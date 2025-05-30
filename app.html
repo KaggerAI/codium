@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>techscreen.in — Interactive Stock Screener for Indian Markets</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+  <style>
+    #results { width: 100% !important; }
+    #chatLog::-webkit-scrollbar {
+      width: 6px;
+    }
+    #chatLog::-webkit-scrollbar-thumb {
+      background-color: #94a3b8; /* slate-400 */
+      border-radius: 3px;
+    }
+    #chatLog::-webkit-scrollbar-track {
+      background-color: #e2e8f0; /* slate-200 */
+    }
+  </style>
+</head>
+<body class="bg-slate-100 text-slate-800 antialiased">
+  <!-- NAVBAR -->
+  <nav class="bg-white shadow-md sticky top-0 z-50">
+    <div class="container mx-auto px-6 py-4 flex items-center justify-between">
+      <a href="#" class="text-3xl font-extrabold text-green-600 hover:text-green-700 transition-colors">techscreen.in</a>
+      <ul class="flex space-x-8 items-center">
+        <li><a href="#" class="text-slate-600 hover:text-green-600 font-medium transition-colors">Home</a></li>
+        <li><a href="#" class="text-slate-600 hover:text-green-600 font-medium transition-colors">Technical Screens</a></li>
+        <li class="relative group">
+          <button class="text-slate-600 hover:text-green-600 font-medium transition-colors flex items-center">
+            Tools <svg class="ml-1 w-4 h-4 fill-current" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
+          </button>
+          <div class="absolute left-0 mt-2 w-56 bg-white border border-slate-200 rounded-md shadow-xl opacity-0 group-hover:opacity-100 transform scale-95 group-hover:scale-100 transition-all duration-200 ease-in-out origin-top-left z-20">
+            <a href="#" class="block px-4 py-3 text-sm text-slate-700 hover:bg-slate-100 hover:text-green-600 transition-colors">Create a technical screen</a>
+          </div>
+        </li>
+      </ul>
+    </div>
+  </nav>
+
+  <!-- MAIN -->
+  <main class="container mx-auto mt-8 mb-12 px-4">
+    <div class="bg-white p-8 rounded-xl shadow-lg w-full max-w-3xl mx-auto mb-12">
+      <h1 class="text-4xl font-bold mb-2 text-center text-slate-700">Stock Technical Screener</h1>
+      <p class="text-center text-slate-500 mb-8">Analyze Indian stocks with comprehensive technical and fundamental data.</p>
+      <div class="flex">
+        <input
+          id="tickerInput"
+          type="text"
+          placeholder="Enter a stock ticker (e.g. TCS.NS or RELIANCE)"
+          class="flex-grow border border-slate-300 rounded-l-md px-4 py-3 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-lg"
+        />
+        <button id="goBtn" class="bg-gradient-to-r from-green-500 to-green-600 text-white px-8 py-3 rounded-r-md hover:from-green-600 hover:to-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-all duration-150 ease-in-out font-semibold text-lg">
+          Analyze
+        </button>
+      </div>
+    </div>
+
+    <!-- Results -->
+    <div id="results" class="w-full space-y-10">
+      <!-- Content will be dynamically inserted here -->
+    </div>
+  </main>
+
+  <!-- Chat launcher button -->
+  <button id="chatBtn"
+          class="fixed bottom-6 right-6 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-full p-4 shadow-xl hover:from-green-600 hover:to-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-all duration-150 ease-in-out hover:scale-110"
+          title="Ask me anything">
+    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 5.523-4.477 10-10 10S1 17.523 1 12 5.477 2 11 2s10 4.477 10 10z"></path></svg>
+  </button>
+
+  <!-- Chat modal -->
+  <div id="chatModal" class="fixed inset-0 bg-black bg-opacity-60 hidden items-center justify-center p-4 z-[100]">
+    <div class="bg-white w-full max-w-lg h-[70vh] max-h-[600px] rounded-xl shadow-2xl flex flex-col overflow-hidden">
+      <div class="bg-gradient-to-r from-green-500 to-green-600 px-6 py-4 flex justify-between items-center text-white">
+        <span class="font-semibold text-lg">Ask about this analysis</span>
+        <button id="chatClose" class="text-green-100 hover:text-white transition-colors text-2xl leading-none">×</button>
+      </div>
+      <div id="chatLog" class="flex-1 p-4 space-y-3 overflow-y-auto bg-slate-50">
+      </div>
+      <form id="chatForm" class="p-4 flex border-t border-slate-300 bg-white">
+        <input id="chatInput" type="text" placeholder="Type your question…"
+               class="flex-grow border border-slate-300 rounded-l-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent" />
+        <button class="bg-gradient-to-r from-green-500 to-green-600 text-white px-6 py-2 rounded-r-md hover:from-green-600 hover:to-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-1 transition-all duration-150 ease-in-out font-semibold">Send</button>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    // Helper to render a fundamentals table
+    // fundData.index (JS) = Headers for columns of the HTML table (e.g., ["index", "Mar 2023", "Jun 2023"])
+    // fundData.columns (JS) = Headers for rows of the HTML table (e.g., ["Sales", "Net Profit"])
+    // fundData.data is data[period_idx][metric_idx] where period_idx maps to fundData.index and metric_idx to fundData.columns
+    function renderFundTable(fundData) {
+        let html = `<div class="overflow-x-auto"><table class="w-full bg-white rounded-lg shadow-md mx-auto mb-8 border border-slate-200">
+            <thead class="bg-slate-200 text-slate-700"><tr>
+                <th class="px-4 py-3 border-b border-slate-300 text-left text-sm font-semibold">Particulars</th>`;
+
+        if (fundData.index && Array.isArray(fundData.index)) {
+            fundData.index.forEach(periodLabel => {
+                const isIndexColumn = periodLabel && periodLabel.toString().toLowerCase() === 'index';
+                const visibilityClass = isIndexColumn ? 'opacity-0 pointer-events-none' : '';
+                // Data under the "index" column header (which are typically the metric names themselves) are text, so left-align.
+                // Other period headers (like "Mar 2023") correspond to numeric data columns, so their headers are right-aligned.
+                const alignmentClass = isIndexColumn ? 'text-left' : 'text-right';
+                
+                html += `<th class="px-4 py-3 border-b border-slate-300 text-sm font-semibold ${alignmentClass} ${visibilityClass}">${periodLabel}</th>`;
+            });
+        }
+        html += `</tr></thead><tbody>`;
+
+        if (fundData.columns && Array.isArray(fundData.columns)) {
+            fundData.columns.forEach((metricName, metric_idx) => { // metricName is "Sales", "Net Profit", etc.
+                html += `<tr class="even:bg-slate-50 hover:bg-slate-100 transition-colors duration-150">
+                            <td class="px-4 py-3 border-b border-slate-200 font-medium text-sm text-slate-700 text-left">${metricName}</td>`; // This is the first visible column with metric names
+
+                if (fundData.index && Array.isArray(fundData.index)) {
+                    fundData.index.forEach((periodLabel, period_idx) => { // periodLabel is "index", "Mar 2023", etc.
+                        const isIndexColumnValue = periodLabel && periodLabel.toString().toLowerCase() === 'index';
+                        const visibilityClass = isIndexColumnValue ? 'opacity-0 pointer-events-none' : '';
+
+                        let v = (fundData.data && fundData.data[period_idx] && fundData.data[period_idx][metric_idx] !== undefined)
+                                  ? fundData.data[period_idx][metric_idx]
+                                  : null;
+
+                        let displayValue = 'N/A';
+                        // Default alignment for data cells: right for numbers, left for text.
+                        // The "index" column's data cells (which are metric names again) should be left-aligned (if they were visible).
+                        let cellClass = 'text-right'; // Assume numeric, will adjust if text
+
+                        if (v != null && v.toString().trim() !== '') {
+                            const s = v.toString().replace(/,/g, ''); // Remove existing commas for parsing
+                            const isPercent = s.endsWith('%');
+                            const numPart = isPercent ? s.substring(0, s.length - 1) : s;
+
+                            if (!isNaN(parseFloat(numPart)) && isFinite(numPart)) { // Check if it's a number
+                                let numVal = parseFloat(numPart);
+                                displayValue = numVal.toLocaleString('en-IN', { 
+                                    minimumFractionDigits: (numVal % 1 !== 0 || numPart.includes('.')) ? Math.min(2, (numPart.split('.')[1] || '').length || 2) : 0, 
+                                    maximumFractionDigits: 2 
+                                });
+                                if (numVal % 1 === 0 && !numPart.includes('.')) { // Pure integer like 100
+                                    displayValue = numVal.toLocaleString('en-IN', { maximumFractionDigits: 0 });
+                                } else if (numPart.includes('.') && (numPart.split('.')[1] || '').length === 1 && parseFloat(numPart.split('.')[1] || '0') === 0) { // e.g. 100.0
+                                     displayValue = numVal.toLocaleString('en-IN', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+                                } else { // e.g. 100.5, 100.50, 100.00
+                                    displayValue = numVal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                                }
+
+
+                                if (isPercent) {
+                                    displayValue += '%';
+                                }
+                                // cellClass remains 'text-right'
+                            } else {
+                                // Not a number, display as is
+                                displayValue = v;
+                                cellClass = 'text-left'; // Text data should be left-aligned
+                            }
+                        } else { // Value is null or empty string
+                            cellClass = 'text-center'; // N/A can be centered or left
+                        }
+                         if (isIndexColumnValue) cellClass = 'text-left'; // Override for index column values (usually text)
+
+                        html += `<td class="px-4 py-3 border-b border-slate-200 text-sm ${cellClass} ${visibilityClass}">${displayValue}</td>`;
+                    });
+                }
+                html += `</tr>`;
+            });
+        }
+        html += `</tbody></table></div>`;
+        return html;
+    }
+
+
+    document.getElementById('goBtn').addEventListener('click', async () => {
+      const ticker = document.getElementById('tickerInput').value.trim().toUpperCase();
+      if (!ticker) return alert('Please enter a ticker.');
+      
+      const resultsContainer = document.getElementById('results');
+      resultsContainer.innerHTML = `
+        <div class="flex justify-center items-center h-32">
+          <div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-green-500"></div>
+          <p class="ml-4 text-slate-600">Fetching data for ${ticker}...</p>
+        </div>
+      `;
+
+      try {
+        const res = await fetch('/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ticker })
+        });
+        const payload = await res.json();
+        if (!res.ok) throw new Error(payload.error || 'Unknown error');
+
+        resultsContainer.innerHTML = `
+          <div class="bg-white p-6 rounded-xl shadow-lg">
+            <h2 class="text-2xl font-bold mb-6 text-slate-700">Technical Summary for ${payload.ticker}</h2>
+            <div class="overflow-x-auto">
+              <table class="w-full border border-slate-200">
+                <tbody class="text-sm">
+                  ${payload.summary.map(row =>
+                    `<tr class="even:bg-slate-50 hover:bg-slate-100 transition-colors duration-150">
+                       <td class="px-4 py-3 border-b border-slate-200 font-medium text-slate-600">${row.key}</td>
+                       <td class="px-4 py-3 border-b border-slate-200 text-slate-700 relative">
+                         ${row.value}
+                       </td>
+                     </tr>`
+                  ).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        `;
+
+        const charts = [
+          { key: 'Price-Action Trend (based on Close prices)',    json: payload.chart_close_json, id: 'chart-close' },
+          { key: 'Price-Action Trend (based on High/Low prices)', json: payload.chart_hl_json,    id: 'chart-hl'    },
+          { key: 'Market Structure (based on EMA Stack)',         json: payload.chart_ema_json,   id: 'chart-ema'   },
+          { key: 'Market Sentiment (based on RSI)',               json: payload.chart_rsi_json,   id: 'chart-rsi'   },
+          { key: 'Accumulating or Distributing (based on Volume)',json: payload.chart_adl_json,   id: 'chart-adl'   },
+          { key: 'Relative Strength vs Nifty',                    json: payload.chart_rs_json,    id: 'chart-rs'    },
+        ];
+
+        const summaryTable = resultsContainer.querySelector('table tbody');
+        charts.forEach(({ key, json, id }) => {
+          if (!json) return;
+          const row = Array.from(summaryTable.querySelectorAll('tr'))
+            .find(tr => tr.children[0].textContent.trim() === key);
+          if (!row) return;
+
+          const cell = row.children[1];
+          const valueContent = cell.textContent.trim();
+          cell.innerHTML = ''; 
+          
+          const valueSpan = document.createElement('span');
+          valueSpan.textContent = valueContent;
+          cell.appendChild(valueSpan);
+
+          const btn = document.createElement('button');
+          btn.innerHTML = 'Expand Chart <span class="ml-1 text-xs">▼</span>';
+          btn.className = 'ml-3 px-2 py-1 text-xs font-medium text-white bg-green-500 rounded-md hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-green-400 transition-colors';
+          cell.appendChild(btn);
+
+          const chartRow = document.createElement('tr');
+          chartRow.className = 'hidden';
+          chartRow.innerHTML = `
+            <td colspan="2" class="p-0 border-b border-slate-200">
+              <div id="${id}" style="width:100%;height:450px;"></div>
+            </td>
+          `;
+          row.parentNode.insertBefore(chartRow, row.nextSibling);
+
+          btn.onclick = () => {
+            const isHidden = chartRow.classList.contains('hidden');
+            if (isHidden) {
+              chartRow.classList.remove('hidden');
+              const fig = JSON.parse(json);
+              const div = chartRow.querySelector('div');
+              const layout = Object.assign({}, fig.layout, {
+                width: div.clientWidth,
+                height: 450,
+                autosize: true,
+                paper_bgcolor: 'rgba(255,255,255,1)',
+                plot_bgcolor: 'rgba(248,250,252,1)',
+                font: { color: '#334155' },
+                legend: { orientation: 'h', x: 0.5, xanchor: 'center', y: -0.15, bgcolor: 'rgba(255,255,255,0.8)' }
+              });
+              Plotly.newPlot(id, fig.data, layout, { responsive: true });
+              btn.innerHTML = 'Hide Chart <span class="ml-1 text-xs">▲</span>';
+            } else {
+              chartRow.classList.add('hidden');
+              btn.innerHTML = 'Expand Chart <span class="ml-1 text-xs">▼</span>';
+            }
+          };
+        });
+
+        if (payload.fundamentals && Object.keys(payload.fundamentals).length > 0) {
+          const order = [
+            "Quarterly Results", "Annual Results", "Growth Patterns",
+            "Balance Sheet", "Cash Flow", "Financial Ratios",
+            "Quarterly Shareholding Pattern", "Annual Shareholding Pattern"
+          ];
+
+          let fundHTML = `
+            <div class="bg-white p-6 rounded-xl shadow-lg mt-10">
+              <h2 class="text-2xl font-bold mb-6 text-slate-700">
+                Fundamental Summary of ${payload.ticker}
+              </h2>`;
+
+          order.forEach(name => {
+            const jsonStr = payload.fundamentals[name];
+            if (!jsonStr) return;
+            try {
+                const data = JSON.parse(jsonStr);
+                if (data && Array.isArray(data.index) && Array.isArray(data.columns) && Array.isArray(data.data)) {
+                    fundHTML += `
+                    <h3 class="text-xl font-semibold mb-3 mt-6 text-slate-600">${name}</h3>
+                    ${renderFundTable(data)}
+                    `;
+                } else {
+                    console.warn(`Skipping fundamental table "${name}" due to unexpected data structure:`, data);
+                }
+            } catch (e) {
+                console.error(`Error parsing JSON for fundamental table "${name}":`, e, jsonStr);
+            }
+          });
+          fundHTML += `</div>`;
+          resultsContainer.insertAdjacentHTML('beforeend', fundHTML);
+        }
+
+        if (payload.metric_charts && Object.keys(payload.metric_charts).length) {
+          let metricsHTML = `
+            <div class="bg-white p-6 rounded-xl shadow-lg mt-10">
+              <h2 class="text-2xl font-bold mb-6 text-slate-700">
+                Valuation & Margin History
+              </h2>`;
+          
+          Object.entries(payload.metric_charts).forEach(([label, json]) => {
+            if (!json) return;
+            const id = 'metric-' + label.replace(/\W+/g, '').toLowerCase();
+            metricsHTML += `
+              <div class="overflow-x-auto mb-6">
+                <table class="w-full bg-white rounded-lg shadow-md border border-slate-200">
+                  <tbody>
+                    <tr class="even:bg-slate-50">
+                      <td class="px-4 py-3 border-b border-slate-200 font-medium text-slate-600">${label}</td>
+                      <td class="px-4 py-3 border-b border-slate-200 text-right">
+                        <button class="toggleMetric px-3 py-1 text-xs font-medium text-white bg-green-500 rounded-md hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-green-400 transition-colors" data-chart-id="${id}" data-chart-json='${json}'>
+                          Expand Chart <span class="ml-1 text-xs">▼</span>
+                        </button>
+                      </td>
+                    </tr>
+                    <tr class="chartRowMetric hidden">
+                      <td colspan="2" class="p-0 border-b border-slate-200">
+                        <div id="${id}" style="width:100%;height:450px;"></div>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            `;
+          });
+          metricsHTML += `</div>`;
+          resultsContainer.insertAdjacentHTML('beforeend', metricsHTML);
+
+          document.querySelectorAll('.toggleMetric').forEach(btn => {
+            btn.onclick = () => {
+              const chartRow = btn.closest('tr').nextElementSibling;
+              const isHidden = chartRow.classList.contains('hidden');
+              const chartId = btn.dataset.chartId;
+              const chartJson = btn.dataset.chartJson;
+
+              if (isHidden) {
+                chartRow.classList.remove('hidden');
+                const fig = JSON.parse(chartJson);
+                const div = chartRow.querySelector('div');
+                const layout = Object.assign({}, fig.layout, {
+                  width: div.clientWidth,
+                  height: 450,
+                  autosize: true,
+                  paper_bgcolor: 'rgba(255,255,255,1)',
+                  plot_bgcolor: 'rgba(248,250,252,1)',
+                  font: { color: '#334155' },
+                  legend: { orientation: 'h', x: 0.5, xanchor: 'center', y: -0.15, bgcolor: 'rgba(255,255,255,0.8)' }
+                });
+                Plotly.newPlot(chartId, fig.data, layout, { responsive: true });
+                btn.innerHTML = 'Hide Chart <span class="ml-1 text-xs">▲</span>';
+              } else {
+                chartRow.classList.add('hidden');
+                btn.innerHTML = 'Expand Chart <span class="ml-1 text-xs">▼</span>';
+              }
+            };
+          });
+        }
+
+        localStorage.setItem('techscreen_' + payload.ticker, JSON.stringify(payload.summary));
+      } catch (err) {
+        resultsContainer.innerHTML = `<div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg shadow-md" role="alert">
+                                        <strong class="font-bold">Error:</strong>
+                                        <span class="block sm:inline">${err.message}</span>
+                                      </div>`;
+        console.error('Analysis error:', err);
+      }
+    });
+
+    const chatBtn   = document.getElementById('chatBtn');
+    const chatModal = document.getElementById('chatModal');
+    const chatClose = document.getElementById('chatClose');
+    const chatLog   = document.getElementById('chatLog');
+    const chatForm  = document.getElementById('chatForm');
+    const chatInput = document.getElementById('chatInput');
+
+    chatBtn.onclick   = () => chatModal.classList.remove('hidden');
+    chatClose.onclick = () => chatModal.classList.add('hidden');
+    window.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && !chatModal.classList.contains('hidden')) {
+        chatModal.classList.add('hidden');
+      }
+    });
+    chatModal.addEventListener('click', (event) => {
+        if (event.target === chatModal) {
+            chatModal.classList.add('hidden');
+        }
+    });
+
+    chatForm.addEventListener('submit', async e => {
+      e.preventDefault();
+      const q = chatInput.value.trim();
+      if (!q) return;
+      
+      appendMessage(q, 'user');
+      chatInput.value = '';
+      chatInput.disabled = true;
+      appendMessage('...', 'bot', true);
+
+      try {
+        const res = await fetch('/chat', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ question: q })
+        });
+        const { answer, error } = await res.json();
+        
+        removeTypingIndicator();
+        if (error) {
+          appendMessage(`Error: ${error}`, 'error');
+        } else {
+          appendMessage(answer, 'bot');
+        }
+      } catch(err) {
+        removeTypingIndicator();
+        appendMessage(`Network error: ${err.message}`, 'error');
+      }
+      chatInput.disabled = false;
+      chatInput.focus();
+    });
+
+    function appendMessage(text, sender, isTyping = false) {
+      const messageDiv = document.createElement('div');
+      messageDiv.classList.add('p-3', 'rounded-lg', 'max-w-[80%]', 'text-sm', 'leading-relaxed', 'break-words');
+      
+      if (isTyping) {
+        messageDiv.id = 'typingIndicator';
+        messageDiv.innerHTML = `
+          <div class="flex items-center space-x-1">
+            <div class="w-2 h-2 bg-slate-400 rounded-full animate-pulse delay-75"></div>
+            <div class="w-2 h-2 bg-slate-400 rounded-full animate-pulse delay-150"></div>
+            <div class="w-2 h-2 bg-slate-400 rounded-full animate-pulse delay-300"></div>
+          </div>`;
+        messageDiv.classList.add('bg-slate-200', 'text-slate-700', 'self-start', 'rounded-bl-none');
+      } else if (sender === 'user') {
+        messageDiv.textContent = text;
+        messageDiv.classList.add('bg-green-500', 'text-white', 'self-end', 'rounded-br-none');
+      } else if (sender === 'bot') {
+        let formattedText = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+        formattedText = formattedText.replace(/\*(.*?)\*/g, '<em>$1</em>');
+        formattedText = formattedText.replace(/^- (.*$)/gm, '<li class="ml-4 list-disc">$1</li>');
+        formattedText = formattedText.replace(/^(\d+)\. (.*$)/gm, '<li class="ml-4 list-decimal">$2</li>');
+        formattedText = formattedText.replace(/\n/g, '<br>');
+        messageDiv.innerHTML = formattedText;
+        messageDiv.classList.add('bg-slate-200', 'text-slate-700', 'self-start', 'rounded-bl-none');
+      } else if (sender === 'error') {
+        messageDiv.textContent = text;
+        messageDiv.classList.add('bg-red-100', 'text-red-700', 'self-center', 'w-full', 'text-center');
+      }
+      
+      chatLog.appendChild(messageDiv);
+      chatLog.scrollTop = chatLog.scrollHeight;
+    }
+
+    function removeTypingIndicator() {
+      const typingIndicator = document.getElementById('typingIndicator');
+      if (typingIndicator) {
+        typingIndicator.remove();
+      }
+    }
+  </script>
+</body>
+</html>
