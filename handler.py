@@ -9,11 +9,11 @@ Before running, ensure you have installed system TA-Lib and Python packages:
      | tar xj -C /usr/lib/x86_64-linux-gnu/ lib --strip-components=1"
 
 2. Python packages:
-   pip install flask flask-cors yfinance pandas numpy matplotlib openai yfinance plotly lxml
-   pip install --upgrade --no-cache-dir git+https://github.com/rongardF/tvdatafeed.git
-   pip install TA-lib
+   pip install flask flask-cors tradingview-datafeed yfinance pandas numpy matplotlib talib openai yfinance
 """
-
+import sys, os
+sys.path.append(os.path.dirname(__file__))
+from prompts import get_planning_system_prompt, get_answering_system_prompt
 
 import traceback
 import time
@@ -33,10 +33,15 @@ from plotly.subplots import make_subplots
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 import matplotlib.pyplot as plt
 import json
+import re
 
 # Import the calculation registry from calculations.py
-from calculations import CALCULATION_REGISTRY, _get_metric_from_table # _get_metric_from_table might be useful here too
+from fund_calculations import CALCULATION_REGISTRY, _get_metric_from_table # _get_metric_from_table might be useful here too
 
+import requests
+from bs4 import BeautifulSoup
+import pdfplumber
+from io import BytesIO
 
 # right below your Flask-app initialization:
 last_analysis: dict = {}
@@ -55,82 +60,102 @@ import os
 import openai
 openai.api_key = "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"
 
+
 # =====================================================================
 # START: Data Schema Description Function and RAG Function for AI Planner
 # =====================================================================
-def get_data_schema_description(current_analysis_context):
-    # ... (Your existing get_data_schema_description function remains the same) ...
-    # This function will be EVEN MORE IMPORTANT now, as the AI needs to know what base data is available.
-    # We might need to add a section to it that lists "Commonly Calculable Metrics" and the base data they generally need.
-    # For now, let's keep it as is.
-    """
-    Generates a concise text description of the available data structure
-    within last_analysis for the AI planner.
-    """
-    if not current_analysis_context:
-        return "No analysis data currently loaded."
+# In handler.py
 
-    schema_lines = ["Available data sources for the current stock analysis:\n"]
+def get_data_schema_description(current_analysis_context):
+    if not current_analysis_context or not isinstance(current_analysis_context, dict) or not current_analysis_context.get("ticker"):
+        return "No analysis data currently loaded or data is malformed."
+
+    schema_lines = ["**Dynamically Generated Data Schema Description for Current Stock Analysis:**\n"]
     schema_lines.append(f"Ticker: {current_analysis_context.get('ticker', 'N/A')}\n")
 
     # 1. Technical Summary
     summary_data = current_analysis_context.get("summary")
-    if summary_data and isinstance(summary_data, list) and summary_data:
-        schema_lines.append("1. Technical Summary (section_name: 'summary'):")
-        schema_lines.append("   - A list of key-value pairs for technical indicators.")
-        example_keys = [item.get('key', 'UnknownKey') for item in summary_data[:3]]
-        schema_lines.append(f"   - Example Indicator Keys: {', '.join(example_keys)}{'...' if len(summary_data) > 3 else ''}")
-        schema_lines.append("   - To retrieve, specify `technical_summary_keys`: [\"Key1\", \"Key2\"].\n")
-        schema_lines.append("   - Contains current market data like 'Current Price', 'Market Cap'.\n") # Added this note
+    if summary_data and isinstance(summary_data, list):
+        schema_lines.append("\n**1. Technical Summary (section_name: 'summary')**")
+        schema_lines.append("   - A list of key-value pairs. Available keys:")
+        # Ensure s_key is handled if it could contain characters needing escaping for f-string *expressions*,
+        # but here it's just being inserted as a string value, so f-string handles it.
+        summary_keys = sorted(list(set(str(item.get('key', '')) for item in summary_data if isinstance(item, dict) and item.get('key') is not None)))
+        for s_key in summary_keys:
+            # f-string is fine here as s_key is an expression evaluating to a string.
+            # The quotes around {s_key} are literal parts of the f-string.
+            schema_lines.append(f"     - \"{s_key}\"")
+        schema_lines.append("   - Contains current market data like 'Current Price', 'Market Cap'.")
+        schema_lines.append("   - To retrieve, specify `technical_summary_keys`: [\"Key1\", \"Key2\"].")
 
     # 2. Fundamentals
     fundamentals_data = current_analysis_context.get("fundamentals")
     if fundamentals_data and isinstance(fundamentals_data, dict):
-        schema_lines.append("2. Fundamentals (section_name: 'fundamentals'):")
+        schema_lines.append("\n**2. Fundamentals (section_name: 'fundamentals')**")
         schema_lines.append("   - A dictionary of tables. Each table is a list of rows (dictionaries).")
-        table_names = list(fundamentals_data.keys())
-        schema_lines.append(f"   - Available Table Names: {', '.join(table_names)}")
+        
+        sorted_table_names = sorted(list(fundamentals_data.keys()))
+        # Using f'{name!r}' or json.dumps(name) is safer if table names could have quotes/backslashes
+        schema_lines.append(f"   - Available Table Names: {', '.join(json.dumps(name) for name in sorted_table_names)}")
 
-        for i, table_name in enumerate(table_names[:2]): # Show structure for first 2 tables as example
+        for table_name in sorted_table_names:
             table_content = fundamentals_data.get(table_name)
+            # Using f'{table_name!r}' for safety if table_name has special chars
+            schema_lines.append(f"\n   **Table: {json.dumps(table_name)}**") # Use json.dumps for table_name
             if table_content and isinstance(table_content, list) and table_content:
-                first_row = table_content[0]
-                metric_name_example = first_row.get("", "Example Metric Name") 
-                period_column_examples = [
-                    k for k in first_row.keys() if k not in ["index", ""]
-                ][:3] 
+                metric_names_in_table = sorted(list(set(str(row.get("", "")) for row in table_content if isinstance(row, dict) and row.get("") is not None)))
+                # This line describes the key `""` literally.
+                schema_lines.append("     - Available Metric Names (values of the literal key `\"\"` (empty string) in rows):")
+                for m_name in metric_names_in_table:
+                    schema_lines.append(f"       - {json.dumps(m_name)}") # Use json.dumps for metric names
 
-                schema_lines.append(f"   - Table '{table_name}':")
-                schema_lines.append(f"     - Rows contain metrics like '{metric_name_example}'. The metric name is found under the key `\"\"` (empty string).")
-                schema_lines.append(f"     - Data columns are periods, e.g., {', '.join(period_column_examples)}{'...' if len(first_row.keys()) > 5 else ''}.")
-                schema_lines.append(f"     - To retrieve from '{table_name}', specify `metrics`: [\"Metric1\", \"Metric2\"] (these are values from the `\"\"` key in rows) and optionally `periods`: [\"Period1\", \"Period2\" or an integer index like -1 for latest, -2 for second latest].") # Updated period info
-        schema_lines.append("") 
+                all_period_headers = set()
+                for row in table_content:
+                    if isinstance(row, dict):
+                        all_period_headers.update(str(k) for k in row.keys() if k not in ["", "index"]) # Ensure keys are strings
+                sorted_period_headers = sorted(list(all_period_headers), key=lambda x: str(x))
+                schema_lines.append(f"     - Available Period Column Headers in this table: {', '.join(json.dumps(p) for p in sorted_period_headers)}")
+                # Using f'{table_name!r}' for safety
+                schema_lines.append(f"     - To retrieve from {json.dumps(table_name)}, specify `metrics`: [\"ExactMetricName1\", ...] and optionally `periods`: [\"ExactPeriodHeader1\", ... or integer index like -1 for latest].")
+            else:
+                schema_lines.append("     - (No data or not a list of rows)")
+        schema_lines.append("")
 
     # 3. Valuation & Margin Data Series
     valuation_data = current_analysis_context.get("valuation_and_margin_data")
     if valuation_data and isinstance(valuation_data, dict):
-        schema_lines.append("3. Valuation & Margin Data Series (section_name: 'valuation_and_margin_data'):")
+        schema_lines.append("\n**3. Valuation & Margin Data Series (section_name: 'valuation_and_margin_data')**")
         schema_lines.append("   - A dictionary of time series. Each series is a list of data points (dictionaries).")
-        series_names = list(valuation_data.keys())
-        schema_lines.append(f"   - Available Series Names: {', '.join(series_names)}")
+        sorted_series_names = sorted(list(valuation_data.keys()))
+        schema_lines.append(f"   - Available Series Names: {', '.join(json.dumps(name) for name in sorted_series_names)}")
 
-        for i, series_name in enumerate(series_names[:2]): 
+        for series_name in sorted_series_names[:3]: 
             series_content = valuation_data.get(series_name)
+            schema_lines.append(f"   - Series {json.dumps(series_name)}:") # Use json.dumps
             if series_content and isinstance(series_content, list) and series_content:
                 first_point = series_content[0]
-                field_names = list(first_point.keys())
-                schema_lines.append(f"   - Series '{series_name}': Each data point has fields like {', '.join(field_names)} (typically 'date' and metric value(s)).")
-                schema_lines.append(f"   - To retrieve from '{series_name}', specify `points`: \"latest N\" or \"all\".")
+                if isinstance(first_point, dict):
+                    field_names = sorted(list(str(k) for k in first_point.keys())) # Ensure keys are strings
+                    schema_lines.append(f"     - Data points are dicts with fields like: {', '.join(json.dumps(f) for f in field_names)}")
+            # This was the line with the typo "lapythoN", now corrected to "latest N"
+            schema_lines.append(f"     - To retrieve from {json.dumps(series_name)}, specify `points`: \"latest N\" or \"all\".")
+        if len(sorted_series_names) > 3:
+            schema_lines.append("   - (Details for other series follow similar structure)")
         schema_lines.append("")
 
-    # Instructions will be heavily updated for the new planning prompt
-    schema_lines.append("Instructions for AI Planner (to be detailed in system prompt):")
+    # 4. Documents for fetching Management Guidance
+    documents_data = current_analysis_context.get("documents")
+    if documents_data and isinstance(documents_data, list):
+        schema_lines.append("\n**4. Documents (section_name: 'documents')**")
+        schema_lines.append("   - A list containing dictionaries for recent documents like conference calls or presentations.")
+        schema_lines.append("   - Contains a `content_summary` field with extracted text from the latest concall transcript.")
+        schema_lines.append("   - This is the **primary source for management commentary, outlook, and future guidance.**")
+        schema_lines.append("   - To retrieve, specify in your plan: `\"documents\": {\"retrieve\": true}`.")
+
+    schema_lines.append("\n**General Instructions for AI Planner (Detailed in System Prompt):**")
     schema_lines.append("Your primary goal is to determine what data is needed (direct or for calculation) to answer the user.")
-    schema_lines.append("You will output a JSON plan with two main keys: `retrieve_data` and `perform_calculations`.")
-    schema_lines.append("`retrieve_data`: Specifies data to fetch from 'summary', 'fundamentals', 'valuation_and_margin_data'.")
-    schema_lines.append("   - For 'fundamentals', `periods` can be specific names or integer indices (e.g., -1 for latest available in the row, -2 for second latest).")
-    schema_lines.append("`perform_calculations`: Lists calculations to run using data from `retrieve_data` or `summary`.")
-    schema_lines.append("   - Each calculation will have a `calculation_name` (from a known list) and `inputs` detailing where to find its base data.")
+    schema_lines.append("You MUST use the exact names for tables, metrics, summary keys, and series names AS LISTED ABOVE in this dynamically generated schema when forming your `retrieve_data` plan.")
+    schema_lines.append("You will output a JSON plan with `retrieve_data` and `perform_calculations` sections.")
 
     return "\n".join(schema_lines)
 
@@ -264,6 +289,13 @@ def retrieve_data_based_on_plan(plan_retrieve_data_section, full_context):
                     retrieved_something = True
         # print(f"DEBUG: Retrieved Valuation Data Series: {focused_data.get('ValuationMarginSeries')}")
 
+    # Retrieve from Documents (section_name: 'documents')
+    if "documents" in plan and plan["documents"].get("retrieve") and full_context.get("documents"):
+        focused_data["documents"] = full_context.get("documents")
+        if focused_data["documents"]:
+            retrieved_something = True
+    # print(f"DEBUG: Retrieved Documents: {focused_data.get('documents')}") 
+
     if not retrieved_something and "error" not in focused_data :
         focused_data["retrieval_info"] = "AI plan's 'retrieve_data' section did not specify any known data sections or the requested data was not found."
         # print(f"WARN: No specific data retrieved based on AI plan's retrieve_data. Plan section was: {json.dumps(plan, indent=2)}")
@@ -271,7 +303,7 @@ def retrieve_data_based_on_plan(plan_retrieve_data_section, full_context):
     return focused_data
 
 
-def call_openai_api(messages, model="gpt-4.1", expect_json_format_flag=False, temperature=0.2):
+def call_openai_api(messages, model="o4-mini", expect_json_format_flag=False, temperature=1):
     # ... (Your existing call_openai_api function remains the same) ...
     try:
         completion_params = {
@@ -279,7 +311,7 @@ def call_openai_api(messages, model="gpt-4.1", expect_json_format_flag=False, te
             "messages": messages,
             "temperature": temperature,
         }
-        if expect_json_format_flag and (model == "gpt-4.1" or model.startswith("gpt-4-turbo") or model.startswith("gpt-3.5-turbo-1106")):
+        if expect_json_format_flag and (model == "o4-mini" or model.startswith("gpt-4-turbo") or model.startswith("gpt-3.5-turbo-1106")):
             completion_params["response_format"] = {"type": "json_object"}
 
         # print(f"DEBUG: Making OpenAI call to model {model}. Expect JSON mode: {expect_json_format_flag}. Messages: {json.dumps(messages, indent=2)}")
@@ -325,86 +357,11 @@ def perform_planned_calculations(plan_calculations_section, retrieved_data, full
             calculated_metrics_output[output_key] = {"error": f"Unknown calculation: {calc_name}"}
             continue
 
-        calculation_function = CALCULATION_REGISTRY[calc_name]
-        
-        # Prepare a combined context for calculation inputs:
-        # Calculations might need data from 'retrieved_data' (which has 'Fundamentals', 'ValuationMarginSeries')
-        # and potentially 'summary_data_direct' (if fetched and put there) or directly from full_last_analysis_context['summary']
-        # for things like current price, market cap.
-        
-        # The `inputs` in calc_spec should guide where `_get_input_value` looks.
-        # `_get_input_value` currently looks into `retrieved_data["Fundamentals"]`.
-        # We need a way for calculations like P/E to get `market_price`.
-        # The AI's `inputs` spec for a calculation should be structured to allow this.
-        # For example, for P/E, inputs might include:
-        # "market_price": {"source_type": "summary", "key": "Current Price"}
-        # "eps": {"table": "Quarterly Results", "metric": "EPS ", "period": -1}
-        
-        # The calculation functions themselves will use `_get_input_value` or `_get_sum_of_metrics`,
-        # which expect `retrieved_data` to be structured with `Fundamentals` key.
-        # For market price etc., the calculation function's spec within the plan needs to handle it.
-        # Let's assume the calculation_spec['inputs'] is what the calculation function expects.
-        # If a calc needs market price, its specific `calculation_spec['inputs']` will contain it directly,
-        # filled by the AI planner by looking at `last_analysis['summary']`.
-
-        # Special handling for inputs that are not from `retrieved_data['Fundamentals']`
-        # but directly from `full_last_analysis_context['summary']`, like current_price or market_cap.
-        # The AI planner will need to specify these if a calculation function expects them.
-        # For instance, the spec for `calculate_price_to_earnings_ratio` might include:
-        # "inputs": {
-        #   "market_price_value": 150.0, // AI fills this from summary
-        #   "eps_spec": {"table": "Annual Results", "metric": "EPS ", "period": -1}
-        # }
-        # Then the Python function `calculate_price_to_earnings_ratio` would use `inputs["market_price_value"]` directly.
-        # And `_get_input_value(retrieved_data, inputs["eps_spec"])` for EPS.
-
-        # The AI planner needs to be instructed that for values like "Current Price", it should
-        # fetch them via `retrieve_data` (into `summary_data_direct`) OR if the calculation function
-        # has a specific key like `market_price_value` in its `inputs` spec (defined by us), the AI
-        # can populate that *value* directly in the plan if it's simple enough.
-        # For robustness, calculation functions should expect `input_specs` for fundamental data,
-        # and for simple values like market_price, they can take them as direct values in their own `calculation_spec`.
-
-        current_summary_data = full_last_analysis_context.get("summary", [])
-        
-        # Augment the calculation_spec.inputs if needed by the specific function, e.g. for market_price
-        # This is a contract between the AI planner and the Python calculation functions.
-        # The AI planner would put these values into the calculation_spec['inputs'] directly if they are simple.
-        # Example: if 'calculate_price_to_earnings_ratio' needs market_price, the AI plan's
-        # `perform_calculations` item for it would be:
-        # { "calculation_name": "calculate_price_to_earnings_ratio",
-        #   "inputs": { "market_price": 123.45,  <-- AI gets this from summary and puts the VALUE here
-        #               "eps_source": {"table": "...", "metric":"EPS ", "period":-1} } ... }
-
-        # Let's ensure the calculation functions themselves clearly document what they expect in `calculation_spec['inputs']`.
-        # The `calculations.py` functions for P/E, P/B, etc., expect `inputs["market_price"]` to be the actual value.
-        # The AI planner must be prompted to:
-        # 1. Identify if market price/cap is needed for a calculation.
-        # 2. If so, retrieve it from `last_analysis['summary']`.
-        # 3. Place the *actual value* into the `inputs` field of the `perform_calculations` spec for that calculation.
-        
-        # Example:
-        # If a calc needs 'market_price', the AI planner needs to find it.
-        # The planner could add a special key to `calculation_spec['inputs']` like:
-        # "market_price_lookup_key": "Current Price"
-        # Then this orchestrator would fetch it from `current_summary_data`.
-        
-        # Simpler: The AI is told that some calc functions expect a direct value for `market_price`
-        # in their `inputs`. The AI should look up `Current Price` in `last_analysis.summary` and put
-        # that value in the `inputs` for the calculation plan.
-
-        # For `calculate_price_to_earnings_ratio`, the Python function expects `inputs["market_price"]`.
-        # The AI planner, when creating the plan for this calc, will look at `last_analysis["summary"]`,
-        # find {"key": "Current Price", "value": "123.45"}, and put `123.45` (as a float)
-        # into `calc_spec["inputs"]["market_price"]`.
-
-        # The AI's `planning_system_prompt` will need to be very clear about this data flow for summary items.
+        calculation_function = CALCULATION_REGISTRY[calc_name]        
 
         try:
-            # print(f"DEBUG: Calling calculation: {calc_name} with spec: {json.dumps(calc_spec, indent=2)}")
             result = calculation_function(retrieved_data, calc_spec)
             calculated_metrics_output[output_key] = result
-            # print(f"DEBUG: Result for {calc_name}: {json.dumps(result, indent=2)}")
         except Exception as e:
             print(f"ERROR: Executing calculation {calc_name} failed: {e}")
             traceback.print_exc()
@@ -428,133 +385,35 @@ def chat():
             if not ticker_present :
                  return jsonify({'answer': 'Please analyze a stock first. No data context is available.'}), 200
 
-        # === Step 1: Planning Call ===
-        # === Step 1: Planning Call ===
-        
         # --- VVV ADD PRINT STATEMENTS HERE VVV ---
+        print("\n" + "="*50)
+        print(f"DEBUG /chat: Processing question: \"{user_question}\"")
+        print(f"DEBUG /chat: last_analysis keys before planning: {list(last_analysis.keys())}")
+        if 'documents' in last_analysis and last_analysis['documents']:
+            print(f"DEBUG /chat: Found 'documents' in last_analysis for ticker '{last_analysis['ticker']}'.")
+        else:
+            print(f"WARN /chat: 'documents' key not found or is empty in last_analysis.")
+        print("="*50 + "\n")
+        # --- ^^^ END OF ADDED PRINT STATEMENTS ^^^ ---
+
+        # === Step 1: Planning Call ===
+        # --- VVV ADD PRINT STATEMENTS HERE VVV ---
+        print("\n" + "="*50)
         print(f"DEBUG /chat: last_analysis keys before planning: {list(last_analysis.keys()) if isinstance(last_analysis, dict) else 'Not a dict or empty'}")
         if isinstance(last_analysis, dict) and 'ticker' in last_analysis:
             print(f"DEBUG /chat: Current ticker in last_analysis: {last_analysis.get('ticker')}")
         # You can also print a small part of last_analysis to verify content, e.g., summary
         if isinstance(last_analysis, dict) and 'summary' in last_analysis:
              print(f"DEBUG /chat: last_analysis.summary (first 3 items): {last_analysis['summary'][:3] if isinstance(last_analysis.get('summary'), list) else 'Summary not a list'}")
+        print("="*50 + "\n")
+        # --- ^^^ END OF ADDED PRINT STATEMENTS ^^^ ---
 
         schema_description = get_data_schema_description(last_analysis)
         print(f"DEBUG /chat: Schema description being sent to planner:\n----SCHEMA START----\n{schema_description}\n----SCHEMA END----")
         # --- ^^^ END OF ADDED PRINT STATEMENTS ^^^ ---
         
         # Fully corrected and detailed planning_system_prompt:
-        planning_system_prompt = """
-You are an expert financial data retrieval and calculation planner. Your primary goal is to understand a user's question about a stock, determine the necessary financial information, and create a JSON plan to retrieve base data and specify calculations. The stock's data context is already loaded in a structure called `last_analysis`.
-
-**Your Process:**
-
-1.  **Analyze User's Question:**
-    *   Identify the core financial metric(s), data point(s), or insight(s) the user is seeking (e.g., "P/E ratio", "ROE for last year", "sales growth trend", "current debt level").
-    *   Determine the relevant period(s) (e.g., latest quarter, latest annual, TTM, specific year/quarter, a series of points).
-
-2.  **Consult Data Schema & Known Calculable Metrics:**
-    *   **Refer to the "Data Schema Description"** provided with the user's question. This schema details what data is directly available in `last_analysis` under sections: `summary` (for current price, market cap, technicals), `fundamentals` (tables like "Quarterly Results", "Balance Sheet"), and `valuation_and_margin_data` (time series like "PE Ratio", "Margins").
-    *   **Refer to your internal "Known Calculable Metrics List"** (provided at the end of this prompt). This list details common financial metrics and the typical base data components they require from the `last_analysis` schema.
-
-3.  **Decision Strategy (Crucial!):**
-    *   **PRIORITY 1: Use Directly Available Data:** If the requested metric/data is directly available in the schema (e.g., "PE Ratio" series in `valuation_and_margin_data`, "ROE %" in "Financial Ratios" table, "Current Price" in `summary`), plan to retrieve it directly. This is usually the most efficient and accurate.
-    *   **PRIORITY 2: Calculate if Necessary or More Specific:**
-        *   If the metric is *not* directly available but is on your "Known Calculable Metrics List".
-        *   If the user's request implies a specificity (e.g., "ROE using average equity over the last two years") that differs from a pre-calculated value.
-        *   If the user asks for a component or a "what-if" that requires calculation.
-        *   If directly available data is missing or seems insufficient for the query's nuance.
-    *   **PRIORITY 3: State Unavailability:** If the data is not directly available and cannot be reasonably calculated from the provided schema, clearly state this in your thought process, and the JSON plan might be minimal or indicate no specific data retrieval/calculation for that part of the query.
-
-4.  **Construct the JSON Plan:**
-    Your output **MUST** be structured with a "Thought Process" followed by a "JSON Plan" in a ```json code block.
-
-    **Thought Process:**
-    [Your detailed step-by-step reasoning. Explain:
-        - What the user is asking for.
-        - Which data you identified as primary.
-        - Whether you'll retrieve it directly or calculate it.
-        - If calculating, list the target metric, the formula (conceptually), and the *exact base data metrics and their sources from the schema* you'll need. Mention the periods.
-        - If a calculation requires a value like "Current Price" or "Market Cap" (usually from `last_analysis.summary`), explain that you will fetch this from the summary and provide its *actual value* in the `inputs` for the relevant calculation step in the JSON plan, as per the calculation function's requirements (see Known Calculable Metrics List for input specs).]
-
-    **JSON Plan:**
-    ```json
-    {
-      "retrieve_data": {
-        // Specifies data to fetch from `last_analysis`.
-        // Structure: {"summary": {...}, "fundamentals": {...}, "valuation_and_margin_data": {...}}
-        // - "summary": {"technical_summary_keys": ["Key1", "Key2", "Current Price", "Market Cap"]} (if needed for calcs or display)
-        // - "fundamentals": {
-        //     "TableName1": {"metrics": ["MetricA", "MetricB"], "periods": [-1, -2]}, // -1 is latest, -2 is previous. Or specific names like "Mar 2024".
-        //     "TableName2": {"metrics": ["MetricC"], "periods": "all"}
-        //   }
-        // - "valuation_and_margin_data": {
-        //     "SeriesName1": {"points": "latest 10"}
-        //   }
-      },
-      "perform_calculations": [
-        // Array of calculation objects. Only include if calculations are needed.
-        // Each object describes one calculation to perform *after* data retrieval.
-        {
-          "calculation_name": "name_from_known_calculable_list", // e.g., "calculate_roe"
-          "target_metric_name": "User-Friendly Name for Result", // e.g., "Return on Equity (Annual, Avg Equity)"
-          "output_key_name": "UniqueKeyForCalculatedResult",   // e.g., "Calculated_ROE_Annual"
-          "inputs": {
-            // Key-value pairs. Keys are what the Python calculation function expects.
-            // Values are either:
-            //   1. Direct values (for simple inputs like market_price, tax_rate if known fixed):
-            //      "market_price": 123.45, // AI gets this from last_analysis.summary and puts the VALUE here.
-            //      "tax_rate_value": 0.25
-            //   2. Specifications for where to find data within the `retrieved_data` from the 'retrieve_data' step:
-            //      "net_income": {"table": "Annual Results", "metric": "Net Profit ", "period": -1},
-            //      "equity_current_sources": [ // For sums
-            //          {"table": "Balance Sheet", "metric": "Equity Capital", "period": -1},
-            //          {"table": "Balance Sheet", "metric": "Reserves", "period": -1, "optional": true}
-            //      ],
-            //   3. Specifications for using a previously calculated metric:
-            //      "ebitda_input": {"type": "calculated", "source_key": "Calculated_EBITDA_OutputKey"}
-          }
-        }
-      ]
-    }
-    ```
-
-**VERY IMPORTANT FOR `perform_calculations`'s `inputs` section:**
-*   Refer to the "Known Calculable Metrics List" below for the specific `calculation_name` and the expected `inputs` structure (including keys like `net_income`, `market_price`, `eps_source`, etc.) for each calculation function.
-*   For `period` in fundamental data input specs: use integer indices like `-1` (latest available in retrieved data for that row), `-2` (second latest), `0` (earliest available in retrieved data). Or, if you know the exact column header (e.g., "Mar 2024"), use that string.
-*   **If a calculation needs "Current Price" or "Market Cap":**
-    1.  Ensure you request "Current Price" or "Market Cap" in the `"summary"` part of `"retrieve_data"`.
-    2.  Then, in the `"inputs"` for the calculation, if the calculation function (see list below) expects a direct value (e.g., `market_price: <value>`), you MUST look up the actual value from the `last_analysis` context provided to you (specifically from its `summary` section) and put that numerical value directly into the JSON plan. Example: `"market_price": 150.75`.
-
-**Known Calculable Metrics List (and their typical `calculation_name` and `inputs` structure):**
-
-*   **`calculate_current_ratio`**:
-    *   `inputs`: `{ "current_assets": {"table": "Balance Sheet", "metric": "Total Current Assets", "period": -1}, "current_liabilities": {"table": "Balance Sheet", "metric": "Total Current Liabilities", "period": -1} }`
-*   **`calculate_quick_ratio`**:
-    *   `inputs`: `{ "current_assets": {"table": "Balance Sheet", "metric": "Total Current Assets", "period": -1}, "inventory": {"table": "Balance Sheet", "metric": "Inventories", "period": -1}, "current_liabilities": {"table": "Balance Sheet", "metric": "Total Current Liabilities", "period": -1} }`
-*   **`calculate_debt_to_equity`**:
-    *   `inputs`: `{ "total_debt_sources": [{"table": "Balance Sheet", "metric": "Borrowings", "period": -1}], "total_equity_sources": [{"table": "Balance Sheet", "metric": "Equity Capital", "period": -1}, {"table": "Balance Sheet", "metric": "Reserves", "period": -1, "optional": true}] }`
-*   **`calculate_return_on_equity`**:
-    *   `inputs`: `{ "net_income": {"table": "Annual Results", "metric": "Net Profit ", "period": -1}, "equity_current_sources": [{"table": "Balance Sheet", "metric": "Equity Capital", "period": -1}, ...], "equity_previous_sources": [{"table": "Balance Sheet", "metric": "Equity Capital", "period": -2}, ...], "use_current_equity_if_avg_fails": false }`
-*   **`calculate_ebitda`**:
-    *   `inputs`: `{ "ebit": {"table": "Annual Results", "metric": "Operating Profit ", "period": -1}, "depreciation": {"table": "Annual Results", "metric": "Depreciation ", "period": -1, "optional": true} }`
-*   **`calculate_ebitda_margin`**:
-    *   `inputs`: `{ "ebitda_input": {"type": "calculated", "source_key": "Calculated_EBITDA_OutputKey_Name"}, "sales": {"table": "Annual Results", "metric": "Sales ", "period": -1} }`
-*   **`calculate_sales_yoy_growth`**:
-    *   `inputs`: `{ "current_sales": {"table": "Annual Results", "metric": "Sales ", "period": -1}, "previous_sales": {"table": "Annual Results", "metric": "Sales ", "period": -2} }`
-*   **`calculate_free_cash_flow`**:
-    *   `inputs`: `{ "operating_cash_flow": {"table": "Cash Flow", "metric": "Cash from Operating Activity ", "period": -1}, "capex_metric_name": "Fixed Assets Purchased", "capex_period": -1 }` (Note: `capex_metric_name`'s value is assumed negative in the Cash Flow statement)
-*   **`calculate_price_to_earnings_ratio`**:
-    *   `inputs`: `{ "market_price": <ACTUAL_NUMERICAL_VALUE_FROM_SUMMARY>, "eps_source": {"table": "Quarterly Results", "metric": "EPS ", "period": -1} }`
-*   **`calculate_enterprise_value`**:
-    *   `inputs`: `{ "market_cap": <ACTUAL_NUMERICAL_VALUE_FROM_SUMMARY>, "total_debt_sources": [...], "cash_equivalents_sources": [...] }`
-*   **`calculate_ev_ebitda_ratio`**:
-    *   `inputs`: `{ "ev_source": {"type": "calculated", "source_key": "Calculated_EV_OutputKey"}, "ebitda_source": {"type": "calculated", "source_key": "Calculated_EBITDA_OutputKey", "allow_zero": false} }`
-*   **(Add other calculation functions from `calculations.py` with their expected input structures here)**
-
-Ensure your JSON plan is valid. Only include sections and calculations that are necessary.
-If no specific data retrieval or calculation is needed based on the question (e.g., a general greeting), `retrieve_data` and `perform_calculations` can be empty or omitted.
-"""
+        planning_system_prompt = get_planning_system_prompt()
 
         planning_messages = [
             {"role": "system", "content": planning_system_prompt},
@@ -563,7 +422,11 @@ If no specific data retrieval or calculation is needed based on the question (e.
         
         print("INFO: Making planning call (with thought process) to AI...")
         # Temperature might be slightly higher for more complex planning, or keep low for precision.
-        ai_full_response_str = call_openai_api(planning_messages, model="gpt-4.1", expect_json_format_flag=False, temperature=0.1) 
+        ai_full_response_str = call_openai_api(planning_messages, model="o4-mini", expect_json_format_flag=False, temperature=1) 
+
+        # --- VVV ADD PRINT STATEMENTS HERE VVV ---
+        print(f"\n--- AI RAW RESPONSE (FULL STRING) ---\n{ai_full_response_str}\n-------------------------------------\n")
+        # --- ^^^ END OF ADDED PRINT STATEMENTS ^^^ ---
 
         # Extract Thought Process and JSON Plan
         thought_process_str = "Could not extract thought process."
@@ -622,8 +485,7 @@ If no specific data retrieval or calculation is needed based on the question (e.
         retrieve_data_spec = parsed_plan.get("retrieve_data", {})
         # print(f"DEBUG: Plan's retrieve_data section: {json.dumps(retrieve_data_spec, indent=2)}")
         retrieved_fundamental_data = retrieve_data_based_on_plan(retrieve_data_spec, last_analysis)
-        # print(f"DEBUG: Data after retrieve_data_based_on_plan: {json.dumps(retrieved_fundamental_data, indent=2, default=str)}")
-
+        print(f"DEBUG: Data returned from retrieval function: {json.dumps(retrieved_fundamental_data, indent=2, default=str)}\n")
 
         if retrieved_fundamental_data.get("error"):
             error_msg = retrieved_fundamental_data.get("error")
@@ -670,47 +532,14 @@ If no specific data retrieval or calculation is needed based on the question (e.
         focused_context_str_for_answer = json.dumps(final_context_for_answer, indent=2, ensure_ascii=False, default=str) # default=str for non-serializable like NaNs if any
 
         # === Step 3: Answering Call ===
-        answering_system_prompt = ( 
-            "You are an advanced, data-driven financial assistant for techscreen.in. Your goal is to provide accurate, concise, and well-reasoned answers based *exclusively* on the provided stock analysis context.\n\n"
-    "The context given to you is structured and contains several key sections:\n"
-    "1.  `user_question`: The original question from the user.\n"
-    "2.  `retrieved_data`: Data fetched directly from the database based on an initial plan. This may include:\n"
-    "    *   `summary_data_direct`: Key-value pairs from the stock's summary (e.g., Current Price).\n"
-    "    *   `Fundamentals`: Tables like 'Quarterly Results', 'Balance Sheet' (each is a list of row dictionaries).\n"
-    "    *   `ValuationMarginSeries`: Time series data (list of data points for P/E, Margins, etc.).\n"
-    "    *   `retrieval_info`: A message about the data retrieval process.\n"
-    "3.  `calculated_metrics`: A dictionary where keys are metric names (e.g., 'Calculated_ROE_Annual') and values are objects containing the `value`, and optionally `unit`, `note`, or `error` for metrics calculated in a preceding step.\n"
-    "4.  `calculation_info`: General information about the calculation step.\n\n"
-    "**Your Task:**\n\n"
-    "1.  **Understand the User's Question:** Re-confirm the core intent of the `user_question`.\n"
-    "2.  **Inspect the Provided Context Thoroughly:**\n"
-    "    *   Check `retrieved_data` for directly relevant information.\n"
-    "    *   Check `calculated_metrics` for any calculations performed that address the question.\n"
-    "    *   Pay attention to any `error` fields within `calculated_metrics` or `retrieval_info` in `retrieved_data`.\n\n"
-    "3.  **Formulate Your Answer - Step-by-Step Reasoning First:**\n"
-    "    *   **Always show your reasoning and thought process step-by-step BEFORE the final answer.** Explain which parts of the provided context you are using.\n"
-    "    *   If a metric was calculated (present in `calculated_metrics`), state that it was calculated and use its `value`. If there's a `note` with the calculation, mention it if relevant (e.g., 'ROE was calculated using current period equity only').\n"
-    "    *   If data was directly retrieved, cite it (e.g., 'According to the PE Ratio series data...', 'The Balance Sheet shows...').\n"
-    "    *   Synthesize information from multiple sources if needed (e.g., combine a calculated ROE with a trend from a valuation series).\n\n"
-    "4.  **Address Missing Information or Errors:**\n"
-    "    *   If a calculation resulted in an `error` (check `calculated_metrics.<key>.error`), politely inform the user that the specific calculation could not be performed and mention the error if it's user-friendly.\n"
-    "    *   If needed data is missing from both `retrieved_data` and `calculated_metrics` (and no overriding error explains why), explicitly state that the specific detail is not available in the provided information.\n"
-    "    *   If `retrieval_info` or `calculation_info` indicates a broader issue (e.g., 'AI plan did not specify any known data sections'), reflect this in your response if it explains why you can't answer fully.\n\n"
-    "5.  **Final Answer:** After your reasoning, provide a concise final answer to the user's question.\n\n"
-    "**Constraints:**\n"
-    "*   **Strictly Adhere to Provided Context:** Base your entire response *only* on the JSON context given. Do not use external knowledge or make assumptions beyond this data.\n"
-    "*   **Be Precise and Factual:** Report numbers and findings as they appear in the context.\n"
-    "*   **Conciseness:** While showing reasoning, keep the final answer direct.\n"
-    "*   **Acknowledge Limitations:** If the data is insufficient to fully answer, say so clearly.\n"
-    "*   **Units and Notes:** If a calculated metric has a `unit` (e.g., '%', 'days') or a `note`, include it in your response where appropriate."
-        )
+        answering_system_prompt = get_answering_system_prompt()
         answering_messages = [
             {"role": "system", "content": answering_system_prompt},
             {"role": "user", "content": f"User Question: \"{user_question}\"\n\nRelevant Focused Stock Analysis Context (Retrieved & Calculated):\n{focused_context_str_for_answer}"}
         ]
 
         print("INFO: Making answering call to AI with focused data...")
-        final_answer = call_openai_api(answering_messages, model="gpt-4.1", temperature=0.3)
+        final_answer = call_openai_api(answering_messages, model="o4-mini", temperature=1)
 
         return jsonify({
             'answer': final_answer,
@@ -933,9 +762,6 @@ def fetch_consolidated(ticker: str) -> dict[str,pd.DataFrame]:
     return tables
 
 
-import requests
-import pandas as pd
-
 def get_company_id(ticker: str) -> int:
     url = "https://www.screener.in/api/company/search/"
     resp = requests.get(url, params={"q": ticker})
@@ -966,7 +792,128 @@ def parse_chart_json(chart_json: dict) -> pd.DataFrame:
         return pd.DataFrame()
     return pd.concat(dfs, axis=1)
 
+# In handler.py, replace the entire function
 
+def get_text_from_pdf_url(pdf_url: str, max_pages_to_process=15, max_chars_to_return=10000) -> str:
+    """
+    Downloads a PDF, finds the start of the 'Question and Answer' session, 
+    and extracts text from that point onwards for a few pages.
+    """
+    try:
+        response = requests.get(pdf_url, headers=HEADERS, timeout=15)
+        response.raise_for_status()
+        
+        pdf_file = BytesIO(response.content)
+        
+        all_text = []
+        start_page = 0
+        found_start_keyword = False
+
+        with pdfplumber.open(pdf_file) as pdf:
+            # 1. Search for the starting page
+            # We'll search the first 10 pages for a keyword that indicates the start of the content
+            search_limit = min(len(pdf.pages), 10)
+            for i in range(search_limit):
+                page_text = pdf.pages[i].extract_text() or ""
+                # Look for common start phrases for the valuable content
+                if "question and answer session" in page_text.lower() or "moderator:" in page_text.lower():
+                    print(f"INFO: Found start keyword on page {i+1}. Starting text extraction from here.")
+                    start_page = i
+                    found_start_keyword = True
+                    break
+            
+            # If we didn't find a keyword, default to starting from page 2 to skip the cover
+            if not found_start_keyword:
+                print("WARN: 'Question and Answer' keyword not found. Defaulting to start extraction from page 3.")
+                start_page = 2 # Skip cover and index pages
+
+            # 2. Extract text from the start page onwards
+            end_page = min(len(pdf.pages), start_page + max_pages_to_process)
+            for i in range(start_page, end_page):
+                page = pdf.pages[i]
+                text = page.extract_text()
+                if text:
+                    all_text.append(text)
+        
+        full_summary = "\n".join(all_text)
+        
+        # 3. Truncate the final text to a reasonable character limit for the AI prompt
+        return full_summary[:max_chars_to_return]
+
+    except Exception as e:
+        print(f"ERROR: Failed to get text from PDF URL {pdf_url}. Reason: {e}")
+        return None
+
+
+# In handler.py
+
+def fetch_latest_documents(ticker: str) -> list[dict]:
+    """
+    DEFINITIVE CORRECTED function to scrape the Screener.in page.
+    This version targets the specific 'concalls' sub-section.
+    """
+    documents = []
+    found_types = set()
+
+    try:
+        url = BASE_URL.format(ticker=ticker)
+        response = requests.get(url, headers=HEADERS, timeout=15)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, 'html.parser')
+
+        # 1. Find the specific 'Concalls' sub-section div
+        concalls_section = soup.find('div', class_='concalls')
+        if not concalls_section:
+            print(f"WARN: No 'concalls' section found for {ticker}")
+            return []
+
+        # 2. Iterate through each list item (each represents a dated entry)
+        for item in concalls_section.find_all('li'):
+            # Stop if we've already found the latest of both types
+            if len(found_types) == 2:
+                break
+
+            date_element = item.find('div', class_='nowrap')
+            date_text = f"({date_element.text.strip()})" if date_element else ""
+
+            # 3. Find the Concall Transcript link if we haven't already
+            if 'Concall' not in found_types:
+                # Find the 'a' tag where the text is exactly 'Transcript'
+                transcript_link = item.find('a', string='Transcript')
+                if transcript_link and transcript_link.get('href'):
+                    doc_info = {
+                        "type": "Concall",
+                        "text": f"Concall Transcript {date_text}",
+                        "link": transcript_link['href']
+                    }
+                    # Extract text content from the PDF
+                    print(f"INFO: Fetching concall text for {ticker} from {doc_info['link']}")
+                    summary = get_text_from_pdf_url(doc_info['link'])
+                    if summary:
+                        doc_info['content_summary'] = summary[:4000] + ("..." if len(summary) > 4000 else "")
+                    
+                    documents.append(doc_info)
+                    found_types.add('Concall')
+
+            # 4. Find the Presentation (PPT) link if we haven't already
+            if 'Presentation' not in found_types:
+                # Find the 'a' tag where the text is exactly 'PPT'
+                ppt_link = item.find('a', string='PPT')
+                if ppt_link and ppt_link.get('href'):
+                    doc_info = {
+                        "type": "Presentation",
+                        "text": f"Results Presentation {date_text}",
+                        "link": ppt_link['href']
+                    }
+                    documents.append(doc_info)
+                    found_types.add('Presentation')
+
+        return documents
+
+    except Exception as e:
+        print(f"ERROR: Could not fetch documents for {ticker}. Reason: {e}")
+        traceback.print_exc()
+        return []
 
 # Initialize TradingView datafeed (guest)
 tv = TvDatafeed()
@@ -1643,13 +1590,19 @@ def analyze():
         except Exception as e_val_metrics:
             print(f"Error fetching/processing valuation metrics for {tick}: {e_val_metrics}")
         
+        # --- New section to fetch documents ---
+        latest_documents = fetch_latest_documents(tick)
+        print(f"DEBUG /analyze: Documents fetched: {latest_documents}")
+        # --- End of new section ---
+        
         # --- Populate last_analysis with cleaned data ---
         global last_analysis
         last_analysis = {
             "ticker": tick,
             "summary": cleaned_technical_summary, # Use the cleaned version
             "fundamentals": fund_data_for_ai_context, # Use the cleaned version
-            "valuation_and_margin_data": parsed_valuation_data 
+            "valuation_and_margin_data": parsed_valuation_data, 
+            "documents": latest_documents
         }
        
         return jsonify({
@@ -1662,7 +1615,8 @@ def analyze():
             'chart_adl_json':adl_j,
             'chart_rs_json':rs_j,
             'fundamentals': fund_data_for_frontend, # Frontend gets original (or its own cleaned version)
-            'metric_charts':metric_charts_for_frontend
+            'metric_charts':metric_charts_for_frontend,
+            'documents': latest_documents
         })
     except Exception as e:
         # ... (error handling) ...
@@ -1672,4 +1626,4 @@ def analyze():
 
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=8000, debug=True)
+    app.run(host='0.0.0.0', port=5000, debug=True)

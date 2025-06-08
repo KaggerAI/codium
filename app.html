@@ -312,6 +312,28 @@
           resultsContainer.insertAdjacentHTML('beforeend', fundHTML);
         }
 
+        if (payload.documents && Array.isArray(payload.documents) && payload.documents.length > 0) {
+          let docsHTML = `
+          <div class="bg-white p-6 rounded-xl shadow-lg mt-10">
+              <h2 class="text-2xl font-bold mb-6 text-slate-700">Latest Documents</h2>
+              <ul class="space-y-3">
+          `;
+
+          payload.documents.forEach(doc => {
+              docsHTML += `
+              <li class="flex items-center justify-between p-3 rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors">
+                  <span class="font-medium text-slate-700">${doc.text} (${doc.type})</span>
+                  <a href="${doc.link}" target="_blank" rel="noopener noreferrer" class="px-3 py-1 text-sm font-semibold text-white bg-green-500 rounded-md hover:bg-green-600 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-green-400">
+                  View PDF
+                  </a>
+              </li>
+          `;
+          });
+
+          docsHTML += `</ul></div>`;
+          resultsContainer.insertAdjacentHTML('beforeend', docsHTML);
+        }
+
         if (payload.metric_charts && Object.keys(payload.metric_charts).length) {
           let metricsHTML = `
             <div class="bg-white p-6 rounded-xl shadow-lg mt-10">
