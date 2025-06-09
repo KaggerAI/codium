@@ -1129,19 +1129,22 @@ def build_close_figure(df, ticker):
     fig = go.Figure()
     # Plot close line
     fig.add_trace(go.Scatter(
-        x=d.index, y=d['Close'], mode='lines', name='Close', line=dict(color='black')
+    x=list(d.index),               # a list of Timestamps
+    y=[float(v) for v in d['Close']],  # *explicit* list of Python floats
+    mode='lines', name='Close',
+    line=dict(color='black')
     ))
     # Swing-highs: red triangles
     highs = sp[sp['Type']=='High']
     fig.add_trace(go.Scatter(
-        x=d.index[highs['Index']], y=highs['Value'],
+        x=d.index[highs['Index']], y=[float(v) for v in highs['Value']],
         mode='markers', name='Swing High',
         marker=dict(symbol='triangle-up', size=12, color='red')
     ))
     # Swing-lows: green inverted triangles
     lows = sp[sp['Type']=='Low']
     fig.add_trace(go.Scatter(
-        x=d.index[lows['Index']], y=lows['Value'],
+        x=d.index[lows['Index']], y=[float(v) for v in lows['Value']],
         mode='markers', name='Swing Low',
         marker=dict(symbol='triangle-down', size=12, color='green')
     ))
@@ -1153,6 +1156,7 @@ def build_close_figure(df, ticker):
     # ← new additions ↓
     hovermode='x unified',                # show all traces’ data at the same x
     xaxis=dict(
+        type='date',
         showspikes=True,                  # draw a spike (vertical line)
         spikemode='across',               # spike runs across the plot
         spikesnap='cursor',               # snap spike to the cursor
@@ -1173,16 +1177,16 @@ def build_hl_figure(df, ticker):
     fig = go.Figure()
     # Close line
     fig.add_trace(go.Scatter(
-        x=d.index, y=d['Close'], mode='lines', name='Close', line=dict(color='black')
+        x=d.index, y=[float(v) for v in d['Close']], mode='lines', name='Close', line=dict(color='black')
     ))
     # HL pivot markers
     fig.add_trace(go.Scatter(
-        x=d.index[sh['Index']], y=sh['Value'],
+        x=d.index[sh['Index']], y=[float(v) for v in sh['Value']],
         mode='markers', name='Swing High',
         marker=dict(symbol='triangle-up', size=12, color='red')
     ))
     fig.add_trace(go.Scatter(
-        x=d.index[sl['Index']], y=sl['Value'],
+        x=d.index[sl['Index']], y=[float(v) for v in sl['Value']],
         mode='markers', name='Swing Low',
         marker=dict(symbol='triangle-down', size=12, color='green')
     ))
@@ -1194,6 +1198,7 @@ def build_hl_figure(df, ticker):
     # ← new additions ↓
     hovermode='x unified',                # show all traces’ data at the same x
     xaxis=dict(
+        type='date',
         showspikes=True,                  # draw a spike (vertical line)
         spikemode='across',               # spike runs across the plot
         spikesnap='cursor',               # snap spike to the cursor
@@ -1212,21 +1217,21 @@ def build_ema_figure(df, ticker):
     fig = go.Figure()
     # Close in black
     fig.add_trace(go.Scatter(
-        x=d.index, y=d['Close'], mode='lines', name='Close', line=dict(color='black')
+        x=d.index, y=[float(v) for v in d['Close']], mode='lines', name='Close', line=dict(color='black')
     ))
     # EMA13 dotted
     fig.add_trace(go.Scatter(
-        x=d.index, y=d['EMA13'], mode='lines', name='EMA13',
+        x=d.index, y=[float(v) for v in d['EMA13']], mode='lines', name='EMA13',
         line=dict(dash='dot', width=1.25, color='blue')
     ))
     # EMA55 dotted
     fig.add_trace(go.Scatter(
-        x=d.index, y=d['EMA55'], mode='lines', name='EMA55',
+        x=d.index, y=[float(v) for v in d['EMA55']], mode='lines', name='EMA55',
         line=dict(dash='dot', width=1.25, color='red')
     ))
     # EMA144 dotted
     fig.add_trace(go.Scatter(
-        x=d.index, y=d['EMA144'], mode='lines', name='EMA144',
+        x=d.index, y=[float(v) for v in d['EMA144']], mode='lines', name='EMA144',
         line=dict(dash='dot', width=1.25, color='green')
     ))
     fig.update_layout(
@@ -1237,6 +1242,7 @@ def build_ema_figure(df, ticker):
     # ← new additions ↓
     hovermode='x unified',                # show all traces’ data at the same x
     xaxis=dict(
+        type='date',
         showspikes=True,                  # draw a spike (vertical line)
         spikemode='across',               # spike runs across the plot
         spikesnap='cursor',               # snap spike to the cursor
@@ -1252,13 +1258,14 @@ def build_ema_figure(df, ticker):
 def build_rsi_figure(df,ticker):
     d=df[df.index>=df.index.max()-pd.DateOffset(years=1)]
     fig=go.Figure()
-    fig.add_trace(go.Scatter(x=d.index, y=d['RSI14'], mode='lines', name='RSI'))
+    fig.add_trace(go.Scatter(x=d.index, y=[float(v) for v in d['RSI14']], mode='lines', name='RSI'))
     # 13‐period EMA of RSI
-    fig.add_trace(go.Scatter(x=d.index, y=d['RSI_EMA13'], mode='lines', name='RSI EMA-13', line=dict(dash='dot', width=1)))
+    fig.add_trace(go.Scatter(x=d.index, y=[float(v) for v in d['RSI_EMA13']], mode='lines', name='RSI EMA-13', line=dict(dash='dot', width=1)))
     fig.update_layout(title=f'{ticker} RSI', height=450,
     # ← new additions ↓
     hovermode='x unified',                # show all traces’ data at the same x
     xaxis=dict(
+        type='date',
         showspikes=True,                  # draw a spike (vertical line)
         spikemode='across',               # spike runs across the plot
         spikesnap='cursor',               # snap spike to the cursor
@@ -1272,13 +1279,14 @@ def build_rsi_figure(df,ticker):
 def build_adl_figure(df,ticker):
     d=df[df.index>=df.index.max()-pd.DateOffset(years=1)]
     fig=go.Figure()
-    fig.add_trace(go.Scatter(x=d.index, y=d['ADL'], mode='lines', name='ADL'))
-    fig.add_trace(go.Scatter(x=d.index, y=d['ADL_EMA'], mode='lines', name='ADL EMA', line=dict(dash='dot', width=1.25, color='orange')
+    fig.add_trace(go.Scatter(x=d.index, y=[float(v) for v in d['ADL']], mode='lines', name='ADL'))
+    fig.add_trace(go.Scatter(x=d.index, y=[float(v) for v in d['ADL_EMA']], mode='lines', name='ADL EMA', line=dict(dash='dot', width=1.25, color='orange')
     ))
     fig.update_layout(title=f'{ticker} ADL', height=450,
     # ← new additions ↓
     hovermode='x unified',                # show all traces’ data at the same x
     xaxis=dict(
+        type='date',
         showspikes=True,                  # draw a spike (vertical line)
         spikemode='across',               # spike runs across the plot
         spikesnap='cursor',               # snap spike to the cursor
@@ -1293,16 +1301,15 @@ def build_rs_figure(df, ticker):
     d = df[df.index >= df.index.max() - pd.DateOffset(years=1)]
     fig = go.Figure()
     fig.add_trace(go.Scatter(
-        x=d.index, y=d['RS'], mode='lines', name='Relative Strength'
-    ))
+        x=d.index, y=[float(v) for v in d['RS']], mode='lines', name='Relative Strength'))
     fig.update_layout(
-        title=f"{ticker} Relative Strength vs Nifty",
-        height=450,
+        title=f"{ticker} Relative Strength vs Nifty", height=450,
         legend=dict(orientation='h', x=0.5, xanchor='center', y=-0.2),
         yaxis=dict(tickformat='.2%'),
     # ← new additions ↓
     hovermode='x unified',                # show all traces’ data at the same x
     xaxis=dict(
+        type='date',
         showspikes=True,                  # draw a spike (vertical line)
         spikemode='across',               # spike runs across the plot
         spikesnap='cursor',               # snap spike to the cursor
@@ -1481,6 +1488,8 @@ def analyze():
         else:
             cleaned_technical_summary = technical_summary_list
 
+        print("DEBUG — df.columns:", df.columns)
+        print("DEBUG — df['Close'] dtype & head:", df['Close'].dtype, df['Close'].head())
 
         # Build chart JSONs (no changes needed here)
         close_j=build_close_figure(df,tick).to_json()
@@ -1561,7 +1570,7 @@ def analyze():
             def make_metric_fig(df_metric: pd.DataFrame, title: str):
                 # ... (make_metric_fig function) ...
                 fig = go.Figure()
-                for col in df_metric.columns: fig.add_trace(go.Scatter(x=df_metric.index, y=df_metric[col], mode='lines', name=col))
+                for col in df_metric.columns: fig.add_trace(go.Scatter(x=df_metric.index, y=[float(v) for v in df_metric[col]], mode='lines', name=col))
                 fig.update_layout(title=title, hovermode='x unified', legend=dict(orientation='h', x=0.5, xanchor='center', y=-0.2), xaxis=dict(type='date', title='Date'), yaxis=dict(title=title))
                 return fig.to_json()
 
@@ -1626,4 +1635,4 @@ def analyze():
 
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host='0.0.0.0', port=8000, debug=True)
