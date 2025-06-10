@@ -18,6 +18,23 @@
     #chatLog::-webkit-scrollbar-track {
       background-color: #e2e8f0; /* slate-200 */
     }
+    /* Simple styling for the AI summary content if prose plugin fails */
+    .summary-content h4 {
+        font-size: 1.125rem; /* text-lg */
+        font-weight: 600; /* font-semibold */
+        margin-top: 1rem;
+        margin-bottom: 0.5rem;
+        color: #334155; /* slate-700 */
+    }
+    .summary-content p, .summary-content ul {
+        margin-bottom: 1rem;
+        line-height: 1.6;
+    }
+    .summary-content ul {
+        list-style-position: inside;
+        list-style-type: disc;
+        padding-left: 1rem;
+    }
   </style>
 </head>
 <body class="bg-slate-100 text-slate-800 antialiased">
@@ -196,18 +213,29 @@
         const payload = await res.json();
         if (!res.ok) throw new Error(payload.error || 'Unknown error');
 
-        resultsContainer.innerHTML = `
+        // === START: MODIFIED SECTION TO RENDER NEW SUMMARY ===
+        let summarySectionHTML = '';
+        if (payload.company_summary_html) {
+            summarySectionHTML = `
+                <div class="bg-white p-6 rounded-xl shadow-lg">
+                    <h2 class="text-2xl font-bold mb-4 text-slate-700">Summary for ${payload.ticker}</h2>
+                    <div class="summary-content prose prose-slate max-w-none text-slate-600">
+                        ${payload.company_summary_html}
+                    </div>
+                </div>
+            `;
+        }
+        // Construct the rest of the HTML
+        let technicalSummaryHTML = `
           <div class="bg-white p-6 rounded-xl shadow-lg">
-            <h2 class="text-2xl font-bold mb-6 text-slate-700">Technical Summary for ${payload.ticker}</h2>
+            <h2 class="text-2xl font-bold mb-6 text-slate-700">Technical Analysis</h2>
             <div class="overflow-x-auto">
               <table class="w-full border border-slate-200">
                 <tbody class="text-sm">
                   ${payload.summary.map(row =>
                     `<tr class="even:bg-slate-50 hover:bg-slate-100 transition-colors duration-150">
                        <td class="px-4 py-3 border-b border-slate-200 font-medium text-slate-600">${row.key}</td>
-                       <td class="px-4 py-3 border-b border-slate-200 text-slate-700 relative">
-                         ${row.value}
-                       </td>
+                       <td class="px-4 py-3 border-b border-slate-200 text-slate-700 relative">${row.value}</td>
                      </tr>`
                   ).join('')}
                 </tbody>
@@ -215,6 +243,9 @@
             </div>
           </div>
         `;
+        // Set the final HTML, with the AI summary at the top
+        resultsContainer.innerHTML = summarySectionHTML + technicalSummaryHTML;
+        // === END: MODIFIED SECTION ===
 
         const charts = [
           { key: 'Price-Action Trend (based on Close prices)',    json: payload.chart_close_json, id: 'chart-close' },

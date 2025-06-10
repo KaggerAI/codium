@@ -59,7 +59,7 @@ def index():
 import os
 import openai
 openai.api_key = "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"
-
+#openai.api_key = os.getenv("OPENAI_API_KEY")
 
 # =====================================================================
 # START: Data Schema Description Function and RAG Function for AI Planner
@@ -698,222 +698,13 @@ def print_full_schema():
 #======================================================================#
 
 import requests
-
-BASE_URL   = "https://www.screener.in/company/{ticker}/consolidated/"
-HEADERS    = {"User-Agent":"Mozilla/5.0"}
-LABELS     = {
-    1: "Quarterly Results",
-    2: "Annual Results",
-    3: "Sales Growth Pattern",
-    4: "Profit Growth Pattern",
-    5: "Stock Price Growth Pattern",
-    6: "ROE Pattern",
-    7: "Balance Sheet",
-    8: "Cash Flow",
-    9: "Financial Ratios",
-    10: "Quarterly Shareholding Pattern",
-    11: "Annual Shareholding Pattern",
-}
-PATTERNS   = [
-    "Sales Growth Pattern",
-    "Profit Growth Pattern",
-    "Stock Price Growth Pattern",
-    "ROE Pattern",
-]
-
-def clean_df(df: pd.DataFrame) -> pd.DataFrame:
-    df = df.copy()
-    if df.columns.nlevels > 1: 
-        df.columns = ['_'.join(col).strip() for col in df.columns.values]
-    else:
-        # This strips column headers (your period names like "Mar 2024", "TTM:")
-        df.columns = df.columns.str.strip().str.replace("Unnamed: 0","", regex=False)
-
-    for col in df.select_dtypes(include="object"):
-        # This strips string values within the DataFrame cells
-        df[col] = df[col].str.strip().str.replace("+","",regex=False)
-    
-    # This strips the DataFrame's index values if they are strings
-    # For Screener data, the index of the raw tables before processing is usually just integer row numbers.
-    # The actual metric names (like "Sales ", "Borrowings ") are *values* in the first column of the DataFrame
-    # before you potentially set it as an index.
-    if df.index.dtype == object:
-        df.index = df.index.astype(str).str.strip().str.replace("+","",regex=False)
-    return df
-
-def fetch_consolidated(ticker: str) -> dict[str,pd.DataFrame]:
-    raw = pd.read_html(
-        requests.get(BASE_URL.format(ticker=ticker), headers=HEADERS).text
-    )
-    tables = { LABELS[i]: clean_df(df) for i, df in enumerate(raw, start=1) }
-    # merge the 4 pattern‐tables into one “Growth Patterns” table:
-    series_list = []
-    for p in PATTERNS:
-        df = tables.pop(p, None)
-        if df is not None:
-            idx, val = df.columns[:2]
-            s = df.set_index(idx)[val]
-            s.name = p
-            series_list.append(s)
-    if series_list:
-        merged = pd.concat(series_list, axis=1).T
-        merged.index.name = ""
-        tables["Growth Patterns"] = merged
-    return tables
-
-
-def get_company_id(ticker: str) -> int:
-    url = "https://www.screener.in/api/company/search/"
-    resp = requests.get(url, params={"q": ticker})
-    resp.raise_for_status()
-    data = resp.json()
-    if not data:
-        raise ValueError(f"No company found for ticker '{ticker}'")
-    return data[0]["id"]
-
-def fetch_chart_data(company_id: int, query: str, days: int=10000) -> dict:
-    url = f"https://www.screener.in/api/company/{company_id}/chart/"
-    resp = requests.get(url, params={"q": query, "days": days})
-    resp.raise_for_status()
-    return resp.json()
-
-def parse_chart_json(chart_json: dict) -> pd.DataFrame:
-    datasets = chart_json.get("datasets", [])
-    dfs = []
-    for ds in datasets:
-        label = ds.get("label") or ds.get("metric")
-        values = ds.get("values", [])
-        df = pd.DataFrame(values, columns=["date", label])
-        df["date"] = pd.to_datetime(df["date"])
-        df.set_index("date", inplace=True)
-        df[label] = pd.to_numeric(df[label], errors="coerce")
-        dfs.append(df)
-    if not dfs:
-        return pd.DataFrame()
-    return pd.concat(dfs, axis=1)
-
-# In handler.py, replace the entire function
-
-def get_text_from_pdf_url(pdf_url: str, max_pages_to_process=15, max_chars_to_return=10000) -> str:
-    """
-    Downloads a PDF, finds the start of the 'Question and Answer' session, 
-    and extracts text from that point onwards for a few pages.
-    """
-    try:
-        response = requests.get(pdf_url, headers=HEADERS, timeout=15)
-        response.raise_for_status()
-        
-        pdf_file = BytesIO(response.content)
-        
-        all_text = []
-        start_page = 0
-        found_start_keyword = False
-
-        with pdfplumber.open(pdf_file) as pdf:
-            # 1. Search for the starting page
-            # We'll search the first 10 pages for a keyword that indicates the start of the content
-            search_limit = min(len(pdf.pages), 10)
-            for i in range(search_limit):
-                page_text = pdf.pages[i].extract_text() or ""
-                # Look for common start phrases for the valuable content
-                if "question and answer session" in page_text.lower() or "moderator:" in page_text.lower():
-                    print(f"INFO: Found start keyword on page {i+1}. Starting text extraction from here.")
-                    start_page = i
-                    found_start_keyword = True
-                    break
-            
-            # If we didn't find a keyword, default to starting from page 2 to skip the cover
-            if not found_start_keyword:
-                print("WARN: 'Question and Answer' keyword not found. Defaulting to start extraction from page 3.")
-                start_page = 2 # Skip cover and index pages
-
-            # 2. Extract text from the start page onwards
-            end_page = min(len(pdf.pages), start_page + max_pages_to_process)
-            for i in range(start_page, end_page):
-                page = pdf.pages[i]
-                text = page.extract_text()
-                if text:
-                    all_text.append(text)
-        
-        full_summary = "\n".join(all_text)
-        
-        # 3. Truncate the final text to a reasonable character limit for the AI prompt
-        return full_summary[:max_chars_to_return]
-
-    except Exception as e:
-        print(f"ERROR: Failed to get text from PDF URL {pdf_url}. Reason: {e}")
-        return None
-
-
-# In handler.py
-
-def fetch_latest_documents(ticker: str) -> list[dict]:
-    """
-    DEFINITIVE CORRECTED function to scrape the Screener.in page.
-    This version targets the specific 'concalls' sub-section.
-    """
-    documents = []
-    found_types = set()
-
-    try:
-        url = BASE_URL.format(ticker=ticker)
-        response = requests.get(url, headers=HEADERS, timeout=15)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.text, 'html.parser')
-
-        # 1. Find the specific 'Concalls' sub-section div
-        concalls_section = soup.find('div', class_='concalls')
-        if not concalls_section:
-            print(f"WARN: No 'concalls' section found for {ticker}")
-            return []
-
-        # 2. Iterate through each list item (each represents a dated entry)
-        for item in concalls_section.find_all('li'):
-            # Stop if we've already found the latest of both types
-            if len(found_types) == 2:
-                break
-
-            date_element = item.find('div', class_='nowrap')
-            date_text = f"({date_element.text.strip()})" if date_element else ""
-
-            # 3. Find the Concall Transcript link if we haven't already
-            if 'Concall' not in found_types:
-                # Find the 'a' tag where the text is exactly 'Transcript'
-                transcript_link = item.find('a', string='Transcript')
-                if transcript_link and transcript_link.get('href'):
-                    doc_info = {
-                        "type": "Concall",
-                        "text": f"Concall Transcript {date_text}",
-                        "link": transcript_link['href']
-                    }
-                    # Extract text content from the PDF
-                    print(f"INFO: Fetching concall text for {ticker} from {doc_info['link']}")
-                    summary = get_text_from_pdf_url(doc_info['link'])
-                    if summary:
-                        doc_info['content_summary'] = summary[:4000] + ("..." if len(summary) > 4000 else "")
-                    
-                    documents.append(doc_info)
-                    found_types.add('Concall')
-
-            # 4. Find the Presentation (PPT) link if we haven't already
-            if 'Presentation' not in found_types:
-                # Find the 'a' tag where the text is exactly 'PPT'
-                ppt_link = item.find('a', string='PPT')
-                if ppt_link and ppt_link.get('href'):
-                    doc_info = {
-                        "type": "Presentation",
-                        "text": f"Results Presentation {date_text}",
-                        "link": ppt_link['href']
-                    }
-                    documents.append(doc_info)
-                    found_types.add('Presentation')
-
-        return documents
-
-    except Exception as e:
-        print(f"ERROR: Could not fetch documents for {ticker}. Reason: {e}")
-        traceback.print_exc()
-        return []
+from screener_fetcher import (
+    fetch_consolidated,
+    get_company_id,
+    fetch_chart_data,
+    parse_chart_json,
+    fetch_latest_documents
+)
 
 # Initialize TradingView datafeed (guest)
 tv = TvDatafeed()
@@ -1456,6 +1247,100 @@ def generate_summary(result):
 #    rows.append(("Last two lows (based on High/Low prices)",      ", ".join(f"{d} @ {v:.2f}" for d, v in hl_lows)))
     return [{"key": k, "value": v} for k, v in rows]
 
+def generate_ai_company_summary(ticker, description, fundamentals, documents):
+    """
+    REWRITTEN: The AI is now tasked with interpreting the raw text from the
+    Results Presentation to find segmental and geographical data, as the
+    structured tables are unavailable.
+    """
+    if not openai.api_key:
+        print("CRITICAL ERROR: OPENAI_API_KEY environment variable is not set.")
+        return "<p><strong>Configuration Error:</strong> The server's AI summary service is not configured.</p>"
+
+    context_parts = []
+    context_parts.append(f"## Company: {ticker}\n")
+    
+    if description:
+        context_parts.append("### Business Description\n")
+        context_parts.append(description)
+
+    # --- Financials Context (Unchanged) ---
+    if fundamentals:
+        annual_results = fundamentals.get("Annual Results")
+        if annual_results is not None and not annual_results.empty:
+            context_parts.append("\n### Key Annual Financials (for overall trend analysis)\n")
+            annual_df = annual_results.set_index(annual_results.columns[0])
+            key_metrics = ["Sales", "Net Profit"]
+            for metric in key_metrics:
+                if metric in annual_df.index:
+                    metric_data = annual_df.loc[metric].iloc[-3:]
+                    context_parts.append(f"- {metric} (last 3 years): {', '.join(metric_data.astype(str).tolist())}")
+
+
+    # --- MODIFIED: Document Context (Checks for both Concall and Presentation) ---
+    if documents:
+        presentation_doc = next((d for d in documents if d.get('type') == 'Presentation' and 'content_summary' in d), None)
+        if presentation_doc and presentation_doc['content_summary']:
+            context_parts.append("\n### Full Text from Latest Results Presentation\n")
+            # Provide a substantial amount of text for the AI to analyze
+            context_parts.append(presentation_doc['content_summary'][:8000])
+
+        concall_doc = next((d for d in documents if d.get('type') == 'Concall' and 'content_summary' in d), None)
+        if concall_doc and concall_doc['content_summary']:
+            context_parts.append("\n### Key Points from Latest Concall Transcript\n")
+            context_parts.append(concall_doc['content_summary'][:3000])
+
+    full_context = "\n".join(context_parts)
+    
+    print("\n" + "="*40)
+    print("CONTEXT BEING SENT TO AI FOR SUMMARY GENERATION:")
+    print(full_context)
+    print("="*40 + "\n")
+    
+    if len(full_context) < 150:
+        return "<p>A detailed summary could not be generated due to insufficient data.</p>"
+
+    # --- MODIFIED: New, more detailed System Prompt ---
+    system_prompt = """You are an expert financial analyst AI. Your task is to generate a concise, data-driven summary for a retail investor by interpreting the provided documents.
+
+    **Instructions:**
+    1.  Structure your response using simple HTML: `<h4>` for headers, `<p>`, `<ul>`, `<li>`.
+    2.  Do NOT include `<html>` or `<body>` tags. The output must be a single block of well-formed HTML.
+    3.  Your primary task is to find and interpret revenue breakdown information from the **'Full Text from Latest Results Presentation'**.
+
+    **Output Structure:**
+
+    <h4>What the Company Does</h4>
+    <p>A brief, one-paragraph description of the company's core business.</p>
+
+    <h4>How it Generates Revenue</h4>
+    <p>Start with a general sentence about the company's overall sales trend based on the 'Key Annual Financials'.</p>
+    <p>Then, **carefully read the 'Full Text from Latest Results Presentation'** to find revenue breakdowns. Look for keywords like "Segment Revenue", "Geographical Mix", "Revenue by Vertical", "Revenue by Geography".</p>
+    <p>If you find this data, create bulleted lists to summarize it. For each segment or geography, extract the revenue contribution (e.g., in Cr. or as a percentage) and any mention of YoY growth. Be factual and extract the numbers as they are presented.</p>
+    <ul>
+        <li><strong>Business Segments:</strong> (e.g., "Digital Platforms: 45% of revenue, grew 15% YoY.")</li>
+        <li><strong>Geographical Segments:</strong> (e.g., "USA: 60% of revenue; Europe: 25%; Rest of World: 15%.")</li>
+    </ul>
+    <p>If, after reading the presentation text, you **cannot find** specific segmental or geographical numbers, you **must** state: "A detailed revenue breakdown by segment or geography was not available in the provided presentation." Do not invent data.</p>
+
+    <h4>Latest Developments & News</h4>
+    <p>Synthesize the key takeaways from BOTH the 'Results Presentation' and the 'Concall Transcript'. Create a unified bulleted list of the most important points.</p>
+    """
+
+    try:
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"Generate the HTML summary for the following company based on this data:\n\n{full_context}"}
+        ]
+        
+        summary_html = call_openai_api(messages, model="o4-mini", temperature=1)
+        return summary_html
+
+    except Exception as e:
+        print(f"CRITICAL ERROR: Failed to generate AI company summary for {ticker}.")
+        # ... (error logging is unchanged) ...
+        return "<p><strong>Error:</strong> The AI-powered summary could not be generated at this time.</p>"
+    
 # ------------- Analysis & Respond -------------
 
 @app.route('/analyze',methods=['POST'])
@@ -1488,9 +1373,6 @@ def analyze():
         else:
             cleaned_technical_summary = technical_summary_list
 
-        print("DEBUG — df.columns:", df.columns)
-        print("DEBUG — df['Close'] dtype & head:", df['Close'].dtype, df['Close'].head())
-
         # Build chart JSONs (no changes needed here)
         close_j=build_close_figure(df,tick).to_json()
         # ... (other chart jsons) ...
@@ -1501,7 +1383,7 @@ def analyze():
         rs_j   =build_rs_figure(df,tick).to_json()
         
         # --- Fundamentals Data Processing ---
-        tables_from_screener = fetch_consolidated(tick) # Returns dict of DataFrames
+        tables_from_screener, company_description = fetch_consolidated(tick)
         
         fund_data_for_frontend = {} # For app.html renderFundTable
         fund_data_for_ai_context = {}   # For last_analysis (cleaned)
@@ -1604,6 +1486,15 @@ def analyze():
         print(f"DEBUG /analyze: Documents fetched: {latest_documents}")
         # --- End of new section ---
         
+        # --- NEW: Generate AI Company Summary ---
+        print(f"INFO: Generating AI company summary for {tick}...")
+        ai_company_summary_html = generate_ai_company_summary(
+            ticker=tick,
+            description=company_description,
+            fundamentals=tables_from_screener, # Pass the dict of DataFrames
+            documents=latest_documents
+        )
+
         # --- Populate last_analysis with cleaned data ---
         global last_analysis
         last_analysis = {
@@ -1615,7 +1506,9 @@ def analyze():
         }
        
         return jsonify({
+
             'ticker':tick,
+            'company_summary_html': ai_company_summary_html, # <-- NEWLY ADDED for the frontend
             'summary': cleaned_technical_summary, # Send cleaned summary to frontend too
             'chart_close_json':close_j,
             'chart_hl_json':hl_j,
