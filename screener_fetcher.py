@@ -52,11 +52,7 @@ def clean_df(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 def fetch_consolidated(ticker: str) -> tuple[dict[str, pd.DataFrame], str]:
-    """
-    MODIFIED: Now returns a third item: a dictionary containing DataFrames for
-    segmental and geographical data if found.
-    Return -> (financial_tables, description, segment_data)
-    """
+    
     url = BASE_URL.format(ticker=ticker)
     response = requests.get(url, headers=HEADERS)
     response.raise_for_status()
@@ -128,7 +124,7 @@ def parse_chart_json(chart_json: dict) -> pd.DataFrame:
         return pd.DataFrame()
     return pd.concat(dfs, axis=1)
 
-def get_text_from_pdf_url(pdf_url: str, max_pages_to_process=20, max_chars_to_return=10000) -> str:
+def get_text_from_pdf_url(pdf_url: str, max_pages_to_process=35, max_chars_to_return=10000) -> str:
     """
     Downloads a PDF, finds the start of the 'Question and Answer' session,
     and extracts text from that point onwards for a few pages.

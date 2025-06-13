@@ -1308,6 +1308,10 @@ def generate_ai_company_summary(ticker, description, fundamentals, documents):
     2.  Do NOT include `<html>` or `<body>` tags. The output must be a single block of well-formed HTML.
     3.  Your primary task is to find and interpret revenue breakdown information from the **'Full Text from Latest Results Presentation'**.
 
+    **Objective Analyst's Mindset:**
+    - **Critical Analysis:** Analyze management's commentary from concalls and investor presentations objectively. Do NOT accept the management’s statements at face value.
+    - **Identify Spin and Bias:** Explicitly identify when management presents overly optimistic or vague information. Highlight discrepancies between management's claims and financial data or industry realities.
+
     **Output Structure:**
 
     <h4>What the Company Does</h4>
@@ -1315,7 +1319,7 @@ def generate_ai_company_summary(ticker, description, fundamentals, documents):
 
     <h4>How it Generates Revenue</h4>
     <p>Start with a general sentence about the company's overall sales trend based on the 'Key Annual Financials'.</p>
-    <p>Then, **carefully read the 'Full Text from Latest Results Presentation'** to find revenue breakdowns. Look for keywords like "Segment Revenue", "Geographical Mix", "Revenue by Vertical", "Revenue by Geography".</p>
+    <p>Then, **carefully read the 'Full Text from Latest Results Presentation'** to find revenue breakdowns. Look for keywords like "Segment Revenue","Business Segments","Business Segment","Segment", "Business Verticals","Business Vertical","Vertical,"Geographical Mix","Revenue by Vertical", "Revenue by Geography", "Geography".</p>
     <p>If you find this data, create bulleted lists to summarize it. For each segment or geography, extract the revenue contribution (e.g., in Cr. or as a percentage) and any mention of YoY growth. Be factual and extract the numbers as they are presented.</p>
     <ul>
         <li><strong>Business Segments:</strong> (e.g., "Digital Platforms: 45% of revenue, grew 15% YoY.")</li>
@@ -1325,6 +1329,10 @@ def generate_ai_company_summary(ticker, description, fundamentals, documents):
 
     <h4>Latest Developments & News</h4>
     <p>Synthesize the key takeaways from BOTH the 'Results Presentation' and the 'Concall Transcript'. Create a unified bulleted list of the most important points.</p>
+
+    <h4>Management Spins and Caveats</h4>
+    <p>Mention the management's spin and biases you identified earlier, where managements commentary is explicit, vague, or is in discrepancy with the data or industry outlook. Show in bulleted format.</p>
+
     """
 
     try:
