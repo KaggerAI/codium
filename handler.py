@@ -55,11 +55,131 @@ CORS(app)
 def index():
     return send_from_directory('.', 'app.html')
 
-# at the top of handler.py
-import os
+# # at the top of handler.py
+# import os
+# import openai
+# #openai.api_key = "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"
+# openai.api_key = os.getenv("OPENAI_API_KEY")
+
+# =====================================================================
+# START: API Configuration and Multi-Model Handling
+# =====================================================================
+
 import openai
-openai.api_key = "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"
-#openai.api_key = os.getenv("OPENAI_API_KEY")
+import perplexityai
+import google.generativeai as genai
+
+# Securely load API keys from environment variables
+openai.api_key = os.getenv("OPENAI_API_KEY")
+PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY")
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+
+# Configure Google Gemini
+if GOOGLE_API_KEY:
+    genai.configure(api_key=GOOGLE_API_KEY)
+
+# Safety check for keys at startup
+if not all([openai.api_key, PERPLEXITY_API_KEY, GOOGLE_API_KEY]):
+    print("CRITICAL WARNING: One or more API keys (OPENAI_API_KEY, PERPLEXITY_API_KEY, GOOGLE_API_KEY) are not set in your environment variables.")
+
+# Helper to convert messages to Gemini format
+def convert_to_gemini_format(messages):
+    gemini_messages = []
+    for msg in messages:
+        # Gemini API requires alternating user/model roles, and can't have two 'user' roles in a row.
+        # We'll simplify and merge consecutive user messages if needed, although our app structure avoids this.
+        role = "user" if msg["role"] == "user" else "model"
+        if gemini_messages and gemini_messages[-1]['role'] == role:
+            # If last message has the same role, append content. This is a safeguard.
+            gemini_messages[-1]['parts'].append(msg["content"])
+        else:
+            gemini_messages.append({'role': role, 'parts': [msg["content"]]})
+    return gemini_messages
+
+def call_openai_api(messages, model="gpt-4o-mini", expect_json_format_flag=False, temperature=1):
+    if not openai.api_key:
+        raise ValueError("OpenAI API key is not configured.")
+    try:
+        completion_params = {
+            "model": model,
+            "messages": messages,
+            "temperature": temperature,
+        }
+        # Use OpenAI's JSON mode for reliable structured output
+        if expect_json_format_flag and ("-turbo" in model or "-o" in model):
+            completion_params["response_format"] = {"type": "json_object"}
+
+        response = openai.chat.completions.create(**completion_params)
+        return response.choices[0].message.content
+    except Exception as e:
+        print(f"ERROR in call_openai_api: {e}")
+        raise
+
+def call_perplexity_api(messages, model="pplx-7b-online", temperature=1):
+    if not PERPLEXITY_API_KEY:
+        raise ValueError("Perplexity API key is not configured.")
+    try:
+        client = perplexityai.Client(api_key=PERPLEXITY_API_KEY)
+        response = client.chat.completions.create(
+            model=model,
+            messages=messages,
+            temperature=temperature,
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        print(f"ERROR in call_perplexity_api: {e}")
+        raise
+
+def call_gemini_api(messages, model="gemini-1.5-flash-latest", temperature=1):
+    if not GOOGLE_API_KEY:
+        raise ValueError("Google Gemini API key is not configured.")
+    try:
+        # Gemini has stricter safety settings; we set them to be permissive for financial analysis.
+        safety_settings = [
+            {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
+        ]
+        gemini_model = genai.GenerativeModel(model)
+        gemini_messages = convert_to_gemini_format(messages)
+        
+        response = gemini_model.generate_content(
+            gemini_messages,
+            generation_config=genai.types.GenerationConfig(temperature=temperature),
+            safety_settings=safety_settings
+        )
+        return response.text
+    except Exception as e:
+        print(f"ERROR in call_gemini_api: {e}")
+        raise
+
+def call_generative_ai_model(model, messages, temperature=1):
+    """
+    Dispatcher function to call the appropriate AI model API.
+    """
+    print(f"INFO: Dispatching request to model: {model}")
+    try:
+        if model.startswith('gpt-') or model.startswith('o4-'):
+            return call_openai_api(messages, model=model, temperature=temperature)
+        elif model.startswith('pplx-'):
+            return call_perplexity_api(messages, model=model, temperature=temperature)
+        elif model.startswith('gemini-'):
+            return call_gemini_api(messages, model=model, temperature=temperature)
+        else:
+            # Default to a reliable, cheap model if the selection is unknown
+            print(f"WARN: Unknown model '{model}', defaulting to 'gpt-4o-mini'.")
+            return call_openai_api(messages, model='gpt-4o-mini', temperature=temperature)
+    except Exception as e:
+        # Catch errors from any of the specific API call functions
+        error_message = f"An error occurred while calling the AI model '{model}': {str(e)}"
+        print(f"ERROR: {error_message}")
+        # Re-raise the exception to be handled by the Flask route's error handler
+        raise Exception(error_message)
+
+# =====================================================================
+# END: API Configuration and Multi-Model Handling
+# =====================================================================
 
 # =====================================================================
 # START: Data Schema Description Function and RAG Function for AI Planner
@@ -303,30 +423,30 @@ def retrieve_data_based_on_plan(plan_retrieve_data_section, full_context):
     return focused_data
 
 
-def call_openai_api(messages, model="o4-mini", expect_json_format_flag=False, temperature=1):
-    # ... (Your existing call_openai_api function remains the same) ...
-    try:
-        completion_params = {
-            "model": model,
-            "messages": messages,
-            "temperature": temperature,
-        }
-        if expect_json_format_flag and (model == "o4-mini" or model.startswith("gpt-4-turbo") or model.startswith("gpt-3.5-turbo-1106")):
-            completion_params["response_format"] = {"type": "json_object"}
+# def call_openai_api(messages, model="o4-mini", expect_json_format_flag=False, temperature=1):
+#     # ... (Your existing call_openai_api function remains the same) ...
+#     try:
+#         completion_params = {
+#             "model": model,
+#             "messages": messages,
+#             "temperature": temperature,
+#         }
+#         if expect_json_format_flag and (model == "o4-mini" or model.startswith("gpt-4-turbo") or model.startswith("gpt-3.5-turbo-1106")):
+#             completion_params["response_format"] = {"type": "json_object"}
 
-        # print(f"DEBUG: Making OpenAI call to model {model}. Expect JSON mode: {expect_json_format_flag}. Messages: {json.dumps(messages, indent=2)}")
-        response = openai.chat.completions.create(**completion_params)
-        content = response.choices[0].message.content
-        # print(f"DEBUG: OpenAI Raw Response Content:\n{content}") 
-        return content
-    except openai.RateLimitError as rle:
-        print(f"ERROR: OpenAI Rate Limit Error: {rle}")
-        raise rle # Re-raise to be caught by the route's error handler
-    except Exception as e:
-        print(f"ERROR: Error in OpenAI API call: {e}")
-        traceback.print_exc()
-        # It's better to raise a custom exception or re-raise 'e' so the route handler can give a 500
-        raise Exception(f"OpenAI API call failed: {str(e)}")
+#         # print(f"DEBUG: Making OpenAI call to model {model}. Expect JSON mode: {expect_json_format_flag}. Messages: {json.dumps(messages, indent=2)}")
+#         response = openai.chat.completions.create(**completion_params)
+#         content = response.choices[0].message.content
+#         # print(f"DEBUG: OpenAI Raw Response Content:\n{content}") 
+#         return content
+#     except openai.RateLimitError as rle:
+#         print(f"ERROR: OpenAI Rate Limit Error: {rle}")
+#         raise rle # Re-raise to be caught by the route's error handler
+#     except Exception as e:
+#         print(f"ERROR: Error in OpenAI API call: {e}")
+#         traceback.print_exc()
+#         # It's better to raise a custom exception or re-raise 'e' so the route handler can give a 500
+#         raise Exception(f"OpenAI API call failed: {str(e)}")
 
 # =====================================================================
 # END: Data Schema Description Function and RAG Function for AI Planner
@@ -377,6 +497,9 @@ def chat():
     try:
         data = request.get_json(force=True)
         user_question = data.get('question', '').strip()
+        # Get the selected model from the request, default to a reliable choice
+        selected_model = data.get('model', 'gpt-4o-mini') 
+        print(f"INFO: /chat route received question with selected model: {selected_model}")
 
         if not user_question:
             return jsonify({'error': 'No question provided'}), 400
@@ -421,6 +544,7 @@ def chat():
         ]
         
         print("INFO: Making planning call (with thought process) to AI...")
+        # NOTE: This call is intentionally hardcoded to a model supporting JSON mode for reliability.
         # Temperature might be slightly higher for more complex planning, or keep low for precision.
         ai_full_response_str = call_openai_api(planning_messages, model="o4-mini", expect_json_format_flag=False, temperature=1) 
 
@@ -539,7 +663,13 @@ def chat():
         ]
 
         print("INFO: Making answering call to AI with focused data...")
-        final_answer = call_openai_api(answering_messages, model="o4-mini", temperature=1)
+        # Use the new dispatcher function with the user's selected model
+        final_answer = call_generative_ai_model(
+            model=selected_model,
+            messages=answering_messages,
+            temperature=1 # A balanced temperature for creative but factual answers
+        )
+        # final_answer = call_openai_api(answering_messages, model="o4-mini", temperature=1)
 
         return jsonify({
             'answer': final_answer,
