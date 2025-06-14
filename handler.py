@@ -66,7 +66,7 @@ def index():
 # =====================================================================
 
 import openai
-import perplexityai
+from perplexity import Perplexity # <- USE THIS CORRECT IMPORT
 import google.generativeai as genai
 
 # Securely load API keys from environment variables
@@ -115,20 +115,42 @@ def call_openai_api(messages, model="gpt-4o-mini", expect_json_format_flag=False
         print(f"ERROR in call_openai_api: {e}")
         raise
 
-def call_perplexity_api(messages, model="pplx-7b-online", temperature=1):
+def call_perplexity_api(messages, model="sonar-medium-online", temperature=1):
     if not PERPLEXITY_API_KEY:
         raise ValueError("Perplexity API key is not configured.")
     try:
-        client = perplexityai.Client(api_key=PERPLEXITY_API_KEY)
-        response = client.chat.completions.create(
-            model=model,
-            messages=messages,
-            temperature=temperature,
-        )
-        return response.choices[0].message.content
+        url = "https://api.perplexity.ai/chat/completions"
+        
+        payload = {
+            "model": model,
+            "messages": messages,
+            "temperature": temperature,
+        }
+        
+        headers = {
+            "Authorization": f"Bearer {PERPLEXITY_API_KEY}",
+            "Content-Type": "application/json"
+        }
+        
+        response = requests.post(url, headers=headers, json=payload)
+        
+        # Check for HTTP errors
+        response.raise_for_status()
+        
+        # Ensure we have valid JSON
+        if response.content.strip():
+            return response.json()['choices'][0]['message']['content']
+        else:
+            raise ValueError("Empty response from Perplexity API")
+            
+    except requests.exceptions.JSONDecodeError:
+        print(f"Non-JSON response: {response.text}")
+        raise ValueError(f"Invalid JSON response from Perplexity API: {response.text}")
     except Exception as e:
         print(f"ERROR in call_perplexity_api: {e}")
         raise
+
+
 
 def call_gemini_api(messages, model="gemini-1.5-flash-latest", temperature=1):
     if not GOOGLE_API_KEY:
@@ -162,7 +184,7 @@ def call_generative_ai_model(model, messages, temperature=1):
     try:
         if model.startswith('gpt-') or model.startswith('o4-'):
             return call_openai_api(messages, model=model, temperature=temperature)
-        elif model.startswith('pplx-'):
+        elif model.startswith('pplx-') or model.startswith('llama-') or model.startswith('r1-') or model.startswith('pplx-') or model.startswith('sonar'):
             return call_perplexity_api(messages, model=model, temperature=temperature)
         elif model.startswith('gemini-'):
             return call_gemini_api(messages, model=model, temperature=temperature)
