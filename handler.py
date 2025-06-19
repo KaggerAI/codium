@@ -43,6 +43,9 @@ from bs4 import BeautifulSoup
 import pdfplumber
 from io import BytesIO
 
+from flask import Response, stream_with_context
+from progress_logger import progress_queue, log_progress, log_final_message
+
 # right below your Flask-app initialization:
 last_analysis: dict = {}
 
@@ -58,8 +61,7 @@ def index():
 # # at the top of handler.py
 # import os
 # import openai
-# #openai.api_key = "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"
-# openai.api_key = os.getenv("OPENAI_API_KEY")
+# openai.api_key = "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"
 
 # =====================================================================
 # START: API Configuration and Multi-Model Handling
@@ -96,7 +98,7 @@ def convert_to_gemini_format(messages):
             gemini_messages.append({'role': role, 'parts': [msg["content"]]})
     return gemini_messages
 
-def call_openai_api(messages, model="gpt-4o-mini", expect_json_format_flag=False, temperature=1):
+def call_openai_api(messages, model="gpt-4.1-mini", expect_json_format_flag=False, temperature=1):
     if not openai.api_key:
         raise ValueError("OpenAI API key is not configured.")
     try:
@@ -115,7 +117,7 @@ def call_openai_api(messages, model="gpt-4o-mini", expect_json_format_flag=False
         print(f"ERROR in call_openai_api: {e}")
         raise
 
-def call_perplexity_api(messages, model="sonar-medium-online", temperature=1):
+def call_perplexity_api(messages, model="sonar", temperature=1):
     if not PERPLEXITY_API_KEY:
         raise ValueError("Perplexity API key is not configured.")
     try:
@@ -152,7 +154,7 @@ def call_perplexity_api(messages, model="sonar-medium-online", temperature=1):
 
 
 
-def call_gemini_api(messages, model="gemini-1.5-flash-latest", temperature=1):
+def call_gemini_api(messages, model="gemini-2.5-flash-preview-05-20", temperature=1):
     if not GOOGLE_API_KEY:
         raise ValueError("Google Gemini API key is not configured.")
     try:
@@ -180,7 +182,7 @@ def call_generative_ai_model(model, messages, temperature=1):
     """
     Dispatcher function to call the appropriate AI model API.
     """
-    print(f"INFO: Dispatching request to model: {model}")
+    log_progress(f"Dispatching request to model: {model}")
     try:
         if model.startswith('gpt-') or model.startswith('o4-'):
             return call_openai_api(messages, model=model, temperature=temperature)
@@ -289,10 +291,12 @@ def get_data_schema_description(current_analysis_context):
     documents_data = current_analysis_context.get("documents")
     if documents_data and isinstance(documents_data, list):
         schema_lines.append("\n**4. Documents (section_name: 'documents')**")
-        schema_lines.append("   - A list containing dictionaries for recent documents like conference calls or presentations.")
-        schema_lines.append("   - Contains a `content_summary` field with extracted text from the latest concall transcript.")
-        schema_lines.append("   - This is the **primary source for management commentary, outlook, and future guidance.**")
-        schema_lines.append("   - To retrieve, specify in your plan: `\"documents\": {\"retrieve\": true}`.")
+        schema_lines.append("   - A list of dictionaries for recent corporate documents.")
+        schema_lines.append("   - Each dictionary has a `type` ('Presentation' or 'Concall') and a `content_summary`.")
+        schema_lines.append("   - **The 'Presentation' summary is a detailed, AI-generated analysis** from Gemini, containing structured data on financial performance, revenue and profit breakdowns by segment/geography/customers, and key operational KPIs.")
+        schema_lines.append("   - **The 'Concall' summary contains extracted text** from the Q&A session, useful for management sentiment and specific queries.")
+        schema_lines.append("   - This is the **primary source for all management commentary, financial results, KPIs, and future guidance.**")
+        schema_lines.append("   - To retrieve this data, specify in your plan: `\"documents\": {\"retrieve\": true}`.")
 
     schema_lines.append("\n**General Instructions for AI Planner (Detailed in System Prompt):**")
     schema_lines.append("Your primary goal is to determine what data is needed (direct or for calculation) to answer the user.")
@@ -521,7 +525,7 @@ def chat():
         user_question = data.get('question', '').strip()
         # Get the selected model from the request, default to a reliable choice
         selected_model = data.get('model', 'gpt-4o-mini') 
-        print(f"INFO: /chat route received question with selected model: {selected_model}")
+        print(f"AI chatbot received question with selected model: {selected_model}")
 
         if not user_question:
             return jsonify({'error': 'No question provided'}), 400
@@ -565,7 +569,7 @@ def chat():
             {"role": "user", "content": f"User Question: \"{user_question}\"\n\nData Schema Description Available for Planning:\n{schema_description}\n\nFull 'last_analysis' context (for AI reference only, primarily for summary items like current price/market_cap if needed for calculation inputs; DO NOT reproduce large parts of this in your JSON plan, only use it to fill specific values if a calculation function's input spec requires it):\n{json.dumps(last_analysis, indent=2, default=str)[:2000]}"} # Send a snippet of last_analysis for reference
         ]
         
-        print("INFO: Making planning call (with thought process) to AI...")
+        log_progress("Creating a plan to fetch data and information and answer the user's question...")
         # NOTE: This call is intentionally hardcoded to a model supporting JSON mode for reliability.
         # Temperature might be slightly higher for more complex planning, or keep low for precision.
         ai_full_response_str = call_openai_api(planning_messages, model="o4-mini", expect_json_format_flag=False, temperature=1) 
@@ -684,7 +688,7 @@ def chat():
             {"role": "user", "content": f"User Question: \"{user_question}\"\n\nRelevant Focused Stock Analysis Context (Retrieved & Calculated):\n{focused_context_str_for_answer}"}
         ]
 
-        print("INFO: Making answering call to AI with focused data...")
+        log_progress("Analyzing data and information to answer user's question...")
         # Use the new dispatcher function with the user's selected model
         final_answer = call_generative_ai_model(
             model=selected_model,
@@ -1470,17 +1474,17 @@ def generate_ai_company_summary(ticker, description, fundamentals, documents):
     <p>A brief, one-paragraph description of the company's core business.</p>
 
     <h4>How it Generates Revenue</h4>
-    <p>Start with a general sentence about the company's overall sales trend based on the 'Key Annual Financials'.</p>
-    <p>Then, **carefully read the 'Full Text from Latest Results Presentation'** to find revenue breakdowns. Look for keywords like "Segment Revenue","Business Segments","Business Segment","Segment", "Business Verticals","Business Vertical","Vertical,"Geographical Mix","Revenue by Vertical", "Revenue by Geography", "Geography".</p>
+    <p>Start with a general sentence about how the company generates revenue, followed by company's overall sales trend based on the '### Key Annual Financials (for overall trend analysis)'.</p>
+    <p>Then, **carefully read the 'Full Text from Latest Results Presentation'** to find revenue/sales breakdowns. Look for keywords like "Segment Revenue","Business Segments","Business Segment","Segment", "Business Verticals","Business Vertical","Vertical,"Geographical Mix","Revenue by Vertical", "Revenue by Geography", "Geography".</p>
     <p>If you find this data, create bulleted lists to summarize it. For each segment or geography, extract the revenue contribution (e.g., in Cr. or as a percentage) and any mention of YoY growth. Be factual and extract the numbers as they are presented.</p>
     <ul>
         <li><strong>Business Segments:</strong> (e.g., "Digital Platforms: 45% of revenue, grew 15% YoY.")</li>
         <li><strong>Geographical Segments:</strong> (e.g., "USA: 60% of revenue; Europe: 25%; Rest of World: 15%.")</li>
     </ul>
-    <p>If, after reading the presentation text, you **cannot find** specific segmental or geographical numbers, you **must** state: "A detailed revenue breakdown by segment or geography was not available in the provided presentation." Do not invent data.</p>
+    <p>If, after reading the presentation text, you **cannot find** specific segmental or geographical revenue/sales numbers, you **must** state: "A detailed revenue breakdown by segment or geography was not available in the provided presentation." Do not invent data.</p>
 
     <h4>Latest Developments & News</h4>
-    <p>Synthesize the key takeaways from BOTH the 'Results Presentation' and the 'Concall Transcript'. Create a unified bulleted list of the most important points.</p>
+    <p>Synthesize the key takeaways from BOTH the 'Results Presentation' and the 'Concall Transcript'. Create a unified bulleted list of the most important points. Group them under various headers such as - Capacity Expansion, New Product Launches, Mergers & Acquisitions, Credit Rating, Financial Highlights, Regulatory Impacts, Forward Guidance or Future Outlook, Order Book, Corporate Actions, Cost Reduction, Margin Expansion, Market Share/Postion, Government Partnerships/Initatives, etc.</p>
 
     <h4>Management Spins and Caveats</h4>
     <p>Mention the management's spin and biases you identified earlier, where managements commentary is explicit, vague, or is in discrepancy with the data or industry outlook. Show in bulleted format.</p>
@@ -1493,7 +1497,7 @@ def generate_ai_company_summary(ticker, description, fundamentals, documents):
             {"role": "user", "content": f"Generate the HTML summary for the following company based on this data:\n\n{full_context}"}
         ]
         
-        summary_html = call_openai_api(messages, model="o4-mini", temperature=1)
+        summary_html = call_openai_api(messages, model="gpt-4.1-mini", temperature=1)
         return summary_html
 
     except Exception as e:
@@ -1503,17 +1507,40 @@ def generate_ai_company_summary(ticker, description, fundamentals, documents):
     
 # ------------- Analysis & Respond -------------
 
+@app.route('/progress-stream')
+def progress_stream():
+    """Streams progress messages to the client."""
+    def generate():
+        while True:
+            # Wait for a message from the queue
+            message = progress_queue.get()
+            if message == "__END__":
+                # Send the final signal and stop
+                yield f"data: {message}\n\n"
+                break
+            # Format as a Server-Sent Event and send to client
+            yield f"data: {message}\n\n"
+            
+    # The 'text/event-stream' mimetype is crucial for SSE
+    return Response(generate(), mimetype='text/event-stream')
+
 @app.route('/analyze',methods=['POST'])
 def analyze():
     try:
         data=request.get_json(force=True)
         tick=data.get('ticker','').strip().upper()
         if not tick: return jsonify({'error':'No ticker provided'}),400
+        log_progress(f"Starting analysis for {tick}...")
+
         
         res=evaluate_ticker_signal(tick)
+        log_progress("AI is analyzing the Chart using Technical signals.")
+
         df=res['Data']
         if df.empty or len(df) < 2 :
-             return jsonify({'error':f'No or insufficient historical data found for {tick} after processing.'}),404
+            log_progress(f"Error: No or insufficient data for {tick}.")
+            return jsonify({'error':f'No or insufficient historical data found for {tick} after processing.'}),404
+
 
         # Technical summary from TA-Lib based analysis
         technical_summary_list = generate_summary(res) # Renamed from summ for clarity
@@ -1639,21 +1666,23 @@ def analyze():
                 metric_charts_for_frontend[label] = make_metric_fig(df_filtered, label)
 
         except Exception as e_val_metrics:
-            print(f"Error fetching/processing valuation metrics for {tick}: {e_val_metrics}")
+            log_progress(f"Error fetching/processing valuation metrics for {tick}: {e_val_metrics}")
         
         # --- New section to fetch documents ---
         latest_documents = fetch_latest_documents(tick)
-        print(f"DEBUG /analyze: Documents fetched: {latest_documents}")
+        print(f"Documents fetched: {latest_documents}")
+        log_progress(f"All documents fetched and analyzed")
         # --- End of new section ---
         
         # --- NEW: Generate AI Company Summary ---
-        print(f"INFO: Generating AI company summary for {tick}...")
+        log_progress(f"Generating AI company summary for {tick}...")
         ai_company_summary_html = generate_ai_company_summary(
             ticker=tick,
             description=company_description,
             fundamentals=tables_from_screener, # Pass the dict of DataFrames
             documents=latest_documents
         )
+        log_progress("AI summary generated successfully.")
 
         # --- Populate last_analysis with cleaned data ---
         global last_analysis
@@ -1664,6 +1693,8 @@ def analyze():
             "valuation_and_margin_data": parsed_valuation_data, 
             "documents": latest_documents
         }
+        log_progress("Analysis complete. Loading results ...")
+
        
         return jsonify({
 
@@ -1682,7 +1713,7 @@ def analyze():
         })
     except Exception as e:
         # ... (error handling) ...
-        print(f"ERROR in /analyze for {data.get('ticker', 'N/A') if isinstance(data, dict) else 'N/A'}: {e}")
+        log_progress(f"ERROR in /analyze for {data.get('ticker', 'N/A') if isinstance(data, dict) else 'N/A'}: {e}")
         traceback.print_exc()
         return jsonify({'error':str(e),'trace':traceback.format_exc()}),500
 
