@@ -39,15 +39,15 @@
 
     /* === CORRECTED PROGRESS BAR CSS STARTS HERE === */
     #progress-container {
-        height: 30px; /* The height of a single message line */
+        height: 30px; 
         width: 90%;
         max-width: 700px;
-        margin: 0 auto 2rem auto; /* Center it and add space below */
-        background-color: #14532d; /* slate-800 */
+        margin: 0 auto 2rem auto;
+        background-color: #14532d; /* Tailwind's green-900 */
         border-radius: 8px;
-        overflow: hidden; /* This is key to the carousel effect */
+        overflow: hidden;
         box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
-        border: 1px solid #166534; /* slate-700 */
+        border: 1px solid #166534; /* Tailwind's green-800 */
         opacity: 0;
         max-height: 0;
         transition: opacity 0.4s ease-out, max-height 0.4s ease-in-out, margin-bottom 0.4s;
@@ -55,16 +55,16 @@
 
     #progress-container.visible {
         opacity: 1;
-        max-height: 30px; /* Animate height from 0 to 30px */
+        max-height: 30px; 
         margin-bottom: 2rem;
     }
 
     #progress-messages {
-        position: relative; /* Needed for absolute positioning of children */
+        position: relative;
         height: 100%;
     }
 
-    /* Combined and corrected rule for the message paragraphs */
+    /* This is the default state: hidden BELOW the view */
     #progress-messages p {
         position: absolute;
         width: 100%;
@@ -73,27 +73,29 @@
         height: 30px;
         line-height: 30px;
         text-align: center;
-        color: #bbf7d0; 
+        color: #bbf7d0; /* Tailwind's green-200 */
         font-family: 'SF Mono', 'Courier New', Courier, monospace;
         font-size: 14px;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
         opacity: 0;
-        transform: translateY(20px); /* Start below view */
+        transform: translateY(100%); /* Start hidden below */
         transition: opacity 0.4s ease-out, transform 0.4s ease-out;
     }
 
+    /* This class brings the message into view */
     #progress-messages p.visible {
         opacity: 1;
         transform: translateY(0); /* Move to center */
     }
 
-    #progress-messages p.hidden-above {
+    /* This temporary class makes the message exit by moving UP */
+    #progress-messages p.exiting {
         opacity: 0;
-        transform: translateY(-20px); /* Exit by moving up */
+        transform: translateY(-100%); /* Exit by moving up */
     }
-    
+
     .hidden {
         display: none;
     }
@@ -296,56 +298,126 @@
 
 // In the <script> tag at the bottom of app.html
 
-    function setupSseListener() {
+      function setupSseListener() {
         const progressContainer = document.getElementById('progress-container');
         const progressMessages = document.getElementById('progress-messages');
 
-        // Clear previous messages and make the container visible
         progressMessages.innerHTML = '';
         progressContainer.classList.add('visible');
 
-        // Establish the Server-Sent Events connection
         sseConnection = new EventSource('/progress-stream');
 
-        let currentMessageElement = null;
+        let messageElement = null;
+        let isAnimating = false;
 
         sseConnection.onmessage = function(event) {
-            // The special signal from the server to close the connection
-            if (event.data === "__END__") {
-                sseConnection.close();
-                console.log("SSE connection closed by server.");
-                // We will now hide the container in the main analyzeTicker function
-                // right before rendering the results.
+            if (event.data === "__END__" || isAnimating) {
+                if(event.data === "__END__") sseConnection.close();
                 return;
             }
 
-            // If there's an old message, fade it out by moving it up
-            if (currentMessageElement) {
-                currentMessageElement.classList.remove('visible');
-                currentMessageElement.classList.add('hidden-above');
+            isAnimating = true;
+
+            if (!messageElement) {
+                messageElement = document.createElement('p');
+                progressMessages.appendChild(messageElement);
             }
 
-            // Create the new message element
-            const newMessage = document.createElement('p');
-            newMessage.textContent = `> ${event.data}`;
-            progressMessages.appendChild(newMessage);
-            
-            // This is a trick to trigger the CSS transition
-            // We add the 'visible' class in the next "frame" of the browser's rendering cycle
-            requestAnimationFrame(() => {
-                newMessage.classList.add('visible');
-            });
+            const showNewMessage = () => {
+                messageElement.textContent = `> ${event.data}`;
+                requestAnimationFrame(() => {
+                    messageElement.classList.add('visible');
+                    messageElement.addEventListener('transitionend', () => {
+                        isAnimating = false;
+                    }, { once: true });
+                });
+            };
 
-            // Keep track of the new message
-            currentMessageElement = newMessage;
+            if (messageElement.classList.contains('visible')) {
+                messageElement.classList.remove('visible');
+                messageElement.classList.add('exiting');
+
+                messageElement.addEventListener('transitionend', () => {
+                    // 1. Reset the element's position by removing the exit class.
+                    messageElement.classList.remove('exiting');
+                    
+                    // 2. ==== THE MAGIC LINE: FORCE BROWSER REPAINT ====
+                    // This line forces the browser to apply the style changes above
+                    // (i.e., reset the element to the bottom) BEFORE proceeding.
+                    void messageElement.offsetHeight; 
+                    // =================================================
+
+                    // 3. Now that the element is correctly positioned at the bottom,
+                    // trigger the entrance animation for the new message.
+                    showNewMessage();
+
+                }, { once: true });
+
+            } else {
+                showNewMessage();
+            }
         };
 
         sseConnection.onerror = function(error) {
             console.error("SSE connection error:", error);
             if(sseConnection) sseConnection.close();
             progressContainer.classList.remove('visible');
+            isAnimating = false;
         };
     }
+  
+
+
+    // function setupSseListener() {
+    //     const progressContainer = document.getElementById('progress-container');
+    //     const progressMessages = document.getElementById('progress-messages');
+
+    //     // Clear previous messages and make the container visible
+    //     progressMessages.innerHTML = '';
+    //     progressContainer.classList.add('visible');
+
+    //     // Establish the Server-Sent Events connection
+    //     sseConnection = new EventSource('/progress-stream');
+
+    //     let currentMessageElement = null;
+
+    //     sseConnection.onmessage = function(event) {
+    //         // The special signal from the server to close the connection
+    //         if (event.data === "__END__") {
+    //             sseConnection.close();
+    //             console.log("SSE connection closed by server.");
+    //             // We will now hide the container in the main analyzeTicker function
+    //             // right before rendering the results.
+    //             return;
+    //         }
+
+    //         // If there's an old message, fade it out by moving it up
+    //         if (currentMessageElement) {
+    //             currentMessageElement.classList.remove('visible');
+    //             currentMessageElement.classList.add('hidden-above');
+    //         }
+
+    //         // Create the new message element
+    //         const newMessage = document.createElement('p');
+    //         newMessage.textContent = `> ${event.data}`;
+    //         progressMessages.appendChild(newMessage);
+            
+    //         // This is a trick to trigger the CSS transition
+    //         // We add the 'visible' class in the next "frame" of the browser's rendering cycle
+    //         requestAnimationFrame(() => {
+    //             newMessage.classList.add('visible');
+    //         });
+
+    //         // Keep track of the new message
+    //         currentMessageElement = newMessage;
+    //     };
+
+    //     sseConnection.onerror = function(error) {
+    //         console.error("SSE connection error:", error);
+    //         if(sseConnection) sseConnection.close();
+    //         progressContainer.classList.remove('visible');
+    //     };
+    // }
 
     document.getElementById('goBtn').addEventListener('click', async () => {
       const ticker = document.getElementById('tickerInput').value.trim().toUpperCase();
