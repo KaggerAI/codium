@@ -4,3 +4,4 @@ codium_env
 
 .env
 perplexityai/
+*.ipynb
