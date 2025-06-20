@@ -1,3 +1,6 @@
 __pycache__
 codium_env
 .vscode/
+
+.env
+perplexityai/

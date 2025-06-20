@@ -15,6 +15,20 @@
     >pip install flask flask-cors yfinance pandas numpy matplotlib openai yfinance plotly lxml
     >pip install --upgrade --no-cache-dir git+https://github.com/rongardF/tvdatafeed.git
     >pip install TA-lib
+    >pip install google-generativeai
+    # rest use requriements.txt
+
+    # for perplexityai dependencies
+    > pip install git+https://github.com/nathanrchn/perplexityai.git
+    or
+    > https://github.com/nathanrchn/perplexityai
+    > cd perplexity; pip install -e .
+    # bugifix see the pull requests in github 
+
+    # need .env file
+    # OPENAI_API_KEY = ""
+    # PERPLEXITY_API_KEY = ""
+    # GOOGLE_API_KEY = ""
 
     # run the webserver
     >python3 handler.py
