@@ -37,6 +37,7 @@ import re
 
 # Import the calculation registry from calculations.py
 from fund_calculations import CALCULATION_REGISTRY, _get_metric_from_table # _get_metric_from_table might be useful here too
+from scores.AIScores import AIScores
 
 import requests
 from bs4 import BeautifulSoup
@@ -1504,7 +1505,25 @@ def generate_ai_company_summary(ticker, description, fundamentals, documents):
         print(f"CRITICAL ERROR: Failed to generate AI company summary for {ticker}.")
         # ... (error logging is unchanged) ...
         return "<p><strong>Error:</strong> The AI-powered summary could not be generated at this time.</p>"
-    
+
+def generate_ai_scores(ticker):
+    ai_scores = AIScores(ticker)
+    ai_scores.calculate_all_scores()
+
+    ai_score_html = []
+    for field in ai_scores.scores.keys():
+        json_dict = {}
+        if field != 'sentiment':
+            json_dict['label'] = field
+            json_dict['value'] = 10
+            json_dict['description'] = f'{field}_score'
+            json_dict['chart1_json'] = ai_scores.scores[field].plot().to_json()
+            json_dict['chart2_json'] = ai_scores.scores[field].plot_violin().to_json()
+        else:
+            continue
+        ai_score_html.append(json_dict)
+    return ai_score_html
+
 # ------------- Analysis & Respond -------------
 
 @app.route('/progress-stream')
@@ -1695,12 +1714,19 @@ def analyze():
         }
         log_progress("Analysis complete. Loading results ...")
 
+        # --- NEW: Generate AI Scores ---
+        log_progress(f"Generating AI scores for {tick}...")
+        ai_scores = generate_ai_scores(
+            ticker=tick
+        )
+        log_progress("AI scores generated successfully.")
        
         return jsonify({
 
             'ticker':tick,
             'company_summary_html': ai_company_summary_html, # <-- NEWLY ADDED for the frontend
             'summary': cleaned_technical_summary, # Send cleaned summary to frontend too
+            'ai_scores': ai_scores,
             'chart_close_json':close_j,
             'chart_hl_json':hl_j,
             'chart_ema_json':ema_j,

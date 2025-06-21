@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -8,100 +9,121 @@
   <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
 
   <style>
-    #results { width: 100% !important; }
+    #results {
+      width: 100% !important;
+    }
+
     #chatLog::-webkit-scrollbar {
       width: 6px;
     }
+
     #chatLog::-webkit-scrollbar-thumb {
-      background-color: #94a3b8; /* slate-400 */
+      background-color: #94a3b8;
+      /* slate-400 */
       border-radius: 3px;
     }
+
     #chatLog::-webkit-scrollbar-track {
-      background-color: #e2e8f0; /* slate-200 */
+      background-color: #e2e8f0;
+      /* slate-200 */
     }
+
     /* Simple styling for the AI summary content if prose plugin fails */
     .summary-content h4 {
-        font-size: 1.125rem; /* text-lg */
-        font-weight: 600; /* font-semibold */
-        margin-top: 1rem;
-        margin-bottom: 0.5rem;
-        color: #334155; /* slate-700 */
+      font-size: 1.125rem;
+      /* text-lg */
+      font-weight: 600;
+      /* font-semibold */
+      margin-top: 1rem;
+      margin-bottom: 0.5rem;
+      color: #334155;
+      /* slate-700 */
     }
-    .summary-content p, .summary-content ul {
-        margin-bottom: 1rem;
-        line-height: 1.6;
-    }
+
+    .summary-content p,
     .summary-content ul {
-        list-style-position: inside;
-        list-style-type: disc;
-        padding-left: 1rem;
+      margin-bottom: 1rem;
+      line-height: 1.6;
+    }
+
+    .summary-content ul {
+      list-style-position: inside;
+      list-style-type: disc;
+      padding-left: 1rem;
     }
 
     /* === CORRECTED PROGRESS BAR CSS STARTS HERE === */
     #progress-container {
-        height: 30px; 
-        width: 90%;
-        max-width: 700px;
-        margin: 0 auto 2rem auto;
-        background-color: #14532d; /* Tailwind's green-900 */
-        border-radius: 8px;
-        overflow: hidden;
-        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
-        border: 1px solid #166534; /* Tailwind's green-800 */
-        opacity: 0;
-        max-height: 0;
-        transition: opacity 0.4s ease-out, max-height 0.4s ease-in-out, margin-bottom 0.4s;
+      height: 30px;
+      width: 90%;
+      max-width: 700px;
+      margin: 0 auto 2rem auto;
+      background-color: #14532d;
+      /* Tailwind's green-900 */
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+      border: 1px solid #166534;
+      /* Tailwind's green-800 */
+      opacity: 0;
+      max-height: 0;
+      transition: opacity 0.4s ease-out, max-height 0.4s ease-in-out, margin-bottom 0.4s;
     }
 
     #progress-container.visible {
-        opacity: 1;
-        max-height: 30px; 
-        margin-bottom: 2rem;
+      opacity: 1;
+      max-height: 30px;
+      margin-bottom: 2rem;
     }
 
     #progress-messages {
-        position: relative;
-        height: 100%;
+      position: relative;
+      height: 100%;
     }
 
     /* This is the default state: hidden BELOW the view */
     #progress-messages p {
-        position: absolute;
-        width: 100%;
-        margin: 0;
-        padding: 0 1rem;
-        height: 30px;
-        line-height: 30px;
-        text-align: center;
-        color: #bbf7d0; /* Tailwind's green-200 */
-        font-family: 'SF Mono', 'Courier New', Courier, monospace;
-        font-size: 14px;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        opacity: 0;
-        transform: translateY(100%); /* Start hidden below */
-        transition: opacity 0.4s ease-out, transform 0.4s ease-out;
+      position: absolute;
+      width: 100%;
+      margin: 0;
+      padding: 0 1rem;
+      height: 30px;
+      line-height: 30px;
+      text-align: center;
+      color: #bbf7d0;
+      /* Tailwind's green-200 */
+      font-family: 'SF Mono', 'Courier New', Courier, monospace;
+      font-size: 14px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      opacity: 0;
+      transform: translateY(100%);
+      /* Start hidden below */
+      transition: opacity 0.4s ease-out, transform 0.4s ease-out;
     }
 
     /* This class brings the message into view */
     #progress-messages p.visible {
-        opacity: 1;
-        transform: translateY(0); /* Move to center */
+      opacity: 1;
+      transform: translateY(0);
+      /* Move to center */
     }
 
     /* This temporary class makes the message exit by moving UP */
     #progress-messages p.exiting {
-        opacity: 0;
-        transform: translateY(-100%); /* Exit by moving up */
+      opacity: 0;
+      transform: translateY(-100%);
+      /* Exit by moving up */
     }
 
     .hidden {
-        display: none;
+      display: none;
     }
   </style>
 
 </head>
+
 <body class="bg-slate-100 text-slate-800 antialiased">
   <!-- NAVBAR -->
   <nav class="bg-white shadow-md sticky top-0 z-50">
@@ -112,10 +134,15 @@
         <li><a href="#" class="text-slate-600 hover:text-green-600 font-medium transition-colors">AI Screens</a></li>
         <li class="relative group">
           <button class="text-slate-600 hover:text-green-600 font-medium transition-colors flex items-center">
-            Tools <svg class="ml-1 w-4 h-4 fill-current" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
+            Tools <svg class="ml-1 w-4 h-4 fill-current" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+              <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" />
+            </svg>
           </button>
-          <div class="absolute left-0 mt-2 w-56 bg-white border border-slate-200 rounded-md shadow-xl opacity-0 group-hover:opacity-100 transform scale-95 group-hover:scale-100 transition-all duration-200 ease-in-out origin-top-left z-20">
-            <a href="#" class="block px-4 py-3 text-sm text-slate-700 hover:bg-slate-100 hover:text-green-600 transition-colors">Create a technical screen</a>
+          <div
+            class="absolute left-0 mt-2 w-56 bg-white border border-slate-200 rounded-md shadow-xl opacity-0 group-hover:opacity-100 transform scale-95 group-hover:scale-100 transition-all duration-200 ease-in-out origin-top-left z-20">
+            <a href="#"
+              class="block px-4 py-3 text-sm text-slate-700 hover:bg-slate-100 hover:text-green-600 transition-colors">Create
+              a technical screen</a>
           </div>
         </li>
       </ul>
@@ -126,15 +153,13 @@
   <main class="container mx-auto mt-8 mb-12 px-4">
     <div class="bg-white p-8 rounded-xl shadow-lg w-full max-w-3xl mx-auto mb-12">
       <h1 class="text-4xl font-bold mb-2 text-center text-slate-700">AI-based Stock Research</h1>
-      <p class="text-center text-slate-500 mb-8">Analyze stocks using Kagger's Multi-agentic AI system created exclusively for Indian Companies</p>
+      <p class="text-center text-slate-500 mb-8">Analyze stocks using Kagger's Multi-agentic AI system created
+        exclusively for Indian Companies</p>
       <div class="flex">
-        <input
-          id="tickerInput"
-          type="text"
-          placeholder="Enter a stock ticker (e.g. TCS.NS or RELIANCE)"
-          class="flex-grow border border-slate-300 rounded-l-md px-4 py-3 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-lg"
-        />
-        <button id="goBtn" class="bg-gradient-to-r from-green-500 to-green-600 text-white px-8 py-3 rounded-r-md hover:from-green-600 hover:to-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-all duration-150 ease-in-out font-semibold text-lg">
+        <input id="tickerInput" type="text" placeholder="Enter a stock ticker (e.g. TCS.NS or RELIANCE)"
+          class="flex-grow border border-slate-300 rounded-l-md px-4 py-3 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-lg" />
+        <button id="goBtn"
+          class="bg-gradient-to-r from-green-500 to-green-600 text-white px-8 py-3 rounded-r-md hover:from-green-600 hover:to-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-all duration-150 ease-in-out font-semibold text-lg">
           Analyze
         </button>
       </div>
@@ -142,7 +167,7 @@
 
     <div id="progress-container"> <!-- Don't add 'hidden' class here -->
       <div id="progress-messages">
-          <!-- Progress messages will be added here by JavaScript -->
+        <!-- Progress messages will be added here by JavaScript -->
       </div>
     </div>
 
@@ -154,9 +179,13 @@
 
   <!-- Chat launcher button -->
   <button id="chatBtn"
-          class="fixed bottom-6 right-6 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-full p-4 shadow-xl hover:from-green-600 hover:to-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-all duration-150 ease-in-out hover:scale-110"
-          title="Ask me anything">
-    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 5.523-4.477 10-10 10S1 17.523 1 12 5.477 2 11 2s10 4.477 10 10z"></path></svg>
+    class="fixed bottom-6 right-6 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-full p-4 shadow-xl hover:from-green-600 hover:to-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-all duration-150 ease-in-out hover:scale-110"
+    title="Ask me anything">
+    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+        d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 5.523-4.477 10-10 10S1 17.523 1 12 5.477 2 11 2s10 4.477 10 10z">
+      </path>
+    </svg>
   </button>
 
   <!-- Chat modal -->
@@ -165,33 +194,35 @@
       <!-- [--- MODIFIED START ---] -->
       <div class="bg-gradient-to-r from-green-500 to-green-600 px-4 py-3 flex justify-between items-center text-white">
         <div class="flex flex-col">
-            <span class="font-semibold text-lg">Ask about this analysis</span>
+          <span class="font-semibold text-lg">Ask about this analysis</span>
         </div>
         <div class="flex items-center space-x-3">
-            <!-- AI Model Selector -->
-            <select id="aiModelSelector" class="bg-green-700/50 text-white text-sm rounded-md p-1 border border-green-400 focus:ring-2 focus:ring-white/80 focus:outline-none">
-                <optgroup label="ChatGPT">
-                    <option value="gpt-4.1" selected>GPT-4.1</option>
-                    <option value="gpt-4.1-mini" selected>GPT-4.1 Mini</option>
-                    <option value="gpt-4o">GPT-4o</option>
-                    <option value="gpt-4o-mini" selected>GPT-4o Mini</option>
-                    <option value="o4-mini">o4-mini</option>
-                </optgroup>
-                <optgroup label="Perplexity">
-                    <option value="sonar">Sonar (Online)</option>
-                    <option value="sonar-pro">Sonar Pro (Online)</option>
-                    <option value="sonar-reasoning">Sonar Reasoning (Online)</option>
-                    <option value="sonar-reasoning-pro">Sonar Reasoning Pro (Online)</option>
-                </optgroup>
-                <optgroup label="Deepseek">
-                    <option value="r1-1776">Deepseek R1</option>
-                </optgroup>
-                <optgroup label="Google Gemini">
-                    <option value="gemini-2.5-flash-preview-05-20">Gemini 2.5 Flash</option>
-                    <option value="gemini-2.5-pro-preview-06-05">Gemini 2.5 Pro</option>
-                </optgroup>
-            </select>
-            <button id="chatClose" class="text-green-100 hover:text-white transition-colors text-2xl leading-none">×</button>
+          <!-- AI Model Selector -->
+          <select id="aiModelSelector"
+            class="bg-green-700/50 text-white text-sm rounded-md p-1 border border-green-400 focus:ring-2 focus:ring-white/80 focus:outline-none">
+            <optgroup label="ChatGPT">
+              <option value="gpt-4.1" selected>GPT-4.1</option>
+              <option value="gpt-4.1-mini" selected>GPT-4.1 Mini</option>
+              <option value="gpt-4o">GPT-4o</option>
+              <option value="gpt-4o-mini" selected>GPT-4o Mini</option>
+              <option value="o4-mini">o4-mini</option>
+            </optgroup>
+            <optgroup label="Perplexity">
+              <option value="sonar">Sonar (Online)</option>
+              <option value="sonar-pro">Sonar Pro (Online)</option>
+              <option value="sonar-reasoning">Sonar Reasoning (Online)</option>
+              <option value="sonar-reasoning-pro">Sonar Reasoning Pro (Online)</option>
+            </optgroup>
+            <optgroup label="Deepseek">
+              <option value="r1-1776">Deepseek R1</option>
+            </optgroup>
+            <optgroup label="Google Gemini">
+              <option value="gemini-2.5-flash-preview-05-20">Gemini 2.5 Flash</option>
+              <option value="gemini-2.5-pro-preview-06-05">Gemini 2.5 Pro</option>
+            </optgroup>
+          </select>
+          <button id="chatClose"
+            class="text-green-100 hover:text-white transition-colors text-2xl leading-none">×</button>
         </div>
       </div>
       <!-- [--- MODIFIED END ---] -->
@@ -199,8 +230,9 @@
       </div>
       <form id="chatForm" class="p-4 flex border-t border-slate-300 bg-white">
         <input id="chatInput" type="text" placeholder="Type your question…"
-               class="flex-grow border border-slate-300 rounded-l-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent" />
-        <button class="bg-gradient-to-r from-green-500 to-green-600 text-white px-6 py-2 rounded-r-md hover:from-green-600 hover:to-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-1 transition-all duration-150 ease-in-out font-semibold">Send</button>
+          class="flex-grow border border-slate-300 rounded-l-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent" />
+        <button
+          class="bg-gradient-to-r from-green-500 to-green-600 text-white px-6 py-2 rounded-r-md hover:from-green-600 hover:to-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-1 transition-all duration-150 ease-in-out font-semibold">Send</button>
       </form>
     </div>
   </div>
@@ -211,161 +243,161 @@
     // fundData.index (JS) = Headers for columns of the HTML table (e.g., ["index", "Mar 2023", "Jun 2023"])
     // fundData.columns (JS) = Headers for rows of the HTML table (e.g., ["Sales", "Net Profit"])
     // fundData.data is data[period_idx][metric_idx] where period_idx maps to fundData.index and metric_idx to fundData.columns
-    
+
     function renderFundTable(fundData) {
-        let html = `<div class="overflow-x-auto"><table class="w-full bg-white rounded-lg shadow-md mx-auto mb-8 border border-slate-200">
+      let html = `<div class="overflow-x-auto"><table class="w-full bg-white rounded-lg shadow-md mx-auto mb-8 border border-slate-200">
             <thead class="bg-slate-200 text-slate-700"><tr>
                 <th class="px-4 py-3 border-b border-slate-300 text-left text-sm font-semibold">Particulars</th>`;
 
-        if (fundData.index && Array.isArray(fundData.index)) {
-            fundData.index.forEach(periodLabel => {
-                const isIndexColumn = periodLabel && periodLabel.toString().toLowerCase() === 'index';
-                const visibilityClass = isIndexColumn ? 'opacity-0 pointer-events-none' : '';
-                // Data under the "index" column header (which are typically the metric names themselves) are text, so left-align.
-                // Other period headers (like "Mar 2023") correspond to numeric data columns, so their headers are right-aligned.
-                const alignmentClass = isIndexColumn ? 'text-left' : 'text-right';
-                
-                html += `<th class="px-4 py-3 border-b border-slate-300 text-sm font-semibold ${alignmentClass} ${visibilityClass}">${periodLabel}</th>`;
-            });
-        }
-        html += `</tr></thead><tbody>`;
+      if (fundData.index && Array.isArray(fundData.index)) {
+        fundData.index.forEach(periodLabel => {
+          const isIndexColumn = periodLabel && periodLabel.toString().toLowerCase() === 'index';
+          const visibilityClass = isIndexColumn ? 'opacity-0 pointer-events-none' : '';
+          // Data under the "index" column header (which are typically the metric names themselves) are text, so left-align.
+          // Other period headers (like "Mar 2023") correspond to numeric data columns, so their headers are right-aligned.
+          const alignmentClass = isIndexColumn ? 'text-left' : 'text-right';
 
-        if (fundData.columns && Array.isArray(fundData.columns)) {
-            fundData.columns.forEach((metricName, metric_idx) => { // metricName is "Sales", "Net Profit", etc.
-                html += `<tr class="even:bg-slate-50 hover:bg-slate-100 transition-colors duration-150">
+          html += `<th class="px-4 py-3 border-b border-slate-300 text-sm font-semibold ${alignmentClass} ${visibilityClass}">${periodLabel}</th>`;
+        });
+      }
+      html += `</tr></thead><tbody>`;
+
+      if (fundData.columns && Array.isArray(fundData.columns)) {
+        fundData.columns.forEach((metricName, metric_idx) => { // metricName is "Sales", "Net Profit", etc.
+          html += `<tr class="even:bg-slate-50 hover:bg-slate-100 transition-colors duration-150">
                             <td class="px-4 py-3 border-b border-slate-200 font-medium text-sm text-slate-700 text-left">${metricName}</td>`; // This is the first visible column with metric names
 
-                if (fundData.index && Array.isArray(fundData.index)) {
-                    fundData.index.forEach((periodLabel, period_idx) => { // periodLabel is "index", "Mar 2023", etc.
-                        const isIndexColumnValue = periodLabel && periodLabel.toString().toLowerCase() === 'index';
-                        const visibilityClass = isIndexColumnValue ? 'opacity-0 pointer-events-none' : '';
+          if (fundData.index && Array.isArray(fundData.index)) {
+            fundData.index.forEach((periodLabel, period_idx) => { // periodLabel is "index", "Mar 2023", etc.
+              const isIndexColumnValue = periodLabel && periodLabel.toString().toLowerCase() === 'index';
+              const visibilityClass = isIndexColumnValue ? 'opacity-0 pointer-events-none' : '';
 
-                        let v = (fundData.data && fundData.data[period_idx] && fundData.data[period_idx][metric_idx] !== undefined)
-                                  ? fundData.data[period_idx][metric_idx]
-                                  : null;
+              let v = (fundData.data && fundData.data[period_idx] && fundData.data[period_idx][metric_idx] !== undefined)
+                ? fundData.data[period_idx][metric_idx]
+                : null;
 
-                        let displayValue = 'N/A';
-                        // Default alignment for data cells: right for numbers, left for text.
-                        // The "index" column's data cells (which are metric names again) should be left-aligned (if they were visible).
-                        let cellClass = 'text-right'; // Assume numeric, will adjust if text
+              let displayValue = 'N/A';
+              // Default alignment for data cells: right for numbers, left for text.
+              // The "index" column's data cells (which are metric names again) should be left-aligned (if they were visible).
+              let cellClass = 'text-right'; // Assume numeric, will adjust if text
 
-                        if (v != null && v.toString().trim() !== '') {
-                            const s = v.toString().replace(/,/g, ''); // Remove existing commas for parsing
-                            const isPercent = s.endsWith('%');
-                            const numPart = isPercent ? s.substring(0, s.length - 1) : s;
+              if (v != null && v.toString().trim() !== '') {
+                const s = v.toString().replace(/,/g, ''); // Remove existing commas for parsing
+                const isPercent = s.endsWith('%');
+                const numPart = isPercent ? s.substring(0, s.length - 1) : s;
 
-                            if (!isNaN(parseFloat(numPart)) && isFinite(numPart)) { // Check if it's a number
-                                let numVal = parseFloat(numPart);
-                                displayValue = numVal.toLocaleString('en-IN', { 
-                                    minimumFractionDigits: (numVal % 1 !== 0 || numPart.includes('.')) ? Math.min(2, (numPart.split('.')[1] || '').length || 2) : 0, 
-                                    maximumFractionDigits: 2 
-                                });
-                                if (numVal % 1 === 0 && !numPart.includes('.')) { // Pure integer like 100
-                                    displayValue = numVal.toLocaleString('en-IN', { maximumFractionDigits: 0 });
-                                } else if (numPart.includes('.') && (numPart.split('.')[1] || '').length === 1 && parseFloat(numPart.split('.')[1] || '0') === 0) { // e.g. 100.0
-                                     displayValue = numVal.toLocaleString('en-IN', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
-                                } else { // e.g. 100.5, 100.50, 100.00
-                                    displayValue = numVal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                                }
+                if (!isNaN(parseFloat(numPart)) && isFinite(numPart)) { // Check if it's a number
+                  let numVal = parseFloat(numPart);
+                  displayValue = numVal.toLocaleString('en-IN', {
+                    minimumFractionDigits: (numVal % 1 !== 0 || numPart.includes('.')) ? Math.min(2, (numPart.split('.')[1] || '').length || 2) : 0,
+                    maximumFractionDigits: 2
+                  });
+                  if (numVal % 1 === 0 && !numPart.includes('.')) { // Pure integer like 100
+                    displayValue = numVal.toLocaleString('en-IN', { maximumFractionDigits: 0 });
+                  } else if (numPart.includes('.') && (numPart.split('.')[1] || '').length === 1 && parseFloat(numPart.split('.')[1] || '0') === 0) { // e.g. 100.0
+                    displayValue = numVal.toLocaleString('en-IN', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+                  } else { // e.g. 100.5, 100.50, 100.00
+                    displayValue = numVal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                  }
 
 
-                                if (isPercent) {
-                                    displayValue += '%';
-                                }
-                                // cellClass remains 'text-right'
-                            } else {
-                                // Not a number, display as is
-                                displayValue = v;
-                                cellClass = 'text-left'; // Text data should be left-aligned
-                            }
-                        } else { // Value is null or empty string
-                            cellClass = 'text-center'; // N/A can be centered or left
-                        }
-                         if (isIndexColumnValue) cellClass = 'text-left'; // Override for index column values (usually text)
-
-                        html += `<td class="px-4 py-3 border-b border-slate-200 text-sm ${cellClass} ${visibilityClass}">${displayValue}</td>`;
-                    });
+                  if (isPercent) {
+                    displayValue += '%';
+                  }
+                  // cellClass remains 'text-right'
+                } else {
+                  // Not a number, display as is
+                  displayValue = v;
+                  cellClass = 'text-left'; // Text data should be left-aligned
                 }
-                html += `</tr>`;
+              } else { // Value is null or empty string
+                cellClass = 'text-center'; // N/A can be centered or left
+              }
+              if (isIndexColumnValue) cellClass = 'text-left'; // Override for index column values (usually text)
+
+              html += `<td class="px-4 py-3 border-b border-slate-200 text-sm ${cellClass} ${visibilityClass}">${displayValue}</td>`;
             });
-        }
-        html += `</tbody></table></div>`;
-        return html;
+          }
+          html += `</tr>`;
+        });
+      }
+      html += `</tbody></table></div>`;
+      return html;
     }
-    
+
     // A global variable to hold our SSE connection
     let sseConnection = null;
 
-// In the <script> tag at the bottom of app.html
+    // In the <script> tag at the bottom of app.html
 
-      function setupSseListener() {
-        const progressContainer = document.getElementById('progress-container');
-        const progressMessages = document.getElementById('progress-messages');
+    function setupSseListener() {
+      const progressContainer = document.getElementById('progress-container');
+      const progressMessages = document.getElementById('progress-messages');
 
-        progressMessages.innerHTML = '';
-        progressContainer.classList.add('visible');
+      progressMessages.innerHTML = '';
+      progressContainer.classList.add('visible');
 
-        sseConnection = new EventSource('/progress-stream');
+      sseConnection = new EventSource('/progress-stream');
 
-        let messageElement = null;
-        let isAnimating = false;
+      let messageElement = null;
+      let isAnimating = false;
 
-        sseConnection.onmessage = function(event) {
-            if (event.data === "__END__" || isAnimating) {
-                if(event.data === "__END__") sseConnection.close();
-                return;
-            }
+      sseConnection.onmessage = function (event) {
+        if (event.data === "__END__" || isAnimating) {
+          if (event.data === "__END__") sseConnection.close();
+          return;
+        }
 
-            isAnimating = true;
+        isAnimating = true;
 
-            if (!messageElement) {
-                messageElement = document.createElement('p');
-                progressMessages.appendChild(messageElement);
-            }
+        if (!messageElement) {
+          messageElement = document.createElement('p');
+          progressMessages.appendChild(messageElement);
+        }
 
-            const showNewMessage = () => {
-                messageElement.textContent = `> ${event.data}`;
-                requestAnimationFrame(() => {
-                    messageElement.classList.add('visible');
-                    messageElement.addEventListener('transitionend', () => {
-                        isAnimating = false;
-                    }, { once: true });
-                });
-            };
-
-            if (messageElement.classList.contains('visible')) {
-                messageElement.classList.remove('visible');
-                messageElement.classList.add('exiting');
-
-                messageElement.addEventListener('transitionend', () => {
-                    // 1. Reset the element's position by removing the exit class.
-                    messageElement.classList.remove('exiting');
-                    
-                    // 2. ==== THE MAGIC LINE: FORCE BROWSER REPAINT ====
-                    // This line forces the browser to apply the style changes above
-                    // (i.e., reset the element to the bottom) BEFORE proceeding.
-                    void messageElement.offsetHeight; 
-                    // =================================================
-
-                    // 3. Now that the element is correctly positioned at the bottom,
-                    // trigger the entrance animation for the new message.
-                    showNewMessage();
-
-                }, { once: true });
-
-            } else {
-                showNewMessage();
-            }
+        const showNewMessage = () => {
+          messageElement.textContent = `> ${event.data}`;
+          requestAnimationFrame(() => {
+            messageElement.classList.add('visible');
+            messageElement.addEventListener('transitionend', () => {
+              isAnimating = false;
+            }, { once: true });
+          });
         };
 
-        sseConnection.onerror = function(error) {
-            console.error("SSE connection error:", error);
-            if(sseConnection) sseConnection.close();
-            progressContainer.classList.remove('visible');
-            isAnimating = false;
-        };
+        if (messageElement.classList.contains('visible')) {
+          messageElement.classList.remove('visible');
+          messageElement.classList.add('exiting');
+
+          messageElement.addEventListener('transitionend', () => {
+            // 1. Reset the element's position by removing the exit class.
+            messageElement.classList.remove('exiting');
+
+            // 2. ==== THE MAGIC LINE: FORCE BROWSER REPAINT ====
+            // This line forces the browser to apply the style changes above
+            // (i.e., reset the element to the bottom) BEFORE proceeding.
+            void messageElement.offsetHeight;
+            // =================================================
+
+            // 3. Now that the element is correctly positioned at the bottom,
+            // trigger the entrance animation for the new message.
+            showNewMessage();
+
+          }, { once: true });
+
+        } else {
+          showNewMessage();
+        }
+      };
+
+      sseConnection.onerror = function (error) {
+        console.error("SSE connection error:", error);
+        if (sseConnection) sseConnection.close();
+        progressContainer.classList.remove('visible');
+        isAnimating = false;
+      };
     }
-  
+
 
 
     // function setupSseListener() {
@@ -401,7 +433,7 @@
     //         const newMessage = document.createElement('p');
     //         newMessage.textContent = `> ${event.data}`;
     //         progressMessages.appendChild(newMessage);
-            
+
     //         // This is a trick to trigger the CSS transition
     //         // We add the 'visible' class in the next "frame" of the browser's rendering cycle
     //         requestAnimationFrame(() => {
@@ -422,7 +454,7 @@
     document.getElementById('goBtn').addEventListener('click', async () => {
       const ticker = document.getElementById('tickerInput').value.trim().toUpperCase();
       if (!ticker) return alert('Please enter a ticker.');
-      
+
       const resultsContainer = document.getElementById('results');
       const progressContainer = document.getElementById('progress-container'); // Get a handle to the container
 
@@ -437,13 +469,13 @@
         });
         const payload = await res.json();
         if (!res.ok) throw new Error(payload.error || 'Unknown error');
-        
+
         progressContainer.classList.remove('visible');
 
         // === START: MODIFIED SECTION TO RENDER NEW SUMMARY ===
         let summarySectionHTML = '';
         if (payload.company_summary_html) {
-            summarySectionHTML = `
+          summarySectionHTML = `
                 <div class="bg-white p-6 rounded-xl shadow-lg">
                     <h2 class="text-2xl font-bold mb-4 text-slate-700">AI Summary for ${payload.ticker}</h2>
                     <div class="summary-content prose prose-slate max-w-none text-slate-600">
@@ -452,6 +484,36 @@
                 </div>
             `;
         }
+
+        // AI Score
+        let aiScoreHTML = '';
+        if (payload.ai_scores && Array.isArray(payload.ai_scores) && payload.ai_scores.length) {
+          aiScoreHTML = `
+          <div class="bg-white p-6 rounded-xl shadow-lg my-10">
+              <h2 class="text-2xl font-bold mb-4 text-slate-700">AI Score</h2>
+              <div class="space-y-6">
+                  ${payload.ai_scores.map((score, idx) => `
+                      <div class="p-4 rounded-lg border border-slate-200 shadow-sm bg-slate-50">
+                          <div class="flex items-start justify-between">
+                              <div>
+                                  <div class="text-lg font-semibold text-green-700">${score.label}</div>
+                                  <div class="text-3xl font-bold mt-1">${score.value}</div>
+                              </div>
+                              <button class="expandChartsBtn px-4 py-2 ml-4 text-sm font-medium text-white bg-green-500 rounded-lg hover:bg-green-600 transition-colors"
+                                      data-idx="${idx}">Show Charts ▼</button>
+                          </div>
+                          <div class="text-slate-600 mt-3">${score.description}</div>
+                          <div class="aiChartsRow hidden mt-6 grid grid-cols-1 md:grid-cols-2 gap-6" id="aiChartsRow${idx}">
+                              <div id="aiChart1_${idx}" style="height:300px;"></div>
+                              <div id="aiChart2_${idx}" style="height:300px;"></div>
+                          </div>
+                      </div>
+                  `).join('')}
+              </div>
+          </div>
+          `;
+        }
+
         // Construct the rest of the HTML
         let technicalSummaryHTML = `
           <div class="bg-white p-6 rounded-xl shadow-lg">
@@ -460,27 +522,51 @@
               <table class="w-full border border-slate-200">
                 <tbody class="text-sm">
                   ${payload.summary.map(row =>
-                    `<tr class="even:bg-slate-50 hover:bg-slate-100 transition-colors duration-150">
+          `<tr class="even:bg-slate-50 hover:bg-slate-100 transition-colors duration-150">
                        <td class="px-4 py-3 border-b border-slate-200 font-medium text-slate-600">${row.key}</td>
                        <td class="px-4 py-3 border-b border-slate-200 text-slate-700 relative">${row.value}</td>
                      </tr>`
-                  ).join('')}
+        ).join('')}
                 </tbody>
               </table>
             </div>
           </div>
         `;
         // Set the final HTML, with the AI summary at the top
-        resultsContainer.innerHTML = summarySectionHTML + technicalSummaryHTML;
+        // resultsContainer.innerHTML = summarySectionHTML + technicalSummaryHTML;
+        resultsContainer.innerHTML = summarySectionHTML + aiScoreHTML + technicalSummaryHTML;
+
+        if (payload.ai_scores && Array.isArray(payload.ai_scores)) {
+          document.querySelectorAll('.expandChartsBtn').forEach(btn => {
+            btn.onclick = function () {
+              const idx = btn.dataset.idx;
+              const chartRow = document.getElementById(`aiChartsRow${idx}`);
+              const isHidden = chartRow.classList.contains('hidden');
+              if (isHidden) {
+                chartRow.classList.remove('hidden');
+                // Parse and plot both charts
+                const chart1 = JSON.parse(payload.ai_scores[idx].chart1_json);
+                const chart2 = JSON.parse(payload.ai_scores[idx].chart2_json);
+                Plotly.newPlot(`aiChart1_${idx}`, chart1.data, chart1.layout || {}, { responsive: true });
+                Plotly.newPlot(`aiChart2_${idx}`, chart2.data, chart2.layout || {}, { responsive: true });
+                btn.textContent = 'Hide Charts ▲';
+              } else {
+                chartRow.classList.add('hidden');
+                btn.textContent = 'Show Charts ▼';
+              }
+            };
+          });
+        }
+
         // === END: MODIFIED SECTION ===
 
         const charts = [
-          { key: 'Price-Action Trend (based on Close prices)',    json: payload.chart_close_json, id: 'chart-close' },
-          { key: 'Price-Action Trend (based on High/Low prices)', json: payload.chart_hl_json,    id: 'chart-hl'    },
-          { key: 'Market Structure (based on EMA Stack)',         json: payload.chart_ema_json,   id: 'chart-ema'   },
-          { key: 'Market Sentiment (based on RSI)',               json: payload.chart_rsi_json,   id: 'chart-rsi'   },
-          { key: 'Accumulating or Distributing (based on Volume)',json: payload.chart_adl_json,   id: 'chart-adl'   },
-          { key: 'Relative Strength vs Nifty',                    json: payload.chart_rs_json,    id: 'chart-rs'    },
+          { key: 'Price-Action Trend (based on Close prices)', json: payload.chart_close_json, id: 'chart-close' },
+          { key: 'Price-Action Trend (based on High/Low prices)', json: payload.chart_hl_json, id: 'chart-hl' },
+          { key: 'Market Structure (based on EMA Stack)', json: payload.chart_ema_json, id: 'chart-ema' },
+          { key: 'Market Sentiment (based on RSI)', json: payload.chart_rsi_json, id: 'chart-rsi' },
+          { key: 'Accumulating or Distributing (based on Volume)', json: payload.chart_adl_json, id: 'chart-adl' },
+          { key: 'Relative Strength vs Nifty', json: payload.chart_rs_json, id: 'chart-rs' },
         ];
 
         const summaryTable = resultsContainer.querySelector('table tbody');
@@ -492,8 +578,8 @@
 
           const cell = row.children[1];
           const valueContent = cell.textContent.trim();
-          cell.innerHTML = ''; 
-          
+          cell.innerHTML = '';
+
           const valueSpan = document.createElement('span');
           valueSpan.textContent = valueContent;
           cell.appendChild(valueSpan);
@@ -553,17 +639,17 @@
             const jsonStr = payload.fundamentals[name];
             if (!jsonStr) return;
             try {
-                const data = JSON.parse(jsonStr);
-                if (data && Array.isArray(data.index) && Array.isArray(data.columns) && Array.isArray(data.data)) {
-                    fundHTML += `
+              const data = JSON.parse(jsonStr);
+              if (data && Array.isArray(data.index) && Array.isArray(data.columns) && Array.isArray(data.data)) {
+                fundHTML += `
                     <h3 class="text-xl font-semibold mb-3 mt-6 text-slate-600">${name}</h3>
                     ${renderFundTable(data)}
                     `;
-                } else {
-                    console.warn(`Skipping fundamental table "${name}" due to unexpected data structure:`, data);
-                }
+              } else {
+                console.warn(`Skipping fundamental table "${name}" due to unexpected data structure:`, data);
+              }
             } catch (e) {
-                console.error(`Error parsing JSON for fundamental table "${name}":`, e, jsonStr);
+              console.error(`Error parsing JSON for fundamental table "${name}":`, e, jsonStr);
             }
           });
           fundHTML += `</div>`;
@@ -578,7 +664,7 @@
           `;
 
           payload.documents.forEach(doc => {
-              docsHTML += `
+            docsHTML += `
               <li class="flex items-center justify-between p-3 rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors">
                   <span class="font-medium text-slate-700">${doc.text} (${doc.type})</span>
                   <a href="${doc.link}" target="_blank" rel="noopener noreferrer" class="px-3 py-1 text-sm font-semibold text-white bg-green-500 rounded-md hover:bg-green-600 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-green-400">
@@ -598,7 +684,7 @@
               <h2 class="text-2xl font-bold mb-6 text-slate-700">
                 Valuation & Margin History
               </h2>`;
-          
+
           Object.entries(payload.metric_charts).forEach(([label, json]) => {
             if (!json) return;
             const id = 'metric-' + label.replace(/\W+/g, '').toLowerCase();
@@ -661,7 +747,7 @@
       } catch (err) {
         if (sseConnection) sseConnection.close();
         document.getElementById('progress-container').classList.remove('visible');
-        
+
         resultsContainer.innerHTML = `<div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg shadow-md" role="alert">
                                         <strong class="font-bold">Error:</strong>
                                         <span class="block sm:inline">${err.message}</span>
@@ -670,16 +756,16 @@
       }
     });
 
-    const chatBtn   = document.getElementById('chatBtn');
+    const chatBtn = document.getElementById('chatBtn');
     const chatModal = document.getElementById('chatModal');
     const chatClose = document.getElementById('chatClose');
-    const chatLog   = document.getElementById('chatLog');
-    const chatForm  = document.getElementById('chatForm');
+    const chatLog = document.getElementById('chatLog');
+    const chatForm = document.getElementById('chatForm');
     const chatInput = document.getElementById('chatInput');
     const modelSelector = document.getElementById('aiModelSelector');
 
 
-    chatBtn.onclick   = () => chatModal.classList.remove('hidden');
+    chatBtn.onclick = () => chatModal.classList.remove('hidden');
     chatClose.onclick = () => chatModal.classList.add('hidden');
     window.addEventListener('keydown', (event) => {
       if (event.key === 'Escape' && !chatModal.classList.contains('hidden')) {
@@ -687,16 +773,16 @@
       }
     });
     chatModal.addEventListener('click', (event) => {
-        if (event.target === chatModal) {
-            chatModal.classList.add('hidden');
-        }
+      if (event.target === chatModal) {
+        chatModal.classList.add('hidden');
+      }
     });
 
     chatForm.addEventListener('submit', async e => {
       e.preventDefault();
       const q = chatInput.value.trim();
       if (!q) return;
-      
+
       appendMessage(q, 'user');
       chatInput.value = '';
       chatInput.disabled = true;
@@ -705,19 +791,19 @@
       try {
         const selectedModel = modelSelector.value;
         const res = await fetch('/chat', {
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ question: q, model: selectedModel })
         });
         const { answer, error } = await res.json();
-        
+
         removeTypingIndicator();
         if (error) {
           appendMessage(`Error: ${error}`, 'error');
         } else {
           appendMessage(answer, 'bot');
         }
-      } catch(err) {
+      } catch (err) {
         removeTypingIndicator();
         appendMessage(`Network error: ${err.message}`, 'error');
       }
@@ -728,7 +814,7 @@
     function appendMessage(text, sender, isTyping = false) {
       const messageDiv = document.createElement('div');
       messageDiv.classList.add('p-3', 'rounded-lg', 'max-w-[80%]', 'text-sm', 'leading-relaxed', 'break-words');
-      
+
       if (isTyping) {
         messageDiv.id = 'typingIndicator';
         messageDiv.innerHTML = `
@@ -753,7 +839,7 @@
         messageDiv.textContent = text;
         messageDiv.classList.add('bg-red-100', 'text-red-700', 'self-center', 'w-full', 'text-center');
       }
-      
+
       chatLog.appendChild(messageDiv);
       chatLog.scrollTop = chatLog.scrollHeight;
     }
@@ -766,4 +852,5 @@
     }
   </script>
 </body>
+
 </html>

@@ -4,7 +4,7 @@ from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 class SentiScore:
     def __init__(self, symbol):
         self.symbol = symbol
-        self.num_articles = 5
+        self.num_articles = 3
         self.analyzer = SentimentIntensityAnalyzer()
 
     def fetch_google_news(self, site: str = "moneycontrol.com"):
@@ -34,9 +34,9 @@ class SentiScore:
                 continue
             total_score += self.analyzer.polarity_scores(text['summary'])["compound"]
         average_score = total_score / self.num_articles if self.num_articles > 0 else 0
-        if average_score > 0.3:
+        if average_score > 0.2:
             sentiment = 'positive'
-        elif average_score < -0.3:
+        elif average_score < -0.2:
             sentiment = 'negative'
         else:
             sentiment = 'neutral'

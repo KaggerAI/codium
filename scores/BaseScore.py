@@ -2,9 +2,16 @@ from abc import ABC, abstractmethod
 import numpy as np
 from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import KMeans
-from sklearn.linear_model import ElasticNet
+from sklearn.linear_model import LinearRegression
+from sklearn.exceptions import ConvergenceWarning
 
 from scores.PlotScore import PlotScore
+
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning)
+warnings.filterwarnings("ignore", category=FutureWarning)
+warnings.filterwarnings("ignore", category=ConvergenceWarning)
+
 
 class BaseScore(ABC):
     def __init__(self, name, description, feaures, df, n_regimes, regime_labels ):
@@ -57,7 +64,7 @@ class BaseScore(ABC):
         self.df[self.regime_labels_col] = self.df[self.regime_col].map(self.regime_labels)
         self.df.drop(columns=['cluster'], inplace=True)
 
-    def feature_regime_weights(self, factor=1, alpha=0.5, l1_ratio=0.8):
+    def feature_regime_weights(self, factor=1, alpha=0, l1_ratio=1):
         """_summary_: calculate weights per regime using regression
         """
         for regime in range(self.n_regimes):
@@ -77,7 +84,8 @@ class BaseScore(ABC):
             # l1_ratio = 1 (feature selection), 0 (shrinkage), 0<l1_ratio<1 : both
             # use gridsearch or manual to find weights
             # fixed random_state for reproducability else set it to None
-            model = ElasticNet(alpha=alpha, l1_ratio=l1_ratio, random_state=42)
+            # model = ElasticNet(alpha=alpha, l1_ratio=l1_ratio, random_state=42)
+            model = LinearRegression()
             model.fit(X_reg, y_reg)
             self.weights_per_regime[regime] = model.coef_
 
@@ -95,9 +103,21 @@ class BaseScore(ABC):
             index_score.append(regime_score)
         self.df[self.score] = index_score
 
+    def get_score(self):
+        """_summary_: returns the score column
+        """
+        return self.df[self.score]
+
     def plot(self, y_list=None, category_column=None):
         if category_column is None:
             category_column = self.regime_col
         if y_list is None:
             y_list = ['close', self.proxy_score_col]
-        PlotScore.multiple_lines(df=self.df, columns=y_list, category_column=category_column, regime_labels=self.regime_labels)
+        return PlotScore.multiple_lines(df=self.df, columns=y_list, category_column=category_column, regime_labels=self.regime_labels)
+    
+    def plot_violin(self, y=None, category_column=None):
+        if category_column is None:
+            category_column = self.regime_col
+        if y is None:
+            y = 'returns'
+        return PlotScore.plot_violin(df=self.df, x_col=category_column, y_col=y)

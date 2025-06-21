@@ -15,7 +15,7 @@ class VolScore(BaseScore):
         }
         self.n_regimes = len(self.regime_labels)
         self.features = ['ATR_14', 'IV','BETA', 'HV_20D', 'HV_IV', 'IndiaVix']
-        super().__init__(name='Volatility', description = f'Volatility Score of {symbol}' ,df=df, feaures=self.features, n_regimes=self.n_regimes, regime_labels=self.regime_labels)
+        super().__init__(name='volatility', description = f'Volatility Score of {symbol}' ,df=df, feaures=self.features, n_regimes=self.n_regimes, regime_labels=self.regime_labels)
 
     def _calculate_simple_score(self):
         weights_label = [('ATR_14',1), ('IV',1), ('BETA',1), ('HV_20D', 1), ('HV_IV',1), ('IndiaVix',1)]

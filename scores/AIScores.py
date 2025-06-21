@@ -5,6 +5,8 @@ from scores.VolScore import VolScore
 from scores.SentiScore import SentiScore
 
 from scores.Data import Data
+from scores.PlotScore import PlotScore
+import numpy as np
 
 class AIScores:
     def __init__(self, symbol):
@@ -23,6 +25,56 @@ class AIScores:
         self.scores['technical'].pipeline()
         self.scores['liquidity'].pipeline()
         self.scores['volatility'].pipeline()
+    
+    def get_radar_plot(self):
+        data_dict = {
+            'Valuation': (self.scores['valuation'].get_score().tail(30).mean(), self.scores['valuation'].df['valuation_regime_labels'].iloc[-1]),
+            'Technical': (self.scores['technical'].get_score().tail(30).mean(),self.scores['technical'].df['technical_regime_labels'].iloc[-1]),
+            'Liquidity': (self.scores['liquidity'].get_score().tail(30).mean(),self.scores['liquidity'].df['liquidity_regime_labels'].iloc[-1]),
+            'Volatility': (self.scores['volatility'].get_score().tail(30).mean(),self.scores['volatility'].df['volatility_regime_labels'].iloc[-1]),
+            #'Sentiment': (self.scores['sentiment']['average_score'], self.scores['sentiment']['sentiment'])
+        }
+        return PlotScore.plot_radar(AIScores._scale_radar_scores(data_dict), title='AI Scores')
 
-    def get_plots(self, name):
-        return self.scores[name].plot() if name in ['valuation', 'technical', 'liquidity', 'volatility'] else None
+    @staticmethod
+    def _scale_radar_scores(data_dict, minmax_dict=None, use_zscore_if_low_var=True):
+        """
+        Scales the first element of each (value, label) tuple in the input dict to [0, 1] range.
+
+        Args:
+            data_dict (dict): {category: (value, label)}
+            minmax_dict (dict, optional): {category: (min, max)} for per-metric scaling.
+            use_zscore_if_low_var (bool): Use z-score normalization if all values are very close.
+        Returns:
+            dict: {category: (scaled_value, label)}
+        """
+        values = np.array([v[0] for v in data_dict.values()])
+        
+        # Check if all values are too close (low variance)
+        if use_zscore_if_low_var and (np.max(values) - np.min(values)) < 1e-6:
+            # Use z-score normalization, then rescale to [0,1]
+            mean = values.mean()
+            std = values.std() if values.std() > 0 else 1
+            z_scores = (values - mean) / std
+            # rescale z-scores to [0,1]
+            min_z, max_z = z_scores.min(), z_scores.max()
+            rng = max_z - min_z if max_z != min_z else 1
+            scaled = (z_scores - min_z) / rng
+            scaled_dict = {
+                k: (float(s), data_dict[k][1]) for k, s in zip(data_dict.keys(), scaled)
+            }
+            return scaled_dict
+
+        scaled_dict = {}
+        for k, (val, desc) in data_dict.items():
+            # Use per-category min/max if available, else global
+            if minmax_dict and k in minmax_dict:
+                min_val, max_val = minmax_dict[k]
+            else:
+                min_val, max_val = np.min(values), np.max(values)
+            rng = max_val - min_val if max_val != min_val else 1
+            scaled_val = (val - min_val) / rng
+            # Optionally clip to [0, 1]
+            scaled_val = min(max(scaled_val, 0), 1)
+            scaled_dict[k] = (float(scaled_val), desc)
+        return scaled_dict
