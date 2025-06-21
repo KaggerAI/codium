@@ -68,8 +68,9 @@ def index():
 # =====================================================================
 
 import openai
-from perplexity import Perplexity # <- USE THIS CORRECT IMPORT
+from perplexity import Perplexity 
 import google.generativeai as genai
+from google.generativeai.types import Tool 
 
 # Securely load API keys from environment variables
 openai.api_key = os.getenv("OPENAI_API_KEY")
@@ -154,10 +155,13 @@ def call_perplexity_api(messages, model="sonar", temperature=1):
 
 
 
-def call_gemini_api(messages, model="gemini-2.5-flash-preview-05-20", temperature=1):
+def call_gemini_api(messages, model="gemini-2.5-flash-preview-05-20", temperature=1, use_google_search=False):
     if not GOOGLE_API_KEY:
         raise ValueError("Google Gemini API key is not configured.")
     try:
+        # Configure tools based on the Latest News parameter
+        tools = [Tool(google_search_retrieval={})] if use_google_search else None # <--- USE THIS LINE INSTEAD
+        # tools = [Tool.from_google_search_retrieval()] if use_google_search else None
         # Gemini has stricter safety settings; we set them to be permissive for financial analysis.
         safety_settings = [
             {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
@@ -171,7 +175,8 @@ def call_gemini_api(messages, model="gemini-2.5-flash-preview-05-20", temperatur
         response = gemini_model.generate_content(
             gemini_messages,
             generation_config=genai.types.GenerationConfig(temperature=temperature),
-            safety_settings=safety_settings
+            safety_settings=safety_settings,
+            tools=tools
         )
         return response.text
     except Exception as e:
@@ -524,7 +529,7 @@ def chat():
         data = request.get_json(force=True)
         user_question = data.get('question', '').strip()
         # Get the selected model from the request, default to a reliable choice
-        selected_model = data.get('model', 'gpt-4o-mini') 
+        selected_model = data.get('model', 'gpt-4.1-mini') 
         print(f"AI chatbot received question with selected model: {selected_model}")
 
         if not user_question:
@@ -533,6 +538,17 @@ def chat():
             ticker_present = isinstance(last_analysis, dict) and last_analysis.get("ticker")
             if not ticker_present :
                  return jsonify({'answer': 'Please analyze a stock first. No data context is available.'}), 200
+
+        # === CHANGE 1: Multi-Agent Model Selection ===
+        is_best_mode = selected_model == 'best'
+        
+        # Define the models for each agent role
+        planner_model = 'o4-mini'
+        news_model = 'sonar'  # Sonar is specialized for this, always use it for news
+        answerer_model = 'gpt-4.1-mini' if is_best_mode else selected_model
+        # answerer_model = 'gemini-2.5-flash-preview-05-20' if is_best_mode else selected_model
+
+        log_progress("Analyzing user query...")
 
         # --- VVV ADD PRINT STATEMENTS HERE VVV ---
         print("\n" + "="*50)
@@ -572,7 +588,7 @@ def chat():
         log_progress("Creating a plan to fetch data and information and answer the user's question...")
         # NOTE: This call is intentionally hardcoded to a model supporting JSON mode for reliability.
         # Temperature might be slightly higher for more complex planning, or keep low for precision.
-        ai_full_response_str = call_openai_api(planning_messages, model="o4-mini", expect_json_format_flag=False, temperature=1) 
+        ai_full_response_str = call_openai_api(planning_messages, model=planner_model, expect_json_format_flag=False, temperature=1) 
 
         # --- VVV ADD PRINT STATEMENTS HERE VVV ---
         print(f"\n--- AI RAW RESPONSE (FULL STRING) ---\n{ai_full_response_str}\n-------------------------------------\n")
@@ -631,7 +647,58 @@ def chat():
         # Ensure parsed_plan is a dict, default if not.
         if not isinstance(parsed_plan, dict): parsed_plan = {}
 
-        # === Step 2: Retrieve Data Based on 'retrieve_data' part of the Plan ===
+        # === Step 2: External News Fetching (New Agent Action) ===
+        # news_summary = None
+        # # Fetch news only if the planner requests it AND the user has selected the "best" model.
+        # if parsed_plan.get("fetch_external_news", {}).get("needed") and is_best_mode:
+        #     # The prompt created by the planner is still valid for Gemini.
+        #     gemini_news_prompt = parsed_plan["fetch_external_news"].get("prompt_for_sonar") # The key name is fine
+            
+        #     if gemini_news_prompt:
+        #         # Replace placeholder with actual ticker
+        #         gemini_news_prompt = gemini_news_prompt.replace("[Company Name/Ticker]", last_analysis.get('ticker', ''))
+                
+        #         # Update the log message to reflect the new tool
+        #         log_progress(f"News agent (Gemini 1.5 Flash) is fetching real-time news via Google Search...")
+                
+        #         try:
+        #             news_messages = [{"role": "user", "content": gemini_news_prompt}]
+        #             # Call our enhanced Gemini function with search enabled
+        #             news_summary = call_gemini_api(
+        #                 news_messages,
+        #                 model="gemini-1.5-flash-latest", # Explicitly use the fast, latest model
+        #                 use_google_search=True # This is the magic flag!
+        #             )
+        #         except Exception as e:
+        #             print(f"ERROR: Gemini news fetching failed: {e}")
+        #             news_summary = f"Error: Failed to fetch real-time news using Gemini. {e}"
+        # elif parsed_plan.get("fetch_external_news", {}).get("needed") and not is_best_mode:
+        #     # This part remains the same.
+        #     log_progress("Skipping real-time news fetch (available in 'best' model mode).")
+        #     print("INFO: Planner requested news, but skipping because 'best' model was not selected.")
+        
+        news_summary = None
+        # Fetch news only if the planner requests it AND the user has selected the "best" model.
+        if parsed_plan.get("fetch_external_news", {}).get("needed") and is_best_mode:
+            sonar_prompt = parsed_plan["fetch_external_news"].get("prompt_for_sonar")
+            if sonar_prompt:
+                # Replace placeholder with actual ticker
+                name_for_search = last_analysis.get('company_name', last_analysis.get('ticker', ''))
+                sonar_prompt = sonar_prompt.replace("[Company Name/Ticker]", name_for_search)
+                log_progress(f"News agent ({news_model}) is fetching real-time news ('best' model feature)...")
+                try:
+                    news_messages = [{"role": "user", "content": sonar_prompt, "mode": "high"}]
+                    news_summary = call_perplexity_api(news_messages, model=news_model)
+                except Exception as e:
+                    print(f"ERROR: News fetching failed: {e}")
+                    news_summary = f"Error: Failed to fetch real-time news. {e}"
+        elif parsed_plan.get("fetch_external_news", {}).get("needed") and not is_best_mode:
+            # Log that news was requested but skipped because the model was not "best"
+            log_progress("Skipping real-time news fetch (available in 'best' model mode).")
+            print("INFO: Planner requested news, but skipping because 'best' model was not selected.")
+
+        # === Step 3: Retrieve Data Based on 'retrieve_data' part of the Plan ===
+        log_progress("Retrieving internal financial data...")
         retrieve_data_spec = parsed_plan.get("retrieve_data", {})
         # print(f"DEBUG: Plan's retrieve_data section: {json.dumps(retrieve_data_spec, indent=2)}")
         retrieved_fundamental_data = retrieve_data_based_on_plan(retrieve_data_spec, last_analysis)
@@ -642,7 +709,8 @@ def chat():
             # ... (error handling as before) ...
             return jsonify({'answer': f"Error retrieving base data: {error_msg}. Plan: {ai_plan_json_str}"}), 200
 
-        # === Step 2a: Perform Calculations ===
+        # === Step 4: Perform Calculations ===
+        log_progress("Performing financial calculations...")
         calculations_spec = parsed_plan.get("perform_calculations", [])
         # The `perform_planned_calculations` function needs `retrieved_fundamental_data`
         # AND access to `last_analysis` (especially `last_analysis['summary']`) if the AI planner
@@ -665,7 +733,8 @@ def chat():
         final_context_for_answer = {
             "user_question": user_question,
             "retrieved_data": retrieved_fundamental_data, # Contains 'Fundamentals', 'ValuationMarginSeries', etc.
-            "calculated_metrics": calculation_results_obj.get("results", {})
+            "calculated_metrics": calculation_results_obj.get("results", {}),
+            "news_summary": news_summary
         }
         if calculation_results_obj.get("info"):
             final_context_for_answer["calculation_info"] = calculation_results_obj.get("info")
@@ -681,26 +750,27 @@ def chat():
 
         focused_context_str_for_answer = json.dumps(final_context_for_answer, indent=2, ensure_ascii=False, default=str) # default=str for non-serializable like NaNs if any
 
-        # === Step 3: Answering Call ===
+        # === Step 5: Answering Call ===
         answering_system_prompt = get_answering_system_prompt()
         answering_messages = [
             {"role": "system", "content": answering_system_prompt},
-            {"role": "user", "content": f"User Question: \"{user_question}\"\n\nRelevant Focused Stock Analysis Context (Retrieved & Calculated):\n{focused_context_str_for_answer}"}
+            {"role": "user", "content": f"User Question: \"{user_question}\"\n\nPlease synthesize an answer based on the following consolidated data:\n{focused_context_str_for_answer}"}
         ]
 
-        log_progress("Analyzing data and information to answer user's question...")
+        log_progress("Answering agent ({answerer_model}) is synthesizing the final response...")
         # Use the new dispatcher function with the user's selected model
         final_answer = call_generative_ai_model(
-            model=selected_model,
+            model=answerer_model,
             messages=answering_messages,
-            temperature=1 # A balanced temperature for creative but factual answers
+            temperature=0.75 # A balanced temperature for creative but factual answers
         )
         # final_answer = call_openai_api(answering_messages, model="o4-mini", temperature=1)
 
         return jsonify({
             'answer': final_answer,
             'thought_process': thought_process_str,
-            'planning_data': ai_plan_str
+            'planning_data': ai_plan_str,
+            'raw_news_summary': news_summary
         })
 
     except openai.RateLimitError as e:
@@ -1532,6 +1602,31 @@ def analyze():
         if not tick: return jsonify({'error':'No ticker provided'}),400
         log_progress(f"Starting analysis for {tick}...")
 
+        # Fetch Company Name from Ticker ===
+        company_name = tick  # Default to the original ticker
+        try:
+            def get_name_from_yfinance(ticker: str, exchange_suffix: str):
+
+                ticker_obj = yf.Ticker(f"{ticker}{exchange_suffix}")
+                info = ticker_obj.info or {}
+                name = info.get("longName") or info.get("shortName")
+                return name.strip() if isinstance(name, str) else None
+            
+
+            found_name = get_name_from_yfinance(tick, ".NS")
+            if not found_name:
+                # If .NS fails, try .BO as the final fallback.
+                found_name = get_name_from_yfinance(tick, ".BO")
+    
+            if found_name:
+                company_name = found_name
+                log_progress(f"Successfully identified company: {company_name}")
+            else:
+                log_progress(f"Could not find company name for {tick} on NSE or BSE. Defaulting to ticker.")
+        except Exception as e:
+            # This catches any unexpected errors during the API call or processing.
+            print(f"WARN: An exception occurred during the yfinance name fetch for '{tick}': {e}")
+            log_progress(f"Could not find company name due to an error. Using ticker: {tick}")
         
         res=evaluate_ticker_signal(tick)
         log_progress("AI is analyzing the Chart using Technical signals.")
@@ -1561,13 +1656,13 @@ def analyze():
             cleaned_technical_summary = technical_summary_list
 
         # Build chart JSONs (no changes needed here)
-        close_j=build_close_figure(df,tick).to_json()
+        close_j=build_close_figure(df,company_name).to_json()
         # ... (other chart jsons) ...
-        hl_j   =build_hl_figure(df,tick).to_json()
-        ema_j  =build_ema_figure(df,tick).to_json()
-        rsi_j  =build_rsi_figure(df,tick).to_json()
-        adl_j  =build_adl_figure(df,tick).to_json()
-        rs_j   =build_rs_figure(df,tick).to_json()
+        hl_j   =build_hl_figure(df,company_name).to_json()
+        ema_j  =build_ema_figure(df,company_name).to_json()
+        rsi_j  =build_rsi_figure(df,company_name).to_json()
+        adl_j  =build_adl_figure(df,company_name).to_json()
+        rs_j   =build_rs_figure(df,company_name).to_json()
         
         # --- Fundamentals Data Processing ---
         tables_from_screener, company_description = fetch_consolidated(tick)
@@ -1688,8 +1783,9 @@ def analyze():
         global last_analysis
         last_analysis = {
             "ticker": tick,
-            "summary": cleaned_technical_summary, # Use the cleaned version
-            "fundamentals": fund_data_for_ai_context, # Use the cleaned version
+            "company_name": company_name,
+            "summary": cleaned_technical_summary, 
+            "fundamentals": fund_data_for_ai_context, 
             "valuation_and_margin_data": parsed_valuation_data, 
             "documents": latest_documents
         }
@@ -1699,6 +1795,7 @@ def analyze():
         return jsonify({
 
             'ticker':tick,
+            'company_name': company_name,
             'company_summary_html': ai_company_summary_html, # <-- NEWLY ADDED for the frontend
             'summary': cleaned_technical_summary, # Send cleaned summary to frontend too
             'chart_close_json':close_j,
