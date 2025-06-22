@@ -529,7 +529,7 @@ def chat():
         data = request.get_json(force=True)
         user_question = data.get('question', '').strip()
         # Get the selected model from the request, default to a reliable choice
-        selected_model = data.get('model', 'gpt-4.1-mini') 
+        selected_model = data.get('model', 'o4-mini') 
         print(f"AI chatbot received question with selected model: {selected_model}")
 
         if not user_question:
