@@ -37,7 +37,7 @@
         padding-left: 1rem;
     }
 
-    /* === CORRECTED PROGRESS BAR CSS STARTS HERE === */
+    /* === PROGRESS BAR CSS === */
     #progress-container {
         height: 30px; 
         width: 90%;
@@ -52,19 +52,15 @@
         max-height: 0;
         transition: opacity 0.4s ease-out, max-height 0.4s ease-in-out, margin-bottom 0.4s;
     }
-
     #progress-container.visible {
         opacity: 1;
         max-height: 30px; 
         margin-bottom: 2rem;
     }
-
     #progress-messages {
         position: relative;
         height: 100%;
     }
-
-    /* This is the default state: hidden BELOW the view */
     #progress-messages p {
         position: absolute;
         width: 100%;
@@ -80,24 +76,34 @@
         overflow: hidden;
         text-overflow: ellipsis;
         opacity: 0;
-        transform: translateY(100%); /* Start hidden below */
+        transform: translateY(100%);
         transition: opacity 0.4s ease-out, transform 0.4s ease-out;
     }
-
-    /* This class brings the message into view */
     #progress-messages p.visible {
         opacity: 1;
-        transform: translateY(0); /* Move to center */
+        transform: translateY(0);
     }
-
-    /* This temporary class makes the message exit by moving UP */
     #progress-messages p.exiting {
         opacity: 0;
-        transform: translateY(-100%); /* Exit by moving up */
+        transform: translateY(-100%);
     }
 
     .hidden {
         display: none;
+    }
+    
+    /* === NEW STYLES FOR TABS === */
+    .tab-button {
+      transition: all 0.2s ease-in-out;
+    }
+    .tab-button.active {
+      border-color: #22c55e; /* green-500 */
+      color: #166534; /* green-800 */
+      background-color: #f0fdf4; /* green-50 */
+    }
+    .tab-panel {
+        border-top: 1px solid #e2e8f0; /* slate-200 */
+        padding-top: 1.5rem;
     }
   </style>
 
@@ -140,10 +146,8 @@
       </div>
     </div>
 
-    <div id="progress-container"> <!-- Don't add 'hidden' class here -->
-      <div id="progress-messages">
-          <!-- Progress messages will be added here by JavaScript -->
-      </div>
+    <div id="progress-container">
+      <div id="progress-messages"></div>
     </div>
 
     <!-- Results -->
@@ -162,44 +166,22 @@
   <!-- Chat modal -->
   <div id="chatModal" class="fixed inset-0 bg-black bg-opacity-60 hidden items-center justify-center p-4 z-[100]">
     <div class="bg-white w-full max-w-lg h-[70vh] max-h-[600px] rounded-xl shadow-2xl flex flex-col overflow-hidden">
-      <!-- [--- MODIFIED START ---] -->
       <div class="bg-gradient-to-r from-green-500 to-green-600 px-4 py-3 flex justify-between items-center text-white">
         <div class="flex flex-col">
             <span class="font-semibold text-lg">Ask about this analysis</span>
         </div>
         <div class="flex items-center space-x-3">
-            <!-- AI Model Selector -->
             <select id="aiModelSelector" class="bg-green-700/50 text-white text-sm rounded-md p-1 border border-green-400 focus:ring-2 focus:ring-white/80 focus:outline-none">
-                <optgroup label="Recommended">
-                    <option value="best" selected>Best (Multi-Agent)</option>
-                </optgroup>
-                <optgroup label="ChatGPT">
-                    <option value="gpt-4.1">GPT-4.1</option>
-                    <option value="gpt-4.1-mini">GPT-4.1 Mini</option>
-                    <option value="gpt-4o">GPT-4o</option>
-                    <option value="gpt-4o-mini">GPT-4o Mini</option>
-                    <option value="o4-mini">o4-mini</option>
-                </optgroup>
-                <optgroup label="Perplexity">
-                    <option value="sonar">Sonar (Online)</option>
-                    <option value="sonar-pro">Sonar Pro (Online)</option>
-                    <option value="sonar-reasoning">Sonar Reasoning (Online)</option>
-                    <option value="sonar-reasoning-pro">Sonar Reasoning Pro (Online)</option>
-                </optgroup>
-                <optgroup label="Deepseek">
-                    <option value="r1-1776">Deepseek R1</option>
-                </optgroup>
-                <optgroup label="Google Gemini">
-                    <option value="gemini-2.5-flash-preview-05-20">Gemini 2.5 Flash</option>
-                    <option value="gemini-2.5-pro-preview-06-05">Gemini 2.5 Pro</option>
-                </optgroup>
+                <optgroup label="Recommended"><option value="best" selected>Best (Multi-Agent)</option></optgroup>
+                <optgroup label="ChatGPT"><option value="gpt-4.1">GPT-4.1</option><option value="gpt-4.1-mini">GPT-4.1 Mini</option><option value="gpt-4o">GPT-4o</option><option value="gpt-4o-mini">GPT-4o Mini</option><option value="o4-mini">o4-mini</option></optgroup>
+                <optgroup label="Perplexity"><option value="sonar">Sonar (Online)</option><option value="sonar-pro">Sonar Pro (Online)</option><option value="sonar-reasoning">Sonar Reasoning (Online)</option><option value="sonar-reasoning-pro">Sonar Reasoning Pro (Online)</option></optgroup>
+                <optgroup label="Deepseek"><option value="r1-1776">Deepseek R1</option></optgroup>
+                <optgroup label="Google Gemini"><option value="gemini-2.5-flash-preview-05-20">Gemini 2.5 Flash</option><option value="gemini-2.5-pro-preview-06-05">Gemini 2.5 Pro</option></optgroup>
             </select>
             <button id="chatClose" class="text-green-100 hover:text-white transition-colors text-2xl leading-none">×</button>
         </div>
       </div>
-      <!-- [--- MODIFIED END ---] -->
-      <div id="chatLog" class="flex-1 p-4 space-y-3 overflow-y-auto bg-slate-50">
-      </div>
+      <div id="chatLog" class="flex-1 p-4 space-y-3 overflow-y-auto bg-slate-50"></div>
       <form id="chatForm" class="p-4 flex border-t border-slate-300 bg-white">
         <input id="chatInput" type="text" placeholder="Type your question…"
                class="flex-grow border border-slate-300 rounded-l-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent" />
@@ -209,540 +191,475 @@
   </div>
 
   <script>
+      // ===================================================================================
+      // START: HELPER FUNCTIONS FOR RENDERING
+      // ===================================================================================
 
-    // Helper to render a fundamentals table
-    // fundData.index (JS) = Headers for columns of the HTML table (e.g., ["index", "Mar 2023", "Jun 2023"])
-    // fundData.columns (JS) = Headers for rows of the HTML table (e.g., ["Sales", "Net Profit"])
-    // fundData.data is data[period_idx][metric_idx] where period_idx maps to fundData.index and metric_idx to fundData.columns
-    
-    function renderFundTable(fundData) {
-        let html = `<div class="overflow-x-auto"><table class="w-full bg-white rounded-lg shadow-md mx-auto mb-8 border border-slate-200">
-            <thead class="bg-slate-200 text-slate-700"><tr>
-                <th class="px-4 py-3 border-b border-slate-300 text-left text-sm font-semibold">Particulars</th>`;
+      const MONTH_MAP = {"Jan":1, "Feb":2, "Mar":3, "Apr":4, "May":5, "Jun":6, "Jul":7, "Aug":8, "Sept":9, "Oct":10, "Nov":11, "Dec":12};
 
-        if (fundData.index && Array.isArray(fundData.index)) {
-            fundData.index.forEach(periodLabel => {
-                const isIndexColumn = periodLabel && periodLabel.toString().toLowerCase() === 'index';
-                const visibilityClass = isIndexColumn ? 'opacity-0 pointer-events-none' : '';
-                // Data under the "index" column header (which are typically the metric names themselves) are text, so left-align.
-                // Other period headers (like "Mar 2023") correspond to numeric data columns, so their headers are right-aligned.
-                const alignmentClass = isIndexColumn ? 'text-left' : 'text-right';
-                
-                html += `<th class="px-4 py-3 border-b border-slate-300 text-sm font-semibold ${alignmentClass} ${visibilityClass}">${periodLabel}</th>`;
-            });
-        }
-        html += `</tr></thead><tbody>`;
+      /**
+       * NEW: Parses date strings like "Mar 2024" or "2024" into Date objects for sorting.
+       * @param {string} dateStr - The date string to parse.
+       * @returns {Date} A Date object.
+       */
+      function parseDateString(dateStr) {
+          if (!dateStr) return new Date(0); // Return a very old date for invalid strings
+          const parts = dateStr.split(' ');
+          if (parts.length === 2 && MONTH_MAP[parts[0]]) { // "Mar 2024" format
+              return new Date(parseInt(parts[1]), MONTH_MAP[parts[0]] - 1, 1);
+          } else if (parts.length === 1 && /^\d{4}$/.test(parts[0])) { // "2024" format
+              return new Date(parseInt(parts[0]), 0, 1);
+          }
+          return new Date(0); // Fallback
+      }
 
-        if (fundData.columns && Array.isArray(fundData.columns)) {
-            fundData.columns.forEach((metricName, metric_idx) => { // metricName is "Sales", "Net Profit", etc.
-                html += `<tr class="even:bg-slate-50 hover:bg-slate-100 transition-colors duration-150">
-                            <td class="px-4 py-3 border-b border-slate-200 font-medium text-sm text-slate-700 text-left">${metricName}</td>`; // This is the first visible column with metric names
+      function renderFundTable(fundData) {
+          let html = `<div class="overflow-x-auto"><table class="w-full bg-white rounded-lg shadow-md mx-auto mb-8 border border-slate-200"><thead class="bg-slate-200 text-slate-700"><tr><th class="px-4 py-3 border-b border-slate-300 text-left text-sm font-semibold">Particulars</th>`;
+          if (fundData.index && Array.isArray(fundData.index)) {
+              fundData.index.forEach(periodLabel => {
+                  const isIndexColumn = periodLabel && periodLabel.toString().toLowerCase() === 'index';
+                  const visibilityClass = isIndexColumn ? 'opacity-0 pointer-events-none' : '';
+                  const alignmentClass = isIndexColumn ? 'text-left' : 'text-right';
+                  html += `<th class="px-4 py-3 border-b border-slate-300 text-sm font-semibold ${alignmentClass} ${visibilityClass}">${periodLabel}</th>`;
+              });
+          }
+          html += `</tr></thead><tbody>`;
+          if (fundData.columns && Array.isArray(fundData.columns)) {
+              fundData.columns.forEach((metricName, metric_idx) => {
+                  html += `<tr class="even:bg-slate-50 hover:bg-slate-100 transition-colors duration-150"><td class="px-4 py-3 border-b border-slate-200 font-medium text-sm text-slate-700 text-left">${metricName}</td>`;
+                  if (fundData.index && Array.isArray(fundData.index)) {
+                      fundData.index.forEach((periodLabel, period_idx) => {
+                          const isIndexColumnValue = periodLabel && periodLabel.toString().toLowerCase() === 'index';
+                          const visibilityClass = isIndexColumnValue ? 'opacity-0 pointer-events-none' : '';
+                          let v = (fundData.data && fundData.data[period_idx] && fundData.data[period_idx][metric_idx] !== undefined) ? fundData.data[period_idx][metric_idx] : null;
+                          let displayValue = 'N/A', cellClass = 'text-right';
+                          if (v != null && v.toString().trim() !== '') {
+                              const s = v.toString().replace(/,/g, ''), isPercent = s.endsWith('%'), numPart = isPercent ? s.substring(0, s.length - 1) : s;
+                              if (!isNaN(parseFloat(numPart)) && isFinite(numPart)) {
+                                  let numVal = parseFloat(numPart);
+                                  displayValue = numVal.toLocaleString('en-IN', { minimumFractionDigits: (numVal % 1 !== 0 || numPart.includes('.')) ? Math.min(2, (numPart.split('.')[1] || '').length || 2) : 0, maximumFractionDigits: 2 });
+                                  if (isPercent) displayValue += '%';
+                              } else { displayValue = v; cellClass = 'text-left'; }
+                          } else { cellClass = 'text-center'; }
+                          if (isIndexColumnValue) cellClass = 'text-left';
+                          html += `<td class="px-4 py-3 border-b border-slate-200 text-sm ${cellClass} ${visibilityClass}">${displayValue}</td>`;
+                      });
+                  }
+                  html += `</tr>`;
+              });
+          }
+          html += `</tbody></table></div>`;
+          return html;
+      }
 
-                if (fundData.index && Array.isArray(fundData.index)) {
-                    fundData.index.forEach((periodLabel, period_idx) => { // periodLabel is "index", "Mar 2023", etc.
-                        const isIndexColumnValue = periodLabel && periodLabel.toString().toLowerCase() === 'index';
-                        const visibilityClass = isIndexColumnValue ? 'opacity-0 pointer-events-none' : '';
+      // ========= UPDATED SCANX HELPER FUNCTIONS START =========
+      function render_scanx_grid(data) {
+          let html = '<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">';
+          for (const [key, value] of Object.entries(data)) {
+              const formattedKey = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+              html += `<div class="bg-slate-50 p-3 rounded-lg border border-slate-200"><p class="text-xs text-slate-500 font-medium">${formattedKey}</p><p class="text-base font-semibold text-slate-800">${value || 'N/A'}</p></div>`;
+          }
+          html += '</div>';
+          return html;
+      }
 
-                        let v = (fundData.data && fundData.data[period_idx] && fundData.data[period_idx][metric_idx] !== undefined)
-                                  ? fundData.data[period_idx][metric_idx]
-                                  : null;
+      function render_analyst_rating(data) {
+          let html = '<div class="bg-slate-50 p-4 rounded-lg border border-slate-200">';
+          if (data.analyst_count) {
+              html += `<p class="text-sm text-slate-600 mb-3">Based on <strong>${data.analyst_count} analysts</strong></p>`;
+          }
+          html += '<div class="flex items-center space-x-6">';
+          if (data.buy_percentage) html += `<div><span class="font-bold text-green-600">${data.buy_percentage}</span><span class="text-sm text-slate-500 ml-1">Buy</span></div>`;
+          if (data.hold_percentage) html += `<div><span class="font-bold text-yellow-500">${data.hold_percentage}</span><span class="text-sm text-slate-500 ml-1">Hold</span></div>`;
+          if (data.sell_percentage) html += `<div><span class="font-bold text-red-600">${data.sell_percentage}</span><span class="text-sm text-slate-500 ml-1">Sell</span></div>`;
+          html += '</div></div>';
+          return html;
+      }
 
-                        let displayValue = 'N/A';
-                        // Default alignment for data cells: right for numbers, left for text.
-                        // The "index" column's data cells (which are metric names again) should be left-aligned (if they were visible).
-                        let cellClass = 'text-right'; // Assume numeric, will adjust if text
+      /**
+       * UPDATED: Renders a generic table from an array of objects, now with chronological sorting for date-based columns.
+       */
+      function render_generic_scanx_table(data) {
+          if (!data || data.length === 0) return '';
+          
+          const allHeaders = Object.keys(data[0]);
+          const fixedHeaders = allHeaders.filter(h => h === 'metric' || h === 'company');
+          const dateHeaders = allHeaders.filter(h => h !== 'metric' && h !== 'company');
+          
+          // Sort date headers chronologically (earliest first)
+          dateHeaders.sort((a, b) => parseDateString(a) - parseDateString(b));
+          
+          const sortedHeaders = [...fixedHeaders, ...dateHeaders];
 
-                        if (v != null && v.toString().trim() !== '') {
-                            const s = v.toString().replace(/,/g, ''); // Remove existing commas for parsing
-                            const isPercent = s.endsWith('%');
-                            const numPart = isPercent ? s.substring(0, s.length - 1) : s;
+          let html = '<div class="overflow-x-auto rounded-lg border border-slate-200"><table class="w-full text-sm border-collapse">';
+          // Table Head
+          html += '<thead class="bg-slate-100 text-slate-600"><tr class="text-left">';
+          sortedHeaders.forEach(h => {
+              const formattedHeader = h.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+              const alignClass = fixedHeaders.includes(h) ? 'text-left' : 'text-right';
+              html += `<th class="p-2 border-b border-slate-300 font-semibold ${alignClass}">${formattedHeader}</th>`;
+          });
+          html += '</tr></thead>';
+          // Table Body
+          html += '<tbody class="bg-white divide-y divide-slate-200">';
+          data.forEach(row => {
+              html += '<tr class="hover:bg-slate-50">';
+              sortedHeaders.forEach(header => {
+                  const cellClass = fixedHeaders.includes(header) ? 'font-medium text-slate-700 text-left' : 'text-slate-600 text-right';
+                  const cellValue = row[header] || 'N/A';
+                  html += `<td class="p-2 whitespace-nowrap ${cellClass}">${cellValue}</td>`;
+              });
+              html += '</tr>';
+          });
+          html += '</tbody></table></div>';
+          return html;
+      }
 
-                            if (!isNaN(parseFloat(numPart)) && isFinite(numPart)) { // Check if it's a number
-                                let numVal = parseFloat(numPart);
-                                displayValue = numVal.toLocaleString('en-IN', { 
-                                    minimumFractionDigits: (numVal % 1 !== 0 || numPart.includes('.')) ? Math.min(2, (numPart.split('.')[1] || '').length || 2) : 0, 
-                                    maximumFractionDigits: 2 
-                                });
-                                if (numVal % 1 === 0 && !numPart.includes('.')) { // Pure integer like 100
-                                    displayValue = numVal.toLocaleString('en-IN', { maximumFractionDigits: 0 });
-                                } else if (numPart.includes('.') && (numPart.split('.')[1] || '').length === 1 && parseFloat(numPart.split('.')[1] || '0') === 0) { // e.g. 100.0
-                                     displayValue = numVal.toLocaleString('en-IN', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
-                                } else { // e.g. 100.5, 100.50, 100.00
-                                    displayValue = numVal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                                }
+      /**
+       * UPDATED: Renders the shareholding table with chronologically sorted columns.
+       */
+      function render_shareholding_table(data) {
+          if (!data || Object.keys(data).length === 0) return '';
+          
+          const allPeriods = new Set();
+          Object.values(data).forEach(periodData => {
+              Object.keys(periodData).forEach(p => allPeriods.add(p));
+          });
 
+          // Sort periods chronologically (earliest first)
+          const sortedPeriods = Array.from(allPeriods).sort((a, b) => parseDateString(a) - parseDateString(b));
 
-                                if (isPercent) {
-                                    displayValue += '%';
-                                }
-                                // cellClass remains 'text-right'
-                            } else {
-                                // Not a number, display as is
-                                displayValue = v;
-                                cellClass = 'text-left'; // Text data should be left-aligned
-                            }
-                        } else { // Value is null or empty string
-                            cellClass = 'text-center'; // N/A can be centered or left
-                        }
-                         if (isIndexColumnValue) cellClass = 'text-left'; // Override for index column values (usually text)
+          let html = '<div class="overflow-x-auto rounded-lg border border-slate-200"><table class="w-full text-sm border-collapse">';
+          // Header
+          html += '<thead class="bg-slate-100 text-slate-600"><tr class="text-left">';
+          html += '<th class="p-2 border-b border-slate-300 font-semibold">Category</th>';
+          sortedPeriods.forEach(p => { html += `<th class="p-2 border-b border-slate-300 font-semibold text-right">${p}</th>`; });
+          html += '</tr></thead>';
+          // Body
+          html += '<tbody class="bg-white divide-y divide-slate-200">';
+          Object.entries(data).forEach(([category, periodData]) => {
+              html += '<tr class="hover:bg-slate-50">';
+              html += `<td class="p-2 whitespace-nowrap font-medium text-slate-700">${category}</td>`;
+              sortedPeriods.forEach(period => {
+                  const value = periodData[period] || 'N/A';
+                  html += `<td class="p-2 whitespace-nowrap text-slate-600 text-right">${value}</td>`;
+              });
+              html += '</tr>';
+          });
+          html += '</tbody></table></div>';
+          return html;
+      }
 
-                        html += `<td class="px-4 py-3 border-b border-slate-200 text-sm ${cellClass} ${visibilityClass}">${displayValue}</td>`;
-                    });
-                }
-                html += `</tr>`;
-            });
-        }
-        html += `</tbody></table></div>`;
-        return html;
-    }
-    
-    // A global variable to hold our SSE connection
-    let sseConnection = null;
-
-// In the <script> tag at the bottom of app.html
+      function render_filings_list(data) {
+          let html = '<ul class="space-y-3">';
+          data.forEach(filing => {
+              html += `<li class="flex items-start justify-between p-3 rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors">
+                          <div>
+                              <p class="font-medium text-slate-700">${filing.type}</p>
+                              <p class="text-xs text-slate-500">${filing.month_year}</p>
+                          </div>
+                          ${filing.url && filing.url !== "URL not found" ? `<a href="${filing.url}" target="_blank" rel="noopener noreferrer" class="px-3 py-1 text-sm font-semibold text-white bg-green-500 rounded-md hover:bg-green-600 self-center">View PDF</a>` : '<span class="text-sm text-slate-400 self-center">Not Found</span>'}
+                       </li>`;
+          });
+          html += '</ul>';
+          return html;
+      }
+      // ========= UPDATED SCANX HELPER FUNCTIONS END =========
+      
+      let sseConnection = null;
 
       function setupSseListener() {
-        const progressContainer = document.getElementById('progress-container');
-        const progressMessages = document.getElementById('progress-messages');
+          const progressContainer = document.getElementById('progress-container');
+          const progressMessages = document.getElementById('progress-messages');
+          progressMessages.innerHTML = '';
+          progressContainer.classList.add('visible');
+          sseConnection = new EventSource('/progress-stream');
+          let messageElement = null, isAnimating = false;
+          sseConnection.onmessage = function(event) {
+              if (event.data === "__END__" || isAnimating) {
+                  if (event.data === "__END__" && sseConnection) sseConnection.close();
+                  return;
+              }
+              isAnimating = true;
+              if (!messageElement) {
+                  messageElement = document.createElement('p');
+                  progressMessages.appendChild(messageElement);
+              }
+              const showNewMessage = () => {
+                  messageElement.textContent = `> ${event.data}`;
+                  requestAnimationFrame(() => {
+                      messageElement.classList.add('visible');
+                      messageElement.addEventListener('transitionend', () => { isAnimating = false; }, { once: true });
+                  });
+              };
+              if (messageElement.classList.contains('visible')) {
+                  messageElement.classList.remove('visible');
+                  messageElement.classList.add('exiting');
+                  messageElement.addEventListener('transitionend', () => {
+                      messageElement.classList.remove('exiting');
+                      void messageElement.offsetHeight;
+                      showNewMessage();
+                  }, { once: true });
+              } else { showNewMessage(); }
+          };
+          sseConnection.onerror = function(error) {
+              console.error("SSE connection error:", error);
+              if (sseConnection) sseConnection.close();
+              progressContainer.classList.remove('visible');
+              isAnimating = false;
+          };
+      }
+    
+      // ===================================================================================
+      // END: HELPER FUNCTIONS FOR RENDERING
+      // ===================================================================================
 
-        progressMessages.innerHTML = '';
-        progressContainer.classList.add('visible');
-
-        sseConnection = new EventSource('/progress-stream');
-
-        let messageElement = null;
-        let isAnimating = false;
-
-        sseConnection.onmessage = function(event) {
-            if (event.data === "__END__" || isAnimating) {
-                if(event.data === "__END__") sseConnection.close();
-                return;
-            }
-
-            isAnimating = true;
-
-            if (!messageElement) {
-                messageElement = document.createElement('p');
-                progressMessages.appendChild(messageElement);
-            }
-
-            const showNewMessage = () => {
-                messageElement.textContent = `> ${event.data}`;
-                requestAnimationFrame(() => {
-                    messageElement.classList.add('visible');
-                    messageElement.addEventListener('transitionend', () => {
-                        isAnimating = false;
-                    }, { once: true });
-                });
-            };
-
-            if (messageElement.classList.contains('visible')) {
-                messageElement.classList.remove('visible');
-                messageElement.classList.add('exiting');
-
-                messageElement.addEventListener('transitionend', () => {
-                    // 1. Reset the element's position by removing the exit class.
-                    messageElement.classList.remove('exiting');
-                    
-                    // 2. ==== THE MAGIC LINE: FORCE BROWSER REPAINT ====
-                    // This line forces the browser to apply the style changes above
-                    // (i.e., reset the element to the bottom) BEFORE proceeding.
-                    void messageElement.offsetHeight; 
-                    // =================================================
-
-                    // 3. Now that the element is correctly positioned at the bottom,
-                    // trigger the entrance animation for the new message.
-                    showNewMessage();
-
-                }, { once: true });
-
-            } else {
-                showNewMessage();
-            }
-        };
-
-        sseConnection.onerror = function(error) {
-            console.error("SSE connection error:", error);
-            if(sseConnection) sseConnection.close();
-            progressContainer.classList.remove('visible');
-            isAnimating = false;
-        };
-    }
-  
-
-    document.getElementById('goBtn').addEventListener('click', async () => {
-      const ticker = document.getElementById('tickerInput').value.trim().toUpperCase();
-      if (!ticker) return alert('Please enter a ticker.');
-      
-      const resultsContainer = document.getElementById('results');
-      const progressContainer = document.getElementById('progress-container'); // Get a handle to the container
-
-      resultsContainer.innerHTML = ''
-      setupSseListener();
-
-      try {
-        const res = await fetch('/analyze', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ticker })
-        });
-        const payload = await res.json();
-        if (!res.ok) throw new Error(payload.error || 'Unknown error');
+      document.getElementById('goBtn').addEventListener('click', async () => {
+        const ticker = document.getElementById('tickerInput').value.trim().toUpperCase();
+        if (!ticker) return alert('Please enter a ticker.');
         
-        progressContainer.classList.remove('visible');
+        const resultsContainer = document.getElementById('results');
+        resultsContainer.innerHTML = '';
+        setupSseListener();
 
-        // === START: MODIFIED SECTION TO RENDER NEW SUMMARY ===
-        const companyName = payload.company_name || payload.ticker;
+        try {
+          const res = await fetch('/analyze', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ticker })
+          });
+          const payload = await res.json();
+          if (!res.ok) throw new Error(payload.error || 'Unknown error');
+          
+          if (sseConnection) sseConnection.close();
+          document.getElementById('progress-container').classList.remove('visible');
 
-        let summarySectionHTML = '';
-        if (payload.company_summary_html) {
-            summarySectionHTML = `
-                <div class="bg-white p-6 rounded-xl shadow-lg">
-                    <h2 class="text-2xl font-bold mb-4 text-slate-700">AI Summary for ${companyName}</h2>
-                    <div class="summary-content prose prose-slate max-w-none text-slate-600">
-                        ${payload.company_summary_html}
-                    </div>
+          const companyName = payload.company_name || payload.ticker;
+
+          // --- RENDER BLOCK 1: AI Summary & Technical Analysis ---
+          let topLevelHTML = '';
+          if (payload.company_summary_html) {
+              topLevelHTML += `<div class="bg-white p-6 rounded-xl shadow-lg"><h2 class="text-2xl font-bold mb-4 text-slate-700">AI Summary for ${companyName}</h2><div class="summary-content prose prose-slate max-w-none text-slate-600">${payload.company_summary_html}</div></div>`;
+          }
+          if (payload.summary) {
+              topLevelHTML += `<div class="bg-white p-6 rounded-xl shadow-lg"><h2 class="text-2xl font-bold mb-6 text-slate-700">AI Technical Analysis</h2><div class="overflow-x-auto"><table class="w-full border border-slate-200"><tbody class="text-sm">${payload.summary.map(row => `<tr class="even:bg-slate-50 hover:bg-slate-100 transition-colors duration-150"><td class="px-4 py-3 border-b border-slate-200 font-medium text-slate-600">${row.key}</td><td class="px-4 py-3 border-b border-slate-200 text-slate-700 relative">${row.value}</td></tr>`).join('')}</tbody></table></div></div>`;
+          }
+          resultsContainer.innerHTML = topLevelHTML;
+
+          // Attach charts to technical analysis table
+          const techCharts = [
+              { key: 'Price-Action Trend (based on Close prices)', json: payload.chart_close_json, id: 'chart-close' }, { key: 'Price-Action Trend (based on High/Low prices)', json: payload.chart_hl_json, id: 'chart-hl' }, { key: 'Market Structure (based on EMA Stack)', json: payload.chart_ema_json, id: 'chart-ema' }, { key: 'Market Sentiment (based on RSI)', json: payload.chart_rsi_json, id: 'chart-rsi' }, { key: 'Accumulating or Distributing (based on Volume)', json: payload.chart_adl_json, id: 'chart-adl' }, { key: 'Relative Strength vs Nifty', json: payload.chart_rs_json, id: 'chart-rs' },
+          ];
+          const summaryTable = resultsContainer.querySelector('table tbody');
+          if (summaryTable) {
+              techCharts.forEach(({ key, json, id }) => {
+                  if (!json) return;
+                  const row = Array.from(summaryTable.querySelectorAll('tr')).find(tr => tr.children[0].textContent.trim() === key);
+                  if (!row) return;
+                  const cell = row.children[1], valueContent = cell.textContent.trim();
+                  cell.innerHTML = `<span>${valueContent}</span><button class="ml-3 px-2 py-1 text-xs font-medium text-white bg-green-500 rounded-md hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-green-400 transition-colors">Expand Chart <span class="ml-1 text-xs">▼</span></button>`;
+                  const chartRow = document.createElement('tr');
+                  chartRow.className = 'hidden';
+                  chartRow.innerHTML = `<td colspan="2" class="p-0 border-b border-slate-200"><div id="${id}" style="width:100%;height:450px;"></div></td>`;
+                  row.parentNode.insertBefore(chartRow, row.nextSibling);
+                  cell.querySelector('button').onclick = (e) => {
+                      const btn = e.currentTarget;
+                      const isHidden = chartRow.classList.toggle('hidden');
+                      if (!isHidden) {
+                          Plotly.newPlot(id, JSON.parse(json).data, JSON.parse(json).layout, { responsive: true });
+                          btn.innerHTML = 'Hide Chart <span class="ml-1 text-xs">▲</span>';
+                      } else {
+                          btn.innerHTML = 'Expand Chart <span class="ml-1 text-xs">▼</span>';
+                      }
+                  };
+              });
+          }
+          
+          // --- RENDER BLOCK 2: FUNDAMENTALS (NEW TABBED INTERFACE) ---
+          
+          // ** STEP 2A: Prepare Screener.in Content **
+          let screenerHTML = '';
+          if (payload.fundamentals && Object.keys(payload.fundamentals).length > 0) {
+              const order = ["Quarterly Results", "Annual Results", "Growth Patterns", "Balance Sheet", "Cash Flow", "Financial Ratios", "Quarterly Shareholding Pattern", "Annual Shareholding Pattern"];
+              order.forEach(name => {
+                if (!payload.fundamentals[name]) return;
+                try {
+                    const data = JSON.parse(payload.fundamentals[name]);
+                    if (data && data.index && data.columns && data.data) {
+                        screenerHTML += `<h3 class="text-xl font-semibold mb-3 mt-6 text-slate-600">${name}</h3>${renderFundTable(data)}`;
+                    }
+                } catch (e) { console.error(`Error parsing fundamental table "${name}":`, e); }
+              });
+          }
+          if (payload.documents && Array.isArray(payload.documents) && payload.documents.length > 0) {
+              screenerHTML += `<h3 class="text-xl font-semibold mb-5 mt-6 text-slate-600">Latest Documents</h3><ul class="space-y-3">`;
+              payload.documents.forEach(doc => {
+                  screenerHTML += `<li class="flex items-center justify-between p-3 rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors"><span class="font-medium text-slate-700">${doc.text} (${doc.type})</span><a href="${doc.link}" target="_blank" rel="noopener noreferrer" class="px-3 py-1 text-sm font-semibold text-white bg-green-500 rounded-md hover:bg-green-600">View PDF</a></li>`;
+              });
+              screenerHTML += `</ul>`;
+          }
+          if (payload.metric_charts && Object.keys(payload.metric_charts).length > 0) {
+              screenerHTML += `<h3 class="text-xl font-semibold mb-3 mt-8 text-slate-600">Valuation & Margin History</h3>`;
+              Object.entries(payload.metric_charts).forEach(([label, json]) => {
+                if (!json) return;
+                const id = 'metric-' + label.replace(/\W+/g, '').toLowerCase();
+                screenerHTML += `<div class="overflow-x-auto mb-6"><table class="w-full bg-white rounded-lg shadow-md border border-slate-200"><tbody><tr class="even:bg-slate-50"><td class="px-4 py-3 border-b border-slate-200 font-medium text-slate-600">${label}</td><td class="px-4 py-3 border-b border-slate-200 text-right"><button class="toggleMetric px-3 py-1 text-xs font-medium text-white bg-green-500 rounded-md" data-chart-id="${id}" data-chart-json='${json}'>Expand Chart <span class="ml-1 text-xs">▼</span></button></td></tr><tr class="chartRowMetric hidden"><td colspan="2" class="p-0 border-b border-slate-200"><div id="${id}" style="width:100%;height:450px;"></div></td></tr></tbody></table></div>`;
+              });
+          }
+
+          // ** STEP 2B: Prepare ScanX.trade Content **
+          let scanxHTML = '';
+          if (payload.scanx_data && !payload.scanx_data.error) {
+              const sections = [
+                  { key: 'basic_metrics', title: 'Key Metrics', type: 'grid' },
+                  { key: 'price_performance', title: 'Price Performance', type: 'grid' },
+                  { key: 'analyst_rating', title: 'Analyst Rating', type: 'analyst' },
+                  { key: 'company_filings', title: 'Company Filings', type: 'filings_list' },
+                  { key: 'peer_comparison', title: 'Peer Comparison', type: 'table' },
+                  { key: 'quarterly_financials', title: 'Quarterly Financials', type: 'table' },
+                  { key: 'balance_sheet', title: 'Balance Sheet', type: 'table' },
+                  { key: 'cash_flow', title: 'Cash Flow', type: 'table' },
+                  { key: 'shareholding_pattern', title: 'Shareholding Pattern', type: 'shareholding_table' }
+              ];
+              sections.forEach(section => {
+                  const data = payload.scanx_data[section.key];
+                  if (data && Object.keys(data).length > 0) {
+                      scanxHTML += `<h3 class="text-xl font-semibold mb-4 mt-8 text-slate-600">${section.title}</h3>`;
+                      switch(section.type) {
+                          case 'grid': scanxHTML += render_scanx_grid(data); break;
+                          case 'analyst': scanxHTML += render_analyst_rating(data); break;
+                          case 'table': scanxHTML += render_generic_scanx_table(data); break;
+                          case 'shareholding_table': scanxHTML += render_shareholding_table(data); break;
+                          case 'filings_list': scanxHTML += render_filings_list(data); break;
+                      }
+                  }
+              });
+          }
+
+          // ** STEP 2C: Build and Append Tab Component **
+          if (screenerHTML || scanxHTML) {
+            const tabsContainer = document.createElement('div');
+            tabsContainer.className = 'bg-white p-6 rounded-xl shadow-lg mt-10';
+            tabsContainer.innerHTML = `
+                <h2 class="text-2xl font-bold mb-4 text-slate-700">AI Fundamental Analysis</h2>
+                <div class="border-b border-slate-200">
+                    <nav class="-mb-px flex space-x-6" aria-label="Tabs">
+                        <button class="tab-button active whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm" data-target="#screener-panel">Screener.in</button>
+                        <button class="tab-button whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300" data-target="#scanx-panel">ScanX.trade</button>
+                    </nav>
+                </div>
+                <div id="screener-panel" class="tab-panel">
+                    ${screenerHTML || '<p class="text-slate-500">No data available from Screener.in.</p>'}
+                </div>
+                <div id="scanx-panel" class="tab-panel hidden">
+                    ${scanxHTML || '<p class="text-slate-500">No data available from ScanX.trade.</p>'}
                 </div>
             `;
-        }
-        // Construct the rest of the HTML
-        let technicalSummaryHTML = `
-          <div class="bg-white p-6 rounded-xl shadow-lg">
-            <h2 class="text-2xl font-bold mb-6 text-slate-700">AI Technical Analysis</h2>
-            <div class="overflow-x-auto">
-              <table class="w-full border border-slate-200">
-                <tbody class="text-sm">
-                  ${payload.summary.map(row =>
-                    `<tr class="even:bg-slate-50 hover:bg-slate-100 transition-colors duration-150">
-                       <td class="px-4 py-3 border-b border-slate-200 font-medium text-slate-600">${row.key}</td>
-                       <td class="px-4 py-3 border-b border-slate-200 text-slate-700 relative">${row.value}</td>
-                     </tr>`
-                  ).join('')}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        `;
-        // Set the final HTML, with the AI summary at the top
-        resultsContainer.innerHTML = summarySectionHTML + technicalSummaryHTML;
-        // === END: MODIFIED SECTION ===
+            resultsContainer.appendChild(tabsContainer);
 
-        const charts = [
-          { key: 'Price-Action Trend (based on Close prices)',    json: payload.chart_close_json, id: 'chart-close' },
-          { key: 'Price-Action Trend (based on High/Low prices)', json: payload.chart_hl_json,    id: 'chart-hl'    },
-          { key: 'Market Structure (based on EMA Stack)',         json: payload.chart_ema_json,   id: 'chart-ema'   },
-          { key: 'Market Sentiment (based on RSI)',               json: payload.chart_rsi_json,   id: 'chart-rsi'   },
-          { key: 'Accumulating or Distributing (based on Volume)',json: payload.chart_adl_json,   id: 'chart-adl'   },
-          { key: 'Relative Strength vs Nifty',                    json: payload.chart_rs_json,    id: 'chart-rs'    },
-        ];
-
-        const summaryTable = resultsContainer.querySelector('table tbody');
-        charts.forEach(({ key, json, id }) => {
-          if (!json) return;
-          const row = Array.from(summaryTable.querySelectorAll('tr'))
-            .find(tr => tr.children[0].textContent.trim() === key);
-          if (!row) return;
-
-          const cell = row.children[1];
-          const valueContent = cell.textContent.trim();
-          cell.innerHTML = ''; 
-          
-          const valueSpan = document.createElement('span');
-          valueSpan.textContent = valueContent;
-          cell.appendChild(valueSpan);
-
-          const btn = document.createElement('button');
-          btn.innerHTML = 'Expand Chart <span class="ml-1 text-xs">▼</span>';
-          btn.className = 'ml-3 px-2 py-1 text-xs font-medium text-white bg-green-500 rounded-md hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-green-400 transition-colors';
-          cell.appendChild(btn);
-
-          const chartRow = document.createElement('tr');
-          chartRow.className = 'hidden';
-          chartRow.innerHTML = `
-            <td colspan="2" class="p-0 border-b border-slate-200">
-              <div id="${id}" style="width:100%;height:450px;"></div>
-            </td>
-          `;
-          row.parentNode.insertBefore(chartRow, row.nextSibling);
-
-          btn.onclick = () => {
-            const isHidden = chartRow.classList.contains('hidden');
-            if (isHidden) {
-              chartRow.classList.remove('hidden');
-              const fig = JSON.parse(json);
-              const div = chartRow.querySelector('div');
-              const layout = Object.assign({}, fig.layout, {
-                width: div.clientWidth,
-                height: 450,
-                autosize: true,
-                paper_bgcolor: 'rgba(255,255,255,1)',
-                plot_bgcolor: 'rgba(248,250,252,1)',
-                font: { color: '#334155' },
-                legend: { orientation: 'h', x: 0.5, xanchor: 'center', y: -0.15, bgcolor: 'rgba(255,255,255,0.8)' }
-              });
-              Plotly.newPlot(id, fig.data, layout, { responsive: true });
-              btn.innerHTML = 'Hide Chart <span class="ml-1 text-xs">▲</span>';
-            } else {
-              chartRow.classList.add('hidden');
-              btn.innerHTML = 'Expand Chart <span class="ml-1 text-xs">▼</span>';
-            }
-          };
-        });
-
-        if (payload.fundamentals && Object.keys(payload.fundamentals).length > 0) {
-          const order = [
-            "Quarterly Results", "Annual Results", "Growth Patterns",
-            "Balance Sheet", "Cash Flow", "Financial Ratios",
-            "Quarterly Shareholding Pattern", "Annual Shareholding Pattern"
-          ];
-
-          let fundHTML = `
-            <div class="bg-white p-6 rounded-xl shadow-lg mt-10">
-              <h2 class="text-2xl font-bold mb-6 text-slate-700">
-                Fundamental Summary of ${companyName}
-              </h2>`;
-
-          order.forEach(name => {
-            const jsonStr = payload.fundamentals[name];
-            if (!jsonStr) return;
-            try {
-                const data = JSON.parse(jsonStr);
-                if (data && Array.isArray(data.index) && Array.isArray(data.columns) && Array.isArray(data.data)) {
-                    fundHTML += `
-                    <h3 class="text-xl font-semibold mb-3 mt-6 text-slate-600">${name}</h3>
-                    ${renderFundTable(data)}
-                    `;
-                } else {
-                    console.warn(`Skipping fundamental table "${name}" due to unexpected data structure:`, data);
-                }
-            } catch (e) {
-                console.error(`Error parsing JSON for fundamental table "${name}":`, e, jsonStr);
-            }
-          });
-          fundHTML += `</div>`;
-          resultsContainer.insertAdjacentHTML('beforeend', fundHTML);
-        }
-
-        if (payload.documents && Array.isArray(payload.documents) && payload.documents.length > 0) {
-          let docsHTML = `
-          <div class="bg-white p-6 rounded-xl shadow-lg mt-10">
-              <h2 class="text-2xl font-bold mb-6 text-slate-700">Latest Documents</h2>
-              <ul class="space-y-3">
-          `;
-
-          payload.documents.forEach(doc => {
-              docsHTML += `
-              <li class="flex items-center justify-between p-3 rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors">
-                  <span class="font-medium text-slate-700">${doc.text} (${doc.type})</span>
-                  <a href="${doc.link}" target="_blank" rel="noopener noreferrer" class="px-3 py-1 text-sm font-semibold text-white bg-green-500 rounded-md hover:bg-green-600 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-green-400">
-                  View PDF
-                  </a>
-              </li>
-          `;
-          });
-
-          docsHTML += `</ul></div>`;
-          resultsContainer.insertAdjacentHTML('beforeend', docsHTML);
-        }
-
-        if (payload.metric_charts && Object.keys(payload.metric_charts).length) {
-          let metricsHTML = `
-            <div class="bg-white p-6 rounded-xl shadow-lg mt-10">
-              <h2 class="text-2xl font-bold mb-6 text-slate-700">
-                Valuation & Margin History
-              </h2>`;
-          
-          Object.entries(payload.metric_charts).forEach(([label, json]) => {
-            if (!json) return;
-            const id = 'metric-' + label.replace(/\W+/g, '').toLowerCase();
-            metricsHTML += `
-              <div class="overflow-x-auto mb-6">
-                <table class="w-full bg-white rounded-lg shadow-md border border-slate-200">
-                  <tbody>
-                    <tr class="even:bg-slate-50">
-                      <td class="px-4 py-3 border-b border-slate-200 font-medium text-slate-600">${label}</td>
-                      <td class="px-4 py-3 border-b border-slate-200 text-right">
-                        <button class="toggleMetric px-3 py-1 text-xs font-medium text-white bg-green-500 rounded-md hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-green-400 transition-colors" data-chart-id="${id}" data-chart-json='${json}'>
-                          Expand Chart <span class="ml-1 text-xs">▼</span>
-                        </button>
-                      </td>
-                    </tr>
-                    <tr class="chartRowMetric hidden">
-                      <td colspan="2" class="p-0 border-b border-slate-200">
-                        <div id="${id}" style="width:100%;height:450px;"></div>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            `;
-          });
-          metricsHTML += `</div>`;
-          resultsContainer.insertAdjacentHTML('beforeend', metricsHTML);
-
-          document.querySelectorAll('.toggleMetric').forEach(btn => {
-            btn.onclick = () => {
-              const chartRow = btn.closest('tr').nextElementSibling;
-              const isHidden = chartRow.classList.contains('hidden');
-              const chartId = btn.dataset.chartId;
-              const chartJson = btn.dataset.chartJson;
-
-              if (isHidden) {
-                chartRow.classList.remove('hidden');
-                const fig = JSON.parse(chartJson);
-                const div = chartRow.querySelector('div');
-                const layout = Object.assign({}, fig.layout, {
-                  width: div.clientWidth,
-                  height: 450,
-                  autosize: true,
-                  paper_bgcolor: 'rgba(255,255,255,1)',
-                  plot_bgcolor: 'rgba(248,250,252,1)',
-                  font: { color: '#334155' },
-                  legend: { orientation: 'h', x: 0.5, xanchor: 'center', y: -0.15, bgcolor: 'rgba(255,255,255,0.8)' }
+            // ** STEP 2D: Activate Tab Logic **
+            tabsContainer.querySelectorAll('.tab-button').forEach(button => {
+                button.addEventListener('click', () => {
+                    const targetPanelId = button.dataset.target;
+                    tabsContainer.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+                    button.classList.add('active');
+                    tabsContainer.querySelectorAll('.tab-panel').forEach(panel => {
+                        panel.classList.add('hidden');
+                    });
+                    tabsContainer.querySelector(targetPanelId).classList.remove('hidden');
                 });
-                Plotly.newPlot(chartId, fig.data, layout, { responsive: true });
-                btn.innerHTML = 'Hide Chart <span class="ml-1 text-xs">▲</span>';
-              } else {
-                chartRow.classList.add('hidden');
-                btn.innerHTML = 'Expand Chart <span class="ml-1 text-xs">▼</span>';
-              }
-            };
-          });
-        }
-
-        localStorage.setItem('KaggerAI_' + payload.ticker, JSON.stringify(payload.summary));
-      } catch (err) {
-        if (sseConnection) sseConnection.close();
-        document.getElementById('progress-container').classList.remove('visible');
-        
-        resultsContainer.innerHTML = `<div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg shadow-md" role="alert">
-                                        <strong class="font-bold">Error:</strong>
-                                        <span class="block sm:inline">${err.message}</span>
-                                      </div>`;
-        console.error('Analysis error:', err);
-      }
-    });
-
-    const chatBtn   = document.getElementById('chatBtn');
-    const chatModal = document.getElementById('chatModal');
-    const chatClose = document.getElementById('chatClose');
-    const chatLog   = document.getElementById('chatLog');
-    const chatForm  = document.getElementById('chatForm');
-    const chatInput = document.getElementById('chatInput');
-    const modelSelector = document.getElementById('aiModelSelector');
-
-
-    chatBtn.onclick   = () => chatModal.classList.remove('hidden');
-    chatClose.onclick = () => chatModal.classList.add('hidden');
-    window.addEventListener('keydown', (event) => {
-      if (event.key === 'Escape' && !chatModal.classList.contains('hidden')) {
-        chatModal.classList.add('hidden');
-      }
-    });
-    chatModal.addEventListener('click', (event) => {
-        if (event.target === chatModal) {
-            chatModal.classList.add('hidden');
-        }
-    });
-
-    chatForm.addEventListener('submit', async e => {
-      e.preventDefault();
-      const q = chatInput.value.trim();
-      if (!q) return;
-      
-      appendMessage(q, 'user');
-      chatInput.value = '';
-      chatInput.disabled = true;
-      appendMessage('...', 'bot', true);
-
-      try {
-        const selectedModel = modelSelector.value;
-        const res = await fetch('/chat', {
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({ question: q, model: selectedModel })
-        });
-        const { answer, error, raw_news_summary } = await res.json();
-        
-        removeTypingIndicator();
-        if (error) {
-          appendMessage(`Error: ${error}`, 'error');
-        } else {
-          if (raw_news_summary) {
-            appendMessage(
-                { title: 'Latest News Summary', content: raw_news_summary }, 
-                'info'
-            );
+            });
           }
-          appendMessage(answer, 'bot');
-        }
-      } catch(err) {
-        removeTypingIndicator();
-        appendMessage(`Network error: ${err.message}`, 'error');
-      }
-      chatInput.disabled = false;
-      chatInput.focus();
-    });
+          
+          // Activate chart toggles for Screener's valuation charts
+          document.querySelectorAll('.toggleMetric').forEach(btn => {
+                btn.onclick = () => {
+                  const chartRow = btn.closest('tr').nextElementSibling;
+                  const isHidden = chartRow.classList.toggle('hidden');
+                  if (!isHidden) {
+                    const fig = JSON.parse(btn.dataset.chartJson);
+                    Plotly.newPlot(btn.dataset.chartId, fig.data, fig.layout, { responsive: true });
+                    btn.innerHTML = 'Hide Chart <span class="ml-1 text-xs">▲</span>';
+                  } else {
+                    btn.innerHTML = 'Expand Chart <span class="ml-1 text-xs">▼</span>';
+                  }
+                };
+            });
 
-    function appendMessage(text, sender, isTyping = false) {
-      const messageDiv = document.createElement('div');
-      // Note: For 'info' and 'error' types, we will adjust max-width later.
-      messageDiv.classList.add('p-3', 'rounded-lg', 'text-sm', 'leading-relaxed', 'break-words');
-      
-      if (isTyping) {
-        messageDiv.id = 'typingIndicator';
-        messageDiv.classList.add('max-w-[80%]', 'bg-slate-200', 'text-slate-700', 'self-start', 'rounded-bl-none');
-        messageDiv.innerHTML = `
-          <div class="flex items-center space-x-1">
-            <div class="w-2 h-2 bg-slate-400 rounded-full animate-pulse delay-75"></div>
-            <div class="w-2 h-2 bg-slate-400 rounded-full animate-pulse delay-150"></div>
-            <div class="w-2 h-2 bg-slate-400 rounded-full animate-pulse delay-300"></div>
-          </div>`;
-      } else if (sender === 'user') {
-        messageDiv.classList.add('max-w-[80%]', 'bg-green-500', 'text-white', 'self-end', 'rounded-br-none');
-        messageDiv.textContent = text;
-      } else if (sender === 'bot') {
-        messageDiv.classList.add('max-w-[80%]', 'bg-slate-200', 'text-slate-700', 'self-start', 'rounded-bl-none');
-        let formattedText = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-        formattedText = formattedText.replace(/\*(.*?)\*/g, '<em>$1</em>');
-        formattedText = formattedText.replace(/^- (.*$)/gm, '<li class="ml-4 list-disc">$1</li>');
-        formattedText = formattedText.replace(/^(\d+)\. (.*$)/gm, '<li class="ml-4 list-decimal">$2</li>');
-        formattedText = formattedText.replace(/\n/g, '<br>');
-        messageDiv.innerHTML = formattedText;
-      } 
-      // --- ADD THIS NEW BLOCK ---
-      else if (sender === 'info') {
-        // This block is for our news summary. It will span more width.
-        messageDiv.classList.add('w-full', 'max-w-full', 'bg-yellow-50', 'text-yellow-900', 'border', 'border-yellow-200', 'my-2');
-        
-        // The 'text' parameter is an object here: { title, content }
-        const title = document.createElement('h4');
-        title.className = 'font-semibold mb-2 text-yellow-800';
-        title.textContent = text.title;
-        
-        const content = document.createElement('pre');
-        content.className = 'text-xs whitespace-pre-wrap break-words font-mono bg-yellow-100/50 p-2 rounded';
-        content.textContent = text.content; // Use .textContent for safety
-        
-        messageDiv.appendChild(title);
-        messageDiv.appendChild(content);
-      } 
-      // --- END OF NEW BLOCK ---
-      else if (sender === 'error') {
-        messageDiv.classList.add('max-w-full', 'bg-red-100', 'text-red-700', 'self-center', 'w-full', 'text-center');
-        messageDiv.textContent = text;
+          localStorage.setItem('KaggerAI_' + payload.ticker, JSON.stringify(payload.summary));
+        } catch (err) {
+          if (sseConnection) sseConnection.close();
+          document.getElementById('progress-container').classList.remove('visible');
+          resultsContainer.innerHTML = `<div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg shadow-md" role="alert"><strong class="font-bold">Error:</strong><span class="block sm:inline">${err.message}</span></div>`;
+          console.error('Analysis error:', err);
+        }
+      });
+
+      // Chat functionality
+      const chatBtn = document.getElementById('chatBtn'), chatModal = document.getElementById('chatModal'), chatClose = document.getElementById('chatClose'), chatLog = document.getElementById('chatLog'), chatForm = document.getElementById('chatForm'), chatInput = document.getElementById('chatInput'), modelSelector = document.getElementById('aiModelSelector');
+      chatBtn.onclick = () => chatModal.classList.remove('hidden');
+      chatClose.onclick = () => chatModal.classList.add('hidden');
+      window.addEventListener('keydown', (event) => { if (event.key === 'Escape' && !chatModal.classList.contains('hidden')) { chatModal.classList.add('hidden'); } });
+      chatModal.addEventListener('click', (event) => { if (event.target === chatModal) { chatModal.classList.add('hidden'); } });
+      chatForm.addEventListener('submit', async e => {
+        e.preventDefault();
+        const q = chatInput.value.trim();
+        if (!q) return;
+        appendMessage(q, 'user');
+        chatInput.value = '';
+        chatInput.disabled = true;
+        appendMessage('...', 'bot', true);
+        try {
+          const selectedModel = modelSelector.value;
+          const res = await fetch('/chat', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ question: q, model: selectedModel }) });
+          const { answer, error, raw_news_summary } = await res.json();
+          removeTypingIndicator();
+          if (error) { appendMessage(`Error: ${error}`, 'error'); } 
+          else {
+            if (raw_news_summary) { appendMessage({ title: 'Latest News Summary', content: raw_news_summary }, 'info'); }
+            appendMessage(answer, 'bot');
+          }
+        } catch(err) { removeTypingIndicator(); appendMessage(`Network error: ${err.message}`, 'error'); }
+        chatInput.disabled = false;
+        chatInput.focus();
+      });
+
+      function appendMessage(text, sender, isTyping = false) {
+        const messageDiv = document.createElement('div');
+        messageDiv.classList.add('p-3', 'rounded-lg', 'text-sm', 'leading-relaxed', 'break-words');
+        if (isTyping) {
+          messageDiv.id = 'typingIndicator';
+          messageDiv.classList.add('max-w-[80%]', 'bg-slate-200', 'text-slate-700', 'self-start', 'rounded-bl-none');
+          messageDiv.innerHTML = `<div class="flex items-center space-x-1"><div class="w-2 h-2 bg-slate-400 rounded-full animate-pulse delay-75"></div><div class="w-2 h-2 bg-slate-400 rounded-full animate-pulse delay-150"></div><div class="w-2 h-2 bg-slate-400 rounded-full animate-pulse delay-300"></div></div>`;
+        } else if (sender === 'user') {
+          messageDiv.classList.add('max-w-[80%]', 'bg-green-500', 'text-white', 'self-end', 'rounded-br-none');
+          messageDiv.textContent = text;
+        } else if (sender === 'bot') {
+          messageDiv.classList.add('max-w-[80%]', 'bg-slate-200', 'text-slate-700', 'self-start', 'rounded-bl-none');
+          let formattedText = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\*(.*?)\*/g, '<em>$1</em>').replace(/^- (.*$)/gm, '<li class="ml-4 list-disc">$1</li>').replace(/^(\d+)\. (.*$)/gm, '<li class="ml-4 list-decimal">$2</li>').replace(/\n/g, '<br>');
+          messageDiv.innerHTML = formattedText;
+        } else if (sender === 'info') {
+          messageDiv.classList.add('w-full', 'max-w-full', 'bg-yellow-50', 'text-yellow-900', 'border', 'border-yellow-200', 'my-2');
+          const title = document.createElement('h4');
+          title.className = 'font-semibold mb-2 text-yellow-800';
+          title.textContent = text.title;
+          const content = document.createElement('pre');
+          content.className = 'text-xs whitespace-pre-wrap break-words font-mono bg-yellow-100/50 p-2 rounded';
+          content.textContent = text.content;
+          messageDiv.appendChild(title);
+          messageDiv.appendChild(content);
+        } else if (sender === 'error') {
+          messageDiv.classList.add('max-w-full', 'bg-red-100', 'text-red-700', 'self-center', 'w-full', 'text-center');
+          messageDiv.textContent = text;
+        }
+        chatLog.appendChild(messageDiv);
+        chatLog.scrollTop = chatLog.scrollHeight;
       }
       
-      chatLog.appendChild(messageDiv);
-      chatLog.scrollTop = chatLog.scrollHeight;
-    }
-    
-    function removeTypingIndicator() {
-      const typingIndicator = document.getElementById('typingIndicator');
-      if (typingIndicator) {
-        typingIndicator.remove();
+      function removeTypingIndicator() {
+        const typingIndicator = document.getElementById('typingIndicator');
+        if (typingIndicator) typingIndicator.remove();
       }
-    }
   </script>
-</body>
+</body> 
 </html>

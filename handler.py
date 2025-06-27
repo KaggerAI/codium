@@ -932,6 +932,8 @@ from screener_fetcher import (
     fetch_latest_documents
 )
 
+from scanx_fetcher import scrape_scanx_company
+
 # Initialize TradingView datafeed (guest)
 tv = TvDatafeed()
 
@@ -1545,7 +1547,7 @@ def generate_ai_company_summary(ticker, description, fundamentals, documents):
 
     <h4>How it Generates Revenue</h4>
     <p>Start with a general sentence about how the company generates revenue, followed by company's overall sales trend based on the '### Key Annual Financials (for overall trend analysis)'.</p>
-    <p>Then, **carefully read the 'Full Text from Latest Results Presentation'** to find revenue/sales breakdowns. Look for keywords like "Segment Revenue","Business Segments","Business Segment","Segment", "Business Verticals","Business Vertical","Vertical,"Geographical Mix","Revenue by Vertical", "Revenue by Geography", "Geography".</p>
+    <p>Then, **carefully read the 'Full Text from Latest Results Presentation'** to find revenue/sales breakdowns by business segment, business vertical, brand, region, geography, and any other relevant business breakdown that company has shown. Only pull the Sales/Revenue breakdown and EBITDA/Operating Profit/Net Profit breakdown. </p>
     <p>If you find this data, create bulleted lists to summarize it. For each segment or geography, extract the revenue contribution (e.g., in Cr. or as a percentage) and any mention of YoY growth. Be factual and extract the numbers as they are presented.</p>
     <ul>
         <li><strong>Business Segments:</strong> (e.g., "Digital Platforms: 45% of revenue, grew 15% YoY.")</li>
@@ -1628,6 +1630,33 @@ def analyze():
             print(f"WARN: An exception occurred during the yfinance name fetch for '{tick}': {e}")
             log_progress(f"Could not find company name due to an error. Using ticker: {tick}")
         
+        # === NEW: Fetch data from ScanX.trade ===
+        log_progress(f"Fetching backup fundamental data from scanx.trade for {tick}...")
+        # build slug from the full company name:
+        # 1) lowercase, 2) replace & → and, 3) strip punctuation, 4) replace "limited"→"ltd", 5) replace spaces→dashes
+        slug = company_name.lower()
+        slug = re.sub(r'\blimited\b', 'ltd', slug)
+        slug = re.sub(r'[^a-z0-9\s-]', '', slug) 
+        slug = re.sub(r'\s+', '-', slug).strip('-')
+        slug = re.sub(r'\s+', '-', slug).strip('-')
+
+        print(f"[DEBUG] ScanX slug: '{slug}'")
+        print(f"[DEBUG] ScanX URL:  https://scanx.trade/company/{slug}")
+
+        # 2) call the scraper
+        scanx_data = scrape_scanx_company(slug)
+
+        # 3) immediately dump the raw returned object
+        print(f"[DEBUG] RAW scanx_data: {scanx_data!r}")
+
+        # 4) existing logging based on result
+        if not scanx_data:
+            log_progress("ScanX.fetch warning: No data returned or parsing failed.")
+        else:
+            log_progress("Successfully fetched data from scanx.trade.")
+            
+        # =========================================
+
         res=evaluate_ticker_signal(tick)
         log_progress("AI is analyzing the Chart using Technical signals.")
 
@@ -1793,20 +1822,20 @@ def analyze():
 
        
         return jsonify({
-
-            'ticker':tick,
+            'ticker': tick,
             'company_name': company_name,
-            'company_summary_html': ai_company_summary_html, # <-- NEWLY ADDED for the frontend
-            'summary': cleaned_technical_summary, # Send cleaned summary to frontend too
-            'chart_close_json':close_j,
-            'chart_hl_json':hl_j,
-            'chart_ema_json':ema_j,
-            'chart_rsi_json':rsi_j,
-            'chart_adl_json':adl_j,
-            'chart_rs_json':rs_j,
-            'fundamentals': fund_data_for_frontend, # Frontend gets original (or its own cleaned version)
-            'metric_charts':metric_charts_for_frontend,
-            'documents': latest_documents
+            'company_summary_html': ai_company_summary_html,
+            'summary': cleaned_technical_summary,
+            'chart_close_json': close_j,
+            'chart_hl_json': hl_j,
+            'chart_ema_json': ema_j,
+            'chart_rsi_json': rsi_j,
+            'chart_adl_json': adl_j,
+            'chart_rs_json': rs_j,
+            'fundamentals': fund_data_for_frontend,
+            'metric_charts': metric_charts_for_frontend,
+            'documents': latest_documents,
+            'scanx_data': scanx_data  
         })
     except Exception as e:
         # ... (error handling) ...

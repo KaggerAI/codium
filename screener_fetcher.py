@@ -319,3 +319,4 @@ def fetch_latest_documents(ticker: str) -> list[dict]:
         print(f"ERROR: Could not fetch documents for {ticker}. Reason: {e}")
         traceback.print_exc()
         return []
+        
