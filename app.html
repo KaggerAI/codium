@@ -197,20 +197,15 @@
 
       const MONTH_MAP = {"Jan":1, "Feb":2, "Mar":3, "Apr":4, "May":5, "Jun":6, "Jul":7, "Aug":8, "Sept":9, "Oct":10, "Nov":11, "Dec":12};
 
-      /**
-       * NEW: Parses date strings like "Mar 2024" or "2024" into Date objects for sorting.
-       * @param {string} dateStr - The date string to parse.
-       * @returns {Date} A Date object.
-       */
       function parseDateString(dateStr) {
-          if (!dateStr) return new Date(0); // Return a very old date for invalid strings
+          if (!dateStr) return new Date(0);
           const parts = dateStr.split(' ');
-          if (parts.length === 2 && MONTH_MAP[parts[0]]) { // "Mar 2024" format
+          if (parts.length === 2 && MONTH_MAP[parts[0]]) {
               return new Date(parseInt(parts[1]), MONTH_MAP[parts[0]] - 1, 1);
-          } else if (parts.length === 1 && /^\d{4}$/.test(parts[0])) { // "2024" format
+          } else if (parts.length === 1 && /^\d{4}$/.test(parts[0])) {
               return new Date(parseInt(parts[0]), 0, 1);
           }
-          return new Date(0); // Fallback
+          return new Date(0);
       }
 
       function renderFundTable(fundData) {
@@ -252,7 +247,6 @@
           return html;
       }
 
-      // ========= UPDATED SCANX HELPER FUNCTIONS START =========
       function render_scanx_grid(data) {
           let html = '<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">';
           for (const [key, value] of Object.entries(data)) {
@@ -276,23 +270,19 @@
           return html;
       }
 
-      /**
-       * UPDATED: Renders a generic table from an array of objects, now with chronological sorting for date-based columns.
-       */
       function render_generic_scanx_table(data) {
           if (!data || data.length === 0) return '';
           
           const allHeaders = Object.keys(data[0]);
           const fixedHeaders = allHeaders.filter(h => h === 'metric' || h === 'company');
-          const dateHeaders = allHeaders.filter(h => h !== 'metric' && h !== 'company');
+          let dateHeaders = allHeaders.filter(h => h !== 'metric' && h !== 'company');
           
-          // Sort date headers chronologically (earliest first)
           dateHeaders.sort((a, b) => parseDateString(a) - parseDateString(b));
+          const limitedDateHeaders = dateHeaders.slice(-13);
           
-          const sortedHeaders = [...fixedHeaders, ...dateHeaders];
+          const sortedHeaders = [...fixedHeaders, ...limitedDateHeaders];
 
           let html = '<div class="overflow-x-auto rounded-lg border border-slate-200"><table class="w-full text-sm border-collapse">';
-          // Table Head
           html += '<thead class="bg-slate-100 text-slate-600"><tr class="text-left">';
           sortedHeaders.forEach(h => {
               const formattedHeader = h.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
@@ -300,7 +290,6 @@
               html += `<th class="p-2 border-b border-slate-300 font-semibold ${alignClass}">${formattedHeader}</th>`;
           });
           html += '</tr></thead>';
-          // Table Body
           html += '<tbody class="bg-white divide-y divide-slate-200">';
           data.forEach(row => {
               html += '<tr class="hover:bg-slate-50">';
@@ -315,9 +304,6 @@
           return html;
       }
 
-      /**
-       * UPDATED: Renders the shareholding table with chronologically sorted columns.
-       */
       function render_shareholding_table(data) {
           if (!data || Object.keys(data).length === 0) return '';
           
@@ -326,16 +312,15 @@
               Object.keys(periodData).forEach(p => allPeriods.add(p));
           });
 
-          // Sort periods chronologically (earliest first)
-          const sortedPeriods = Array.from(allPeriods).sort((a, b) => parseDateString(a) - parseDateString(b));
+          const sortedPeriods = Array.from(allPeriods)
+                                     .sort((a, b) => parseDateString(a) - parseDateString(b))
+                                     .slice(-13);
 
           let html = '<div class="overflow-x-auto rounded-lg border border-slate-200"><table class="w-full text-sm border-collapse">';
-          // Header
           html += '<thead class="bg-slate-100 text-slate-600"><tr class="text-left">';
           html += '<th class="p-2 border-b border-slate-300 font-semibold">Category</th>';
           sortedPeriods.forEach(p => { html += `<th class="p-2 border-b border-slate-300 font-semibold text-right">${p}</th>`; });
           html += '</tr></thead>';
-          // Body
           html += '<tbody class="bg-white divide-y divide-slate-200">';
           Object.entries(data).forEach(([category, periodData]) => {
               html += '<tr class="hover:bg-slate-50">';
@@ -364,7 +349,6 @@
           html += '</ul>';
           return html;
       }
-      // ========= UPDATED SCANX HELPER FUNCTIONS END =========
       
       let sseConnection = null;
 
@@ -436,15 +420,73 @@
 
           const companyName = payload.company_name || payload.ticker;
 
-          // --- RENDER BLOCK 1: AI Summary & Technical Analysis ---
-          let topLevelHTML = '';
+          // =====================================================================
+          // START: MODIFIED SECTION FOR SCORES INTEGRATION
+          // =====================================================================
+          
+          // --- RENDER BLOCK 1: AI Summary, Scores, & Technical Analysis ---
+          let summarySectionHTML = '';
           if (payload.company_summary_html) {
-              topLevelHTML += `<div class="bg-white p-6 rounded-xl shadow-lg"><h2 class="text-2xl font-bold mb-4 text-slate-700">AI Summary for ${companyName}</h2><div class="summary-content prose prose-slate max-w-none text-slate-600">${payload.company_summary_html}</div></div>`;
+              summarySectionHTML = `<div class="bg-white p-6 rounded-xl shadow-lg"><h2 class="text-2xl font-bold mb-4 text-slate-700">AI Summary for ${companyName}</h2><div class="summary-content prose prose-slate max-w-none text-slate-600">${payload.company_summary_html}</div></div>`;
           }
+
+          let aiScoreHTML = '';
+          if (payload.ai_scores && Array.isArray(payload.ai_scores) && payload.ai_scores.length) {
+            aiScoreHTML = `
+            <div class="bg-white p-6 rounded-xl shadow-lg">
+                <h2 class="text-2xl font-bold mb-4 text-slate-700">AI Score</h2>
+                <div class="space-y-6">
+                    ${payload.ai_scores.map((score, idx) => `
+                        <div class="p-4 rounded-lg border border-slate-200 shadow-sm bg-slate-50">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <div class="text-lg font-semibold text-green-700">${score.label}</div>
+                                    <div class="text-3xl font-bold mt-1 text-slate-800">${score.value} / 10</div>
+                                    <div class="text-slate-600 mt-2 font-medium">${score.description}</div>
+                                </div>
+                                <button class="expandChartsBtn self-start px-3 py-2 ml-4 text-sm font-medium text-white bg-green-500 rounded-lg hover:bg-green-600 transition-colors"
+                                        data-idx="${idx}">Show Charts <span class="ml-1">▼</span></button>
+                            </div>
+                            <div class="aiChartsRow hidden mt-6 grid grid-cols-1 md:grid-cols-2 gap-6" id="aiChartsRow${idx}">
+                                <div id="aiChart1_${idx}" style="height:300px;"></div>
+                                <div id="aiChart2_${idx}" style="height:300px;"></div>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+            `;
+          }
+          
+          let technicalSummaryHTML = '';
           if (payload.summary) {
-              topLevelHTML += `<div class="bg-white p-6 rounded-xl shadow-lg"><h2 class="text-2xl font-bold mb-6 text-slate-700">AI Technical Analysis</h2><div class="overflow-x-auto"><table class="w-full border border-slate-200"><tbody class="text-sm">${payload.summary.map(row => `<tr class="even:bg-slate-50 hover:bg-slate-100 transition-colors duration-150"><td class="px-4 py-3 border-b border-slate-200 font-medium text-slate-600">${row.key}</td><td class="px-4 py-3 border-b border-slate-200 text-slate-700 relative">${row.value}</td></tr>`).join('')}</tbody></table></div></div>`;
+              technicalSummaryHTML = `<div class="bg-white p-6 rounded-xl shadow-lg"><h2 class="text-2xl font-bold mb-6 text-slate-700">AI Technical Analysis</h2><div class="overflow-x-auto"><table class="w-full border border-slate-200"><tbody class="text-sm">${payload.summary.map(row => `<tr class="even:bg-slate-50 hover:bg-slate-100 transition-colors duration-150"><td class="px-4 py-3 border-b border-slate-200 font-medium text-slate-600">${row.key}</td><td class="px-4 py-3 border-b border-slate-200 text-slate-700 relative">${row.value}</td></tr>`).join('')}</tbody></table></div></div>`;
           }
-          resultsContainer.innerHTML = topLevelHTML;
+
+          resultsContainer.innerHTML = summarySectionHTML + aiScoreHTML + technicalSummaryHTML;
+
+          // Attach click handlers for AI Score charts
+          if (payload.ai_scores && Array.isArray(payload.ai_scores)) {
+            document.querySelectorAll('.expandChartsBtn').forEach(btn => {
+              btn.onclick = function () {
+                const idx = btn.dataset.idx;
+                const chartRow = document.getElementById(`aiChartsRow${idx}`);
+                const isHidden = chartRow.classList.toggle('hidden');
+                if (!isHidden) {
+                  const chart1Data = JSON.parse(payload.ai_scores[idx].chart1_json);
+                  const chart2Data = JSON.parse(payload.ai_scores[idx].chart2_json);
+                  Plotly.newPlot(`aiChart1_${idx}`, chart1Data.data, chart1Data.layout || {}, { responsive: true });
+                  Plotly.newPlot(`aiChart2_${idx}`, chart2Data.data, chart2Data.layout || {}, { responsive: true });
+                  btn.innerHTML = 'Hide Charts <span class="ml-1">▲</span>';
+                } else {
+                  btn.innerHTML = 'Show Charts <span class="ml-1">▼</span>';
+                }
+              };
+            });
+          }
+          // =====================================================================
+          // END: MODIFIED SECTION FOR SCORES INTEGRATION
+          // =====================================================================
 
           // Attach charts to technical analysis table
           const techCharts = [
@@ -477,7 +519,6 @@
           
           // --- RENDER BLOCK 2: FUNDAMENTALS (NEW TABBED INTERFACE) ---
           
-          // ** STEP 2A: Prepare Screener.in Content **
           let screenerHTML = '';
           if (payload.fundamentals && Object.keys(payload.fundamentals).length > 0) {
               const order = ["Quarterly Results", "Annual Results", "Growth Patterns", "Balance Sheet", "Cash Flow", "Financial Ratios", "Quarterly Shareholding Pattern", "Annual Shareholding Pattern"];
@@ -492,7 +533,7 @@
               });
           }
           if (payload.documents && Array.isArray(payload.documents) && payload.documents.length > 0) {
-              screenerHTML += `<h3 class="text-xl font-semibold mb-5 mt-6 text-slate-600">Latest Documents</h3><ul class="space-y-3">`;
+              screenerHTML += `<h3 class="text-xl font-semibold mb-3 mt-6 text-slate-600">Latest Documents</h3><ul class="space-y-3">`;
               payload.documents.forEach(doc => {
                   screenerHTML += `<li class="flex items-center justify-between p-3 rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors"><span class="font-medium text-slate-700">${doc.text} (${doc.type})</span><a href="${doc.link}" target="_blank" rel="noopener noreferrer" class="px-3 py-1 text-sm font-semibold text-white bg-green-500 rounded-md hover:bg-green-600">View PDF</a></li>`;
               });
@@ -507,7 +548,6 @@
               });
           }
 
-          // ** STEP 2B: Prepare ScanX.trade Content **
           let scanxHTML = '';
           if (payload.scanx_data && !payload.scanx_data.error) {
               const sections = [
@@ -536,7 +576,6 @@
               });
           }
 
-          // ** STEP 2C: Build and Append Tab Component **
           if (screenerHTML || scanxHTML) {
             const tabsContainer = document.createElement('div');
             tabsContainer.className = 'bg-white p-6 rounded-xl shadow-lg mt-10';
@@ -557,7 +596,6 @@
             `;
             resultsContainer.appendChild(tabsContainer);
 
-            // ** STEP 2D: Activate Tab Logic **
             tabsContainer.querySelectorAll('.tab-button').forEach(button => {
                 button.addEventListener('click', () => {
                     const targetPanelId = button.dataset.target;
@@ -571,7 +609,6 @@
             });
           }
           
-          // Activate chart toggles for Screener's valuation charts
           document.querySelectorAll('.toggleMetric').forEach(btn => {
                 btn.onclick = () => {
                   const chartRow = btn.closest('tr').nextElementSibling;

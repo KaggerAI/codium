@@ -9,11 +9,11 @@ Before running, ensure you have installed system TA-Lib and Python packages:
      | tar xj -C /usr/lib/x86_64-linux-gnu/ lib --strip-components=1"
 
 2. Python packages:
-   pip install flask flask-cors tradingview-datafeed yfinance pandas numpy matplotlib talib openai yfinance
+   pip install flask flask-cors tradingview-datafeed yfinance pandas numpy matplotlib openai yfinance pdfplumber plotly matplotlib scikit-learn feedparser openai google-generativeai
 """
 import sys, os
 sys.path.append(os.path.dirname(__file__))
-from prompts import get_planning_system_prompt, get_answering_system_prompt
+from prompts import get_central_brain_prompt, get_planning_system_prompt, get_answering_system_prompt
 
 import traceback
 import time
@@ -46,6 +46,19 @@ from io import BytesIO
 from flask import Response, stream_with_context
 from progress_logger import progress_queue, log_progress, log_final_message
 
+from scores.AIScores import AIScores
+
+from tech_calculations import (
+    evaluate_ticker_signal,
+    generate_summary,
+    build_close_figure,
+    build_hl_figure,
+    build_ema_figure,
+    build_rsi_figure,
+    build_adl_figure,
+    build_rs_figure
+)
+
 # right below your Flask-app initialization:
 last_analysis: dict = {}
 
@@ -68,7 +81,7 @@ def index():
 # =====================================================================
 
 import openai
-from perplexity import Perplexity 
+#from perplexity import Perplexity 
 import google.generativeai as genai
 from google.generativeai.types import Tool 
 
@@ -521,269 +534,188 @@ def perform_planned_calculations(plan_calculations_section, retrieved_data, full
     return {"info": "Calculations performed.", "results": calculated_metrics_output}
 
 # new endpoint, below your /analyze route
-@app.route('/chat', methods=['POST'])
 
+### 2. The Complete `def chat` Function from `handler.py`
+
+@app.route('/chat', methods=['POST'])
 def chat():
     global last_analysis
     try:
         data = request.get_json(force=True)
         user_question = data.get('question', '').strip()
-        # Get the selected model from the request, default to a reliable choice
-        selected_model = data.get('model', 'o4-mini') 
+        selected_model = data.get('model', 'o4-mini')
         print(f"AI chatbot received question with selected model: {selected_model}")
 
         if not user_question:
             return jsonify({'error': 'No question provided'}), 400
-        if not last_analysis:
-            ticker_present = isinstance(last_analysis, dict) and last_analysis.get("ticker")
-            if not ticker_present :
-                 return jsonify({'answer': 'Please analyze a stock first. No data context is available.'}), 200
+        if not last_analysis or not last_analysis.get("ticker"):
+            return jsonify({'answer': 'Please analyze a stock first. No data context is available.'}), 200
 
-        # === CHANGE 1: Multi-Agent Model Selection ===
         is_best_mode = selected_model == 'best'
-        
-        # Define the models for each agent role
-        planner_model = 'o4-mini'
-        news_model = 'sonar'  # Sonar is specialized for this, always use it for news
-        answerer_model = 'gpt-4.1-mini' if is_best_mode else selected_model
-        # answerer_model = 'gemini-2.5-flash-preview-05-20' if is_best_mode else selected_model
+        central_brain_plan = None
+        parsed_plan = {}
+        ai_plan_json_str = "{}"
+        thought_process_str = "No thought process generated."
 
-        log_progress("Analyzing user query...")
-
-        # --- VVV ADD PRINT STATEMENTS HERE VVV ---
-        print("\n" + "="*50)
-        print(f"DEBUG /chat: Processing question: \"{user_question}\"")
-        print(f"DEBUG /chat: last_analysis keys before planning: {list(last_analysis.keys())}")
-        if 'documents' in last_analysis and last_analysis['documents']:
-            print(f"DEBUG /chat: Found 'documents' in last_analysis for ticker '{last_analysis['ticker']}'.")
-        else:
-            print(f"WARN /chat: 'documents' key not found or is empty in last_analysis.")
-        print("="*50 + "\n")
-        # --- ^^^ END OF ADDED PRINT STATEMENTS ^^^ ---
-
-        # === Step 1: Planning Call ===
-        # --- VVV ADD PRINT STATEMENTS HERE VVV ---
-        print("\n" + "="*50)
-        print(f"DEBUG /chat: last_analysis keys before planning: {list(last_analysis.keys()) if isinstance(last_analysis, dict) else 'Not a dict or empty'}")
-        if isinstance(last_analysis, dict) and 'ticker' in last_analysis:
-            print(f"DEBUG /chat: Current ticker in last_analysis: {last_analysis.get('ticker')}")
-        # You can also print a small part of last_analysis to verify content, e.g., summary
-        if isinstance(last_analysis, dict) and 'summary' in last_analysis:
-             print(f"DEBUG /chat: last_analysis.summary (first 3 items): {last_analysis['summary'][:3] if isinstance(last_analysis.get('summary'), list) else 'Summary not a list'}")
-        print("="*50 + "\n")
-        # --- ^^^ END OF ADDED PRINT STATEMENTS ^^^ ---
-
-        schema_description = get_data_schema_description(last_analysis)
-        print(f"DEBUG /chat: Schema description being sent to planner:\n----SCHEMA START----\n{schema_description}\n----SCHEMA END----")
-        # --- ^^^ END OF ADDED PRINT STATEMENTS ^^^ ---
-        
-        # Fully corrected and detailed planning_system_prompt:
-        planning_system_prompt = get_planning_system_prompt()
-
-        planning_messages = [
-            {"role": "system", "content": planning_system_prompt},
-            {"role": "user", "content": f"User Question: \"{user_question}\"\n\nData Schema Description Available for Planning:\n{schema_description}\n\nFull 'last_analysis' context (for AI reference only, primarily for summary items like current price/market_cap if needed for calculation inputs; DO NOT reproduce large parts of this in your JSON plan, only use it to fill specific values if a calculation function's input spec requires it):\n{json.dumps(last_analysis, indent=2, default=str)[:2000]}"} # Send a snippet of last_analysis for reference
-        ]
-        
-        log_progress("Creating a plan to fetch data and information and answer the user's question...")
-        # NOTE: This call is intentionally hardcoded to a model supporting JSON mode for reliability.
-        # Temperature might be slightly higher for more complex planning, or keep low for precision.
-        ai_full_response_str = call_openai_api(planning_messages, model=planner_model, expect_json_format_flag=False, temperature=1) 
-
-        # --- VVV ADD PRINT STATEMENTS HERE VVV ---
-        print(f"\n--- AI RAW RESPONSE (FULL STRING) ---\n{ai_full_response_str}\n-------------------------------------\n")
-        # --- ^^^ END OF ADDED PRINT STATEMENTS ^^^ ---
-
-        # Extract Thought Process and JSON Plan
-        thought_process_str = "Could not extract thought process."
-        ai_plan_str = "{}" 
-
-        try:
-            # Current extraction logic for thought process and JSON plan block
-            # This needs to be robust to get the structured JSON plan.
-            if "**JSON Plan:**" in ai_full_response_str:
-                parts = ai_full_response_str.split("**JSON Plan:**", 1)
-                thought_process_str = parts[0].replace("**Thought Process:**", "").strip()
-                json_block_match = parts[1].strip()
-                if json_block_match.startswith("```json"): json_block_match = json_block_match[len("```json"):].strip()
-                if json_block_match.startswith("```"): json_block_match = json_block_match[len("```"):].strip()
-                if json_block_match.endswith("```"): json_block_match = json_block_match[:-len("```")].strip()
-                ai_plan_json_str = json_block_match.strip()
-                if not ai_plan_json_str: ai_plan_json_str = "{}"
-                parsed_plan = json.loads(ai_plan_json_str) # Validate primary JSON structure
-            else: # Fallback regex
-                import re
-                json_match_obj = re.search(r"```json\s*([\s\S]*?)\s*```", ai_full_response_str, re.MULTILINE)
-                if json_match_obj:
-                    ai_plan_json_str = json_match_obj.group(1).strip()
-                    if not ai_plan_json_str: ai_plan_json_str = "{}"
-                    parsed_plan = json.loads(ai_plan_json_str)
-                    thought_process_str = ai_full_response_str.split("```json")[0].replace("**Thought Process:**", "").strip()
-                    if not thought_process_str and json_match_obj.start() > 0:
-                        thought_process_str = ai_full_response_str[:json_match_obj.start()].replace("**Thought Process:**", "").strip()
-                else: # Last resort: is the whole thing JSON?
-                    try:
-                        parsed_plan = json.loads(ai_full_response_str)
-                        ai_plan_json_str = ai_full_response_str.strip()
-                        thought_process_str = "No explicit thought process; response might be direct JSON plan."
-                    except json.JSONDecodeError:
-                        thought_process_str = f"AI response did not follow format. Full response: {ai_full_response_str}"
-                        ai_plan_json_str = "{}"
-                        parsed_plan = {}
-        except json.JSONDecodeError as je:
-            print(f"ERROR: Extracted content for JSON plan ('{ai_plan_json_str}') was not valid JSON. Error: {je}. Full response: {ai_full_response_str}")
-            thought_process_str += f". JSON plan part was invalid: {ai_plan_json_str}"
-            ai_plan_json_str = "{}"
-            parsed_plan = {} # Ensure parsed_plan is a dict
-        except Exception as e_parse:
-            print(f"ERROR: Failed to parse AI planning response: {e_parse}. Full response:\n{ai_full_response_str}")
-            thought_process_str = f"Error parsing AI plan: {e_parse}. Response: {ai_full_response_str}"
-            ai_plan_json_str = "{}"
-            parsed_plan = {}
-
-        print(f"\n--- AI Thought Process ---\n{thought_process_str}\n---------------------------\n")
-        print(f"--- AI JSON Plan (extracted) ---\n{ai_plan_json_str}\n------------------------------\n")
-
-        # Ensure parsed_plan is a dict, default if not.
-        if not isinstance(parsed_plan, dict): parsed_plan = {}
-
-        # === Step 2: External News Fetching (New Agent Action) ===
-        # news_summary = None
-        # # Fetch news only if the planner requests it AND the user has selected the "best" model.
-        # if parsed_plan.get("fetch_external_news", {}).get("needed") and is_best_mode:
-        #     # The prompt created by the planner is still valid for Gemini.
-        #     gemini_news_prompt = parsed_plan["fetch_external_news"].get("prompt_for_sonar") # The key name is fine
+        if is_best_mode:
+            # =================================================================
+            # STAGE 1: CENTRAL BRAIN - STRATEGIC PLANNING
+            # =================================================================
+            log_progress("Central Brain is analyzing the query and forming a strategy...")
+            central_brain_prompt = get_central_brain_prompt()
+            brain_messages = [
+                {"role": "system", "content": central_brain_prompt},
+                {"role": "user", "content": f"User Question: \"{user_question}\""}
+            ]
             
-        #     if gemini_news_prompt:
-        #         # Replace placeholder with actual ticker
-        #         gemini_news_prompt = gemini_news_prompt.replace("[Company Name/Ticker]", last_analysis.get('ticker', ''))
+            central_brain_response_str = call_generative_ai_model("gpt-4.1-mini", brain_messages, temperature=0.5)
+
+            try:
+                json_match = re.search(r"```json\s*([\s\S]*?)\s*```", central_brain_response_str, re.MULTILINE)
+                if not json_match:
+                    raise json.JSONDecodeError("No JSON block found in Central Brain response", central_brain_response_str, 0)
                 
-        #         # Update the log message to reflect the new tool
-        #         log_progress(f"News agent (Gemini 1.5 Flash) is fetching real-time news via Google Search...")
+                central_brain_plan_str = json_match.group(1)
+                central_brain_plan = json.loads(central_brain_plan_str)
+                thought_process_str = central_brain_plan.get("thought_process", "Central Brain planning complete.")
+                print(f"--- Central Brain Plan ---\n{json.dumps(central_brain_plan, indent=2)}\n--------------------------")
+            except (json.JSONDecodeError, AttributeError) as e:
+                print(f"ERROR: Could not parse Central Brain plan. Error: {e}. Response: {central_brain_response_str}")
+                return jsonify({'error': 'Failed to generate a strategic plan. Please try rephrasing your question.'}), 500
+
+            # =================================================================
+            # STAGE 2: TACTICAL PLANNER - CREATING EXECUTABLE JSON
+            # =================================================================
+            log_progress("Tactical Planner is creating a detailed data retrieval plan...")
+            schema_description = get_data_schema_description(last_analysis)
+            planning_system_prompt = get_planning_system_prompt()
+            
+            planner_user_content = (
+                f"User Question: \"{user_question}\"\n\n"
+                f"Central Brain Directives:\n{json.dumps(central_brain_plan, indent=2)}\n\n"
+                f"Data Schema Description:\n{schema_description}\n\n"
+                f"Full 'last_analysis' context (for reference, e.g., current price):\n{json.dumps(last_analysis, indent=2, default=str)[:2000]}"
+            )
+
+            planner_messages = [
+                {"role": "system", "content": planning_system_prompt},
+                {"role": "user", "content": planner_user_content}
+            ]
+            
+            tactical_plan_response_str = call_openai_api(planner_messages, model='o4-mini', expect_json_format_flag=True, temperature=1)
+            
+            # ===================================================================
+            # START: CORRECTED TACTICAL PLAN PARSING LOGIC
+            # ===================================================================
+            try:
+                # Use regex to robustly find the JSON block, even if the model includes extra text.
+                json_match = re.search(r"```json\s*([\s\S]*?)\s*```", tactical_plan_response_str, re.MULTILINE)
                 
-        #         try:
-        #             news_messages = [{"role": "user", "content": gemini_news_prompt}]
-        #             # Call our enhanced Gemini function with search enabled
-        #             news_summary = call_gemini_api(
-        #                 news_messages,
-        #                 model="gemini-1.5-flash-latest", # Explicitly use the fast, latest model
-        #                 use_google_search=True # This is the magic flag!
-        #             )
-        #         except Exception as e:
-        #             print(f"ERROR: Gemini news fetching failed: {e}")
-        #             news_summary = f"Error: Failed to fetch real-time news using Gemini. {e}"
-        # elif parsed_plan.get("fetch_external_news", {}).get("needed") and not is_best_mode:
-        #     # This part remains the same.
-        #     log_progress("Skipping real-time news fetch (available in 'best' model mode).")
-        #     print("INFO: Planner requested news, but skipping because 'best' model was not selected.")
-        
+                if json_match:
+                    ai_plan_json_str = json_match.group(1)
+                    parsed_plan = json.loads(ai_plan_json_str)
+                else:
+                    # Fallback: If no ```json``` block is found, try to parse the whole string.
+                    # This handles cases where the model correctly returns *only* JSON.
+                    parsed_plan = json.loads(tactical_plan_response_str)
+                    ai_plan_json_str = tactical_plan_response_str
+
+                print(f"--- Tactical Execution Plan ---\n{json.dumps(parsed_plan, indent=2)}\n--------------------------")
+
+            except json.JSONDecodeError as e:
+                print(f"ERROR: Could not parse Tactical Plan. Error: {e}. Response: {tactical_plan_response_str}")
+                return jsonify({'error': 'Failed to create a detailed execution plan.'}), 500
+            # ===================================================================
+            # END: CORRECTED TACTICAL PLAN PARSING LOGIC
+            # ===================================================================
+
+        else: # Standard, single-agent flow
+            log_progress("Creating a plan to answer the user's question...")
+            schema_description = get_data_schema_description(last_analysis)
+            planning_system_prompt = get_planning_system_prompt()
+            planning_messages = [
+                {"role": "system", "content": planning_system_prompt},
+                {"role": "user", "content": f"User Question: \"{user_question}\"\n\nData Schema Description:\n{schema_description}\n\nFull 'last_analysis' context:\n{json.dumps(last_analysis, indent=2, default=str)[:2000]}"}
+            ]
+            
+            full_response_str = call_openai_api(planning_messages, model='o4-mini', expect_json_format_flag=False, temperature=1)
+            
+            try:
+                json_match = re.search(r"```json\s*([\s\S]*?)\s*```", full_response_str, re.MULTILINE)
+                thought_process_str = re.split(r"```json", full_response_str)[0].replace("**Thought Process:**", "").strip()
+                if json_match:
+                    ai_plan_json_str = json_match.group(1)
+                    parsed_plan = json.loads(ai_plan_json_str)
+                else:
+                    raise ValueError("No JSON plan found in planner response.")
+            except Exception as e:
+                 print(f"ERROR: Could not parse standard plan. Error: {e}. Response: {full_response_str}")
+                 return jsonify({'error': 'Failed to create a standard execution plan.'}), 500
+
+        # =================================================================
+        # STAGE 3: EXECUTION (Common to both modes)
+        # =================================================================
+        log_progress("Executing plan: Fetching news and internal data...")
         news_summary = None
-        # Fetch news only if the planner requests it AND the user has selected the "best" model.
-        if parsed_plan.get("fetch_external_news", {}).get("needed") and is_best_mode:
-            sonar_prompt = parsed_plan["fetch_external_news"].get("prompt_for_sonar")
-            if sonar_prompt:
-                # Replace placeholder with actual ticker
-                name_for_search = last_analysis.get('company_name', last_analysis.get('ticker', ''))
-                sonar_prompt = sonar_prompt.replace("[Company Name/Ticker]", name_for_search)
-                log_progress(f"News agent ({news_model}) is fetching real-time news ('best' model feature)...")
-                try:
-                    news_messages = [{"role": "user", "content": sonar_prompt, "mode": "high"}]
-                    news_summary = call_perplexity_api(news_messages, model=news_model)
-                except Exception as e:
-                    print(f"ERROR: News fetching failed: {e}")
-                    news_summary = f"Error: Failed to fetch real-time news. {e}"
-        elif parsed_plan.get("fetch_external_news", {}).get("needed") and not is_best_mode:
-            # Log that news was requested but skipped because the model was not "best"
-            log_progress("Skipping real-time news fetch (available in 'best' model mode).")
-            print("INFO: Planner requested news, but skipping because 'best' model was not selected.")
+        news_plan = parsed_plan.get("fetch_external_news", {})
+        if news_plan.get("needed"):
+            sonar_prompt = news_plan.get("prompt_for_sonar", f"Get the latest news for {last_analysis.get('ticker')}")
+            try:
+                news_messages = [{"role": "user", "content": sonar_prompt}]
+                news_summary = call_perplexity_api(news_messages, model="sonar-pro")
+            except Exception as e:
+                print(f"ERROR: News fetching failed: {e}")
+                news_summary = f"Error: Failed to fetch real-time news. {e}"
 
-        # === Step 3: Retrieve Data Based on 'retrieve_data' part of the Plan ===
-        log_progress("Retrieving internal financial data...")
         retrieve_data_spec = parsed_plan.get("retrieve_data", {})
-        # print(f"DEBUG: Plan's retrieve_data section: {json.dumps(retrieve_data_spec, indent=2)}")
         retrieved_fundamental_data = retrieve_data_based_on_plan(retrieve_data_spec, last_analysis)
-        print(f"DEBUG: Data returned from retrieval function: {json.dumps(retrieved_fundamental_data, indent=2, default=str)}\n")
 
-        if retrieved_fundamental_data.get("error"):
-            error_msg = retrieved_fundamental_data.get("error")
-            # ... (error handling as before) ...
-            return jsonify({'answer': f"Error retrieving base data: {error_msg}. Plan: {ai_plan_json_str}"}), 200
-
-        # === Step 4: Perform Calculations ===
         log_progress("Performing financial calculations...")
         calculations_spec = parsed_plan.get("perform_calculations", [])
-        # The `perform_planned_calculations` function needs `retrieved_fundamental_data`
-        # AND access to `last_analysis` (especially `last_analysis['summary']`) if the AI planner
-        # specified that some calculation inputs (like current price) should be taken from there.
-        # The AI's `inputs` spec for each calculation should make this clear.
-        
-        # Pass `retrieved_fundamental_data` (which contains `Fundamentals`, `ValuationMarginSeries`, `summary_data_direct`)
-        # and `last_analysis` (for the AI planner to use as reference for summary items to put in calc inputs).
-        # The calculation functions themselves primarily use `retrieved_fundamental_data`.
-        
-        # print(f"DEBUG: Calling perform_planned_calculations with spec: {json.dumps(calculations_spec, indent=2)}")
         calculation_results_obj = perform_planned_calculations(calculations_spec, retrieved_fundamental_data, last_analysis)
-        # print(f"DEBUG: Results from perform_planned_calculations: {json.dumps(calculation_results_obj, indent=2)}")
 
 
-        # Combine retrieved data and calculated data for the answering LLM
-        # `retrieved_fundamental_data` might contain 'Fundamentals', 'ValuationMarginSeries', 'summary_data_direct'
-        # `calculation_results_obj` contains 'results' which is a dict of calculated_metrics
-        
+        # =================================================================
+        # STAGE 4: SYNTHESIS (Common to both modes, guided by brain_plan if present)
+        # =================================================================
+        log_progress("Synthesizing the final response...")
         final_context_for_answer = {
             "user_question": user_question,
-            "retrieved_data": retrieved_fundamental_data, # Contains 'Fundamentals', 'ValuationMarginSeries', etc.
+            "central_brain_plan": central_brain_plan,
+            "retrieved_data": retrieved_fundamental_data,
             "calculated_metrics": calculation_results_obj.get("results", {}),
+            "documents": last_analysis.get('documents', []),
             "news_summary": news_summary
         }
-        if calculation_results_obj.get("info"):
-            final_context_for_answer["calculation_info"] = calculation_results_obj.get("info")
-        
-        # Check if any actual data was retrieved or calculated
-        no_retrieved_data = not any(k for k in retrieved_fundamental_data if k not in ["retrieval_info", "error"])
-        no_calculated_data = not calculation_results_obj.get("results")
 
-        if no_retrieved_data and no_calculated_data and "AI plan did not specify" in retrieved_fundamental_data.get("retrieval_info",""):
-            # ... (handle cases where nothing was planned or retrieved/calculated) ...
-            simplified_thought = thought_process_str[:500] + ("..." if len(thought_process_str) > 500 else "")
-            return jsonify({'answer': f"I analyzed your question but couldn't identify specific data to retrieve or calculate. Reasoning hint: '{simplified_thought}'. Plan: {ai_plan_json_str}"}), 200
-
-        focused_context_str_for_answer = json.dumps(final_context_for_answer, indent=2, ensure_ascii=False, default=str) # default=str for non-serializable like NaNs if any
-
-        # === Step 5: Answering Call ===
         answering_system_prompt = get_answering_system_prompt()
+        
         answering_messages = [
             {"role": "system", "content": answering_system_prompt},
-            {"role": "user", "content": f"User Question: \"{user_question}\"\n\nPlease synthesize an answer based on the following consolidated data:\n{focused_context_str_for_answer}"}
+            {"role": "user", "content": f"Please synthesize an answer based on the following consolidated data:\n{json.dumps(final_context_for_answer, indent=2, default=str)}"}
         ]
-
-        log_progress("Answering agent ({answerer_model}) is synthesizing the final response...")
-        # Use the new dispatcher function with the user's selected model
+        
+        answerer_model = 'gpt-4.1-mini' if is_best_mode else selected_model
         final_answer = call_generative_ai_model(
             model=answerer_model,
             messages=answering_messages,
-            temperature=0.75 # A balanced temperature for creative but factual answers
+            temperature=0.7
         )
-        # final_answer = call_openai_api(answering_messages, model="o4-mini", temperature=1)
 
         return jsonify({
             'answer': final_answer,
             'thought_process': thought_process_str,
-            'planning_data': ai_plan_str,
+            'planning_data': ai_plan_json_str,
             'raw_news_summary': news_summary
         })
-
-    except openai.RateLimitError as e:
-        error_detail = str(e)
-        if hasattr(e, 'body') and isinstance(e.body, dict) and 'error' in e.body:
-            error_detail = e.body['error'].get('message', str(e))
-        print(f"ERROR: OpenAI Rate Limit Error in /chat: {error_detail}")
-        return jsonify({'error': f'OpenAI API request limit reached. Please try again shortly. Details: {error_detail}', 'code': 'rate_limit_exceeded'}), 429
 
     except Exception as e:
         print(f"ERROR: General Error in /chat: {e}")
         traceback.print_exc()
         return jsonify({'error': f'An unexpected error occurred: {str(e)}', 'trace': traceback.format_exc()}), 500
+
+
+
 
 #======================================================================#
 # START: DEBUGGING CODE FOR SCHEMA INSPECTION                          #
@@ -937,543 +869,6 @@ from scanx_fetcher import scrape_scanx_company
 # Initialize TradingView datafeed (guest)
 tv = TvDatafeed()
 
-# ---------------- Helper Functions ----------------
-
-def fetch_histogram(symbol, exchange, start_date, end_date, max_retries=3):
-    n_bars = max(1100, (end_date - start_date).days + 5)
-    raw = None
-    for _ in range(max_retries):
-        try:
-            raw = tv.get_hist(symbol=symbol, exchange=exchange,
-                              interval=Interval.in_daily, n_bars=n_bars)
-            if raw is not None and not raw.empty:
-                break
-        except Exception:
-            time.sleep(1)
-    if raw is None or raw.empty:
-        yf_sym = '^NSEI' if symbol.upper()=='NIFTY' and exchange=='NSE' else f"{symbol}.NS"
-        try:
-            raw = yf.download(yf_sym,
-                              start=start_date.strftime('%Y-%m-%d'),
-                              end=end_date.strftime('%Y-%m-%d'),
-                              interval='1d', auto_adjust=False)
-        except Exception:
-            return pd.DataFrame()
-    df = raw.copy()
-    df = df[(df.index >= pd.to_datetime(start_date)) & (df.index <= pd.to_datetime(end_date))]
-    df.rename(columns={'open':'Open','high':'High','low':'Low','close':'Close','volume':'Volume'}, inplace=True)
-    return df
-
-
-def align_data_indices(a, b):
-    idx = a.index.intersection(b.index)
-    return a.loc[idx], b.loc[idx]
-
-
-def calculate_relative_strength(stock, index, length=55):
-    if len(stock) < length or len(index) < length:
-        return pd.Series(index=stock.index, data=np.nan)
-    sp = stock['Close'].pct_change(length)
-    ip = index['Close'].pct_change(length)
-    return sp - ip
-
-
-def is_swing_high(df, i, L, R, col='Close'):
-    if i < L or i > len(df) - 1 - R:
-        return False
-    v = df[col].iat[i]
-    return v >= df[col].iloc[i-L:i+1].max() and v >= df[col].iloc[i:i+R+1].max()
-
-
-def is_swing_low(df, i, L, R, col='Close'):
-    if i < L or i > len(df) - 1 - R:
-        return False
-    v = df[col].iat[i]
-    return v <= df[col].iloc[i-L:i+1].min() and v <= df[col].iloc[i:i+R+1].min()
-
-
-def identify_swing_points(df, L, R, column='Close'):
-    data = df.reset_index(drop=True)
-    pts = []
-    for i in range(len(data)):
-        if is_swing_high(data, i, L, R, column):
-            pts.append({'Index': i, 'Value': data[column].iat[i], 'Type': 'High'})
-        elif is_swing_low(data, i, L, R, column):
-            pts.append({'Index': i, 'Value': data[column].iat[i], 'Type': 'Low'})
-    return pd.DataFrame(pts)
-
-
-def identify_swing_points_high(df, L, R):
-    data = df.reset_index(drop=True)
-    pts = []
-    for i in range(L, len(data) - R):
-        v = data['High'].iat[i]
-        if v >= data['High'].iloc[i-L:i+1].max() and v >= data['High'].iloc[i:i+R+1].max():
-            pts.append({'Index': i, 'Value': v, 'Type': 'High'})
-    return pd.DataFrame(pts)
-
-
-def identify_swing_points_low(df, L, R):
-    data = df.reset_index(drop=True)
-    pts = []
-    for i in range(L, len(data) - R):
-        v = data['Low'].iat[i]
-        if v <= data['Low'].iloc[i-L:i+1].min() and v <= data['Low'].iloc[i:i+R+1].min():
-            pts.append({'Index': i, 'Value': v, 'Type': 'Low'})
-    return pd.DataFrame(pts)
-
-
-def analyze_swing_behaviour(sw):
-    beh = {'HH': False, 'HL': False, 'LH': False, 'LL': False}
-    highs = sw[sw['Type'] == 'High']
-    lows  = sw[sw['Type'] == 'Low']
-    if len(highs) >= 2:
-        beh['HH'] = highs['Value'].iloc[-1] > highs['Value'].iloc[-2]
-        beh['LH'] = not beh['HH']
-    if len(lows) >= 2:
-        beh['HL'] = lows['Value'].iloc[-1] > lows['Value'].iloc[-2]
-        beh['LL'] = not beh['HL']
-    return beh
-
-
-def get_swing_tokens(sw):
-    highs = sw[sw['Type'] == 'High']
-    lows  = sw[sw['Type'] == 'Low']
-    toks = []
-    if len(highs) >= 2:
-        toks.append('HH' if highs['Value'].iloc[-1] > highs['Value'].iloc[-2] else 'LH')
-    if len(lows) >= 2:
-        toks.append('HL' if lows['Value'].iloc[-1] > lows['Value'].iloc[-2] else 'LL')
-    return toks
-
-
-def compute_market_structure(df):
-    up   = (df['EMA13'] > df['EMA55']) & (df['EMA55'] > df['EMA144'])
-    down = (df['EMA13'] < df['EMA55']) & (df['EMA55'] < df['EMA144'])
-    mildup   = (df['EMA13'] > df['EMA55']) & (df['EMA55'] < df['EMA144'])
-    milddown = (df['EMA13'] < df['EMA55']) & (df['EMA55'] > df['EMA144'])
-    i = -1
-    if up.iloc[i]:
-        return 'Uptrend'
-    elif down.iloc[i]:
-        return 'Downtrend'
-    elif mildup.iloc[i]:
-        return 'Mild Uptrend'
-    elif milddown.iloc[i]:
-        return 'Mild Downtrend'
-    else:
-        return 'Sideways'
-
-
-def compute_price_action_trend(sw, df):
-    beh = analyze_swing_behaviour(sw)
-    if beh['HH'] and beh['HL']:
-        return 'Uptrend'
-    if beh['LH'] and beh['LL']:
-        return 'Downtrend'
-    return 'Sideways'
-
-
-def compute_fib_strength(sw, trend, cp, df):
-    lvls = [0.236, 0.382, 0.5, 0.618]
-    highs = sw[sw['Type'] == 'High']
-    lows  = sw[sw['Type'] == 'Low']
-    if trend == 'Uptrend' and len(highs) >= 1 and len(lows) >= 1:
-        last_h = highs['Value'].iloc[-1]
-        prev_l = lows['Value'].iloc[-1]
-        retr = {l: last_h - (last_h - prev_l) * l for l in lvls}
-        fib_ok = cp >= retr[0.382]
-        show = ''
-        for l in lvls:
-            if cp >= retr[l]:
-                show = f'({l})'
-                break
-        return f"{'Strong' if fib_ok else 'Weak'} {show}".strip()
-    if trend == 'Downtrend' and len(lows) >= 1 and len(highs) >= 1:
-        last_l = lows['Value'].iloc[-1]
-        prev_h = highs['Value'].iloc[-1]
-        retr = {l: last_l + (prev_h - last_l) * l for l in lvls}
-        fib_ok = cp <= retr[0.382]
-        show = ''
-        for l in lvls:
-            if cp <= retr[l]:
-                show = f'({l})'
-                break
-        return f"{'Strong' if fib_ok else 'Weak'} {show}".strip()
-    return 'Not Applicable'
-
-
-def find_support_resistance(sw, df):
-    cp  = df['Close'].iat[-1]
-    atr = df['ATR14'].iat[-1]
-    support, resistance = None, None
-    min_sup_gap, min_res_gap = float('inf'), float('inf')
-    for _, pivot in sw.iterrows():
-        idx = int(pivot['Index'])
-        val = pivot['Value']
-        typ = pivot['Type']
-        gap = abs(cp - val)
-        if gap < atr:
-            continue
-        # support
-        if ((typ == 'Low' and val < cp) or (typ == 'High' and val <= cp)) and gap < min_sup_gap:
-            min_sup_gap = gap
-            support = (df['Low'].iat[idx], df['High'].iat[idx])
-        # resistance
-        if ((typ == 'High' and val > cp) or (typ == 'Low' and val >= cp)) and gap < min_res_gap:
-            min_res_gap = gap
-            resistance = (df['Low'].iat[idx], df['High'].iat[idx])
-    return support, resistance
-
-
-def detect_ema_crosses(df):
-    crosses = []
-    for i in range(1, len(df)):
-        prev13, prev144 = df['EMA13'].iat[i-1], df['EMA144'].iat[i-1]
-        cur13,  cur144  = df['EMA13'].iat[i],   df['EMA144'].iat[i]
-        if prev13 <= prev144 < cur13 > cur144:
-            crosses.append(f"GC@{i}")
-        if prev13 >= prev144 > cur13 < cur144:
-            crosses.append(f"DC@{i}")
-    return crosses
-
-
-
-# ------------- Build mini-figures -------------
-
-def build_close_figure(df, ticker):
-    """Close-price chart with pivot markers: red ▲ for swing-high, green ▼ for swing-low"""
-    d = df[df.index >= df.index.max() - pd.DateOffset(years=1)]
-    sp = identify_swing_points(d, 6, 4, 'Close')
-    fig = go.Figure()
-    # Plot close line
-    fig.add_trace(go.Scatter(
-    x=list(d.index),               # a list of Timestamps
-    y=[float(v) for v in d['Close']],  # *explicit* list of Python floats
-    mode='lines', name='Close',
-    line=dict(color='black')
-    ))
-    # Swing-highs: red triangles
-    highs = sp[sp['Type']=='High']
-    fig.add_trace(go.Scatter(
-        x=d.index[highs['Index']], y=[float(v) for v in highs['Value']],
-        mode='markers', name='Swing High',
-        marker=dict(symbol='triangle-up', size=12, color='red')
-    ))
-    # Swing-lows: green inverted triangles
-    lows = sp[sp['Type']=='Low']
-    fig.add_trace(go.Scatter(
-        x=d.index[lows['Index']], y=[float(v) for v in lows['Value']],
-        mode='markers', name='Swing Low',
-        marker=dict(symbol='triangle-down', size=12, color='green')
-    ))
-    fig.update_layout(
-    title=f"{ticker} Price Pivots",
-    height=450,
-    legend=dict(orientation='h', x=0.5, xanchor='center', y=-0.2),
-
-    # ← new additions ↓
-    hovermode='x unified',                # show all traces’ data at the same x
-    xaxis=dict(
-        type='date',
-        showspikes=True,                  # draw a spike (vertical line)
-        spikemode='across',               # spike runs across the plot
-        spikesnap='cursor',               # snap spike to the cursor
-        spikethickness=1,
-        spikedash='dot',
-        spikecolor='lightgrey'
-    )
-)
-
-    return fig
-
-
-def build_hl_figure(df, ticker):
-    """High/Low pivot chart: red ▲ for highs, green ▼ for lows"""
-    d = df[df.index >= df.index.max() - pd.DateOffset(years=1)]
-    sh = identify_swing_points_high(d, 6, 4)
-    sl = identify_swing_points_low(d, 6, 4)
-    fig = go.Figure()
-    # Close line
-    fig.add_trace(go.Scatter(
-        x=d.index, y=[float(v) for v in d['Close']], mode='lines', name='Close', line=dict(color='black')
-    ))
-    # HL pivot markers
-    fig.add_trace(go.Scatter(
-        x=d.index[sh['Index']], y=[float(v) for v in sh['Value']],
-        mode='markers', name='Swing High',
-        marker=dict(symbol='triangle-up', size=12, color='red')
-    ))
-    fig.add_trace(go.Scatter(
-        x=d.index[sl['Index']], y=[float(v) for v in sl['Value']],
-        mode='markers', name='Swing Low',
-        marker=dict(symbol='triangle-down', size=12, color='green')
-    ))
-    fig.update_layout(
-    title=f"{ticker} High/Low Pivots",
-    height=450,
-    legend=dict(orientation='h', x=0.5, xanchor='center', y=-0.2),
-
-    # ← new additions ↓
-    hovermode='x unified',                # show all traces’ data at the same x
-    xaxis=dict(
-        type='date',
-        showspikes=True,                  # draw a spike (vertical line)
-        spikemode='across',               # spike runs across the plot
-        spikesnap='cursor',               # snap spike to the cursor
-        spikethickness=1,
-        spikedash='dot',
-        spikecolor='lightgrey'
-    )
-)
-
-    return fig
-
-
-def build_ema_figure(df, ticker):
-    """EMA stack with black close line and dotted EMAs"""
-    d = df[df.index >= df.index.max() - pd.DateOffset(years=1)]
-    fig = go.Figure()
-    # Close in black
-    fig.add_trace(go.Scatter(
-        x=d.index, y=[float(v) for v in d['Close']], mode='lines', name='Close', line=dict(color='black')
-    ))
-    # EMA13 dotted
-    fig.add_trace(go.Scatter(
-        x=d.index, y=[float(v) for v in d['EMA13']], mode='lines', name='EMA13',
-        line=dict(dash='dot', width=1.25, color='blue')
-    ))
-    # EMA55 dotted
-    fig.add_trace(go.Scatter(
-        x=d.index, y=[float(v) for v in d['EMA55']], mode='lines', name='EMA55',
-        line=dict(dash='dot', width=1.25, color='red')
-    ))
-    # EMA144 dotted
-    fig.add_trace(go.Scatter(
-        x=d.index, y=[float(v) for v in d['EMA144']], mode='lines', name='EMA144',
-        line=dict(dash='dot', width=1.25, color='green')
-    ))
-    fig.update_layout(
-    title=f"{ticker} EMA Stack",
-    height=450,
-    legend=dict(orientation='h', x=0.5, xanchor='center', y=-0.2),
-
-    # ← new additions ↓
-    hovermode='x unified',                # show all traces’ data at the same x
-    xaxis=dict(
-        type='date',
-        showspikes=True,                  # draw a spike (vertical line)
-        spikemode='across',               # spike runs across the plot
-        spikesnap='cursor',               # snap spike to the cursor
-        spikethickness=1,
-        spikedash='dot',
-        spikecolor='lightgrey'
-    )
-)
-
-    return fig
-
-
-def build_rsi_figure(df,ticker):
-    d=df[df.index>=df.index.max()-pd.DateOffset(years=1)]
-    fig=go.Figure()
-    fig.add_trace(go.Scatter(x=d.index, y=[float(v) for v in d['RSI14']], mode='lines', name='RSI'))
-    # 13‐period EMA of RSI
-    fig.add_trace(go.Scatter(x=d.index, y=[float(v) for v in d['RSI_EMA13']], mode='lines', name='RSI EMA-13', line=dict(dash='dot', width=1)))
-    fig.update_layout(title=f'{ticker} RSI', height=450,
-    # ← new additions ↓
-    hovermode='x unified',                # show all traces’ data at the same x
-    xaxis=dict(
-        type='date',
-        showspikes=True,                  # draw a spike (vertical line)
-        spikemode='across',               # spike runs across the plot
-        spikesnap='cursor',               # snap spike to the cursor
-        spikethickness=1,
-        spikedash='dot',
-        spikecolor='lightgrey'
-    ))
-    return fig
-
-
-def build_adl_figure(df,ticker):
-    d=df[df.index>=df.index.max()-pd.DateOffset(years=1)]
-    fig=go.Figure()
-    fig.add_trace(go.Scatter(x=d.index, y=[float(v) for v in d['ADL']], mode='lines', name='ADL'))
-    fig.add_trace(go.Scatter(x=d.index, y=[float(v) for v in d['ADL_EMA']], mode='lines', name='ADL EMA', line=dict(dash='dot', width=1.25, color='orange')
-    ))
-    fig.update_layout(title=f'{ticker} ADL', height=450,
-    # ← new additions ↓
-    hovermode='x unified',                # show all traces’ data at the same x
-    xaxis=dict(
-        type='date',
-        showspikes=True,                  # draw a spike (vertical line)
-        spikemode='across',               # spike runs across the plot
-        spikesnap='cursor',               # snap spike to the cursor
-        spikethickness=1,
-        spikedash='dot',
-        spikecolor='lightgrey'
-    ))
-    return fig
-
-
-def build_rs_figure(df, ticker):
-    d = df[df.index >= df.index.max() - pd.DateOffset(years=1)]
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(
-        x=d.index, y=[float(v) for v in d['RS']], mode='lines', name='Relative Strength'))
-    fig.update_layout(
-        title=f"{ticker} Relative Strength vs Nifty", height=450,
-        legend=dict(orientation='h', x=0.5, xanchor='center', y=-0.2),
-        yaxis=dict(tickformat='.2%'),
-    # ← new additions ↓
-    hovermode='x unified',                # show all traces’ data at the same x
-    xaxis=dict(
-        type='date',
-        showspikes=True,                  # draw a spike (vertical line)
-        spikemode='across',               # spike runs across the plot
-        spikesnap='cursor',               # snap spike to the cursor
-        spikethickness=1,
-        spikedash='dot',
-        spikecolor='lightgrey'
-    ))
-    return fig
-
-def evaluate_ticker_signal(ticker, in_position=False, price_pattern="", left_price=6, right_price=4, recency_candles=3):
-    end = datetime.today()
-    start = end - pd.DateOffset(years=5)
-    sym = ticker.replace('.NS','')
-    df = fetch_histogram(sym, 'NSE', start, end)
-    if df.empty:
-        return {"Ticker": ticker, "Signal": "NO DATA", "Data": df}
-    idx_df = fetch_histogram('NIFTY', 'NSE', start, end)
-    df, idx_df = align_data_indices(df, idx_df)
-    if len(df) < left_price + right_price + 1:
-        return {"Ticker": ticker, "Signal": "INSUFFICIENT DATA", "Data": df}
-    # Indicators
-    df['RS']     = calculate_relative_strength(df, idx_df)
-    df['ATR14']  = talib.ATR(df.High, df.Low, df.Close, timeperiod=14)
-    df['EMA13']  = talib.EMA(df.Close, timeperiod=13)
-    df['EMA55']  = talib.EMA(df.Close, timeperiod=55)
-    df['EMA144'] = talib.EMA(df.Close, timeperiod=144)
-    df['RSI14']  = talib.RSI(df.Close, timeperiod=14)
-    df['RSI_EMA13'] = talib.EMA(df['RSI14'], timeperiod=13)
-    df['ADL']    = talib.AD(df.High, df.Low, df.Close, df.Volume)
-    df['ADL_EMA']= talib.EMA(df.ADL, timeperiod=55)
-    n = 3
-    df['ADL_EMA_Slope'] = (df['ADL_EMA'] - df['ADL_EMA'].shift(n)) / n
-    # Swing-based entry logic
-    sp = identify_swing_points(df, left_price, right_price, 'Close')
-    beh = analyze_swing_behaviour(sp[sp['Index'] <= len(df)-1])
-    rs_positive = df['RS'].iat[-1] > 0 if not np.isnan(df['RS'].iat[-1]) else False
-    price_ok    = beh['HH'] and beh['HL']
-    if not in_position and rs_positive and price_ok:
-        signal = "BUY"
-    elif in_position and not (rs_positive and price_ok):
-        signal = "SELL"
-    else:
-        signal = "HOLD"
-    return {"Ticker": ticker, "Signal": signal, "Data": df}
-
-
-def generate_summary(result):
-    df = result.get('Data')
-    if df is None or df.empty:
-        return []
-    cp = df['Close'].iat[-1]
-    sw = identify_swing_points(df, 6, 4, 'Close')
-    pt = compute_price_action_trend(sw, df)
-    tk = get_swing_tokens(sw)
-    lows = sw[sw['Type']=='Low']
-    if not lows.empty:
-        last_minima = lows['Value'].iloc[-1]
-        if pt == 'Uptrend' and cp < last_minima:
-            pt, tk = 'Sideways', []
-    sh = identify_swing_points_high(df, 6, 4)
-    sl = identify_swing_points_low(df, 6, 4)
-    phl = pd.concat([sh, sl]).sort_values('Index')
-    pth = compute_price_action_trend(phl, df)
-    th = get_swing_tokens(phl)
-    mstr = compute_market_structure(df)
-    e13, e55, e144 = df['EMA13'].iat[-1], df['EMA55'].iat[-1], df['EMA144'].iat[-1]
-    estack = f"EMA13 {'>' if e13>e55 else '<'} EMA55 {'>' if e55>e144 else '<'} EMA144"
-    fs = compute_fib_strength(sw, pt, cp, df)
-    rsi = df['RSI14'].iat[-1]
-    sentiment = 'Bullish' if rsi>55 else ('Bearish' if rsi<45 else 'Neutral')
-    # 2) Enhanced RSI‐based sentiment
-    sentiment = None
-    # a) overbought / oversold
-    if rsi > 80:
-        sentiment = 'Overbought'
-    elif rsi < 20:
-        sentiment = 'Oversold'
-    else:
-        # b) look for crosses in last 3 days
-        recent = df['RSI14'].iloc[-4:]  # include yesterday
-        # down‐cross from >80 to <=80
-        cross_down = ((recent.shift(1) > 80) & (recent <= 80)).any()
-        # up‐cross from <20 to >=20
-        cross_up   = ((recent.shift(1) < 20) & (recent >= 20)).any()
-        if cross_down:
-            sentiment = 'Price has Topped Out'
-        elif cross_up:
-            sentiment = 'Price has Bottomed Out'
-        else:
-            # fallback to your old neutral bounds
-            sentiment = 'Bullish' if rsi > 55 else ('Bearish' if rsi < 45 else 'Neutral')
-    adl_condition = (df['ADL_EMA_Slope'].iat[-1] > 0) if not np.isnan(df['ADL_EMA_Slope'].iat[-1]) else False
-    rs_positive = df['RS'].iat[-1] > 0 if not np.isnan(df['RS'].iat[-1]) else False
-    sup, res = find_support_resistance(sw, df)
-    crosses = detect_ema_crosses(df)
-
-    sw_close     = identify_swing_points(df, 6, 4, 'Close')
-    last_ch      = sw_close[sw_close['Type']=='High'].tail(2)
-    last_cl      = sw_close[sw_close['Type']=='Low' ].tail(2)
-
-    # for each pivot, pull the actual date from df.index
-    close_highs = [
-        (df.index[int(idx)].strftime('%d/%m/%Y'), val)
-        for idx, val in zip(last_ch['Index'], last_ch['Value'])
-    ]
-    close_lows  = [
-        (df.index[int(idx)].strftime('%d/%m/%Y'), val)
-        for idx, val in zip(last_cl['Index'], last_cl['Value'])
-    ]
-
-    # … same for your High/Low swings …
-    sh = identify_swing_points_high(df, 6, 4)
-    sl = identify_swing_points_low(df, 6, 4)
-    last_hh = sh.tail(2)
-    last_hl = sl.tail(2)
-
-    hl_highs = [
-        (df.index[int(idx)].strftime('%d/%m/%Y'), val)
-        for idx, val in zip(last_hh['Index'], last_hh['Value'])
-    ]
-    hl_lows  = [
-        (df.index[int(idx)].strftime('%d/%m/%Y'), val)
-        for idx, val in zip(last_hl['Index'], last_hl['Value'])
-    ]
-    
-    rows = [
-        ("Current Price",                                           f"{cp:.2f}"),
-        ("Price-Action Trend (based on Close prices)",              f"{pt} ({', '.join(tk)})"),
-        ("Price-Action Trend (based on High/Low prices)",           f"{pth} ({', '.join(th)})"),
-        ("Trend Strength (based on Fibonacci retracement)",         fs),
-        ("Market Structure (based on EMA Stack)",                   f"{mstr} ({estack})"),
-        ("Market Sentiment (based on RSI)",                         f"{sentiment} (RSI: {rsi:.2f})"),
-        ("Relative Strength vs Nifty",                              f"{'Positive' if rs_positive else 'Negative'}"),
-        ("Accumulating or Distributing (based on Volume)",             f"{'Accumulating' if adl_condition else 'Distributing'}")
-    ]
-    if sup:
-        rows.append(("Support Zone",                                f"{sup[0]:.2f} – {sup[1]:.2f}"))
-    if res:
-        rows.append(("Resistance Zone",                             f"{res[0]:.2f} – {res[1]:.2f}"))
-#    rows.append(("EMA Crosses",                                     str(crosses)))
-#    rows.append(("Last two highs (based on Close prices)",  ", ".join(f"{d} @ {v:.2f}" for d, v in close_highs)))
-#    rows.append(("Last two lows (based on Close prices)",   ", ".join(f"{d} @ {v:.2f}" for d, v in close_lows)))
-#    rows.append(("Last two highs (based on High/Low prices)",     ", ".join(f"{d} @ {v:.2f}" for d, v in hl_highs)))
-#    rows.append(("Last two lows (based on High/Low prices)",      ", ".join(f"{d} @ {v:.2f}" for d, v in hl_lows)))
-    return [{"key": k, "value": v} for k, v in rows]
 
 def generate_ai_company_summary(ticker, description, fundamentals, documents):
     """
@@ -1576,7 +971,53 @@ def generate_ai_company_summary(ticker, description, fundamentals, documents):
         print(f"CRITICAL ERROR: Failed to generate AI company summary for {ticker}.")
         # ... (error logging is unchanged) ...
         return "<p><strong>Error:</strong> The AI-powered summary could not be generated at this time.</p>"
+
+
+def generate_ai_scores(ticker, last_analysis): # MODIFIED to accept last_analysis
+    """
+    Calculates all AI scores for a given stock ticker, scales them,
+    and prepares a list of dictionaries for frontend rendering.
+    """
+    try:
+        # Pass the full last_analysis object during instantiation
+        ai_scores = AIScores(ticker, last_analysis)
+        ai_scores.calculate_all_scores()
+
+        # Prepare data for scaling, mirroring the logic in get_radar_plot
+        data_dict_for_scaling = {}
+        for field, score_obj in ai_scores.scores.items():
+            if field != 'sentiment':
+                # Use the mean of the last 30 days for a more stable score value
+                score_value = score_obj.get_score().tail(30).mean()
+                # Get the latest regime label as the description
+                regime_label = score_obj.df[f'{field}_regime_labels'].iloc[-1]
+                data_dict_for_scaling[field.capitalize()] = (score_value, regime_label.replace('_', ' ').title())
+
+        # Use the scaling method from AIScores to get values between 0 and 1
+        scaled_scores = AIScores._scale_radar_scores(data_dict_for_scaling)
+        
+        ai_score_html = []
+        for field_key, score_obj in ai_scores.scores.items():
+            if field_key != 'sentiment':
+                capitalized_field = field_key.capitalize()
+                if capitalized_field in scaled_scores:
+                    scaled_value, description = scaled_scores[capitalized_field]
+                    
+                    json_dict = {
+                        'label': capitalized_field,
+                        'value': round(scaled_value * 10, 1),  # Scale to 0-10 for display
+                        'description': description, # This is the current regime, e.g., "Mildly Overvalued"
+                        'chart1_json': score_obj.plot().to_json(),
+                        'chart2_json': score_obj.plot_violin().to_json()
+                    }
+                    ai_score_html.append(json_dict)
+        return ai_score_html
+    except Exception as e:
+        print(f"ERROR: Could not generate AI scores for {ticker}. Reason: {e}")
+        traceback.print_exc()
+        return [] # Return an empty list on failure
     
+
 # ------------- Analysis & Respond -------------
 
 @app.route('/progress-stream')
@@ -1807,7 +1248,7 @@ def analyze():
             documents=latest_documents
         )
         log_progress("AI summary generated successfully.")
-
+        
         # --- Populate last_analysis with cleaned data ---
         global last_analysis
         last_analysis = {
@@ -1818,6 +1259,12 @@ def analyze():
             "valuation_and_margin_data": parsed_valuation_data, 
             "documents": latest_documents
         }
+
+        log_progress(f"Generating AI scores for {tick}...")
+        ai_scores_data = generate_ai_scores(tick, last_analysis)
+        log_progress("AI scores generated successfully.")
+
+
         log_progress("Analysis complete. Loading results ...")
 
        
@@ -1826,6 +1273,7 @@ def analyze():
             'company_name': company_name,
             'company_summary_html': ai_company_summary_html,
             'summary': cleaned_technical_summary,
+            'ai_scores': ai_scores_data,
             'chart_close_json': close_j,
             'chart_hl_json': hl_j,
             'chart_ema_json': ema_j,
