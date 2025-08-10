@@ -1,31 +1,30 @@
 # requirements.txt
 
-# Core Flask App
+# --- Core Flask App ---
 Flask
 Flask-Cors
 gunicorn
 
-# Data & Technical Analysis
+# --- Data & Technical Analysis ---
 pandas
 numpy
 yfinance
 TA-Lib
-tvdatafeed==2.1.1
-#tradingview-datafeed @ git+https://github.com/rongardF/tvdatafeed.git@e6f6aaa7de439ac6e454d9b26d2760ded8dc4923
+tradingview-datafeed==2.1.1   # installs as tvDatafeed
 
-# Plotting & Visualization
+# --- Plotting & Visualization ---
 matplotlib
 plotly
 
-# AI & API Interaction
+# --- AI & API Interaction ---
 openai
 google-generativeai
 
-# Web Scraping & Document Parsing
+# --- Web Scraping & Document Parsing ---
 requests
 beautifulsoup4
 pdfplumber
 
-# Other utilities
+# --- Other utilities ---
 feedparser
 scikit-learn
