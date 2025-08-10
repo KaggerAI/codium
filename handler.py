@@ -66,6 +66,23 @@ last_analysis: dict = {}
 app = Flask(__name__, static_folder='.', static_url_path='')
 CORS(app)
 
+# --- ADD THIS BLOCK ANYWHERE BELOW THE APP INIT ---
+from flask import jsonify
+
+@app.route('/debug/env', methods=['GET'])
+def debug_env():
+    keys = [
+        "OPENAI_API_KEY",
+        "AZURE_OPENAI_API_KEY",
+        "AZURE_OPENAI_ENDPOINT",
+        "AZURE_OPENAI_API_VERSION",
+        "AZURE_OPENAI_DEPLOYMENT",
+        "PERPLEXITY_API_KEY",
+        "GOOGLE_API_KEY",
+    ]
+    # returns True/False (no secrets leaked)
+    return jsonify({k: bool(os.getenv(k)) for k in keys})
+
 # Serve front-end HTML
 @app.route('/')
 def index():
@@ -74,7 +91,6 @@ def index():
 # # at the top of handler.py
 # import os
 # import openai
-# openai.api_key = "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"
 
 # =====================================================================
 # START: API Configuration and Multi-Model Handling
