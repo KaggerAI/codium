@@ -128,7 +128,7 @@ def convert_to_gemini_format(messages):
             gemini_messages.append({'role': role, 'parts': [msg["content"]]})
     return gemini_messages
 
-def call_openai_api(messages, model="gpt-4.1-mini", expect_json_format_flag=False, temperature=1):
+def call_openai_api(messages, model="gpt-5-mini", expect_json_format_flag=False, temperature=1):
     if not openai.api_key:
         raise ValueError("OpenAI API key is not configured.")
     try:
@@ -584,7 +584,7 @@ def chat():
                 {"role": "user", "content": f"User Question: \"{user_question}\""}
             ]
             
-            central_brain_response_str = call_generative_ai_model("gpt-4.1-mini", brain_messages, temperature=0.5)
+            central_brain_response_str = call_generative_ai_model("gpt-5-mini", brain_messages, temperature=1)
 
             try:
                 json_match = re.search(r"```json\s*([\s\S]*?)\s*```", central_brain_response_str, re.MULTILINE)
@@ -711,7 +711,7 @@ def chat():
             {"role": "user", "content": f"Please synthesize an answer based on the following consolidated data:\n{json.dumps(final_context_for_answer, indent=2, default=str)}"}
         ]
         
-        answerer_model = 'gpt-4.1-mini' if is_best_mode else selected_model
+        answerer_model = 'gpt-5-mini' if is_best_mode else selected_model
         final_answer = call_generative_ai_model(
             model=answerer_model,
             messages=answering_messages,
@@ -980,7 +980,7 @@ def generate_ai_company_summary(ticker, description, fundamentals, documents):
             {"role": "user", "content": f"Generate the HTML summary for the following company based on this data:\n\n{full_context}"}
         ]
         
-        summary_html = call_openai_api(messages, model="gpt-4.1-mini", temperature=1)
+        summary_html = call_openai_api(messages, model="gpt-5-mini", temperature=1)
         return summary_html
 
     except Exception as e:
