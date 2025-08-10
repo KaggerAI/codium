@@ -10,7 +10,8 @@ pandas
 numpy
 yfinance
 TA-Lib
-tradingview-datafeed @ git+https://github.com/rongardF/tvdatafeed.git@e6f6aaa7de439ac6e454d9b26d2760ded8dc4923
+tvdatafeed==2.1.1
+#tradingview-datafeed @ git+https://github.com/rongardF/tvdatafeed.git@e6f6aaa7de439ac6e454d9b26d2760ded8dc4923
 
 # Plotting & Visualization
 matplotlib
