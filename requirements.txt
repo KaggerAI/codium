@@ -23,6 +23,8 @@ google-generativeai
 # --- Web Scraping & Document Parsing ---
 requests
 beautifulsoup4
+lxml==5.2.2
+html5lib==1.1
 pdfplumber
 
 # --- Other utilities ---
