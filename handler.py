@@ -25,6 +25,7 @@ import httpx
 
 from flask import Flask, request, jsonify, send_from_directory, Response, stream_with_context
 from flask_caching import Cache
+from a2wsgi import ASGIMiddleware
 
 from flask_cors import CORS
 import pandas as pd
@@ -1336,5 +1337,8 @@ def analyze():
 # =====================================================================
 
 
-#if __name__ == '__main__':
+# if __name__ == '__main__':
 #    app.run(host='0.0.0.0', port=8000, debug=True)
+
+# Wrap the WSGI app in ASGI middleware for Uvicorn
+app = ASGIMiddleware(app)
