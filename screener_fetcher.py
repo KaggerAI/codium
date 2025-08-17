@@ -16,10 +16,11 @@ import os
 import mimetypes
 import google.generativeai as genai
 from progress_logger import log_progress
+import httpx
+import asyncio
 
 # import os
 # import openai
-# openai.api_key = "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"
 
 # --- Gemini API Configuration ---
 # NOTE: Ensure GOOGLE_API_KEY is set as an environment variable
@@ -67,6 +68,40 @@ def clean_df(df: pd.DataFrame) -> pd.DataFrame:
         df.index = df.index.astype(str).str.strip().str.replace("+", "", regex=False)
     return df
 
+async def fetch_consolidated_async(ticker: str) -> tuple[dict[str, pd.DataFrame], str]:
+    url = BASE_URL.format(ticker=ticker)
+    async with httpx.AsyncClient() as client:
+        response = await client.get(url, headers=HEADERS, timeout=30.0)
+        response.raise_for_status()
+        text = response.text
+
+    soup = BeautifulSoup(text, 'html.parser')
+    description = ""
+    try:
+        about_p = soup.select_one(".company-info .about p")
+        if about_p:
+            description = about_p.get_text(strip=True)
+    except Exception as e:
+        log_progress(f"WARN: Could not parse company description for {ticker}. Reason: {e}")
+
+    # pd.read_html is a blocking (non-async) function, so we run it in a separate thread.
+    raw_tables = await asyncio.to_thread(pd.read_html, text)
+    
+    tables = {LABELS.get(i): clean_df(df) for i, df in enumerate(raw_tables, start=1) if LABELS.get(i)}
+    series_list = []
+    for p in PATTERNS:
+        df = tables.pop(p, None)
+        if df is not None and len(df.columns) >= 2:
+            idx, val = df.columns[:2]
+            s = df.set_index(idx)[val]
+            s.name = p
+            series_list.append(s)
+    if series_list:
+        merged = pd.concat(series_list, axis=1).T
+        merged.index.name = ""
+        tables["Growth Patterns"] = merged
+    return tables, description
+
 def fetch_consolidated(ticker: str) -> tuple[dict[str, pd.DataFrame], str]:
     
     url = BASE_URL.format(ticker=ticker)
@@ -110,6 +145,15 @@ def fetch_consolidated(ticker: str) -> tuple[dict[str, pd.DataFrame], str]:
 
     return tables, description
 
+async def get_company_id_async(ticker: str) -> int:
+    url = "https://www.screener.in/api/company/search/"
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(url, params={"q": ticker}, timeout=30.0)
+        resp.raise_for_status()
+        data = resp.json()
+    if not data: raise ValueError(f"No company found for ticker '{ticker}'")
+    return data[0]["id"]
+
 def get_company_id(ticker: str) -> int:
     url = "https://www.screener.in/api/company/search/"
     resp = requests.get(url, params={"q": ticker})
@@ -118,6 +162,12 @@ def get_company_id(ticker: str) -> int:
     if not data:
         raise ValueError(f"No company found for ticker '{ticker}'")
     return data[0]["id"]
+
+async def fetch_chart_data_async(client: httpx.AsyncClient, company_id: int, query: str, days: int = 10000) -> dict:
+    url = f"https://www.screener.in/api/company/{company_id}/chart/"
+    resp = await client.get(url, params={"q": query, "days": days}, timeout=30.0)
+    resp.raise_for_status()
+    return resp.json()
 
 def fetch_chart_data(company_id: int, query: str, days: int = 10000) -> dict:
     url = f"https://www.screener.in/api/company/{company_id}/chart/"
@@ -139,6 +189,37 @@ def parse_chart_json(chart_json: dict) -> pd.DataFrame:
     if not dfs:
         return pd.DataFrame()
     return pd.concat(dfs, axis=1)
+
+async def get_text_from_pdf_url_async(pdf_url: str, max_pages_to_process=50, max_chars_to_return=10000) -> str:
+    try:
+        async with httpx.AsyncClient(follow_redirects=True) as client:
+            response = await client.get(pdf_url, headers=HEADERS, timeout=45.0)
+            response.raise_for_status()
+        
+        pdf_file = BytesIO(response.content)
+
+        def blocking_pdf_extraction():
+            all_text = []
+            with pdfplumber.open(pdf_file) as pdf:
+                search_limit = min(len(pdf.pages), 10)
+                start_page = 2 # Default
+                for i in range(search_limit):
+                    page_text = pdf.pages[i].extract_text() or ""
+                    if "moderator" in page_text.lower():
+                        start_page = i
+                        break
+                end_page = min(len(pdf.pages), start_page + max_pages_to_process)
+                for i in range(start_page, end_page):
+                    page = pdf.pages[i]
+                    text = page.extract_text()
+                    if text: all_text.append(text)
+            full_summary = "\n".join(all_text)
+            return full_summary[:max_chars_to_return]
+
+        return await asyncio.to_thread(blocking_pdf_extraction)
+    except Exception as e:
+        print(f"ERROR (async): Failed to get text from PDF URL {pdf_url}. Reason: {e}")
+        return None
 
 def get_text_from_pdf_url(pdf_url: str, max_pages_to_process=50, max_chars_to_return=10000) -> str:
     """
@@ -183,6 +264,82 @@ def get_text_from_pdf_url(pdf_url: str, max_pages_to_process=50, max_chars_to_re
         print(f"ERROR: Failed to get text from PDF URL {pdf_url}. Reason: {e}")
         return None
 
+async def summarize_presentation_with_gemini_async(pdf_url: str) -> str:
+    """
+    CORRECTED: This version isolates the entire Gemini SDK interaction into a 
+    separate thread to prevent event loop conflicts with its underlying gRPC library.
+    """
+    if not GOOGLE_API_KEY:
+        return "Error: Google API Key is not configured."
+
+    try:
+        # Step 1: Download the PDF content asynchronously (this part is fast and safe)
+        async with httpx.AsyncClient(follow_redirects=True) as client:
+            print(f"Downloading presentation from {pdf_url} for Gemini analysis...")
+            response = await client.get(pdf_url, headers=HEADERS, timeout=60.0)
+            response.raise_for_status()
+            pdf_content = response.content
+
+        # Step 2: Define a synchronous function that handles ALL Gemini operations.
+        def blocking_gemini_tasks(content):
+            log_progress("Uploading PDF to Google AI File Service...")
+            mime_type = mimetypes.guess_type(pdf_url)[0] or 'application/pdf'
+            
+            # This is a synchronous call
+            pdf_file = genai.upload_file(
+                path=BytesIO(content),
+                display_name=pdf_url.split('/')[-1],
+                mime_type=mime_type
+            )
+            print(f"PDF uploaded successfully as '{pdf_file.name}'.")
+
+            prompt = """You are an expert financial data extractor AI. Your task is to perform a forensic-level analysis of the entire provided investor presentation PDF. Leave no stone unturned. Analyze every page of the document.
+
+            Your output must be an extremely detailed and well-structured summary.
+
+            **Instructions:**
+            
+            1.  **Extract All Quantitative Data:**
+                -   Go through every chart, table, and text block. Extract all key financial metrics (Revenue, EBITDA, PAT, Margins, etc.) and operational KPIs (volumes, utilization, order book, etc.).
+                -   Present this data in **Markdown tables** for clarity.
+                -   Always include the period (e.g., Q3 FY24, FY24) and any YoY or QoQ growth figures mentioned.
+
+            2.  **Detailed Revenue & Profit Breakdowns:**
+                -   Create separate sections for revenue and profit breakdowns.
+                -   Detail the contribution from every business segment, geographical region, or product line mentioned. Include absolute values and percentages if available.
+                -   If this information is not present, you must explicitly state: "A detailed revenue/profit breakdown was not provided."
+
+            3.  **Management Commentary & Outlook:**
+                -   Extract **verbatim quotes** or detailed summaries of management's commentary on performance, strategy, and future outlook.
+                -   List all stated future guidance, capex plans, new projects, and strategic initiatives.
+                -   Summarize any discussion of industry trends, risks, headwinds, or competitive landscape.
+
+            4.  **Source Everything:**
+                -   If possible, reference the page number from the PDF where the information was found (e.g., "Source: Page 5").
+
+            Do not summarize aggressively. The goal is a comprehensive, data-rich extraction of all relevant information from the document."""
+
+            log_progress("Calling Gemini 2.5 Flash to extract insights from Investor Presentation...")
+            model = genai.GenerativeModel('gemini-2.5-flash-lite') # Using the latest model
+            
+            # Use the SYNCHRONOUS version of the call inside this blocking function
+            response = model.generate_content([prompt, pdf_file])
+
+            # This is also a synchronous call
+            genai.delete_file(pdf_file.name)
+            print(f"Cleaned up uploaded file {pdf_file.name}.")
+            
+            return response.text
+
+        # Step 3: Run the entire synchronous Gemini block in a separate thread.
+        return await asyncio.to_thread(blocking_gemini_tasks, pdf_content)
+
+    except Exception as e:
+        # This will catch errors from both the httpx download and the Gemini processing
+        print(f"ERROR (async): Failed to generate summary with Gemini for PDF {pdf_url}. Reason: {e}")
+        traceback.print_exc() # Print full traceback for better debugging
+        return f"Error: AI model failed to analyze presentation. Reason: {e}"
+
 def summarize_presentation_with_gemini(pdf_url: str) -> str:
     """
     Downloads a PDF presentation, sends it to the Gemini 1.5 Flash model for
@@ -203,9 +360,7 @@ def summarize_presentation_with_gemini(pdf_url: str) -> str:
         response.raise_for_status()
         pdf_content = response.content
         
-        # The Gemini API is most robust when the file is uploaded first.
         log_progress("Uploading PDF to Google AI File Service...")
-        # Guess the MIME type of the file from its URL, default to application/pdf
         mime_type = mimetypes.guess_type(pdf_url)[0] or 'application/pdf'
         pdf_file = genai.upload_file(
             path=BytesIO(pdf_content),
@@ -214,39 +369,40 @@ def summarize_presentation_with_gemini(pdf_url: str) -> str:
         )
         print(f"PDF uploaded successfully as '{pdf_file.name}'.")
 
-        # Create a detailed prompt for the multimodal model.
+        # CHANGED: The prompt is now much more detailed to ensure a comprehensive summary.
         prompt = """
-        You are a senior financial analyst. Your primary task is to meticulously analyze the provided investor presentation PDF and extract the most critical information for an investor. Focus on quantitative data, key performance indicators, and specific management commentary.
+        You are an expert financial data extractor AI. Your task is to perform a forensic-level analysis of the entire provided investor presentation PDF. Leave no stone unturned. Analyze every page of the document.
 
-        Please structure your summary in clear, well-defined sections:
+        Your output must be an extremely detailed and well-structured summary.
 
-        1.  **Overall Financial Performance:**
-            -   Extract key financial highlights for the latest quarter and/or year (e.g., Revenue, EBITDA, Net Profit).
-            -   Explicitly mention Year-on-Year (YoY) and Quarter-on-Quarter (QoQ) growth rates if they are provided in the presentation.
+        **Instructions:**
 
-        2.  **Revenue Breakdown (if available):**
-            -   **By Business Segment:** List each business segment, its revenue contribution (e.g., in Rs. Cr. or as a percentage), and its growth rate.
-            -   **By Geography:** List each geographical region, its revenue contribution, and its growth trends.
-            -   If a specific breakdown is not present in the document, you must state: "A detailed revenue breakdown was not provided in the presentation."
+        1.  **Extract All Quantitative Data:**
+            -   Go through every chart, table, and text block. Extract all key financial metrics (Revenue, EBITDA, PAT, Margins, etc.) and operational KPIs (volumes, utilization, order book, etc.).
+            -   Present this data in **Markdown tables** for clarity.
+            -   Always include the period (e.g., Q3 FY24, FY24) and any YoY or QoQ growth figures mentioned.
 
-        3.  **Key Operational Metrics & KPIs:**
-            -   Identify and list any non-financial metrics mentioned, such as customer numbers, production volumes, capacity utilization, order book value, etc.
+        2.  **Detailed Revenue & Profit Breakdowns:**
+            -   Create separate sections for revenue and profit breakdowns.
+            -   Detail the contribution from every business segment, geographical region, or product line mentioned. Include absolute values and percentages if available.
+            -   If this information is not present, you must explicitly state: "A detailed revenue/profit breakdown was not provided."
 
-        4.  **Management Commentary & Future Outlook:**
-            -   Summarize the management's guidance on future growth, demand forecasts, margin expectations, and strategic initiatives.
-            -   Note any new projects, capacity expansions, or planned acquisitions.
-            -   Capture any stated risks, challenges, or headwinds.
+        3.  **Management Commentary & Outlook:**
+            -   Extract **verbatim quotes** or detailed summaries of management's commentary on performance, strategy, and future outlook.
+            -   List all stated future guidance, capex plans, new projects, and strategic initiatives.
+            -   Summarize any discussion of industry trends, risks, headwinds, or competitive landscape.
 
-        Provide a comprehensive, well-organized text summary. Do not omit crucial numbers or specific details found within the charts, tables, or text of the presentation.
+        4.  **Source Everything:**
+            -   If possible, reference the page number from the PDF where the information was found (e.g., "Source: Page 5").
+
+        Do not summarize aggressively. The goal is a comprehensive, data-rich extraction of all relevant information from the document.
         """
 
-        # Call the Gemini 1.5 Flash model to perform the analysis
-        log_progress("Calling Gemini 2.5-Lite Flash to extract insights from Investor Presentation...")
-        model = genai.GenerativeModel('gemini-2.5-flash-lite-preview-06-17')
-        # model = genai.GenerativeModel('gemini-2.5-flash-preview-05-20')
+        log_progress("Calling Gemini 2.5 Flash to extract insights from Investor Presentation...")
+        model = genai.GenerativeModel('gemini-2.5-flash-lite') # Using the latest model
+        # model = genai.GenerativeModel('gemini-1.5-flash-latest')
         response = model.generate_content([prompt, pdf_file])
 
-        # Clean up the uploaded file from the cloud service to manage resources
         genai.delete_file(pdf_file.name)
         print(f"Cleaned up uploaded file {pdf_file.name}.")
 
@@ -258,6 +414,62 @@ def summarize_presentation_with_gemini(pdf_url: str) -> str:
         return f"Error: The AI model failed to analyze the presentation. Reason: {e}"
 
 # In screener_fetcher.py
+
+async def fetch_latest_documents_async(ticker: str) -> list[dict]:
+    try:
+        url = BASE_URL.format(ticker=ticker)
+        async with httpx.AsyncClient(follow_redirects=True) as client:
+            response = await client.get(url, headers=HEADERS, timeout=45.0)
+            response.raise_for_status()
+        
+        soup = BeautifulSoup(response.text, 'html.parser')
+        concalls_section = soup.find('div', class_='concalls')
+        if not concalls_section: return []
+
+        tasks_to_run = []
+        doc_infos = []
+        found_types = set()
+
+        for item in concalls_section.find_all('li', limit=4): # Limit search to recent items
+            if len(found_types) == 2: break
+            date_element = item.find('div', class_='nowrap')
+            date_text = f"({date_element.text.strip()})" if date_element else ""
+
+            if 'Concall' not in found_types:
+                transcript_link = item.find('a', string='Transcript', href=True)
+                if transcript_link:
+                    doc_info = {"type": "Concall", "text": f"Concall Transcript {date_text}", "link": transcript_link['href']}
+                    tasks_to_run.append(get_text_from_pdf_url_async(doc_info['link']))
+                    doc_infos.append(doc_info)
+                    found_types.add('Concall')
+
+            if 'Presentation' not in found_types:
+                ppt_link = item.find('a', string='PPT', href=True)
+                if ppt_link:
+                    doc_info = {"type": "Presentation", "text": f"Results Presentation {date_text}", "link": ppt_link['href']}
+                    tasks_to_run.append(summarize_presentation_with_gemini_async(doc_info['link']))
+                    doc_infos.append(doc_info)
+                    found_types.add('Presentation')
+        
+        if not tasks_to_run: return []
+        
+        log_progress(f"Fetching and analyzing {len(tasks_to_run)} documents in parallel...")
+        summaries = await asyncio.gather(*tasks_to_run, return_exceptions=True)
+        
+        final_docs = []
+        for i, summary in enumerate(summaries):
+            doc_info = doc_infos[i]
+            if isinstance(summary, Exception):
+                print(f"Failed to process document {doc_info['link']}: {summary}")
+                doc_info['content_summary'] = f"Error processing document: {summary}"
+            else:
+                doc_info['content_summary'] = summary
+            final_docs.append(doc_info)
+        
+        return final_docs
+    except Exception as e:
+        print(f"ERROR (async): Could not fetch documents for {ticker}. Reason: {e}")
+        return []
 
 def fetch_latest_documents(ticker: str) -> list[dict]:
     """

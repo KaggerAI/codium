@@ -8,6 +8,8 @@ It is intended to be imported and used by other parts of the application.
 import json
 import re
 import requests
+import httpx
+import asyncio
 from bs4 import BeautifulSoup
 from typing import Dict, List, Any
 
@@ -840,5 +842,41 @@ def scrape_scanx_company(slug: str) -> Dict[str, Any]:
         pass
     
     # Use corrected parser
+    parser = FinalScanXParser(soup)
+    return parser.parse_all_data()
+
+
+async def scrape_scanx_company_async(slug: str) -> Dict[str, Any]:
+    """
+    Asynchronous version of the scraping function, including Next.js
+    JSON parsing and fallback to the HTML parser.
+    """
+    url = f"https://scanx.trade/company/{slug}"
+    
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url, headers=HEADERS, timeout=30.0)
+            response.raise_for_status()
+    except httpx.RequestError as e:
+        return {"error": f"Async request failed: {e}"}
+    
+    try:
+        soup = BeautifulSoup(response.text, "html.parser")
+    except Exception as e:
+        return {"error": f"HTML parsing failed: {e}"}
+    
+    # Try Next.js JSON first (This was the missing logic)
+    try:
+        script_tag = soup.find("script", id="__NEXT_DATA__")
+        if script_tag and script_tag.string:
+            payload = json.loads(script_tag.string)
+            company_data = payload.get("props", {}).get("pageProps", {}).get("company", {})
+            if company_data and company_data.get("name"):
+                return company_data
+    except Exception:
+        # If JSON parsing fails, we gracefully fall through to the HTML parser.
+        pass
+    
+    # Fallback to the corrected HTML parser
     parser = FinalScanXParser(soup)
     return parser.parse_all_data()

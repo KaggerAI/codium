@@ -20,8 +20,12 @@ import time
 import io
 import base64
 from datetime import datetime
+import asyncio
+import httpx
 
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, Response, stream_with_context
+from flask_caching import Cache
+
 from flask_cors import CORS
 import pandas as pd
 import numpy as np
@@ -43,7 +47,6 @@ from bs4 import BeautifulSoup
 import pdfplumber
 from io import BytesIO
 
-from flask import Response, stream_with_context
 from progress_logger import progress_queue, log_progress, log_final_message
 
 from scores.AIScores import AIScores
@@ -66,7 +69,15 @@ last_analysis: dict = {}
 app = Flask(__name__, static_folder='.', static_url_path='')
 CORS(app)
 
-# --- ADD THIS BLOCK ANYWHERE BELOW THE APP INIT ---
+# Configure a simple in-memory cache.
+# Data will be cached for 6 hours (21600 seconds).
+config = {
+    "CACHE_TYPE": "SimpleCache",
+    "CACHE_DEFAULT_TIMEOUT": 21600
+}
+app.config.from_mapping(config)
+cache = Cache(app)
+
 from flask import jsonify
 
 @app.route('/debug/env', methods=['GET'])
@@ -128,7 +139,7 @@ def convert_to_gemini_format(messages):
             gemini_messages.append({'role': role, 'parts': [msg["content"]]})
     return gemini_messages
 
-def call_openai_api(messages, model="gpt-5-mini", expect_json_format_flag=False, temperature=1):
+def call_openai_api(messages, model="gpt-4.1-mini", expect_json_format_flag=False, temperature=1):
     if not openai.api_key:
         raise ValueError("OpenAI API key is not configured.")
     try:
@@ -584,7 +595,7 @@ def chat():
                 {"role": "user", "content": f"User Question: \"{user_question}\""}
             ]
             
-            central_brain_response_str = call_generative_ai_model("gpt-5-mini", brain_messages, temperature=1)
+            central_brain_response_str = call_generative_ai_model("gpt-4.1-mini", brain_messages, temperature=1)
 
             try:
                 json_match = re.search(r"```json\s*([\s\S]*?)\s*```", central_brain_response_str, re.MULTILINE)
@@ -711,7 +722,7 @@ def chat():
             {"role": "user", "content": f"Please synthesize an answer based on the following consolidated data:\n{json.dumps(final_context_for_answer, indent=2, default=str)}"}
         ]
         
-        answerer_model = 'gpt-5-mini' if is_best_mode else selected_model
+        answerer_model = 'gpt-4.1-mini' if is_best_mode else selected_model
         final_answer = call_generative_ai_model(
             model=answerer_model,
             messages=answering_messages,
@@ -873,14 +884,14 @@ def print_full_schema():
 
 import requests
 from screener_fetcher import (
-    fetch_consolidated,
-    get_company_id,
-    fetch_chart_data,
+    fetch_consolidated_async,
+    get_company_id_async,
+    fetch_chart_data_async,
     parse_chart_json,
-    fetch_latest_documents
+    fetch_latest_documents_async
 )
 
-from scanx_fetcher import scrape_scanx_company
+from scanx_fetcher import scrape_scanx_company_async
 
 # Initialize TradingView datafeed (guest)
 tv = TvDatafeed()
@@ -922,12 +933,12 @@ def generate_ai_company_summary(ticker, description, fundamentals, documents):
         if presentation_doc and presentation_doc['content_summary']:
             context_parts.append("\n### Full Text from Latest Results Presentation\n")
             # Provide a substantial amount of text for the AI to analyze
-            context_parts.append(presentation_doc['content_summary'][:8000])
+            context_parts.append(presentation_doc['content_summary'])
 
         concall_doc = next((d for d in documents if d.get('type') == 'Concall' and 'content_summary' in d), None)
         if concall_doc and concall_doc['content_summary']:
             context_parts.append("\n### Key Points from Latest Concall Transcript\n")
-            context_parts.append(concall_doc['content_summary'][:3000])
+            context_parts.append(concall_doc['content_summary'])
 
     full_context = "\n".join(context_parts)
     
@@ -940,38 +951,81 @@ def generate_ai_company_summary(ticker, description, fundamentals, documents):
         return "<p>A detailed summary could not be generated due to insufficient data.</p>"
 
     # --- MODIFIED: New, more detailed System Prompt ---
-    system_prompt = """You are an expert financial analyst AI. Your task is to generate a concise, data-driven summary for a retail investor by interpreting the provided documents.
+    # system_prompt = """You are an expert financial analyst AI. Generate a concise, data-driven summary of the company for a retail investor using simple HTML (<h4>, <p>, <ul>, <li>) emphasizing with <b>, <i> wherever relevant, without <html>/<body> tags. Start with a section called "What the company does", followed by "How it generates revenue", followed by "Business segments" that details of the company's split by business segments, geography, product line, and/or customer/channel, followed finally by "Latest Developments" that highlight any new projects/initiatives company has taken, for e.g. capital expansion, acquisition, new market entry, product launch, latest order book, forward looking guidance, regulatory changes, potential threats to business, or major weakness/loss to business. Keep the content crisp and easy to read such that even a new investor can understand. It should read like a dialog between two people."""
+    system_prompt = """You are an expert financial analyst. Your task is to explain complex company information in simple, direct language for a retail investor. You will generate a concise, data-driven summary by interpreting the provided documents.
 
-    **Instructions:**
-    1.  Structure your response using simple HTML: `<h4>` for headers, `<p>`, `<ul>`, `<li>`.
-    2.  Do NOT include `<html>` or `<body>` tags. The output must be a single block of well-formed HTML.
-    3.  Your primary task is to find and interpret revenue breakdown information from the **'Full Text from Latest Results Presentation'**.
+You must follow two sets of instructions exactly: the **Analysis Instructions** for content and structure, and the **Writing Guidelines** for style and tone.
 
-    **Objective Analyst's Mindset:**
-    - **Critical Analysis:** Analyze management's commentary from concalls and investor presentations objectively. Do NOT accept the management’s statements at face value.
-    - **Identify Spin and Bias:** Explicitly identify when management presents overly optimistic or vague information. Highlight discrepancies between management's claims and financial data or industry realities.
+---
 
-    **Output Structure:**
+### **Analysis Instructions**
+
+1.  **Structure your response using simple HTML.** Use `<h4>` for headers and `<p>`, `<ul>`, and `<li>` for the body. Do not include `<html>` or `<body>` tags. Your output must be a single block of well-formed HTML.
+2.  **Analyze management commentary objectively.** Do not accept management's statements at face value.
+3.  **Identify and highlight bias.** Point out when management presents overly optimistic or vague information. Show discrepancies between what management claims and what the financial data shows.
+4.  **Use the following output structure:**
 
     <h4>What the Company Does</h4>
-    <p>A brief, one-paragraph description of the company's core business.</p>
+    <p>Write one short paragraph describing the company's main business.</p>
 
     <h4>How it Generates Revenue</h4>
-    <p>Start with a general sentence about how the company generates revenue, followed by company's overall sales trend based on the '### Key Annual Financials (for overall trend analysis)'.</p>
-    <p>Then, **carefully read the 'Full Text from Latest Results Presentation'** to find revenue/sales breakdowns by business segment, business vertical, brand, region, geography, and any other relevant business breakdown that company has shown. Only pull the Sales/Revenue breakdown and EBITDA/Operating Profit/Net Profit breakdown. </p>
-    <p>If you find this data, create bulleted lists to summarize it. For each segment or geography, extract the revenue contribution (e.g., in Cr. or as a percentage) and any mention of YoY growth. Be factual and extract the numbers as they are presented.</p>
+    <p>Start with a single sentence about how the company makes money. Then, describe the company's overall sales trend using the '### Key Annual Financials (for overall trend analysis)'.</p>
+    <p>Next, carefully read the 'Full Text from Latest Results Presentation'. Find revenue breakdowns by business segment, geography, or any other category the company provides. Extract only Sales/Revenue figures and Profit breakdowns (like EBITDA or Net Profit).</p>
+    <p>If you find this data, put it in bulleted lists. For each item, show its revenue contribution and its year-over-year (YoY) growth. Be factual and use the numbers exactly as they are presented.</p>
     <ul>
-        <li><strong>Business Segments:</strong> (e.g., "Digital Platforms: 45% of revenue, grew 15% YoY.")</li>
-        <li><strong>Geographical Segments:</strong> (e.g., "USA: 60% of revenue; Europe: 25%; Rest of World: 15%.")</li>
+        <li><strong>Business Segments:</strong> (Example: "Digital Platforms: 45% of revenue, grew 15% YoY.")</li>
+        <li><strong>Geographical Segments:</strong> (Example: "USA: 60% of revenue; Europe: 25%; Rest of World: 15%.")</li>
     </ul>
-    <p>If, after reading the presentation text, you **cannot find** specific segmental or geographical revenue/sales numbers, you **must** state: "A detailed revenue breakdown by segment or geography was not available in the provided presentation." Do not invent data.</p>
-
+    <p>If you cannot find specific revenue numbers after reading the presentation, you must state: "A detailed revenue breakdown by segment or geography was not available in the provided presentation." Do not invent data.</p>
+    
     <h4>Latest Developments & News</h4>
-    <p>Synthesize the key takeaways from BOTH the 'Results Presentation' and the 'Concall Transcript'. Create a unified bulleted list of the most important points. Group them under various headers such as - Capacity Expansion, New Product Launches, Mergers & Acquisitions, Credit Rating, Financial Highlights, Regulatory Impacts, Forward Guidance or Future Outlook, Order Book, Corporate Actions, Cost Reduction, Margin Expansion, Market Share/Postion, Government Partnerships/Initatives, etc.</p>
+    <p>Combine the main points from both the 'Results Presentation' and the 'Concall Transcript'. Create a single bulleted list of the most important developments. Group related points under headers like Capacity Expansion, New Product Launches, Financial Highlights, Future Outlook, or Order Book.</p>
 
-    <h4>Management Spins and Caveats</h4>
-    <p>Mention the management's spin and biases you identified earlier, where managements commentary is explicit, vague, or is in discrepancy with the data or industry outlook. Show in bulleted format.</p>
+    <h4>Management Biases and Caveats</h4>
+    <p>In a bulleted list, point out the management biases you found. Note where their commentary seems too positive, is vague, or conflicts with financial data or industry facts.</p>
 
+---
+
+### **Writing Guidelines**
+
+You must follow these writing rules exactly. Any failure to follow a negative directive invalidates the entire output.
+
+**POSITIVE DIRECTIVES (How you SHOULD write)**
+
+*   **Clarity and brevity:** Craft sentences that average 10-20 words. Focus on a single idea per sentence. You can use an occasional longer sentence for variety.
+*   **Active voice and direct verbs:** Use active voice 90% of the time.
+*   **Everyday vocabulary:** Use common, concrete words instead of abstract ones.
+*   **Straightforward punctuation:** Rely on periods, commas, and question marks. You may use a colon to introduce a list.
+*   **Varied sentence length, minimal complexity:** Mix short and medium sentences. Avoid stacking multiple clauses.
+*   **Logical flow without buzzwords:** Build your points with plain connectors like 'and', 'but', 'so', or 'then'.
+*   **Concrete detail over abstraction:** Give numbers, dates, names, and measurable facts when possible.
+
+**NEGATIVE DIRECTIVES (What you MUST AVOID)**
+
+**A. Punctuation to avoid**
+*   **Semicolons (;) and Em dashes (—)**
+
+**B. Overused words & phrases to ban**
+*   Never use any of the following, in any form or capitalization:
+    At the end of the day, With that being said, It goes without saying, In a nutshell, Needless to say, When it comes to, A significant number of, It's worth mentioning, Last but not least, Cutting-edge, Leveraging, Moving forward, Going forward, On the other hand, Notwithstanding, Takeaway, As a matter of fact, In the realm of, Seamless integration, Robust framework, Holistic approach, Paradigm shift, Synergy, Scale‑up, Optimize, Game‑changer, Unleash, Uncover, In a world, In a sea of, Digital landscape, Elevate, Embark, Delve, In the midst, In addition, It’s important to note, Delve into, Tapestry, Bustling, In summary, In conclusion, Remember that …, Take a dive into, Navigating (e.g., ‘Navigating the landscape’), Landscape (metaphorical), Testament (e.g., ‘a testament to …’), In the world of, Realm, Virtuoso, Symphony, vibrant, Firstly, Moreover, Furthermore, However, Therefore, Additionally, Specifically, Generally, Consequently, Importantly, Similarly, Nonetheless, As a result, Indeed, Thus, Alternatively, Notably, As well as, Despite, Essentially, While, Unless, Also, Even though, Because (as subordinate conjunction), In contrast, Although, In order to, Due to, Even if, Given that, Arguably, To consider, Ensure, Essential, Vital, Out of the box, Underscores, Soul, Crucible, It depends on, You may want to, This is not an exhaustive list, You could consider, As previously mentioned, It’s worth noting that, To summarize, Ultimately, To put it simply, Pesky, Promptly, Dive into, In today’s digital era, Reverberate, Enhance, Emphasise, Enable, Hustle and bustle, Revolutionize, Folks, Foster, Sure, Labyrinthine, Moist, Remnant, As a professional, Subsequently, Nestled, Labyrinth, Gossamer, Enigma, Whispering, Sights unseen, Sounds unheard, A testament to …, Dance, Metamorphosis, Indelible.
+
+**C. Overused single words to ban**
+*   however, moreover, furthermore, additionally, consequently, therefore, ultimately, generally, essentially, arguably, significant, innovative, efficient, dynamic, ensure, foster, leverage, utilize.
+
+**D. Sentence-structure patterns to eliminate**
+*   **Complex, multi-clause sentences.**
+    *   ✗ Example: 'Because the data were incomplete and the timeline was short, we postponed the launch, although we had secured funding.'
+    *   ✓ Preferred: 'The data were incomplete. We had little time. So we postponed the launch. The funding was ready.'
+*   **Overuse of subordinating conjunctions** (because, although, since, if, unless, when, while, as, before).
+*   **Sentences containing more than one verb phrase.**
+*   **Chains of prepositional phrases.**
+
+**E. Tone and style**
+*   Never mention or reference your own limitations (e.g., 'As an AI …').
+*   Do not apologize.
+*   Do not hedge. State facts directly.
+*   Avoid clichés and metaphors about journeys, music, or landscapes.
+*   Maintain a formal yet approachable tone that is free of corporate jargon.
     """
 
     try:
@@ -980,7 +1034,7 @@ def generate_ai_company_summary(ticker, description, fundamentals, documents):
             {"role": "user", "content": f"Generate the HTML summary for the following company based on this data:\n\n{full_context}"}
         ]
         
-        summary_html = call_openai_api(messages, model="gpt-5-mini", temperature=1)
+        summary_html = call_openai_api(messages, model="gpt-4.1-mini", temperature=1)
         return summary_html
 
     except Exception as e:
@@ -1053,259 +1107,233 @@ def progress_stream():
     # The 'text/event-stream' mimetype is crucial for SSE
     return Response(generate(), mimetype='text/event-stream')
 
-@app.route('/analyze',methods=['POST'])
-def analyze():
-    try:
-        data=request.get_json(force=True)
-        tick=data.get('ticker','').strip().upper()
-        if not tick: return jsonify({'error':'No ticker provided'}),400
-        log_progress(f"Starting analysis for {tick}...")
+# =====================================================================
+# START: New ASYNC and Caching Implementation for Analysis
+# =====================================================================
 
-        # Fetch Company Name from Ticker ===
-        company_name = tick  # Default to the original ticker
-        try:
-            def get_name_from_yfinance(ticker: str, exchange_suffix: str):
+async def get_analysis_for_ticker_async(tick):
+    """
+    This is the new async core logic function. It runs all I/O-bound
+    operations in parallel to significantly speed up data gathering.
+    """
+    global last_analysis
+    log_progress(f"Starting async analysis for {tick}...")
 
-                ticker_obj = yf.Ticker(f"{ticker}{exchange_suffix}")
-                info = ticker_obj.info or {}
-                name = info.get("longName") or info.get("shortName")
-                return name.strip() if isinstance(name, str) else None
-            
-
-            found_name = get_name_from_yfinance(tick, ".NS")
-            if not found_name:
-                # If .NS fails, try .BO as the final fallback.
-                found_name = get_name_from_yfinance(tick, ".BO")
+    # --- Stage 1: Gather all independent I/O-bound data concurrently ---
     
-            if found_name:
-                company_name = found_name
-                log_progress(f"Successfully identified company: {company_name}")
-            else:
-                log_progress(f"Could not find company name for {tick} on NSE or BSE. Defaulting to ticker.")
-        except Exception as e:
-            # This catches any unexpected errors during the API call or processing.
-            print(f"WARN: An exception occurred during the yfinance name fetch for '{tick}': {e}")
-            log_progress(f"Could not find company name due to an error. Using ticker: {tick}")
-        
-        # === NEW: Fetch data from ScanX.trade ===
-        log_progress(f"Fetching backup fundamental data from scanx.trade for {tick}...")
-        # build slug from the full company name:
-        # 1) lowercase, 2) replace & → and, 3) strip punctuation, 4) replace "limited"→"ltd", 5) replace spaces→dashes
-        slug = company_name.lower()
-        slug = re.sub(r'\blimited\b', 'ltd', slug)
-        slug = re.sub(r'[^a-z0-9\s-]', '', slug) 
-        slug = re.sub(r'\s+', '-', slug).strip('-')
-        slug = re.sub(r'\s+', '-', slug).strip('-')
-
-        print(f"[DEBUG] ScanX slug: '{slug}'")
-        print(f"[DEBUG] ScanX URL:  https://scanx.trade/company/{slug}")
-
-        # 2) call the scraper
-        scanx_data = scrape_scanx_company(slug)
-
-        # 3) immediately dump the raw returned object
-        print(f"[DEBUG] RAW scanx_data: {scanx_data!r}")
-
-        # 4) existing logging based on result
-        if not scanx_data:
-            log_progress("ScanX.fetch warning: No data returned or parsing failed.")
-        else:
-            log_progress("Successfully fetched data from scanx.trade.")
-            
-        # =========================================
-
-        res=evaluate_ticker_signal(tick)
-        log_progress("AI is analyzing the Chart using Technical signals.")
-
-        df=res['Data']
-        if df.empty or len(df) < 2 :
-            log_progress(f"Error: No or insufficient data for {tick}.")
-            return jsonify({'error':f'No or insufficient historical data found for {tick} after processing.'}),404
-
-
-        # Technical summary from TA-Lib based analysis
-        technical_summary_list = generate_summary(res) # Renamed from summ for clarity
-
-        # Clean the technical_summary_list (keys)
-        cleaned_technical_summary = []
-        if isinstance(technical_summary_list, list):
-            for item in technical_summary_list:
-                if isinstance(item, dict) and "key" in item and isinstance(item["key"], str):
-                    cleaned_key = item["key"].strip()
-                    # Also strip value if it's a string and might have spaces from formatting
-                    value = item.get("value")
-                    cleaned_value = value.strip() if isinstance(value, str) else value
-                    cleaned_technical_summary.append({"key": cleaned_key, "value": cleaned_value})
-                else:
-                    cleaned_technical_summary.append(item)
-        else:
-            cleaned_technical_summary = technical_summary_list
-
-        # Build chart JSONs (no changes needed here)
-        close_j=build_close_figure(df,company_name).to_json()
-        # ... (other chart jsons) ...
-        hl_j   =build_hl_figure(df,company_name).to_json()
-        ema_j  =build_ema_figure(df,company_name).to_json()
-        rsi_j  =build_rsi_figure(df,company_name).to_json()
-        adl_j  =build_adl_figure(df,company_name).to_json()
-        rs_j   =build_rs_figure(df,company_name).to_json()
-        
-        # --- Fundamentals Data Processing ---
-        tables_from_screener, company_description = fetch_consolidated(tick)
-        
-        fund_data_for_frontend = {} # For app.html renderFundTable
-        fund_data_for_ai_context = {}   # For last_analysis (cleaned)
-
-        if not tables_from_screener:
-            print(f"WARN: No fundamental tables fetched for {tick}.")
-        else:
-            for table_name, df_original_table in tables_from_screener.items():
-                # 1. Prepare data for frontend (as before, using original df values)
-                #    The frontend renderFundTable might handle its own display formatting.
-                fund_data_for_frontend[table_name] = df_original_table.reset_index().T.to_json(orient='split')
-
-                # 2. Prepare cleaned data for AI context (last_analysis)
-                #    Convert DataFrame to list of dicts, then clean.
-                #    `df_original_table` already has columns cleaned by `clean_df`.
-                #    We need to clean the metric names (index if set, or first column).
-                
-                # If metric names are in the index of df_original_table:
-                df_for_processing = df_original_table.copy()
-                if isinstance(df_for_processing.index, pd.Index) and df_for_processing.index.dtype == 'object':
-                    df_for_processing.index = df_for_processing.index.str.strip()
-                
-                # Convert to list of dicts, ensuring index (metric names) becomes the "" key
-                # If the index was named, reset_index() gives it that name as a column.
-                # Screener tables usually have metric names as the first column (which might become index '')
-                # Let's assume the structure from previous debugging:
-                # Metric names are in the first column of the DFs returned by fetch_consolidated,
-                # which after reset_index() will be under a key, often "index" or the original first col name.
-                # The to_dict(orient='records') step on `df.reset_index()` puts the *original first column's values*
-                # under the `""` key if that first column in the DF passed to `to_dict` was literally named `""`
-                # OR if it was the first column from `pd.read_html` which sometimes gets an empty string name.
-
-                # Simplest approach: Convert to records, then iterate and clean the "" key.
-                # This assumes `df_original_table.reset_index()` would give a column that becomes `""`.
-                # More robust if `fetch_consolidated` ensures metric names are in a known column like "Particulars"
-                # before `clean_df` and then this column is used.
-                # For now, sticking to cleaning the `""` key after `to_dict(orient='records')`
-
-                temp_rows_for_cleaning = df_original_table.reset_index().to_dict(orient='records')
-                cleaned_rows_for_ai = []
-                for row_dict in temp_rows_for_cleaning:
-                    cleaned_row = {}
-                    for r_key, r_val in row_dict.items():
-                        new_key = r_key.strip() if isinstance(r_key, str) else r_key # Clean column headers (keys in dict)
-                        
-                        if new_key == "" and isinstance(r_val, str): # Metric name
-                            cleaned_val = r_val.strip()
-                        elif isinstance(r_val, str): # Other string cell values
-                            cleaned_val = r_val.strip()
-                        else:
-                            cleaned_val = r_val
-                        cleaned_row[new_key] = cleaned_val
-                    cleaned_rows_for_ai.append(cleaned_row)
-                fund_data_for_ai_context[table_name] = cleaned_rows_for_ai
-
-        # --- Valuation & Margin Data Series Processing (no changes needed here from previous) ---
-        parsed_valuation_data = {}
-        metric_charts_for_frontend = {}
+    # yfinance is not async, so we wrap its calls in asyncio.to_thread
+    def get_yfinance_data(ticker):
+        company_name_from_yfinance = ticker
         try:
-            comp_id = get_company_id(tick) # Use tick here
-            metric_queries = {
-                "PE Ratio": "Price to Earning-Median PE-EPS", "PB Ratio": "Price to book value-Median PBV-Book value",
-                "EV / EBITDA": "EV Multiple-Median EV Multiple-EBITDA", "Market Cap / Sales": "Market Cap to Sales-Median Market Cap to Sales-Sales",
-                "Margins": "GPM-OPM-NPM-Quarter Sales"
-            }
-            def make_metric_fig(df_metric: pd.DataFrame, title: str):
-                # ... (make_metric_fig function) ...
-                fig = go.Figure()
-                for col in df_metric.columns: fig.add_trace(go.Scatter(x=df_metric.index, y=[float(v) for v in df_metric[col]], mode='lines', name=col))
-                fig.update_layout(title=title, hovermode='x unified', legend=dict(orientation='h', x=0.5, xanchor='center', y=-0.2), xaxis=dict(type='date', title='Date'), yaxis=dict(title=title))
-                return fig.to_json()
+            def get_name(t, suffix):
+                info = yf.Ticker(f"{t}{suffix}").info or {}
+                return (info.get("longName") or info.get("shortName") or "").strip()
+            
+            name = get_name(ticker, ".NS") or get_name(ticker, ".BO")
+            if name:
+                company_name_from_yfinance = name
+                log_progress(f"Successfully identified company: {name}")
+            else:
+                log_progress(f"Could not find company name for {ticker}. Defaulting to ticker.")
+            return company_name_from_yfinance
+        except Exception as e:
+            print(f"WARN: yfinance name fetch failed for '{ticker}': {e}")
+            return ticker
 
-            for label, query in metric_queries.items():
-                # ... (logic to fetch, parse, filter, and store in parsed_valuation_data & metric_charts_for_frontend) ...
-                raw_chart_data = fetch_chart_data(comp_id, query) # Use comp_id
-                df_from_parser = parse_chart_json(raw_chart_data)
-                if df_from_parser.empty: continue
+    # Define all tasks that can run without dependencies on each other
+    tasks = {
+        "yfinance_name": asyncio.to_thread(get_yfinance_data, tick),
+        "tech_data": asyncio.to_thread(evaluate_ticker_signal, tick),
+        "screener_tables": fetch_consolidated_async(tick),
+        "documents": fetch_latest_documents_async(tick),
+    }
+    
+    # Run them all in parallel and wait for all to complete
+    results = await asyncio.gather(*tasks.values(), return_exceptions=True)
+    results_dict = dict(zip(tasks.keys(), results))
 
-                df_filtered = pd.DataFrame()
-                if label == "PE Ratio" and "PE" in df_from_parser.columns: df_filtered = df_from_parser[["PE"]]
-                elif label == "PB Ratio" and "Price to BV" in df_from_parser.columns: df_filtered = df_from_parser[["Price to BV"]]
-                elif label == "EV / EBITDA" and "EV / EBITDA" in df_from_parser.columns: df_filtered = df_from_parser[["EV / EBITDA"]]
-                elif label == "Market Cap / Sales" and "Market Cap / Sales" in df_from_parser.columns: df_filtered = df_from_parser[["Market Cap / Sales"]]
-                elif label == "Margins": df_filtered = df_from_parser[[c for c in ("GPM %","OPM %","NPM %") if c in df_from_parser.columns]]
+    # --- Check for critical failures from Stage 1 ---
+    for task_name, result in results_dict.items():
+        if isinstance(result, Exception):
+            log_progress(f"Critical error during initial data fetch: {task_name} failed.")
+            return ({'error': f'Failed to fetch critical data: {task_name}. Reason: {result}'}, 500)
+
+    company_name = results_dict["yfinance_name"]
+    res = results_dict["tech_data"]
+    tables_from_screener, company_description = results_dict["screener_tables"]
+    latest_documents = results_dict["documents"]
+
+    # --- Stage 2: Gather dependent I/O tasks ---
+    
+    async def fetch_dependent_data():
+        try:
+            # get_company_id runs now since it's fast and needed for valuation
+            comp_id = await get_company_id_async(tick)
+
+            # ScanX scrape depends on company_name
+            slug = re.sub(r'[^a-z0-9\s-]', '', re.sub(r'\s+', '-', re.sub(r'\blimited\b', 'ltd', company_name.lower()))).strip('-')
+            scanx_task = scrape_scanx_company_async(slug)
+
+            # Valuation metrics depend on company_id
+            async def fetch_all_valuation_data():
+                metric_queries = {
+                    "PE Ratio": "Price to Earning-Median PE-EPS", "PB Ratio": "Price to book value-Median PBV-Book value",
+                    "EV / EBITDA": "EV Multiple-Median EV Multiple-EBITDA", "Market Cap / Sales": "Market Cap to Sales-Median Market Cap to Sales-Sales",
+                    "Margins": "GPM-OPM-NPM-Quarter Sales"
+                }
+                parsed_data, charts_data = {}, {}
+                async with httpx.AsyncClient() as client:
+                    valuation_tasks = {label: fetch_chart_data_async(client, comp_id, query) for label, query in metric_queries.items()}
+                    valuation_results = await asyncio.gather(*valuation_tasks.values(), return_exceptions=True)
                 
-                if df_filtered.empty: continue
-                
-                df_for_ai_series = df_filtered.copy().reset_index()
-                for col_name_ai_series in df_for_ai_series.columns:
-                    if pd.api.types.is_datetime64_any_dtype(df_for_ai_series[col_name_ai_series]):
-                        df_for_ai_series[col_name_ai_series] = df_for_ai_series[col_name_ai_series].dt.strftime('%Y-%m-%d')
-                parsed_valuation_data[label] = df_for_ai_series.to_dict(orient='records')
-                metric_charts_for_frontend[label] = make_metric_fig(df_filtered, label)
+                results = dict(zip(valuation_tasks.keys(), valuation_results))
+                for label, chart_json in results.items():
+                    if isinstance(chart_json, Exception) or not chart_json: continue
+                    
+                    df_from_parser = parse_chart_json(chart_json)
+                    if df_from_parser.empty: continue
 
-        except Exception as e_val_metrics:
-            log_progress(f"Error fetching/processing valuation metrics for {tick}: {e_val_metrics}")
+                    df_filtered = pd.DataFrame()
+                    if label == "PE Ratio" and "PE" in df_from_parser.columns: df_filtered = df_from_parser[["PE"]]
+                    elif label == "PB Ratio" and "Price to BV" in df_from_parser.columns: df_filtered = df_from_parser[["Price to BV"]]
+                    elif label == "EV / EBITDA" and "EV / EBITDA" in df_from_parser.columns: df_filtered = df_from_parser[["EV / EBITDA"]]
+                    elif label == "Market Cap / Sales" and "Market Cap / Sales" in df_from_parser.columns: df_filtered = df_from_parser[["Market Cap / Sales"]]
+                    elif label == "Margins": df_filtered = df_from_parser[[c for c in ("GPM %","OPM %","NPM %") if c in df_from_parser.columns]]
+                    
+                    if not df_filtered.empty:
+                        df_for_ai_series = df_filtered.copy().reset_index()
+                        for col in df_for_ai_series.columns:
+                            if pd.api.types.is_datetime64_any_dtype(df_for_ai_series[col]):
+                                df_for_ai_series[col] = df_for_ai_series[col].dt.strftime('%Y-%m-%d')
+                        parsed_data[label] = df_for_ai_series.to_dict(orient='records')
+                        
+                        fig = go.Figure()
+                        for col in df_filtered.columns: fig.add_trace(go.Scatter(x=df_filtered.index, y=[float(v) for v in df_filtered[col]], mode='lines', name=col))
+                        fig.update_layout(title=label, hovermode='x unified', legend=dict(orientation='h', x=0.5, xanchor='center', y=-0.2), xaxis=dict(type='date', title='Date'), yaxis=dict(title=label))
+                        charts_data[label] = fig.to_json()
+
+                return parsed_data, charts_data
+
+            valuation_task = fetch_all_valuation_data()
+            
+            # Run Stage 2 tasks in parallel
+            stage2_results = await asyncio.gather(scanx_task, valuation_task, return_exceptions=True)
+            return stage2_results
+        except Exception as e:
+            log_progress(f"Error in dependent data fetching stage: {e}")
+            return e # Return exception to be handled
+
+    stage2_results = await fetch_dependent_data()
+    if isinstance(stage2_results, Exception):
+        return ({'error': f'Failed during dependent data fetching: {stage2_results}'}, 500)
         
-        # --- New section to fetch documents ---
-        latest_documents = fetch_latest_documents(tick)
-        print(f"Documents fetched: {latest_documents}")
-        log_progress(f"All documents fetched and analyzed")
-        # --- End of new section ---
+    scanx_data = stage2_results[0] if not isinstance(stage2_results[0], Exception) else {}
+    parsed_valuation_data, metric_charts_for_frontend = stage2_results[1] if not isinstance(stage2_results[1], Exception) else ({}, {})
+
+    # --- Stage 3: Process all results (now purely CPU-bound) ---
+    log_progress("All data fetched. Processing results...")
+    
+    df = res['Data']
+    if df.empty or len(df) < 2 :
+        return ({'error':f'No or insufficient historical data found for {tick} after processing.'}, 404)
+
+    technical_summary_list = generate_summary(res)
+    cleaned_technical_summary = []
+    if isinstance(technical_summary_list, list):
+        for item in technical_summary_list:
+            if isinstance(item, dict) and "key" in item and "value" in item:
+                cleaned_key = str(item["key"]).strip()
+                value = item["value"]
+                cleaned_value = str(value).strip() if isinstance(value, str) else value
+                cleaned_technical_summary.append({"key": cleaned_key, "value": cleaned_value})
+            else:
+                cleaned_technical_summary.append(item)
+    else:
+        cleaned_technical_summary = technical_summary_list
+
+    close_j=build_close_figure(df,company_name).to_json()
+    hl_j   =build_hl_figure(df,company_name).to_json()
+    ema_j  =build_ema_figure(df,company_name).to_json()
+    rsi_j  =build_rsi_figure(df,company_name).to_json()
+    adl_j  =build_adl_figure(df,company_name).to_json()
+    rs_j   =build_rs_figure(df,company_name).to_json()
+    
+    fund_data_for_frontend, fund_data_for_ai_context = {}, {}
+    if tables_from_screener:
+        for table_name, df_original_table in tables_from_screener.items():
+            fund_data_for_frontend[table_name] = df_original_table.reset_index().T.to_json(orient='split')
+            temp_rows_for_cleaning = df_original_table.reset_index().to_dict(orient='records')
+            cleaned_rows_for_ai = []
+            for row_dict in temp_rows_for_cleaning:
+                cleaned_row = { (str(k).strip() if isinstance(k, str) else k): (str(v).strip() if isinstance(v, str) else v) for k, v in row_dict.items() }
+                cleaned_rows_for_ai.append(cleaned_row)
+            fund_data_for_ai_context[table_name] = cleaned_rows_for_ai
+    
+    log_progress(f"Generating AI company summary for {tick}...")
+    ai_company_summary_html = generate_ai_company_summary(
+        ticker=tick,
+        description=company_description,
+        fundamentals=tables_from_screener,
+        documents=latest_documents
+    )
+    log_progress("AI summary generated successfully.")
+    
+    last_analysis = {
+        "ticker": tick, "company_name": company_name, "summary": cleaned_technical_summary, 
+        "fundamentals": fund_data_for_ai_context, "valuation_and_margin_data": parsed_valuation_data, 
+        "documents": latest_documents
+    }
+
+    log_progress(f"Generating AI scores for {tick}...")
+    ai_scores_data = generate_ai_scores(tick, last_analysis)
+    log_progress("AI scores generated successfully.")
+
+    log_progress("Analysis complete. Loading results ...")
+   
+    return {
+        'ticker': tick, 'company_name': company_name, 'company_summary_html': ai_company_summary_html,
+        'summary': cleaned_technical_summary, 'ai_scores': ai_scores_data,
+        'chart_close_json': close_j, 'chart_hl_json': hl_j, 'chart_ema_json': ema_j,
+        'chart_rsi_json': rsi_j, 'chart_adl_json': adl_j, 'chart_rs_json': rs_j,
+        'fundamentals': fund_data_for_frontend, 'metric_charts': metric_charts_for_frontend,
+        'documents': latest_documents, 'scanx_data': scanx_data
+    }
+
+@cache.memoize(timeout=21600)
+def get_analysis_for_ticker(tick):
+    """
+    Synchronous wrapper that runs the async logic. The cache stores the final result.
+    This is the bridge between the synchronous Flask world and our async code.
+    """
+    return asyncio.run(get_analysis_for_ticker_async(tick))
+
+@app.route('/analyze', methods=['POST'])
+def analyze():
+    """
+    Lightweight Flask route that calls the cached, synchronous wrapper.
+    It remains unchanged from the previous caching step.
+    """
+    try:
+        data = request.get_json(force=True)
+        tick = data.get('ticker','').strip().upper()
+        if not tick:
+            return jsonify({'error': 'No ticker provided'}), 400
+
+        result = get_analysis_for_ticker(tick)
         
-        # --- NEW: Generate AI Company Summary ---
-        log_progress(f"Generating AI company summary for {tick}...")
-        ai_company_summary_html = generate_ai_company_summary(
-            ticker=tick,
-            description=company_description,
-            fundamentals=tables_from_screener, # Pass the dict of DataFrames
-            documents=latest_documents
-        )
-        log_progress("AI summary generated successfully.")
-        
-        # --- Populate last_analysis with cleaned data ---
-        global last_analysis
-        last_analysis = {
-            "ticker": tick,
-            "company_name": company_name,
-            "summary": cleaned_technical_summary, 
-            "fundamentals": fund_data_for_ai_context, 
-            "valuation_and_margin_data": parsed_valuation_data, 
-            "documents": latest_documents
-        }
+        if isinstance(result, tuple) and len(result) == 2 and isinstance(result[0], dict):
+             return jsonify(result[0]), result[1]
 
-        log_progress(f"Generating AI scores for {tick}...")
-        ai_scores_data = generate_ai_scores(tick, last_analysis)
-        log_progress("AI scores generated successfully.")
-
-
-        log_progress("Analysis complete. Loading results ...")
-
-       
-        return jsonify({
-            'ticker': tick,
-            'company_name': company_name,
-            'company_summary_html': ai_company_summary_html,
-            'summary': cleaned_technical_summary,
-            'ai_scores': ai_scores_data,
-            'chart_close_json': close_j,
-            'chart_hl_json': hl_j,
-            'chart_ema_json': ema_j,
-            'chart_rsi_json': rsi_j,
-            'chart_adl_json': adl_j,
-            'chart_rs_json': rs_j,
-            'fundamentals': fund_data_for_frontend,
-            'metric_charts': metric_charts_for_frontend,
-            'documents': latest_documents,
-            'scanx_data': scanx_data  
-        })
+        return jsonify(result)
     except Exception as e:
-        # ... (error handling) ...
-        log_progress(f"ERROR in /analyze for {data.get('ticker', 'N/A') if isinstance(data, dict) else 'N/A'}: {e}")
+        data = request.get_json(force=True) if request.is_json else {}
+        log_progress(f"ERROR in /analyze wrapper for {data.get('ticker', 'N/A')}: {e}")
         traceback.print_exc()
-        return jsonify({'error':str(e),'trace':traceback.format_exc()}),500
+        return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
+
+# =====================================================================
+# END: New ASYNC and Caching Implementation for Analysis
+# =====================================================================
 
 
 if __name__ == '__main__':
