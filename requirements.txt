@@ -4,8 +4,8 @@
 Flask
 Flask-Cors
 flask-caching
-gunicorn
-uvicorn # ASGI server for async support
+gunicorn==22.0.0
+uvicorn==0.29.0
 a2wsgi==1.10.10
 celery[redis]==5.3.6
 redis>=4.5,<6
@@ -23,7 +23,7 @@ matplotlib==3.7.2
 plotly
 
 # --- AI & API Interaction ---
-openai
+openai>=1.0.0
 google-generativeai
 
 # --- Web Scraping & Document Parsing ---
