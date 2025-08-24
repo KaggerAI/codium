@@ -22,6 +22,7 @@ import base64
 from datetime import datetime
 import asyncio
 import httpx
+import uuid
 
 from flask import Flask, request, jsonify, send_from_directory, Response, stream_with_context
 from flask_caching import Cache
@@ -621,14 +622,23 @@ def perform_planned_calculations(plan_calculations_section, retrieved_data, full
 
 @app.route('/chat', methods=['POST'])
 def chat():
-    # global last_analysis
-    last_analysis = cache.get("last_analysis_data")
-
     try:
         data = request.get_json(force=True)
         user_question = data.get('question', '').strip()
         selected_model = data.get('model', 'o4-mini')
+        
+        # --- THIS IS THE NEW LOGIC ---
+        # Get the unique analysis key from the frontend request
+        analysis_key = data.get('analysis_key')
+        if not analysis_key:
+             return jsonify({'answer': 'Analysis key is missing. Please analyze a stock first.'}), 200
+
+        # Retrieve the specific analysis data using the key
+        last_analysis = cache.get(analysis_key)
+        # --- END OF NEW LOGIC ---
+
         print(f"AI chatbot received question with selected model: {selected_model}")
+
 
         if not user_question:
             return jsonify({'error': 'No question provided'}), 400
@@ -1384,18 +1394,32 @@ def analyze():
         if not tick:
             return jsonify({'error': 'No ticker provided'}), 400
 
+        # Run the main analysis function
         result = get_analysis_for_ticker(tick)
         
         if isinstance(result, tuple) and len(result) == 2 and isinstance(result[0], dict):
              return jsonify(result[0]), result[1]
 
+        # --- THIS IS THE NEW LOGIC ---
+        # Generate a unique key for this analysis session
+        analysis_key = str(uuid.uuid4())
+        
+        # Save the full result dictionary to the cache with this unique key
+        # We will give it a timeout of 6 hours (21600 seconds)
+        cache.set(analysis_key, result, timeout=21600)
+        
+        # Add the key to the JSON response so the frontend can use it
+        result['analysis_key'] = analysis_key
+        
         return jsonify(result)
+        # --- END OF NEW LOGIC ---
+
     except Exception as e:
         data = request.get_json(force=True) if request.is_json else {}
         log_progress(f"ERROR in /analyze wrapper for {data.get('ticker', 'N/A')}: {e}")
         traceback.print_exc()
         return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
-
+    
 # =====================================================================
 # END: New ASYNC and Caching Implementation for Analysis
 # =====================================================================

@@ -414,7 +414,9 @@
           });
           const payload = await res.json();
           if (!res.ok) throw new Error(payload.error || 'Unknown error');
-          
+
+          currentAnalysisKey = payload.analysis_key; // <<<--- ADD THIS LINE to save the key
+
           if (sseConnection) sseConnection.close();
           document.getElementById('progress-container').classList.remove('visible');
 
@@ -648,7 +650,7 @@
         appendMessage('...', 'bot', true);
         try {
           const selectedModel = modelSelector.value;
-          const res = await fetch('/chat', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ question: q, model: selectedModel }) });
+          const res = await fetch('/chat', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ question: q, model: selectedModel, analysis_key: currentAnalysisKey}) });
           const { answer, error, raw_news_summary } = await res.json();
           removeTypingIndicator();
           if (error) { appendMessage(`Error: ${error}`, 'error'); } 
@@ -697,6 +699,7 @@
         const typingIndicator = document.getElementById('typingIndicator');
         if (typingIndicator) typingIndicator.remove();
       }
+  let currentAnalysisKey = null; 
   </script>
 </body> 
 </html>
