@@ -196,25 +196,28 @@ def parse_chart_json(chart_json: dict) -> pd.DataFrame:
     if combined_df.empty:
         return pd.DataFrame()
 
-    # --- START: NEW AND IMPROVED CODE TO FILL GAPS ON TRADING DAYS ONLY ---
+    # --- START: CORRECTED CODE TO FILL GAPS ON TRADING DAYS ONLY ---
 
-    # 1. Get the Indian (Bombay Stock Exchange) market calendar.
-    #    The BSE calendar is a good representative for Indian trading holidays.
+    # 1. NORMALIZE THE INDEX: This is the crucial fix. It sets the time part
+    #    of all timestamps to midnight (00:00:00), ensuring they can be matched
+    #    with the clean dates from the market calendar.
+    combined_df.index = combined_df.index.normalize() # <--- THE CRITICAL FIX
+
+    # 2. Get the Indian (Bombay Stock Exchange) market calendar.
     bse = mcal.get_calendar('BSE')
 
-    # 2. Determine the date range from your existing data.
+    # 3. Determine the date range from your now-normalized data.
     start_date = combined_df.index.min()
     end_date = combined_df.index.max()
 
-    # 3. Get a list of all valid trading days within that range.
+    # 4. Get a list of all valid trading days within that range.
     valid_trading_days = bse.valid_days(start_date=start_date, end_date=end_date)
 
-    # 4. Re-index the DataFrame to this list of valid trading days. This will
-    #    create NaN values for all the trading days where data was not reported,
-    #    while correctly ignoring weekends and holidays.
+    # 5. Re-index the DataFrame. This will now work correctly because the
+    #    normalized dates in your data will match the dates in valid_trading_days.
     business_days_df = combined_df.reindex(valid_trading_days)
 
-    # 5. Use linear interpolation to fill the NaN values, just as before.
+    # 6. Use linear interpolation to fill the NaN values.
     interpolated_df = business_days_df.interpolate(method='linear', limit_direction='both')
 
     return interpolated_df
