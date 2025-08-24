@@ -72,11 +72,39 @@ CORS(app)
 
 # --- NEW CACHE CONFIGURATION ---
 # It will now automatically use the REDIS URL from your environment variables
-config = {
-    "CACHE_TYPE": "RedisCache",
-    "CACHE_DEFAULT_TIMEOUT": 21600, # 6 hours
-    "CACHE_REDIS_URL": os.getenv("CACHE_REDIS_URL")
-}
+# --- ROBUST CACHE CONFIGURATION ---
+
+# Get the raw connection string from the environment variable set in Azure
+azure_redis_conn_string = os.getenv("CACHE_REDIS_URL")
+
+if azure_redis_conn_string:
+    print("INFO: Found Azure Redis connection string. Reformatting for Python redis library.")
+    
+    # Parse the Azure-specific connection string
+    # Example: kagger-ai-cache.redis.cache.windows.net:6380,password=...,ssl=True
+    host_port, password_part, *_ = azure_redis_conn_string.split(',')
+    host, port = host_port.split(':')
+    password = password_part.split('=')[1]
+    
+    # Construct the standard Redis URL that the Python library expects
+    # The 'rediss://' scheme signifies a SSL connection.
+    formatted_redis_url = f"rediss://:{password}@{host}:{port}"
+    
+    config = {
+        "CACHE_TYPE": "RedisCache",
+        "CACHE_DEFAULT_TIMEOUT": 21600, # 6 hours
+        "CACHE_REDIS_URL": formatted_redis_url,
+        "CACHE_REDIS_SSL_CERT_REQS": "none" # Important for Azure Redis
+    }
+    print("INFO: Configuring cache for PRODUCTION (Redis)")
+else:
+    # Fallback for local development if the environment variable isn't set
+    print("INFO: CACHE_REDIS_URL not found. Configuring cache for DEVELOPMENT (SimpleCache)")
+    config = {
+        "CACHE_TYPE": "SimpleCache",
+        "CACHE_DEFAULT_TIMEOUT": 3600
+    }
+
 app.config.from_mapping(config)
 cache = Cache(app)
 
