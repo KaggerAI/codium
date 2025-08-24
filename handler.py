@@ -70,35 +70,51 @@ from tech_calculations import (
 app = Flask(__name__, static_folder='.', static_url_path='')
 CORS(app)
 
-# --- NEW CACHE CONFIGURATION ---
-# It will now automatically use the REDIS URL from your environment variables
-# --- ROBUST CACHE CONFIGURATION ---
+# --- FINAL, ROBUST CACHE CONFIGURATION ---
 
 # Get the raw connection string from the environment variable set in Azure
 azure_redis_conn_string = os.getenv("CACHE_REDIS_URL")
 
 if azure_redis_conn_string:
-    print("INFO: Found Azure Redis connection string. Reformatting for Python redis library.")
+    print("INFO: Found Azure Redis connection string. Parsing for Python redis library.")
     
-    # Parse the Azure-specific connection string
-    # Example: kagger-ai-cache.redis.cache.windows.net:6380,password=...,ssl=True
-    host_port, password_part, *_ = azure_redis_conn_string.split(',')
-    host, port = host_port.split(':')
-    password = password_part.split('=')[1]
-    
-    # Construct the standard Redis URL that the Python library expects
-    # The 'rediss://' scheme signifies a SSL connection.
-    formatted_redis_url = f"rediss://:{password}@{host}:{port}"
-    
-    config = {
-        "CACHE_TYPE": "RedisCache",
-        "CACHE_DEFAULT_TIMEOUT": 21600, # 6 hours
-        "CACHE_REDIS_URL": formatted_redis_url,
-        "CACHE_REDIS_SSL_CERT_REQS": "none" # Important for Azure Redis
-    }
-    print("INFO: Configuring cache for PRODUCTION (Redis)")
+    # This new parser is much safer and handles different connection string formats.
+    try:
+        # Split the string by commas to separate the parts
+        parts = azure_redis_conn_string.split(',')
+        
+        # The host and port are always the first part
+        host, port = parts[0].split(':')
+        
+        # Find the password and ssl parts in the rest of the string
+        # We create a dictionary of the other options
+        options = {p.split('=')[0]: p.split('=')[1] for p in parts[1:]}
+        
+        password = options.get('password')
+        ssl = options.get('ssl', 'false').lower() == 'true'
+
+        if not password:
+            raise ValueError("Password not found in Redis connection string")
+
+        # Use 'rediss://' for SSL connections, which Azure requires
+        scheme = "rediss://" if ssl else "redis://"
+        
+        # Construct the final, standard Redis URL
+        formatted_redis_url = f"{scheme}:{password}@{host}:{port}"
+
+        config = {
+            "CACHE_TYPE": "RedisCache",
+            "CACHE_DEFAULT_TIMEOUT": 21600, # 6 hours
+            "CACHE_REDIS_URL": formatted_redis_url
+        }
+        print("INFO: Configuring cache for PRODUCTION (Redis)")
+
+    except Exception as e:
+        print(f"CRITICAL ERROR: Failed to parse Redis connection string. Error: {e}")
+        # Fallback to SimpleCache if parsing fails, so the app doesn't crash
+        config = {"CACHE_TYPE": "SimpleCache"}
 else:
-    # Fallback for local development if the environment variable isn't set
+    # Fallback for local development
     print("INFO: CACHE_REDIS_URL not found. Configuring cache for DEVELOPMENT (SimpleCache)")
     config = {
         "CACHE_TYPE": "SimpleCache",
