@@ -1365,14 +1365,36 @@ async def get_analysis_for_ticker_async(tick):
 
     log_progress("Analysis complete. Loading results ...")
    
-    return {
+    # return {
+    #     'ticker': tick, 'company_name': company_name, 'company_summary_html': ai_company_summary_html,
+    #     'summary': cleaned_technical_summary, 'ai_scores': ai_scores_data,
+    #     'chart_close_json': close_j, 'chart_hl_json': hl_j, 'chart_ema_json': ema_j,
+    #     'chart_rsi_json': rsi_j, 'chart_adl_json': adl_j, 'chart_rs_json': rs_j,
+    #     'fundamentals': fund_data_for_frontend, 'metric_charts': metric_charts_for_frontend,
+    #     'documents': latest_documents, 'scanx_data': scanx_data
+    # }
+
+    # This dictionary is what the AI needs. It uses the Python objects.
+    analysis_for_cache = {
+        "ticker": tick, "company_name": company_name, "summary": cleaned_technical_summary, 
+        "fundamentals": fund_data_for_ai_context,  # <-- The AI-friendly version
+        "valuation_and_margin_data": parsed_valuation_data, 
+        "documents": latest_documents
+    }
+    
+    # This dictionary is what the frontend needs. It uses the JSON strings.
+    result_for_frontend = {
         'ticker': tick, 'company_name': company_name, 'company_summary_html': ai_company_summary_html,
         'summary': cleaned_technical_summary, 'ai_scores': ai_scores_data,
         'chart_close_json': close_j, 'chart_hl_json': hl_j, 'chart_ema_json': ema_j,
         'chart_rsi_json': rsi_j, 'chart_adl_json': adl_j, 'chart_rs_json': rs_j,
-        'fundamentals': fund_data_for_frontend, 'metric_charts': metric_charts_for_frontend,
+        'fundamentals': fund_data_for_frontend, # <-- The frontend-friendly version
+        'metric_charts': metric_charts_for_frontend,
         'documents': latest_documents, 'scanx_data': scanx_data
     }
+
+    # Pass BOTH dictionaries back to the synchronous wrapper
+    return result_for_frontend, analysis_for_cache
 
 @cache.memoize(timeout=21600)
 def get_analysis_for_ticker(tick):
@@ -1393,25 +1415,21 @@ def analyze():
         tick = data.get('ticker','').strip().upper()
         if not tick:
             return jsonify({'error': 'No ticker provided'}), 400
-
-        # Run the main analysis function
-        result = get_analysis_for_ticker(tick)
+    
+        # Unpack the two dictionaries returned by the function
+        result_for_frontend, analysis_for_cache = get_analysis_for_ticker(tick)
         
-        if isinstance(result, tuple) and len(result) == 2 and isinstance(result[0], dict):
-             return jsonify(result[0]), result[1]
-
-        # --- THIS IS THE NEW LOGIC ---
         # Generate a unique key for this analysis session
         analysis_key = str(uuid.uuid4())
         
-        # Save the full result dictionary to the cache with this unique key
-        # We will give it a timeout of 6 hours (21600 seconds)
-        cache.set(analysis_key, result, timeout=21600)
+        # Save the AI-formatted data to the cache
+        cache.set(analysis_key, analysis_for_cache, timeout=21600)
         
-        # Add the key to the JSON response so the frontend can use it
-        result['analysis_key'] = analysis_key
+        # Add the key to the frontend data so the browser can use it
+        result_for_frontend['analysis_key'] = analysis_key
         
-        return jsonify(result)
+        return jsonify(result_for_frontend)
+
         # --- END OF NEW LOGIC ---
 
     except Exception as e:
