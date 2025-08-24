@@ -1351,7 +1351,7 @@ async def get_analysis_for_ticker_async(tick):
     "documents": latest_documents
     }
     # Store the analysis data in the shared Redis cache
-    cache.set("last_analysis_data", analysis_result_for_cache)
+    # cache.set("last_analysis_data", analysis_result_for_cache)
     
     # last_analysis = {
     #    "ticker": tick, "company_name": company_name, "summary": cleaned_technical_summary, 
