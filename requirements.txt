@@ -17,6 +17,7 @@ numpy<2.0
 yfinance
 TA-Lib
 tradingview-datafeed==2.1.1   # installs as tvDatafeed
+pandas-market-calendars
 
 # --- Plotting & Visualization ---
 matplotlib==3.7.2

@@ -18,6 +18,7 @@ import google.generativeai as genai
 from progress_logger import log_progress
 import httpx
 import asyncio
+import pandas_market_calendars as mcal
 
 # import os
 # import openai
@@ -186,9 +187,37 @@ def parse_chart_json(chart_json: dict) -> pd.DataFrame:
         df.set_index("date", inplace=True)
         df[label] = pd.to_numeric(df[label], errors="coerce")
         dfs.append(df)
+
     if not dfs:
         return pd.DataFrame()
-    return pd.concat(dfs, axis=1)
+
+    combined_df = pd.concat(dfs, axis=1)
+
+    if combined_df.empty:
+        return pd.DataFrame()
+
+    # --- START: NEW AND IMPROVED CODE TO FILL GAPS ON TRADING DAYS ONLY ---
+
+    # 1. Get the Indian (Bombay Stock Exchange) market calendar.
+    #    The BSE calendar is a good representative for Indian trading holidays.
+    bse = mcal.get_calendar('BSE')
+
+    # 2. Determine the date range from your existing data.
+    start_date = combined_df.index.min()
+    end_date = combined_df.index.max()
+
+    # 3. Get a list of all valid trading days within that range.
+    valid_trading_days = bse.valid_days(start_date=start_date, end_date=end_date)
+
+    # 4. Re-index the DataFrame to this list of valid trading days. This will
+    #    create NaN values for all the trading days where data was not reported,
+    #    while correctly ignoring weekends and holidays.
+    business_days_df = combined_df.reindex(valid_trading_days)
+
+    # 5. Use linear interpolation to fill the NaN values, just as before.
+    interpolated_df = business_days_df.interpolate(method='linear', limit_direction='both')
+
+    return interpolated_df
 
 async def get_text_from_pdf_url_async(pdf_url: str, max_pages_to_process=50, max_chars_to_return=10000) -> str:
     try:
