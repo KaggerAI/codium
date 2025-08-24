@@ -1255,7 +1255,12 @@ async def get_analysis_for_ticker_async(tick):
                 
                 results = dict(zip(valuation_tasks.keys(), valuation_results))
                 for label, chart_json in results.items():
-                    if isinstance(chart_json, Exception) or not chart_json: continue
+                    print(f"\n{'='*20} DEBUG: RAW DATA FOR '{label}' {'='*20}")
+                    print(f"Raw JSON (first 300 chars): {str(chart_json)[:300]}")
+
+                    if isinstance(chart_json, Exception) or not chart_json:
+                        print(f"DEBUG: Skipping '{label}' due to an exception or empty data.")
+                        continue
                     
                     df_from_parser = parse_chart_json(chart_json)
                     if df_from_parser.empty: continue
