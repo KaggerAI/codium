@@ -64,20 +64,30 @@ from tech_calculations import (
 )
 
 # right below your Flask-app initialization:
-last_analysis: dict = {}
+# last_analysis: dict = {}
 
 # Initialize Flask app and enable CORS
 app = Flask(__name__, static_folder='.', static_url_path='')
 CORS(app)
 
-# Configure a simple in-memory cache.
-# Data will be cached for 6 hours (21600 seconds).
+# --- NEW CACHE CONFIGURATION ---
+# It will now automatically use the REDIS URL from your environment variables
 config = {
-    "CACHE_TYPE": "SimpleCache",
-    "CACHE_DEFAULT_TIMEOUT": 21600
+    "CACHE_TYPE": "RedisCache",
+    "CACHE_DEFAULT_TIMEOUT": 21600, # 6 hours
+    "CACHE_REDIS_URL": os.getenv("CACHE_REDIS_URL")
 }
 app.config.from_mapping(config)
 cache = Cache(app)
+
+# Configure a simple in-memory cache.
+# Data will be cached for 6 hours (21600 seconds).
+# config = {
+#     "CACHE_TYPE": "SimpleCache",
+#     "CACHE_DEFAULT_TIMEOUT": 21600
+# }
+# app.config.from_mapping(config)
+# cache = Cache(app)
 
 from flask import jsonify
 
@@ -567,7 +577,9 @@ def perform_planned_calculations(plan_calculations_section, retrieved_data, full
 
 @app.route('/chat', methods=['POST'])
 def chat():
-    global last_analysis
+    # global last_analysis
+    last_analysis = cache.get("last_analysis_data")
+
     try:
         data = request.get_json(force=True)
         user_question = data.get('question', '').strip()
@@ -1117,7 +1129,7 @@ async def get_analysis_for_ticker_async(tick):
     This is the new async core logic function. It runs all I/O-bound
     operations in parallel to significantly speed up data gathering.
     """
-    global last_analysis
+    # global last_analysis
     log_progress(f"Starting async analysis for {tick}...")
 
     # --- Stage 1: Gather all independent I/O-bound data concurrently ---
@@ -1279,14 +1291,22 @@ async def get_analysis_for_ticker_async(tick):
     )
     log_progress("AI summary generated successfully.")
     
-    last_analysis = {
-        "ticker": tick, "company_name": company_name, "summary": cleaned_technical_summary, 
-        "fundamentals": fund_data_for_ai_context, "valuation_and_margin_data": parsed_valuation_data, 
-        "documents": latest_documents
+    analysis_result_for_cache = {
+    "ticker": tick, "company_name": company_name, "summary": cleaned_technical_summary, 
+    "fundamentals": fund_data_for_ai_context, "valuation_and_margin_data": parsed_valuation_data, 
+    "documents": latest_documents
     }
+    # Store the analysis data in the shared Redis cache
+    cache.set("last_analysis_data", analysis_result_for_cache)
+    
+    # last_analysis = {
+    #    "ticker": tick, "company_name": company_name, "summary": cleaned_technical_summary, 
+    #    "fundamentals": fund_data_for_ai_context, "valuation_and_margin_data": parsed_valuation_data, 
+    #    "documents": latest_documents
+    # }
 
     log_progress(f"Generating AI scores for {tick}...")
-    ai_scores_data = generate_ai_scores(tick, last_analysis)
+    ai_scores_data = generate_ai_scores(tick, analysis_result_for_cache)
     log_progress("AI scores generated successfully.")
 
     log_progress("Analysis complete. Loading results ...")
@@ -1338,7 +1358,7 @@ def analyze():
 
 
 # if __name__ == '__main__':
-#    app.run(host='0.0.0.0', port=8000, debug=True)
+#     app.run(host='0.0.0.0', port=8000, debug=True)
 
 # Wrap the WSGI app in ASGI middleware for Uvicorn
 # app = ASGIMiddleware(app)
