@@ -192,7 +192,6 @@ def fetch_chart_data(company_id: int, query: str, days: int = 10000) -> dict:
 #     return pd.concat(dfs, axis=1)
 
 def parse_chart_json(chart_json: dict) -> pd.DataFrame:
-    print("\n*** INSIDE parse_chart_json ***")
     datasets = chart_json.get("datasets", [])
     dfs = []
     for ds in datasets:
@@ -205,59 +204,39 @@ def parse_chart_json(chart_json: dict) -> pd.DataFrame:
         dfs.append(df)
 
     if not dfs:
-        print("DEBUG 1: No datasets found or processed. Returning empty DataFrame.")
         return pd.DataFrame()
 
     combined_df = pd.concat(dfs, axis=1)
-    print("\nDEBUG 2: DataFrame immediately after pd.concat()")
-    print("Shape:", combined_df.shape)
-    print("Info:", combined_df.info())
-    print("Head:\n", combined_df.head())
-    print("Tail:\n", combined_df.tail())
+
     if combined_df.empty:
-        print(">>> Issue Found: DataFrame is empty immediately after creation. <<<")
         return pd.DataFrame()
 
-    # --- Normalization Step ---
-    combined_df.index = combined_df.index.normalize()
-    print("\nDEBUG 3: DataFrame after index.normalize()")
-    print("Shape:", combined_df.shape)
-    print("Normalized Head:\n", combined_df.head())
-    print("Normalized Tail:\n", combined_df.tail())
+    # --- START: FINAL CORRECTED LOGIC ---
 
-    # --- Market Calendar Step ---
+    # 1. Normalize the data's index to remove time part
+    combined_df.index = combined_df.index.normalize()
+
+    # 2. Get the BSE market calendar
     bse = mcal.get_calendar('BSE')
     start_date = combined_df.index.min()
     end_date = combined_df.index.max()
-    print(f"\nDEBUG 4: Date range for market calendar: {start_date} to {end_date}")
 
     if pd.isna(start_date) or pd.isna(end_date):
-        print(">>> Issue Found: Invalid date range (contains NaT). Cannot proceed. <<<")
+        # This handles cases where a stock might have no valuation data at all
         return pd.DataFrame()
 
+    # 3. Get the valid trading days from the calendar
     valid_trading_days = bse.valid_days(start_date=start_date, end_date=end_date)
-    print(f"DEBUG 5: Found {len(valid_trading_days)} valid trading days in this range.")
-    print("First 5 trading days:", valid_trading_days[:5])
 
-    # --- Re-indexing Step ---
+    # 4. THE CRITICAL FIX: Remove the timezone information from the calendar's index
+    #    to make it compatible with our data's timezone-naive index.
+    valid_trading_days = valid_trading_days.tz_localize(None)
+
+    # 5. Re-index the DataFrame. This will now work correctly.
     business_days_df = combined_df.reindex(valid_trading_days)
-    print("\nDEBUG 6: DataFrame after re-indexing to valid trading days.")
-    print("Shape:", business_days_df.shape)
-    print("Info:", business_days_df.info()) # This will likely show many NaNs, which is expected.
-    # We check for non-NaN values to see if our original data survived the re-index.
-    print(f"Non-NaN values count after reindex: {business_days_df.count().sum()}")
-    if business_days_df.count().sum() == 0:
-        print(">>> Issue Found: All data was lost during re-indexing. This is the point of failure. <<<")
-    
-    # --- Interpolation Step ---
+
+    # 6. Interpolate to fill the gaps.
     interpolated_df = business_days_df.interpolate(method='linear', limit_direction='both')
-    print("\nDEBUG 7: Final DataFrame after interpolation.")
-    print("Shape:", interpolated_df.shape)
-    print("Info:", interpolated_df.info())
-    print("Head:\n", interpolated_df.head())
-    print("Tail:\n", interpolated_df.tail())
-    print(f"Non-NaN values count in final DF: {interpolated_df.count().sum()}")
-    print("*** EXITING parse_chart_json ***")
 
     return interpolated_df
 
