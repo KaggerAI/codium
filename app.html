@@ -421,6 +421,14 @@
           document.getElementById('progress-container').classList.remove('visible');
 
           const companyName = payload.company_name || payload.ticker;
+          // --- START: TEMPORARY TEST DATA ---
+          const dummyScores = [
+              { label: "Valuation", value: "7.8", description: "Mildly Undervalued" },
+              { label: "Technical", value: "8.5", description: "Strongly Overbought" },
+              { label: "Liquidity", value: "6.2", description: "Moderately Liquid" },
+              { label: "Volatility", value: "4.1", description: "Low Volatility" }
+          ];
+          // --- END: TEMPORARY TEST DATA ---
 
           // =====================================================================
           // START: MODIFIED SECTION FOR SCORES INTEGRATION
@@ -433,7 +441,7 @@
           }
 
           let aiScoreHTML = '';
-          if (payload.ai_scores && Array.isArray(payload.ai_scores) && payload.ai_scores.length) {
+          if (dummyScores && Array.isArray(dummyScores) && dummyScores.length) {
             aiScoreHTML = `
             <div class="bg-white p-6 rounded-xl shadow-lg">
                 <h2 class="text-2xl font-bold mb-4 text-slate-700">AI Score</h2>
