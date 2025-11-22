@@ -1,32 +1,46 @@
-# Use an official Python 3.10 runtime as a parent image
-FROM python:3.11-slim
+# Use Python 3.10 (More stable for financial libraries than 3.11)
+FROM python:3.10-slim
 
-# Set the working directory in the container to /app
+# Set work directory
 WORKDIR /app
 
-# Install system dependencies.
-# - git: needed to install tvdatafeed from GitHub
-# - build-essential & libta-lib-dev: needed to compile the TA-Lib python wrapper
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    libta-lib-dev \
+# 1. Install System Dependencies required for compiling TA-Lib and Playwright
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    make \
+    curl \
+    tar \
     git \
+    libffi-dev \
+    libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy the requirements file into the container at /app
-COPY requirements.txt .
+# 2. Compile and Install TA-Lib (The C-Library) from source
+# This corresponds to step 1 in your handler.py comments
+RUN curl -L http://prdownloads.sourceforge.net/ta-lib/ta-lib-0.4.0-src.tar.gz | tar xz \
+    && cd ta-lib \
+    && ./configure --prefix=/usr \
+    && make \
+    && make install \
+    && cd .. \
+    && rm -rf ta-lib
 
-# Install the python packages specified in requirements.txt
-# The --no-cache-dir flag keeps the image size smaller
+# 3. Copy requirements and install Python packages
+COPY requirements.txt .
+RUN pip install --no-cache-dir --upgrade pip
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the rest of your application's code from your local machine to /app in the container
+# 4. Install Playwright Browsers (Required for ScanX/News fetching)
+# We only install Chromium to save space, as that's usually enough
+RUN playwright install chromium --with-deps
+
+# 5. Copy the application code
 COPY . .
 
-# Tell Docker that the container will listen on port 8000 at runtime
+# 6. Expose the port Azure expects
 EXPOSE 8000
 
-# Define the command to run your application using Gunicorn (a production-grade server)
-# This will run 4 worker processes to handle incoming requests.
-# It points to the 'app' object inside your 'handler.py' file.
-CMD ["gunicorn", "--workers", "4", "--bind", "0.0.0.0:8000", "handler:app"]
+# 7. Start the app using the timeout settings from your startup.txt
+# We increase timeout to 600s because financial analysis takes time
+CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--timeout", "600", "handler:app"]
