@@ -24,6 +24,8 @@ import asyncio
 import httpx
 import uuid
 
+from flask import send_from_directory
+
 from flask import Flask, request, jsonify, send_from_directory, Response, stream_with_context
 from flask_caching import Cache
 # from a2wsgi import ASGIMiddleware
@@ -175,7 +177,7 @@ GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 
 # Configure Google Gemini
 if GOOGLE_API_KEY:
-    genai.configure(api_key=GOOGLE_API_KEY)
+    genai.api_key=GOOGLE_API_KEY
 
 # Safety check for keys at startup
 if not all([openai.api_key, PERPLEXITY_API_KEY, GOOGLE_API_KEY]):
@@ -666,13 +668,19 @@ def chat():
 
             try:
                 json_match = re.search(r"```json\s*([\s\S]*?)\s*```", central_brain_response_str, re.MULTILINE)
-                if not json_match:
-                    raise json.JSONDecodeError("No JSON block found in Central Brain response", central_brain_response_str, 0)
                 
-                central_brain_plan_str = json_match.group(1)
-                central_brain_plan = json.loads(central_brain_plan_str)
+                if json_match:
+                    # If a block is found, extract and parse it
+                    central_brain_plan_str = json_match.group(1)
+                    central_brain_plan = json.loads(central_brain_plan_str)
+                else:
+                    # If no block is found, try to parse the entire response string directly
+                    # This handles cases where the model returns pure JSON without markdown
+                    central_brain_plan = json.loads(central_brain_response_str)
+
                 thought_process_str = central_brain_plan.get("thought_process", "Central Brain planning complete.")
                 print(f"--- Central Brain Plan ---\n{json.dumps(central_brain_plan, indent=2)}\n--------------------------")
+                
             except (json.JSONDecodeError, AttributeError) as e:
                 print(f"ERROR: Could not parse Central Brain plan. Error: {e}. Response: {central_brain_response_str}")
                 return jsonify({'error': 'Failed to generate a strategic plan. Please try rephrasing your question.'}), 500
@@ -1049,7 +1057,7 @@ You must follow two sets of instructions exactly: the **Analysis Instructions** 
     <p>Combine the main points from both the 'Results Presentation' and the 'Concall Transcript'. Create a single bulleted list of the most important developments. Group related points under headers like Capacity Expansion, New Product Launches, Financial Highlights, Future Outlook, or Order Book.</p>
 
     <h4>Management Biases and Caveats</h4>
-    <p>In a bulleted list, point out the management biases you found. Note where their commentary seems too positive, is vague, or conflicts with financial data or industry facts.</p>
+    <p>In a bulleted list, point out the management biases you found. Note where their commentary seems too positive, is vague, or conflicts with financial data or industry facts. Highlight the management's tone, intent and conviction in the concall as well. </p>
 
 ---
 
@@ -1110,49 +1118,163 @@ You must follow these writing rules exactly. Any failure to follow a negative di
         return "<p><strong>Error:</strong> The AI-powered summary could not be generated at this time.</p>"
 
 
-def generate_ai_scores(ticker, last_analysis): # MODIFIED to accept last_analysis
+def generate_ai_scores(ticker, last_analysis):
     """
-    Calculates all AI scores for a given stock ticker, scales them,
-    and prepares a list of dictionaries for frontend rendering.
+    DEFINITIVE VERSION: Uses an explicit get_proxy_score() method to ensure
+    the correct data is used for both the score tile and the chart.
     """
     try:
-        # Pass the full last_analysis object during instantiation
         ai_scores = AIScores(ticker, last_analysis)
         ai_scores.calculate_all_scores()
 
-        # Prepare data for scaling, mirroring the logic in get_radar_plot
-        data_dict_for_scaling = {}
-        for field, score_obj in ai_scores.scores.items():
-            if field != 'sentiment':
-                # Use the mean of the last 30 days for a more stable score value
-                score_value = score_obj.get_score().tail(30).mean()
-                # Get the latest regime label as the description
-                regime_label = score_obj.df[f'{field}_regime_labels'].iloc[-1]
-                data_dict_for_scaling[field.capitalize()] = (score_value, regime_label.replace('_', ' ').title())
+        final_scaled_scores = {}
 
-        # Use the scaling method from AIScores to get values between 0 and 1
-        scaled_scores = AIScores._scale_radar_scores(data_dict_for_scaling)
-        
+        # 1. Handle special cases: Valuation and Technical Scores
+        for field in ['valuation', 'technical']:
+            score_obj = ai_scores.scores[field]
+            
+            # --- THE DEFINITIVE FIX ---
+            # Call the new, unambiguous method to get the proxy score history
+            proxy_score_history = score_obj.get_proxy_score()
+            # --- END FIX ---
+            
+            latest_proxy_score = proxy_score_history.iloc[-1]
+            hist_min = proxy_score_history.min()
+            hist_max = proxy_score_history.max()
+            hist_range = hist_max - hist_min if (hist_max - hist_min) != 0 else 1
+            scaled_proxy_score_0_1 = (latest_proxy_score - hist_min) / hist_range
+            latest_regime = score_obj.df[score_obj.regime_labels_col].iloc[-1]
+
+            final_scaled_scores[field.capitalize()] = (scaled_proxy_score_0_1, latest_regime.replace('_', ' ').title())
+
+        # 2. Handle remaining scores with relative scaling
+        data_dict_for_relative_scaling = {}
+        for field, score_obj in ai_scores.scores.items():
+            if field in ['liquidity', 'volatility']:
+                # This correctly uses get_score() to get the final regression score for these modules
+                raw_score_value = score_obj.get_score().tail(30).mean()
+                regime_label = score_obj.df[f'{field}_regime_labels'].iloc[-1]
+                data_dict_for_relative_scaling[field.capitalize()] = (raw_score_value, regime_label.replace('_', ' ').title())
+
+        if data_dict_for_relative_scaling:
+            relatively_scaled = AIScores._scale_radar_scores(data_dict_for_relative_scaling)
+            final_scaled_scores.update(relatively_scaled)
+            
+        # 3. Final display loop
         ai_score_html = []
-        for field_key, score_obj in ai_scores.scores.items():
-            if field_key != 'sentiment':
-                capitalized_field = field_key.capitalize()
-                if capitalized_field in scaled_scores:
-                    scaled_value, description = scaled_scores[capitalized_field]
-                    
-                    json_dict = {
-                        'label': capitalized_field,
-                        'value': round(scaled_value * 10, 1),  # Scale to 0-10 for display
-                        'description': description, # This is the current regime, e.g., "Mildly Overvalued"
-                        'chart1_json': score_obj.plot().to_json(),
-                        'chart2_json': score_obj.plot_violin().to_json()
-                    }
-                    ai_score_html.append(json_dict)
-        return ai_score_html
+        for field_key in ['Valuation', 'Technical', 'Liquidity', 'Volatility']:
+            if field_key in final_scaled_scores:
+                score_obj = ai_scores.scores[field_key.lower()]
+                scaled_value, description = final_scaled_scores[field_key]
+                
+                json_dict = {
+                    'label': field_key,
+                    'value': round(scaled_value * 10, 1),
+                    'description': description,
+                    'chart1_json': score_obj.plot().to_json(),
+                    'chart2_json': score_obj.plot_violin().to_json()
+                }
+                ai_score_html.append(json_dict)
+                
+        return ai_score_html, None # Return None for debug filename
+        
     except Exception as e:
-        print(f"ERROR: Could not generate AI scores for {ticker}. Reason: {e}")
+        print(f"CRITICAL ERROR in generate_ai_scores for {ticker}.")
+        print(f"Error: {e}")
         traceback.print_exc()
-        return [] # Return an empty list on failure
+        return [], None
+
+
+# def generate_ai_scores(ticker, last_analysis):
+#     """
+#     MODIFIED: Now generates a downloadable Excel debug file for the Valuation Score.
+#     It now returns a tuple: (score_html_list, debug_filename_or_none)
+#     """
+#     debug_filename = None # Initialize filename as None
+#     try:
+#         ai_scores = AIScores(ticker, last_analysis)
+#         ai_scores.calculate_all_scores()
+
+#         # --- START: NEW DEBUG FILE GENERATION LOGIC ---
+#         try:
+#             val_score_obj = ai_scores.scores.get('valuation')
+#             if val_score_obj and not val_score_obj.df.empty:
+#                 # Define the columns we want to inspect
+#                 features = val_score_obj.features
+#                 proxy_col = val_score_obj.proxy_score_col
+#                 regime_col = val_score_obj.regime_labels_col
+                
+#                 # Ensure all required columns exist before proceeding
+#                 required_cols = features + [proxy_col, regime_col]
+#                 if all(col in val_score_obj.df.columns for col in required_cols):
+#                     # Select only the data we need
+#                     debug_df = val_score_obj.df[required_cols]
+
+#                     # Generate a unique, temporary filename
+#                     unique_id = uuid.uuid4()
+#                     debug_filename = f"debug_valuation_{ticker}_{unique_id}.xlsx"
+                    
+#                     # --- START: MODIFIED FILE SAVING LOGIC ---
+                    
+#                     # 1. Define the dedicated debug directory
+#                     debug_dir = "debug_files"
+                    
+#                     # 2. Create the directory if it doesn't already exist
+#                     os.makedirs(debug_dir, exist_ok=True)
+                    
+#                     # 3. Create the full, explicit path to the file
+#                     full_file_path = os.path.join(debug_dir, debug_filename)
+                    
+#                     # 4. Save the DataFrame to the specific path
+#                     debug_df.to_excel(full_file_path)
+                    
+#                     print(f"INFO: Successfully created debug file at: {full_file_path}")
+
+#         except Exception as e:
+#             print(f"ERROR: Could not create debug file. Reason: {e}")
+#         # --- END: NEW DEBUG FILE GENERATION LOGIC ---
+
+#         # The rest of the function continues as before...
+#         final_scaled_scores = {}
+#         for field in ['valuation', 'technical']:
+#             # ... (rest of the logic is unchanged)
+#             score_obj = ai_scores.scores[field]
+#             proxy_score_history = score_obj.df[score_obj.proxy_score_col]
+#             latest_proxy_score = proxy_score_history.iloc[-1]
+#             hist_min = proxy_score_history.min()
+#             hist_max = proxy_score_history.max()
+#             hist_range = hist_max - hist_min if (hist_max - hist_min) != 0 else 1
+#             scaled_proxy_score_0_1 = (latest_proxy_score - hist_min) / hist_range
+#             latest_regime = score_obj.df[score_obj.regime_labels_col].iloc[-1]
+#             final_scaled_scores[field.capitalize()] = (scaled_proxy_score_0_1, latest_regime.replace('_', ' ').title())
+
+#         data_dict_for_relative_scaling = {}
+#         for field, score_obj in ai_scores.scores.items():
+#             if field in ['liquidity', 'volatility']:
+#                 raw_score_value = score_obj.get_score().tail(30).mean()
+#                 regime_label = score_obj.df[f'{field}_regime_labels'].iloc[-1]
+#                 data_dict_for_relative_scaling[field.capitalize()] = (raw_score_value, regime_label.replace('_', ' ').title())
+
+#         if data_dict_for_relative_scaling:
+#             relatively_scaled = AIScores._scale_radar_scores(data_dict_for_relative_scaling)
+#             final_scaled_scores.update(relatively_scaled)
+            
+#         ai_score_html = []
+#         for field_key in ['Valuation', 'Technical', 'Liquidity', 'Volatility']:
+#             if field_key in final_scaled_scores:
+#                 score_obj = ai_scores.scores[field_key.lower()]
+#                 scaled_value, description = final_scaled_scores[field_key]
+                
+#                 json_dict = { 'label': field_key, 'value': round(scaled_value * 10, 1), 'description': description, 'chart1_json': score_obj.plot().to_json(), 'chart2_json': score_obj.plot_violin().to_json() }
+#                 ai_score_html.append(json_dict)
+                
+#         return ai_score_html, debug_filename # Return both the HTML and the filename
+        
+#     except Exception as e:
+#         print(f"CRITICAL ERROR in generate_ai_scores for {ticker}.")
+#         print(f"Error: {e}")
+#         traceback.print_exc()
+#         return [], None # Return empty list and None on failure
     
 
 # ------------- Analysis & Respond -------------
@@ -1273,12 +1395,17 @@ async def get_analysis_for_ticker_async(tick):
                     elif label == "Margins": df_filtered = df_from_parser[[c for c in ("GPM %","OPM %","NPM %") if c in df_from_parser.columns]]
                     
                     if not df_filtered.empty:
+                        # --- START FIX ---
+                        # Convert the DataFrame to a list of dictionaries for the AI context
                         df_for_ai_series = df_filtered.copy().reset_index()
+                        # Ensure the date column is a string for JSON compatibility
                         for col in df_for_ai_series.columns:
                             if pd.api.types.is_datetime64_any_dtype(df_for_ai_series[col]):
                                 df_for_ai_series[col] = df_for_ai_series[col].dt.strftime('%Y-%m-%d')
+                        # Store the data in the correct format
                         parsed_data[label] = df_for_ai_series.to_dict(orient='records')
-                        
+                        # --- END FIX ---
+                                                
                         fig = go.Figure()
                         for col in df_filtered.columns: fig.add_trace(go.Scatter(x=df_filtered.index, y=[float(v) for v in df_filtered[col]], mode='lines', name=col))
                         fig.update_layout(title=label, hovermode='x unified', legend=dict(orientation='h', x=0.5, xanchor='center', y=-0.2), xaxis=dict(type='date', title='Date'), yaxis=dict(title=label))
@@ -1353,7 +1480,8 @@ async def get_analysis_for_ticker_async(tick):
     analysis_result_for_cache = {
     "ticker": tick, "company_name": company_name, "summary": cleaned_technical_summary, 
     "fundamentals": fund_data_for_ai_context, "valuation_and_margin_data": parsed_valuation_data, 
-    "documents": latest_documents
+    "documents": latest_documents,
+    "technical_data_df": df
     }
     # Store the analysis data in the shared Redis cache
     # cache.set("last_analysis_data", analysis_result_for_cache)
@@ -1384,7 +1512,8 @@ async def get_analysis_for_ticker_async(tick):
         "ticker": tick, "company_name": company_name, "summary": cleaned_technical_summary, 
         "fundamentals": fund_data_for_ai_context,  # <-- The AI-friendly version
         "valuation_and_margin_data": parsed_valuation_data, 
-        "documents": latest_documents
+        "documents": latest_documents,
+        "technical_data_df": df
     }
     
     # This dictionary is what the frontend needs. It uses the JSON strings.
@@ -1423,6 +1552,16 @@ def analyze():
     
         # Unpack the two dictionaries returned by the function
         result_for_frontend, analysis_for_cache = get_analysis_for_ticker(tick)
+
+        # --- START MODIFICATION ---
+        # Generate the AI scores and get the debug filename
+        ai_scores_data, debug_filename = generate_ai_scores(tick, analysis_for_cache)
+        result_for_frontend['ai_scores'] = ai_scores_data
+
+        # If a debug file was created, add its download URL to the response
+        if debug_filename:
+            result_for_frontend['debug_file_url'] = f"/download_debug_file/{debug_filename}"
+        # --- END MODIFICATION ---
         
         # Generate a unique key for this analysis session
         analysis_key = str(uuid.uuid4())
@@ -1443,13 +1582,28 @@ def analyze():
         traceback.print_exc()
         return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
     
+    
+@app.route('/download_debug_file/<filename>')
+def download_debug_file(filename):
+    """
+    Serves the temporary debug Excel file for download from the 'debug_files' subdir.
+    """
+    try:
+        # --- MODIFIED FILE SERVING LOGIC ---
+        # Explicitly serve from the dedicated 'debug_files' directory
+        return send_from_directory("debug_files", filename, as_attachment=True)
+        # --- END MODIFICATION ---
+    except FileNotFoundError:
+        return "File not found.", 404
+    
+
 # =====================================================================
 # END: New ASYNC and Caching Implementation for Analysis
 # =====================================================================
 
 
-# if __name__ == '__main__':
-#     app.run(host='0.0.0.0', port=8000, debug=True)
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=8000, debug=True)
 
 # Wrap the WSGI app in ASGI middleware for Uvicorn
 # app = ASGIMiddleware(app)

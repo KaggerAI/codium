@@ -19,6 +19,7 @@ from progress_logger import log_progress
 import httpx
 import asyncio
 import pandas_market_calendars as mcal
+from playwright.async_api import async_playwright
 
 # import os
 # import openai
@@ -27,7 +28,7 @@ import pandas_market_calendars as mcal
 # NOTE: Ensure GOOGLE_API_KEY is set as an environment variable
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 if GOOGLE_API_KEY:
-    genai.configure(api_key=GOOGLE_API_KEY)
+    genai.api_key=GOOGLE_API_KEY
 else:
     print("WARN: GOOGLE_API_KEY environment variable not set. AI-powered PDF presentation analysis will be disabled.")
 
@@ -70,38 +71,159 @@ def clean_df(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 async def fetch_consolidated_async(ticker: str) -> tuple[dict[str, pd.DataFrame], str]:
-    url = BASE_URL.format(ticker=ticker)
+    """
+    Fetches financial tables using a robust, two-stage hybrid approach.
+    
+    STAGE 1: FAST FETCH
+    - Attempts a fast fetch of the '/consolidated/' page using httpx. This works for
+      most companies where data is rendered on the server.
+
+    STAGE 2: ROBUST FALLBACK (if needed)
+    - If the consolidated page is empty (like for BDL), it escalates to using Playwright.
+    - Playwright loads the main standalone page and executes the JavaScript to render
+      the dynamic financial tables.
+
+    PARSING:
+    - A new, robust parsing method is used. Instead of relying on table order,
+      it finds each table by its specific HTML ID ('#quarters', '#profit-loss'),
+      ensuring accuracy.
+    """
+    standalone_url = f"https://www.screener.in/company/{ticker}/"
+    consolidated_url = standalone_url + "consolidated/"
+    
+    # --- STAGE 1: FAST FETCH ---
+    log_progress(f"Attempting fast fetch for {ticker} consolidated report...")
     async with httpx.AsyncClient() as client:
-        response = await client.get(url, headers=HEADERS, timeout=30.0)
-        response.raise_for_status()
-        text = response.text
+        try:
+            response = await client.get(consolidated_url, headers=HEADERS, timeout=30.0)
+            response.raise_for_status()
+            text = response.text
+        except httpx.HTTPStatusError:
+            log_progress(f"Consolidated URL not found for {ticker}. Proceeding to fallback.")
+            text = "" # Ensure text is empty to trigger the fallback logic
 
     soup = BeautifulSoup(text, 'html.parser')
+
+    # --- STAGE 2: ROBUST FALLBACK ---
+    # The check: is the main "Quarterly Results" table missing from the initial HTML?
+    if not soup.select_one("#quarters > .data-table"):
+        log_progress(f"Fast method insufficient. Escalating to browser fetch for {ticker} standalone report...")
+        
+        async with async_playwright() as p:
+            browser = await p.chromium.launch()
+            page = await browser.new_page()
+            try:
+                await page.goto(standalone_url, wait_until='networkidle', timeout=45000)
+                # We wait for the network to be idle, a more reliable signal that JS has finished.
+                text = await page.content()
+            finally:
+                await browser.close()
+        # Re-parse the soup object with the complete, JS-rendered HTML
+        soup = BeautifulSoup(text, 'html.parser')
+
+    # --- NEW ROBUST PARSING LOGIC ---
+    tables = {}
     description = ""
     try:
         about_p = soup.select_one(".company-info .about p")
         if about_p:
             description = about_p.get_text(strip=True)
     except Exception as e:
-        log_progress(f"WARN: Could not parse company description for {ticker}. Reason: {e}")
+        log_progress(f"WARN: Could not parse company description. Reason: {e}")
 
-    # pd.read_html is a blocking (non-async) function, so we run it in a separate thread.
-    raw_tables = await asyncio.to_thread(pd.read_html, text)
-    
-    tables = {LABELS.get(i): clean_df(df) for i, df in enumerate(raw_tables, start=1) if LABELS.get(i)}
-    series_list = []
-    for p in PATTERNS:
-        df = tables.pop(p, None)
-        if df is not None and len(df.columns) >= 2:
-            idx, val = df.columns[:2]
-            s = df.set_index(idx)[val]
-            s.name = p
-            series_list.append(s)
-    if series_list:
-        merged = pd.concat(series_list, axis=1).T
-        merged.index.name = ""
-        tables["Growth Patterns"] = merged
+    # This mapping is the key. We find each section by its unique ID.
+    SECTIONS_TO_FIND = {
+        "Quarterly Results": "#quarters",
+        "Annual Results": "#profit-loss",
+        "Balance Sheet": "#balance-sheet",
+        "Cash Flow": "#cash-flow",
+        "Financial Ratios": "#ratios",
+        "Quarterly Shareholding Pattern": "#shareholding",
+    }
+
+    for label, selector in SECTIONS_TO_FIND.items():
+        section_div = soup.select_one(selector)
+        if section_div:
+            # Find the actual data table within the section
+            table_html = section_div.select_one(".data-table")
+            if table_html:
+                try:
+                    df_list = await asyncio.to_thread(pd.read_html, str(table_html))
+                    if df_list:
+                        tables[label] = clean_df(df_list[0])
+                except Exception as e:
+                    log_progress(f"Could not parse table for '{label}' for {ticker}. Error: {e}")
+            else:
+                log_progress(f"Found section for '{label}' but no data-table inside for {ticker}.")
+        else:
+             log_progress(f"Could not find section with selector '{selector}' for {ticker}.")
+
+    # The old "Growth Patterns" came from tables we are no longer using.
+    # The primary financial tables are the priority and are now correctly fetched.
+
     return tables, description
+
+# async def fetch_consolidated_async(ticker: str) -> tuple[dict[str, pd.DataFrame], str]:
+#     """
+#     Fetches financial tables and company description from Screener.in.
+    
+#     This function includes a fallback mechanism. It first tries to fetch the
+#     'consolidated' report. If it detects that key financial data (like the
+#     quarterly results table) is missing, it automatically fetches the main
+#     'standalone' page, ensuring data is retrieved even for companies without
+#     a separate consolidated view (e.g., BDL).
+#     """
+#     standalone_url = f"https://www.screener.in/company/{ticker}/"
+#     consolidated_url = standalone_url + "consolidated/"
+    
+#     async with httpx.AsyncClient() as client:
+#         # First, attempt to get the consolidated report
+#         log_progress(f"Fetching consolidated report for {ticker}...")
+#         response = await client.get(consolidated_url, headers=HEADERS, timeout=30.0)
+#         response.raise_for_status()
+#         text = response.text
+
+#     soup = BeautifulSoup(text, 'html.parser')
+
+#     # Check if the main "quarters" table section is missing. This is our indicator
+#     # that the consolidated page is empty and we need the standalone page.
+#     if not soup.select_one("#quarters"):
+#         log_progress(f"Consolidated view for {ticker} is incomplete. Fetching standalone data as a fallback.")
+#         async with httpx.AsyncClient() as client:
+#             # If missing, make a second request to the standalone URL
+#             response = await client.get(standalone_url, headers=HEADERS, timeout=30.0)
+#             response.raise_for_status()
+#             text = response.text
+#             # We must re-parse the soup object with the new page content
+#             soup = BeautifulSoup(text, 'html.parser')
+
+#     # The rest of the function proceeds with the 'text' that is guaranteed
+#     # to have the financial tables.
+#     description = ""
+#     try:
+#         about_p = soup.select_one(".company-info .about p")
+#         if about_p:
+#             description = about_p.get_text(strip=True)
+#     except Exception as e:
+#         log_progress(f"WARN: Could not parse company description for {ticker}. Reason: {e}")
+
+#     # pd.read_html is a blocking (non-async) function, so we run it in a separate thread.
+#     raw_tables = await asyncio.to_thread(pd.read_html, text)
+    
+#     tables = {LABELS.get(i): clean_df(df) for i, df in enumerate(raw_tables, start=1) if LABELS.get(i)}
+#     series_list = []
+#     for p in PATTERNS:
+#         df = tables.pop(p, None)
+#         if df is not None and len(df.columns) >= 2:
+#             idx, val = df.columns[:2]
+#             s = df.set_index(idx)[val]
+#             s.name = p
+#             series_list.append(s)
+#     if series_list:
+#         merged = pd.concat(series_list, axis=1).T
+#         merged.index.name = ""
+#         tables["Growth Patterns"] = merged
+#     return tables, description
 
 def fetch_consolidated(ticker: str) -> tuple[dict[str, pd.DataFrame], str]:
     
@@ -334,13 +456,14 @@ async def summarize_presentation_with_gemini_async(pdf_url: str) -> str:
         def blocking_gemini_tasks(content):
             log_progress("Uploading PDF to Google AI File Service...")
             mime_type = mimetypes.guess_type(pdf_url)[0] or 'application/pdf'
-            
-            # This is a synchronous call
+
+            # This is the correct syntax for the library installed in Step 2
             pdf_file = genai.upload_file(
                 path=BytesIO(content),
                 display_name=pdf_url.split('/')[-1],
                 mime_type=mime_type
             )
+
             print(f"PDF uploaded successfully as '{pdf_file.name}'.")
 
             prompt = """You are an expert financial data extractor AI. Your task is to perform a forensic-level analysis of the entire provided investor presentation PDF. Leave no stone unturned. Analyze every page of the document.
@@ -412,11 +535,17 @@ def summarize_presentation_with_gemini(pdf_url: str) -> str:
         
         log_progress("Uploading PDF to Google AI File Service...")
         mime_type = mimetypes.guess_type(pdf_url)[0] or 'application/pdf'
+
+        # --- FIX STARTS HERE ---
+
+        # --- FIX STARTS HERE (Using the new google-genai SDK syntax) ---
         pdf_file = genai.upload_file(
             path=BytesIO(pdf_content),
             display_name=pdf_url.split('/')[-1],
-            mime_type=mime_type,
+            mime_type=mime_type
         )
+        # --- FIX ENDS HERE ---
+
         print(f"PDF uploaded successfully as '{pdf_file.name}'.")
 
         # CHANGED: The prompt is now much more detailed to ensure a comprehensive summary.

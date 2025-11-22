@@ -4,6 +4,23 @@ import plotly.express as px
 class PlotScore:
 
     @staticmethod
+    def empty_figure(text="No data available"):
+        """Creates an empty Plotly figure with a text annotation."""
+        fig = go.Figure()
+        fig.update_layout(
+            xaxis={'visible': False},
+            yaxis={'visible': False},
+            annotations=[{
+                'text': text,
+                'xref': 'paper',
+                'yref': 'paper',
+                'showarrow': False,
+                'font': {'size': 16}
+            }]
+        )
+        return fig
+
+    @staticmethod
     def multiple_lines(df, columns, category_column=None, regime_labels=None):
         # Define the colors (using Plotly color palette)
         colors = px.colors.qualitative.Plotly

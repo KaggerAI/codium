@@ -14,12 +14,12 @@ class ValScore(BaseScore):
             4: 'overvalued',
         }
         self.n_regimes = len(self.regime_labels)
-        self.features = ['PE', 'PB', 'EBITDA_BY_EV', 'SALES_BY_MCAP']
+        self.features = ['PE', 'PB', 'EV / EBITDA', 'Market Cap / Sales']
         super().__init__(name='valuation', description = f'Valuation Score of {symbol}' ,df=df, feaures=self.features, n_regimes=self.n_regimes, regime_labels=self.regime_labels)
 
     def _calculate_simple_score(self):
         # Scale and apply weights
-        weights_label = [('PE',1), ('PB',1), ('EBITDA_BY_EV',1), ('SALES_BY_MCAP',1)]
+        weights_label = [('PE',1), ('PB',1), ('EV / EBITDA', 1), ('Market Cap / Sales', 1)]
         weights = np.array([weight for _, weight in weights_label])
         Xscaled = StandardScaler().fit_transform(self.df[self.features])
         self.df[self.proxy_score_col] = Xscaled @ weights

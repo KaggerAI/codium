@@ -14,6 +14,7 @@ httpx>=0.23.0
 # --- Data & Technical Analysis ---
 pandas
 numpy<2.0
+openpyxl
 yfinance
 TA-Lib
 tradingview-datafeed==2.1.1   # installs as tvDatafeed

@@ -8,22 +8,26 @@ from scores.Data import Data
 from scores.PlotScore import PlotScore
 import numpy as np
 
+# In AIScores.py
+
 class AIScores:
     def __init__(self, symbol, last_analysis):
         """
-        MODIFIED to accept last_analysis to pass real data to the Data loader.
-        This is the fix for the TypeError.
+        MODIFIED to accept last_analysis and pass ALL real data to the Data loader.
         """
         self.symbol = symbol
         
-        # Extract the valuation data from the main analysis object
+        # 1. Extract both valuation and technical data from the main analysis object
         valuation_data = last_analysis.get("valuation_and_margin_data", {})
+        technical_df = last_analysis.get("technical_data_df", None)
         
-        # Instantiate Data class and load data (real for valuation, placeholder for others)
+        # 2. Instantiate Data class
         data_loader = Data(symbol)
-        self.df = data_loader.load_data(valuation_data)
+        
+        # 3. Call load_data with BOTH arguments, satisfying the function's requirement
+        self.df = data_loader.load_data(valuation_data, technical_df)
 
-        # The rest of the initialization proceeds as before, but now with a better df
+        # 4. Initialize the score calculators with the fully populated DataFrame
         self.scores = {
             'valuation': ValScore(symbol, self.df),
             'technical': TechScore(symbol, self.df),
@@ -33,12 +37,18 @@ class AIScores:
         }
 
     def calculate_all_scores(self):
+        """
+        This method was restored. It runs the calculation pipeline for each score.
+        """
         self.scores['valuation'].pipeline()
         self.scores['technical'].pipeline()
         self.scores['liquidity'].pipeline()
         self.scores['volatility'].pipeline()
     
     def get_radar_plot(self):
+        """
+        This method was restored. It prepares data for the UI radar plot.
+        """
         data_dict = {
             'Valuation': (self.scores['valuation'].get_score().tail(30).mean(), self.scores['valuation'].df['valuation_regime_labels'].iloc[-1]),
             'Technical': (self.scores['technical'].get_score().tail(30).mean(),self.scores['technical'].df['technical_regime_labels'].iloc[-1]),
@@ -51,7 +61,7 @@ class AIScores:
     @staticmethod
     def _scale_radar_scores(data_dict, minmax_dict=None, use_zscore_if_low_var=True):
         """
-        Scales the first element of each (value, label) tuple in the input dict to [0, 1] range.
+        This method was restored. It scales the score values for consistent display.
         """
         values = np.array([v[0] for v in data_dict.values()])
         

@@ -104,20 +104,66 @@ class BaseScore(ABC):
         self.df[self.score] = index_score
 
     def get_score(self):
-        """_summary_: returns the score column
         """
-        return self.df[self.score]
+        MODIFIED: Now intelligently returns the scaled score column if it exists,
+        otherwise falls back to the raw score. This is a central fix.
+        """
+        # By convention, the scaled score column is named '{score_name}_score_scaled'
+        scaled_score_column_name = f"{self.name}_score_scaled"
+        
+        # Check if our DataFrame has this dedicated scaled score column
+        if scaled_score_column_name in self.df.columns:
+            # If it does, return it as the definitive score
+            return self.df[scaled_score_column_name]
+        else:
+            # If not, fall back to returning the raw, unscaled score
+            return self.df[self.score]
+
+    def get_proxy_score(self):
+        """
+        NEW: Explicitly returns the raw proxy score series.
+        This removes ambiguity.
+        """
+        return self.df[self.proxy_score_col]
 
     def plot(self, y_list=None, category_column=None):
+        """
+        MODIFIED: Filters the DataFrame to only show the last 2 years of data
+        before rendering the plot.
+        """
+        if self.df.empty:
+            return PlotScore.empty_figure("No data to plot.")
+
+        # Determine the date range: last 2 years from the most recent data point
+        end_date = self.df.index.max()
+        start_date = end_date - np.timedelta64(2 * 365, 'D') # Approx 2 years
+        
+        # Filter the DataFrame for plotting
+        df_to_plot = self.df[self.df.index >= start_date]
+
         if category_column is None:
             category_column = self.regime_col
         if y_list is None:
             y_list = [self.proxy_score_col]
-        return PlotScore.multiple_lines(df=self.df, columns=y_list, category_column=category_column, regime_labels=self.regime_labels)
+        
+        return PlotScore.multiple_lines(df=df_to_plot, columns=y_list, category_column=category_column, regime_labels=self.regime_labels)
     
     def plot_violin(self, y=None, category_column=None):
+        """
+        MODIFIED: Also filters the DataFrame for the violin plot to maintain consistency.
+        """
+        if self.df.empty:
+            return PlotScore.empty_figure("No data to plot.")
+
+        # Determine the date range: last 2 years from the most recent data point
+        end_date = self.df.index.max()
+        start_date = end_date - np.timedelta64(2 * 365, 'D') # Approx 2 years
+        
+        # Filter the DataFrame for plotting
+        df_to_plot = self.df[self.df.index >= start_date]
+
         if category_column is None:
             category_column = self.regime_col
         if y is None:
             y = 'returns'
-        return PlotScore.plot_violin(df=self.df, x_col=category_column, y_col=y)
+        return PlotScore.plot_violin(df=df_to_plot, x_col=category_column, y_col=y)

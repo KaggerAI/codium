@@ -7,89 +7,157 @@ class Data:
         self.df = None
         # This list now defines ALL possible columns we might need.
         self.all_feature_columns = [
-            'PE', 'PB', 'EBITDA_BY_EV', 'SALES_BY_MCAP',
+            'PE', 'PB', 'EV / EBITDA', 'Market Cap / Sales',
             'RSI14', 'ema13_55', 'ema55_144',
             'IMPLIED_BID_ASK', 'VOLUME', 'VOLUME_FUTURE', 'FII', 'DII',
             'ATR_14', 'IV', 'BETA', 'HV_20D', 'HV_IV', 'IndiaVix',
             'returns', 'close'
         ]
         # These are the specific columns for ValScore we will populate with real data
-        self.valuation_features = ['PE', 'PB', 'EBITDA_BY_EV', 'SALES_BY_MCAP']
+        self.valuation_features = ['PE', 'PB', 'EV / EBITDA', 'Market Cap / Sales']
 
-    def load_data(self, valuation_data: dict):
+
+    def load_data(self, valuation_data: dict, technical_df: pd.DataFrame):
         """
-        Loads and processes real valuation data, filling other features with placeholders.
-        
-        Args:
-            valuation_data (dict): The 'valuation_and_margin_data' section from last_analysis.
+        CORRECTED VERSION: Properly handles the incoming data format. It converts the
+        list of dictionaries from valuation_data back into DataFrames before processing.
         """
         processed_dfs = []
 
-        # --- Process each valuation metric from the input data ---
-        
-        # 1. Process PE Ratio
-        pe_series_data = valuation_data.get("PE Ratio", [])
-        if pe_series_data:
-            df_pe = pd.DataFrame(pe_series_data).set_index('date')
-            # FIX 1: Explicitly convert to numeric, turning errors into NaN
-            df_pe['PE'] = pd.to_numeric(df_pe['PE'], errors='coerce')
-            processed_dfs.append(df_pe[['PE']])
+        # --- Part 1: Process and Normalize Valuation DataFrames ---
+        if valuation_data:
+            # The variable is renamed to 'data_list' for clarity.
+            for label, data_list in valuation_data.items():
+                if not isinstance(data_list, list) or not data_list:
+                    continue
 
-        # 2. Process PB Ratio
-        pb_series_data = valuation_data.get("PB Ratio", [])
-        if pb_series_data:
-            df_pb = pd.DataFrame(pb_series_data).set_index('date')
-            df_pb.rename(columns={'Price to BV': 'PB'}, inplace=True)
-            df_pb['PB'] = pd.to_numeric(df_pb['PB'], errors='coerce')
-            processed_dfs.append(df_pb[['PB']])
-            
-        # 3. Process EV / EBITDA (and calculate its inverse)
-        ev_ebitda_series_data = valuation_data.get("EV / EBITDA", [])
-        if ev_ebitda_series_data:
-            df_ev_ebitda = pd.DataFrame(ev_ebitda_series_data).set_index('date')
-            df_ev_ebitda['EV / EBITDA'] = pd.to_numeric(df_ev_ebitda['EV / EBITDA'], errors='coerce')
-            # FIX 2: Safely calculate inverse, avoiding division by zero
-            df_ev_ebitda['EBITDA_BY_EV'] = 1 / df_ev_ebitda['EV / EBITDA'].replace(0, np.nan)
-            processed_dfs.append(df_ev_ebitda[['EBITDA_BY_EV']])
+                # --- START FIX ---
+                # 1. Convert the list of dictionaries back into a DataFrame.
+                df = pd.DataFrame(data_list)
+                
+                # 2. Check if a 'date' column exists to be set as the index.
+                if 'date' not in df.columns:
+                    continue
+                df.set_index('date', inplace=True)
+                # --- END FIX ---
 
-        # 4. Process Market Cap / Sales (and calculate its inverse)
-        mcap_sales_series_data = valuation_data.get("Market Cap / Sales", [])
-        if mcap_sales_series_data:
-            df_mcap_sales = pd.DataFrame(mcap_sales_series_data).set_index('date')
-            df_mcap_sales['Market Cap / Sales'] = pd.to_numeric(df_mcap_sales['Market Cap / Sales'], errors='coerce')
-            df_mcap_sales['SALES_BY_MCAP'] = 1 / df_mcap_sales['Market Cap / Sales'].replace(0, np.nan)
-            processed_dfs.append(df_mcap_sales[['SALES_BY_MCAP']])
+                # Now that 'df' is a proper DataFrame, the rest of the original logic will work.
+                df.index = pd.to_datetime(df.index).normalize()
+                
+                if label == "PE Ratio" and 'PE' in df.columns:
+                    processed_dfs.append(df[['PE']])
+                elif label == "PB Ratio" and 'Price to BV' in df.columns:
+                    df_pb = df[['Price to BV']].rename(columns={'Price to BV': 'PB'})
+                    processed_dfs.append(df_pb)
+                elif label == "EV / EBITDA" and 'EV / EBITDA' in df.columns:
+                    processed_dfs.append(df[['EV / EBITDA']])
+                elif label == "Market Cap / Sales" and 'Market Cap / Sales' in df.columns:
+                    processed_dfs.append(df[['Market Cap / Sales']])
 
-        # --- Combine all processed data and create the master DataFrame ---
+        # --- Part 2: Process and Normalize Technical DataFrame (No change needed here) ---
+        if technical_df is not None and not technical_df.empty:
+            technical_df.index = pd.to_datetime(technical_df.index).normalize()
+
+            tech_features_df = pd.DataFrame(index=technical_df.index)
+            tech_features_df['RSI14'] = technical_df['RSI14']
+            tech_features_df['ema13_55'] = technical_df['EMA13'] - technical_df['EMA55']
+            tech_features_df['ema55_144'] = technical_df['EMA55'] - technical_df['EMA144']
+            tech_features_df['close'] = technical_df['Close']
+            tech_features_df['returns'] = tech_features_df['close'].pct_change()
+            processed_dfs.append(tech_features_df)
+
+        # --- Part 3: Merge and Sanitize (No change needed here) ---
         if not processed_dfs:
-            print("WARNING: No valuation data found. Falling back to fully random data.")
+            self.df = self._generate_random_dataframe()
+            return self.df
+            
+        master_df = pd.concat(processed_dfs, axis=1)
+
+        start, end = master_df.index.min(), master_df.index.max()
+        if pd.isna(start) or pd.isna(end):
             self.df = self._generate_random_dataframe()
             return self.df
 
-        master_df = pd.concat(processed_dfs, axis=1)
-        master_df.index = pd.to_datetime(master_df.index)
-
-        date_index = pd.date_range(start=master_df.index.min(), end=master_df.index.max(), freq='B')
+        date_index = pd.date_range(start=start, end=end, freq='B')
         master_df = master_df.reindex(date_index)
-
-        # FIX 3: Robustly fill gaps. First with the mean, then with 0 for any columns that were entirely NaN.
-        master_df.fillna(master_df.mean(), inplace=True)
+        
+        master_df.interpolate(method='linear', limit_direction='both', inplace=True)
+        master_df.fillna(method='bfill', inplace=True)
         master_df.fillna(0, inplace=True)
 
-        # --- Fill placeholder data for all other required features ---
+        # --- Part 4: Fill placeholders (Unchanged) ---
         placeholder_cols = [col for col in self.all_feature_columns if col not in master_df.columns]
-        
         placeholder_data = np.random.rand(len(master_df.index), len(placeholder_cols))
         df_placeholder = pd.DataFrame(placeholder_data, index=master_df.index, columns=placeholder_cols)
+        self.df = pd.concat([master_df, df_placeholder], axis=1).reindex(columns=self.all_feature_columns).fillna(0)
 
-        self.df = pd.concat([master_df, df_placeholder], axis=1)
+        print("INFO: Data.py successfully converted and merged REAL valuation and technical data.")
+        return self.df
+
+    
+    # def load_data(self, valuation_data: dict, technical_df: pd.DataFrame):
+    #     """
+    #     FINAL VERSION: Uses .normalize() on all indices to strip the time component,
+    #     ensuring a perfect data alignment before merging.
+    #     """
+    #     processed_dfs = []
+
+    #     # --- Part 1: Process and Normalize Valuation DataFrames ---
+    #     if valuation_data:
+    #         for label, df in valuation_data.items():
+    #             # THE FIX: Ensure the index is a normalized, timezone-naive datetime object
+    #             df.index = pd.to_datetime(df.index).normalize()
+                
+    #             if label == "PE Ratio" and 'PE' in df.columns:
+    #                 processed_dfs.append(df[['PE']])
+    #             elif label == "PB Ratio" and 'Price to BV' in df.columns:
+    #                 df_pb = df[['Price to BV']].rename(columns={'Price to BV': 'PB'})
+    #                 processed_dfs.append(df_pb)
+    #             elif label == "EV / EBITDA" and 'EV / EBITDA' in df.columns:
+    #                 processed_dfs.append(df[['EV / EBITDA']])
+    #             elif label == "Market Cap / Sales" and 'Market Cap / Sales' in df.columns:
+    #                 processed_dfs.append(df[['Market Cap / Sales']])
+    #     # --- Part 2: Process and Normalize Technical DataFrame ---
+    #     if technical_df is not None and not technical_df.empty:
+    #         # THE FIX: Normalize the technical data's index to remove the time component
+    #         technical_df.index = pd.to_datetime(technical_df.index).normalize()
+
+    #         tech_features_df = pd.DataFrame(index=technical_df.index)
+    #         tech_features_df['RSI14'] = technical_df['RSI14']
+    #         tech_features_df['ema13_55'] = technical_df['EMA13'] - technical_df['EMA55']
+    #         tech_features_df['ema55_144'] = technical_df['EMA55'] - technical_df['EMA144']
+    #         tech_features_df['close'] = technical_df['Close']
+    #         tech_features_df['returns'] = tech_features_df['close'].pct_change()
+    #         processed_dfs.append(tech_features_df)
+
+    #     # --- Part 3: Merge and Sanitize (This will now work correctly) ---
+    #     if not processed_dfs:
+    #         self.df = self._generate_random_dataframe()
+    #         return self.df
+            
+    #     master_df = pd.concat(processed_dfs, axis=1)
+
+    #     start, end = master_df.index.min(), master_df.index.max()
+    #     if pd.isna(start) or pd.isna(end):
+    #          self.df = self._generate_random_dataframe()
+    #          return self.df
+
+    #     date_index = pd.date_range(start=start, end=end, freq='B')
+    #     master_df = master_df.reindex(date_index)
         
-        for col in self.all_feature_columns:
-            if col not in self.df.columns:
-                 self.df[col] = 0 # Fill any completely missing columns with 0
+    #     master_df.interpolate(method='linear', limit_direction='both', inplace=True)
+    #     master_df.fillna(method='bfill', inplace=True)
+    #     master_df.fillna(0, inplace=True)
 
-        print("INFO: Data.py loaded with REAL valuation data and PLACEHOLDER data for other scores.")
-        return self.df[self.all_feature_columns]
+    #     # --- Part 4: Fill placeholders (Unchanged) ---
+    #     placeholder_cols = [col for col in self.all_feature_columns if col not in master_df.columns]
+    #     placeholder_data = np.random.rand(len(master_df.index), len(placeholder_cols))
+    #     df_placeholder = pd.DataFrame(placeholder_data, index=master_df.index, columns=placeholder_cols)
+    #     self.df = pd.concat([master_df, df_placeholder], axis=1).reindex(columns=self.all_feature_columns).fillna(0)
+
+    #     print("INFO: Data.py successfully merged REAL valuation and technical data after NORMALIZING indices.")
+    #     return self.df
+    
 
     def _generate_random_dataframe(self):
         """Generates a fully random DataFrame as a fallback."""
