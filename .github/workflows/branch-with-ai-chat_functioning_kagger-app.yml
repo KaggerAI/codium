@@ -1,0 +1,53 @@
+# Docs for the Azure Web Apps Deploy action: https://github.com/Azure/webapps-deploy
+# More GitHub Actions for Azure: https://github.com/Azure/actions
+
+name: Build and deploy container app to Azure Web App - kagger-app
+
+on:
+  push:
+    branches:
+      - branch-with-AI-chat_functioning
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read #This is required for actions/checkout
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Log in to container registry
+        uses: docker/login-action@v2
+        with:
+          registry: kaggerimages.azurecr.io/
+          username: ${{ secrets.AZUREAPPSERVICE_CONTAINERUSERNAME_CEC0AF2C699B452CBC07266EFF9B43CC }}
+          password: ${{ secrets.AZUREAPPSERVICE_CONTAINERPASSWORD_D3F6CDBFF5F6482FB0A134159905901F }}
+
+      - name: Build and push container image to registry
+        uses: docker/build-push-action@v3
+        with:
+          context: .
+          push: true
+          tags: kaggerimages.azurecr.io/${{ secrets.AZUREAPPSERVICE_CONTAINERUSERNAME_CEC0AF2C699B452CBC07266EFF9B43CC }}/codium:${{ github.sha }}
+          file: ./Dockerfile
+
+  deploy:
+    runs-on: ubuntu-latest
+    
+    needs: build
+    
+    steps:
+      
+      - name: Deploy to Azure Web App
+        id: deploy-to-webapp
+        uses: azure/webapps-deploy@v2
+        with:
+          app-name: 'kagger-app'
+          slot-name: 'Production'
+          images: 'kaggerimages.azurecr.io/${{ secrets.AZUREAPPSERVICE_CONTAINERUSERNAME_CEC0AF2C699B452CBC07266EFF9B43CC }}/codium:${{ github.sha }}'
+          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_45FE73803B9E481298D1AE46C38BFA68 }}
