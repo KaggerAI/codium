@@ -82,28 +82,37 @@ if azure_redis_conn_string:
     print("INFO: Found Azure Redis connection string. Parsing for Python redis library.")
     
     # This new parser is much safer and handles different connection string formats.
+
     try:
-        # Split the string by commas to separate the parts
+        # Split the string by commas
         parts = azure_redis_conn_string.split(',')
         
         # The host and port are always the first part
-        host, port = parts[0].split(':')
+        host_part = parts[0]
         
-        # Find the password and ssl parts in the rest of the string
-        # We create a dictionary of the other options
-        options = {p.split('=')[0]: p.split('=')[1] for p in parts[1:]}
+        # Robustly find password and ssl
+        password = None
+        ssl_enabled = False
         
-        password = options.get('password')
-        ssl = options.get('ssl', 'false').lower() == 'true'
+        for part in parts[1:]:
+            # Use split('=', 1) to ensure we only split on the FIRST equals sign
+            # This protects passwords that contain '=' characters (like base64)
+            if '=' in part:
+                key, value = part.split('=', 1)
+                if key.lower() == 'password':
+                    password = value
+                elif key.lower() == 'ssl':
+                    ssl_enabled = value.lower() == 'true'
 
         if not password:
             raise ValueError("Password not found in Redis connection string")
 
         # Use 'rediss://' for SSL connections, which Azure requires
-        scheme = "rediss://" if ssl else "redis://"
+        scheme = "rediss://" if ssl_enabled else "redis://"
         
         # Construct the final, standard Redis URL
-        formatted_redis_url = f"{scheme}:{password}@{host}:{port}"
+        # host_part looks like "name.redis.cache.windows.net:6380"
+        formatted_redis_url = f"{scheme}:{password}@{host_part}"
 
         config = {
             "CACHE_TYPE": "RedisCache",
@@ -114,8 +123,43 @@ if azure_redis_conn_string:
 
     except Exception as e:
         print(f"CRITICAL ERROR: Failed to parse Redis connection string. Error: {e}")
-        # Fallback to SimpleCache if parsing fails, so the app doesn't crash
+        # Fallback to SimpleCache if parsing fails
         config = {"CACHE_TYPE": "SimpleCache"}
+
+    # try:
+    #     # Split the string by commas to separate the parts
+    #     parts = azure_redis_conn_string.split(',')
+        
+    #     # The host and port are always the first part
+    #     host, port = parts[0].split(':')
+        
+    #     # Find the password and ssl parts in the rest of the string
+    #     # We create a dictionary of the other options
+    #     options = {p.split('=')[0]: p.split('=')[1] for p in parts[1:]}
+        
+    #     password = options.get('password')
+    #     ssl = options.get('ssl', 'false').lower() == 'true'
+
+    #     if not password:
+    #         raise ValueError("Password not found in Redis connection string")
+
+    #     # Use 'rediss://' for SSL connections, which Azure requires
+    #     scheme = "rediss://" if ssl else "redis://"
+        
+    #     # Construct the final, standard Redis URL
+    #     formatted_redis_url = f"{scheme}:{password}@{host}:{port}"
+
+    #     config = {
+    #         "CACHE_TYPE": "RedisCache",
+    #         "CACHE_DEFAULT_TIMEOUT": 21600, # 6 hours
+    #         "CACHE_REDIS_URL": formatted_redis_url
+    #     }
+    #     print("INFO: Configuring cache for PRODUCTION (Redis)")
+
+    # except Exception as e:
+    #     print(f"CRITICAL ERROR: Failed to parse Redis connection string. Error: {e}")
+    #     # Fallback to SimpleCache if parsing fails, so the app doesn't crash
+    #     config = {"CACHE_TYPE": "SimpleCache"}
 else:
     # Fallback for local development
     print("INFO: CACHE_REDIS_URL not found. Configuring cache for DEVELOPMENT (SimpleCache)")
@@ -1388,6 +1432,7 @@ async def get_analysis_for_ticker_async(tick):
                     if df_from_parser.empty: continue
 
                     df_filtered = pd.DataFrame()
+                    
                     if label == "PE Ratio" and "PE" in df_from_parser.columns: df_filtered = df_from_parser[["PE"]]
                     elif label == "PB Ratio" and "Price to BV" in df_from_parser.columns: df_filtered = df_from_parser[["Price to BV"]]
                     elif label == "EV / EBITDA" and "EV / EBITDA" in df_from_parser.columns: df_filtered = df_from_parser[["EV / EBITDA"]]
