@@ -1610,14 +1610,35 @@ def analyze():
         
         # Generate a unique key for this analysis session
         analysis_key = str(uuid.uuid4())
+
+        # --- ROBUST CACHING BLOCK ---
+        try:
+            import sys
+            # Optional: Log the size to see how big the object is
+            size_in_mb = sys.getsizeof(str(analysis_for_cache)) / (1024 * 1024)
+            print(f"INFO: Attempting to cache analysis data. Est. Size: {size_in_mb:.2f} MB")
+
+            # Try to save to cache, but don't let it kill the request if it fails
+            cache.set(analysis_key, analysis_for_cache, timeout=21600)
+            print(f"INFO: Successfully cached data for {tick}")
+            
+        except Exception as e:
+            print(f"WARNING: Failed to write to Redis Cache. Returning data anyway. Error: {e}")
+            # We continue execution so the user still sees the result, 
+            # even if the "Deep Chat" feature might need a reload later.
+        # ---------------------------
         
-        # Save the AI-formatted data to the cache
-        cache.set(analysis_key, analysis_for_cache, timeout=21600)
-        
-        # Add the key to the frontend data so the browser can use it
+        # Add the key to the frontend data
         result_for_frontend['analysis_key'] = analysis_key
         
         return jsonify(result_for_frontend)
+
+
+        # cache.set(analysis_key, analysis_for_cache, timeout=21600)
+        
+        # result_for_frontend['analysis_key'] = analysis_key
+        
+        # return jsonify(result_for_frontend)
 
         # --- END OF NEW LOGIC ---
 
