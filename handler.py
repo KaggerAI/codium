@@ -1575,7 +1575,7 @@ async def get_analysis_for_ticker_async(tick):
     # Pass BOTH dictionaries back to the synchronous wrapper
     return result_for_frontend, analysis_for_cache
 
-@cache.memoize(timeout=21600)
+# @cache.memoize(timeout=21600)
 def get_analysis_for_ticker(tick):
     """
     Synchronous wrapper that runs the async logic. The cache stores the final result.
