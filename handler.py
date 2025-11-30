@@ -272,7 +272,7 @@ def call_openai_api(messages, model="gpt-4.1-mini", expect_json_format_flag=Fals
         print(f"ERROR in call_openai_api: {e}")
         raise
 
-def call_perplexity_api(messages, model="sonar-pro", temperature=1):
+def call_perplexity_api(messages, model="sonar", temperature=1):
     if not PERPLEXITY_API_KEY:
         raise ValueError("Perplexity API key is not configured.")
     try:
@@ -289,7 +289,7 @@ def call_perplexity_api(messages, model="sonar-pro", temperature=1):
             "Content-Type": "application/json"
         }
         
-        response = requests.post(url, headers=headers, json=payload)
+        response = requests.post(url, headers=headers, json=payload, timeout=30)
         
         # Check for HTTP errors
         response.raise_for_status()
@@ -709,6 +709,12 @@ def chat():
         if not last_analysis or not last_analysis.get("ticker"):
             print("ERROR: Could not retrieve analysis data from cache.")
             return jsonify({'answer': 'Context data unavailable (Cache Miss). Please re-analyze the stock.'}), 200
+
+        if last_analysis:
+            size_kb = sys.getsizeof(str(last_analysis)) / 1024
+            print(f"INFO: Chat Data Loaded. Size: {size_kb:.2f} KB. Keys: {list(last_analysis.keys())}")
+        else:
+            print("ERROR: Chat Data is None after fetch.")
         # ------------------------------
 
         print(f"AI chatbot received question with selected model: {selected_model}")
@@ -854,7 +860,7 @@ def chat():
             sonar_prompt = news_plan.get("prompt_for_sonar", f"Get the latest news for {last_analysis.get('ticker')}")
             try:
                 news_messages = [{"role": "user", "content": sonar_prompt}]
-                news_summary = call_perplexity_api(news_messages, model="sonar-pro")
+                news_summary = call_perplexity_api(news_messages, model="sonar")
             except Exception as e:
                 print(f"ERROR: News fetching failed: {e}")
                 news_summary = f"Error: Failed to fetch real-time news. {e}"
