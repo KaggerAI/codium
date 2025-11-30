@@ -1495,32 +1495,76 @@ async def get_analysis_for_ticker_async(tick):
     else:
         cleaned_technical_summary = technical_summary_list
 
-    close_j=build_close_figure(df,company_name).to_json()
-    hl_j   =build_hl_figure(df,company_name).to_json()
-    ema_j  =build_ema_figure(df,company_name).to_json()
-    rsi_j  =build_rsi_figure(df,company_name).to_json()
-    adl_j  =build_adl_figure(df,company_name).to_json()
-    rs_j   =build_rs_figure(df,company_name).to_json()
-    
+# --- START: OPTIMIZED PARALLEL PROCESSING ---    
+    # 1. First, process the fundamentals quickly (CPU lightweight)
     fund_data_for_frontend, fund_data_for_ai_context = {}, {}
     if tables_from_screener:
         for table_name, df_original_table in tables_from_screener.items():
             fund_data_for_frontend[table_name] = df_original_table.reset_index().T.to_json(orient='split')
+            # Prepare clean rows for AI context
             temp_rows_for_cleaning = df_original_table.reset_index().to_dict(orient='records')
             cleaned_rows_for_ai = []
             for row_dict in temp_rows_for_cleaning:
                 cleaned_row = { (str(k).strip() if isinstance(k, str) else k): (str(v).strip() if isinstance(v, str) else v) for k, v in row_dict.items() }
                 cleaned_rows_for_ai.append(cleaned_row)
             fund_data_for_ai_context[table_name] = cleaned_rows_for_ai
+
+    # 2. Now run the Heavy Tasks (Charts + AI Summary) in PARALLEL
+    log_progress("Generating Charts and AI Summary concurrently...")
     
-    log_progress(f"Generating AI company summary for {tick}...")
-    ai_company_summary_html = generate_ai_company_summary(
-        ticker=tick,
-        description=company_description,
-        fundamentals=tables_from_screener,
-        documents=latest_documents
-    )
-    log_progress("AI summary generated successfully.")
+    loop = asyncio.get_running_loop()
+
+    # Helper to build chart and convert to JSON in a thread (CPU Bound)
+    def make_chart_json(func, *args):
+        return func(*args).to_json()
+
+    # Define all the tasks
+    task_close = loop.run_in_executor(None, make_chart_json, build_close_figure, df, company_name)
+    task_hl    = loop.run_in_executor(None, make_chart_json, build_hl_figure, df, company_name)
+    task_ema   = loop.run_in_executor(None, make_chart_json, build_ema_figure, df, company_name)
+    task_rsi   = loop.run_in_executor(None, make_chart_json, build_rsi_figure, df, company_name)
+    task_adl   = loop.run_in_executor(None, make_chart_json, build_adl_figure, df, company_name)
+    task_rs    = loop.run_in_executor(None, make_chart_json, build_rs_figure, df, company_name)
+    
+    # Run AI Summary in parallel (Network Bound)
+    task_ai_sum = loop.run_in_executor(None, generate_ai_company_summary, tick, company_description, tables_from_screener, latest_documents)
+
+    # EXECUTE ALL AT ONCE
+    parallel_results = await asyncio.gather(task_close, task_hl, task_ema, task_rsi, task_adl, task_rs, task_ai_sum)
+
+    # Unpack the results
+    close_j, hl_j, ema_j, rsi_j, adl_j, rs_j, ai_company_summary_html = parallel_results
+    
+    log_progress("Charts and AI Summary generated successfully.")
+# --- END: OPTIMIZED PARALLEL PROCESSING ---
+
+
+    # close_j=build_close_figure(df,company_name).to_json()
+    # hl_j   =build_hl_figure(df,company_name).to_json()
+    # ema_j  =build_ema_figure(df,company_name).to_json()
+    # rsi_j  =build_rsi_figure(df,company_name).to_json()
+    # adl_j  =build_adl_figure(df,company_name).to_json()
+    # rs_j   =build_rs_figure(df,company_name).to_json()
+    
+    # fund_data_for_frontend, fund_data_for_ai_context = {}, {}
+    # if tables_from_screener:
+    #     for table_name, df_original_table in tables_from_screener.items():
+    #         fund_data_for_frontend[table_name] = df_original_table.reset_index().T.to_json(orient='split')
+    #         temp_rows_for_cleaning = df_original_table.reset_index().to_dict(orient='records')
+    #         cleaned_rows_for_ai = []
+    #         for row_dict in temp_rows_for_cleaning:
+    #             cleaned_row = { (str(k).strip() if isinstance(k, str) else k): (str(v).strip() if isinstance(v, str) else v) for k, v in row_dict.items() }
+    #             cleaned_rows_for_ai.append(cleaned_row)
+    #         fund_data_for_ai_context[table_name] = cleaned_rows_for_ai
+    
+    # log_progress(f"Generating AI company summary for {tick}...")
+    # ai_company_summary_html = generate_ai_company_summary(
+    #     ticker=tick,
+    #     description=company_description,
+    #     fundamentals=tables_from_screener,
+    #     documents=latest_documents
+    # )
+    # log_progress("AI summary generated successfully.")
     
     analysis_result_for_cache = {
     "ticker": tick, "company_name": company_name, "summary": cleaned_technical_summary, 
