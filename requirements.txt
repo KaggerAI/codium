@@ -4,6 +4,7 @@
 Flask
 Flask-Cors
 flask-caching
+Flask-Compress
 gunicorn==22.0.0
 # uvicorn==0.29.0
 # a2wsgi==1.10.10
