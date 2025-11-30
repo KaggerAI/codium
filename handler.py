@@ -272,7 +272,7 @@ def call_openai_api(messages, model="gpt-4.1-mini", expect_json_format_flag=Fals
         print(f"ERROR in call_openai_api: {e}")
         raise
 
-def call_perplexity_api(messages, model="sonar", temperature=1):
+def call_perplexity_api(messages, model="sonar-pro", temperature=1):
     if not PERPLEXITY_API_KEY:
         raise ValueError("Perplexity API key is not configured.")
     try:
@@ -702,13 +702,13 @@ def chat():
                     break # Success!
             except Exception as e:
                 print(f"WARN: Redis fetch failed on attempt {retry_count+1}: {e}")
-                time.sleep(0.5) # Wait half a second before retrying
+                time.sleep(0.2) # Wait half a second before retrying
             retry_count += 1
             
         # If still None after retries, we can't proceed
         if not last_analysis or not last_analysis.get("ticker"):
             print("ERROR: Could not retrieve analysis data from cache.")
-            return jsonify({'answer': 'I cannot access the analysis data right now (Cache Timeout). Please try refreshing the page and analyzing the stock again.'}), 200
+            return jsonify({'answer': 'Context data unavailable (Cache Miss). Please re-analyze the stock.'}), 200
         # ------------------------------
 
         print(f"AI chatbot received question with selected model: {selected_model}")
@@ -1698,24 +1698,53 @@ def analyze():
             result_for_frontend['debug_file_url'] = f"/download_debug_file/{debug_filename}"
         # --- END MODIFICATION ---
         
+        # --- NEW SPLIT CACHING LOGIC ---
+        analysis_key = str(uuid.uuid4()) # Key for Light Data (Chatbot)
+        heavy_key = f"{analysis_key}_heavy" # Key for Heavy Data (Future use)
+
+        # 1. Create Light Payload (For AI Chatbot)
+        # We exclude the massive 'technical_data_df' which causes the timeouts
+        light_analysis_data = {
+            k: v for k, v in analysis_for_cache.items() 
+            if k != 'technical_data_df'
+        }
+
+        # 2. Create Heavy Payload
+        heavy_analysis_data = {
+            "technical_data_df": analysis_for_cache.get("technical_data_df")
+        }
+
         # Generate a unique key for this analysis session
-        analysis_key = str(uuid.uuid4())
+        # analysis_key = str(uuid.uuid4())
 
         # --- ROBUST CACHING BLOCK ---
         try:
             import sys
-            # Optional: Log the size to see how big the object is
-            size_in_mb = sys.getsizeof(str(analysis_for_cache)) / (1024 * 1024)
-            print(f"INFO: Attempting to cache analysis data. Est. Size: {size_in_mb:.2f} MB")
-
-            # Try to save to cache, but don't let it kill the request if it fails
-            cache.set(analysis_key, analysis_for_cache, timeout=21600)
-            print(f"INFO: Successfully cached data for {tick}")
+            size_mb = sys.getsizeof(str(light_analysis_data)) / (1024 * 1024)
+            print(f"INFO: Caching LIGHT data for Chat (Key: {analysis_key}). Est Size: {size_mb:.2f} MB")
+            
+            # This should be instant now
+            cache.set(analysis_key, light_analysis_data, timeout=21600)
+            
+            # We also cache the heavy data separately in case we need it later
+            # We use a very short timeout for heavy data if it's not strictly needed yet
+            # or keep it long if you plan to use it.
+            cache.set(heavy_key, heavy_analysis_data, timeout=21600)
             
         except Exception as e:
-            print(f"WARNING: Failed to write to Redis Cache. Returning data anyway. Error: {e}")
-            # We continue execution so the user still sees the result, 
-            # even if the "Deep Chat" feature might need a reload later.
+            print(f"WARNING: Cache write failed despite split. Error: {e}")
+
+
+        # try:
+        #     import sys
+        #     size_in_mb = sys.getsizeof(str(analysis_for_cache)) / (1024 * 1024)
+        #     print(f"INFO: Attempting to cache analysis data. Est. Size: {size_in_mb:.2f} MB")
+
+        #     cache.set(analysis_key, analysis_for_cache, timeout=21600)
+        #     print(f"INFO: Successfully cached data for {tick}")
+            
+        # except Exception as e:
+        #     print(f"WARNING: Failed to write to Redis Cache. Returning data anyway. Error: {e}")
         # ---------------------------
         
         # Add the key to the frontend data
