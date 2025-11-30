@@ -23,6 +23,8 @@ from datetime import datetime
 import asyncio
 import httpx
 import uuid
+import zlib
+import pickle
 
 from flask import send_from_directory
 
@@ -124,7 +126,8 @@ if azure_redis_conn_string:
         
         # Construct the final, standard Redis URL
         # host_part looks like "name.redis.cache.windows.net:6380"
-        formatted_redis_url = f"{scheme}:{password}@{host_part}"
+        formatted_redis_url = f"{scheme}:{password}@{host_part}?socket_timeout=30&socket_connect_timeout=30"
+        # formatted_redis_url = f"{scheme}:{password}@{host_part}"
 
         config = {
             "CACHE_TYPE": "RedisCache",
@@ -696,19 +699,45 @@ def chat():
         
         while retry_count < max_retries:
             try:
-                print(f"INFO: Fetching data from Redis for Chat (Attempt {retry_count+1})...")
-                last_analysis = cache.get(analysis_key)
-                if last_analysis:
-                    break # Success!
+                # Fetch the compressed bytes from Redis
+                cached_blob = cache.get(analysis_key)
+                
+                if cached_blob:
+                    # Decompress and Unpickle
+                    try:
+                        decompressed_data = zlib.decompress(cached_blob)
+                        last_analysis = pickle.loads(decompressed_data)
+                        print(f"INFO: Successfully decompressed chat data.")
+                        break # Success!
+                    except Exception as unpack_error:
+                        print(f"WARN: Failed to decompress data (might be raw?): {unpack_error}")
+                        # Fallback: Maybe it wasn't compressed?
+                        last_analysis = cached_blob
+                        break
+                
             except Exception as e:
-                print(f"WARN: Redis fetch failed on attempt {retry_count+1}: {e}")
-                time.sleep(0.2) # Wait half a second before retrying
+                print(f"WARN: Redis fetch failed (Attempt {retry_count+1}). Error: {e}")
+                time.sleep(0.5)
             retry_count += 1
             
-        # If still None after retries, we can't proceed
         if not last_analysis or not last_analysis.get("ticker"):
-            print("ERROR: Could not retrieve analysis data from cache.")
-            return jsonify({'answer': 'Context data unavailable (Cache Miss). Please re-analyze the stock.'}), 200
+             return jsonify({'answer': 'Context data unavailable (Cache Miss). Please re-analyze the stock.'}), 200
+
+        # while retry_count < max_retries:
+        #     try:
+        #         print(f"INFO: Fetching data from Redis for Chat (Attempt {retry_count+1})...")
+        #         last_analysis = cache.get(analysis_key)
+        #         if last_analysis:
+        #             break # Success!
+        #     except Exception as e:
+        #         print(f"WARN: Redis fetch failed on attempt {retry_count+1}: {e}")
+        #         time.sleep(0.2) # Wait half a second before retrying
+        #     retry_count += 1
+            
+        # # If still None after retries, we can't proceed
+        # if not last_analysis or not last_analysis.get("ticker"):
+        #     print("ERROR: Could not retrieve analysis data from cache.")
+        #     return jsonify({'answer': 'Context data unavailable (Cache Miss). Please re-analyze the stock.'}), 200
 
         if last_analysis:
             size_kb = sys.getsizeof(str(last_analysis)) / 1024
@@ -1725,45 +1754,40 @@ def analyze():
 
         # --- ROBUST CACHING BLOCK ---
         try:
-            import sys
-            size_mb = sys.getsizeof(str(light_analysis_data)) / (1024 * 1024)
-            print(f"INFO: Caching LIGHT data for Chat (Key: {analysis_key}). Est Size: {size_mb:.2f} MB")
+            # 2. Compress the data using zlib
+            pickled_data = pickle.dumps(light_analysis_data)
+            compressed_data = zlib.compress(pickled_data)
             
-            # This should be instant now
-            cache.set(analysis_key, light_analysis_data, timeout=21600)
+            # Log size for debugging
+            size_mb = sys.getsizeof(compressed_data) / (1024 * 1024)
+            print(f"INFO: Caching COMPRESSED data (Key: {analysis_key}). Size: {size_mb:.2f} MB")
             
-            # We also cache the heavy data separately in case we need it later
-            # We use a very short timeout for heavy data if it's not strictly needed yet
-            # or keep it long if you plan to use it.
-            cache.set(heavy_key, heavy_analysis_data, timeout=21600)
+            # 3. Save to Redis
+            cache.set(analysis_key, compressed_data, timeout=21600)
             
         except Exception as e:
-            print(f"WARNING: Cache write failed despite split. Error: {e}")
+            print(f"WARNING: Cache write failed. Error: {e}")
 
 
         # try:
         #     import sys
-        #     size_in_mb = sys.getsizeof(str(analysis_for_cache)) / (1024 * 1024)
-        #     print(f"INFO: Attempting to cache analysis data. Est. Size: {size_in_mb:.2f} MB")
+        #     size_mb = sys.getsizeof(str(light_analysis_data)) / (1024 * 1024)
+        #     print(f"INFO: Caching LIGHT data for Chat (Key: {analysis_key}). Est Size: {size_mb:.2f} MB")
+            
+        #     cache.set(analysis_key, light_analysis_data, timeout=21600)
 
-        #     cache.set(analysis_key, analysis_for_cache, timeout=21600)
-        #     print(f"INFO: Successfully cached data for {tick}")
+        #     cache.set(heavy_key, heavy_analysis_data, timeout=21600)
             
         # except Exception as e:
-        #     print(f"WARNING: Failed to write to Redis Cache. Returning data anyway. Error: {e}")
-        # ---------------------------
+        #     print(f"WARNING: Cache write failed despite split. Error: {e}")
+
+
         
         # Add the key to the frontend data
         result_for_frontend['analysis_key'] = analysis_key
         
         return jsonify(result_for_frontend)
 
-
-        # cache.set(analysis_key, analysis_for_cache, timeout=21600)
-        
-        # result_for_frontend['analysis_key'] = analysis_key
-        
-        # return jsonify(result_for_frontend)
 
         # --- END OF NEW LOGIC ---
 
