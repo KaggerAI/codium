@@ -685,6 +685,7 @@ def perform_planned_calculations(plan_calculations_section, retrieved_data, full
 def chat():
     try:
         data = request.get_json(force=True)
+        print("DEBUG: Request JSON parsed successfully.", file=sys.stderr)
         user_question = data.get('question', '').strip()
         selected_model = data.get('model', 'o4-mini')
         analysis_key = data.get('analysis_key')
@@ -700,13 +701,18 @@ def chat():
         while retry_count < max_retries:
             try:
                 # Fetch the compressed bytes from Redis
+                print(f"DEBUG: Attempting Redis Fetch {retry_count+1}...", file=sys.stderr)
                 cached_blob = cache.get(analysis_key)
                 
                 if cached_blob:
+                    print(f"DEBUG: Blob found. Size: {len(cached_blob)} bytes. Decompressing...", file=sys.stderr)
                     # Decompress and Unpickle
                     try:
                         decompressed_data = zlib.decompress(cached_blob)
+                        print(f"DEBUG: Decompressed. Size: {len(decompressed_data)} bytes. Unpickling...", file=sys.stderr)
+
                         last_analysis = pickle.loads(decompressed_data)
+                        print("DEBUG: Unpickle Successful.", file=sys.stderr)
                         print(f"INFO: Successfully decompressed chat data.")
                         break # Success!
                     except Exception as unpack_error:
@@ -716,12 +722,13 @@ def chat():
                         break
                 
             except Exception as e:
-                print(f"WARN: Redis fetch failed (Attempt {retry_count+1}). Error: {e}")
+                print(f"WARN: Redis fetch failed (Attempt {retry_count+1}). Error: {e}", file=sys.stderr)
                 time.sleep(0.5)
             retry_count += 1
             
         if not last_analysis or not last_analysis.get("ticker"):
-             return jsonify({'answer': 'Context data unavailable (Cache Miss). Please re-analyze the stock.'}), 200
+            print("ERROR: Final Decision - Context unavailable.", file=sys.stderr)
+            return jsonify({'answer': 'Context data unavailable (Cache Miss). Please re-analyze the stock.'}), 200
 
         # while retry_count < max_retries:
         #     try:
@@ -741,9 +748,9 @@ def chat():
 
         if last_analysis:
             size_kb = sys.getsizeof(str(last_analysis)) / 1024
-            print(f"INFO: Chat Data Loaded. Size: {size_kb:.2f} KB. Keys: {list(last_analysis.keys())}")
+            print(f"INFO: Chat Data Loaded. Size: {size_kb:.2f} KB. Keys: {list(last_analysis.keys())}", file=sys.stderr)
         else:
-            print("ERROR: Chat Data is None after fetch.")
+            print("ERROR: Chat Data is None after fetch.", file=sys.stderr)
         # ------------------------------
 
         print(f"AI chatbot received question with selected model: {selected_model}")
@@ -876,7 +883,7 @@ def chat():
                 else:
                     raise ValueError("No JSON plan found in planner response.")
             except Exception as e:
-                 print(f"ERROR: Could not parse standard plan. Error: {e}. Response: {full_response_str}")
+                 print(f"ERROR: Could not parse standard plan. Error: {e}. Response: {full_response_str}", file=sys.stderr)
                  return jsonify({'error': 'Failed to create a standard execution plan.'}), 500
 
         # =================================================================
