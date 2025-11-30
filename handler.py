@@ -684,18 +684,52 @@ def chat():
         data = request.get_json(force=True)
         user_question = data.get('question', '').strip()
         selected_model = data.get('model', 'o4-mini')
-        
-        # --- THIS IS THE NEW LOGIC ---
-        # Get the unique analysis key from the frontend request
         analysis_key = data.get('analysis_key')
+
         if not analysis_key:
              return jsonify({'answer': 'Analysis key is missing. Please analyze a stock first.'}), 200
 
-        # Retrieve the specific analysis data using the key
-        last_analysis = cache.get(analysis_key)
-        # --- END OF NEW LOGIC ---
+        # --- ROBUST RETRIEVAL LOGIC ---
+        last_analysis = None
+        retry_count = 0
+        max_retries = 2
+        
+        while retry_count < max_retries:
+            try:
+                print(f"INFO: Fetching data from Redis for Chat (Attempt {retry_count+1})...")
+                last_analysis = cache.get(analysis_key)
+                if last_analysis:
+                    break # Success!
+            except Exception as e:
+                print(f"WARN: Redis fetch failed on attempt {retry_count+1}: {e}")
+                time.sleep(0.5) # Wait half a second before retrying
+            retry_count += 1
+            
+        # If still None after retries, we can't proceed
+        if not last_analysis or not last_analysis.get("ticker"):
+            print("ERROR: Could not retrieve analysis data from cache.")
+            return jsonify({'answer': 'I cannot access the analysis data right now (Cache Timeout). Please try refreshing the page and analyzing the stock again.'}), 200
+        # ------------------------------
 
         print(f"AI chatbot received question with selected model: {selected_model}")
+
+
+    # try:
+    #     data = request.get_json(force=True)
+    #     user_question = data.get('question', '').strip()
+    #     selected_model = data.get('model', 'o4-mini')
+        
+    #     # --- THIS IS THE NEW LOGIC ---
+    #     # Get the unique analysis key from the frontend request
+    #     analysis_key = data.get('analysis_key')
+    #     if not analysis_key:
+    #          return jsonify({'answer': 'Analysis key is missing. Please analyze a stock first.'}), 200
+
+    #     # Retrieve the specific analysis data using the key
+    #     last_analysis = cache.get(analysis_key)
+    #     # --- END OF NEW LOGIC ---
+
+    #     print(f"AI chatbot received question with selected model: {selected_model}")
 
 
         if not user_question:
