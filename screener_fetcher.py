@@ -105,8 +105,10 @@ async def fetch_consolidated_async(ticker: str) -> tuple[dict[str, pd.DataFrame]
     soup = BeautifulSoup(text, 'html.parser')
 
     # --- STAGE 2: ROBUST FALLBACK ---
-    # The check: is the main "Quarterly Results" table missing from the initial HTML?
-    if not soup.select_one("#quarters > .data-table"):
+    # FIX: Changed selector from "#quarters > .data-table" to "#quarters .data-table"
+    # The '>' implied a direct child, but the table is nested in divs.
+    # We check if we successfully scraped the Consolidated Quarterly Results.
+    if not soup.select_one("#quarters .data-table"):
         log_progress(f"Fast method insufficient. Escalating to browser fetch for {ticker} standalone report...")
         
         async with async_playwright() as p:
