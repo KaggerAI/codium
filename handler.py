@@ -32,6 +32,9 @@ from flask import Flask, request, jsonify, send_from_directory, Response, stream
 from flask_caching import Cache
 from flask_compress import Compress
 
+import redis
+import urllib.parse
+
 # from a2wsgi import ASGIMiddleware
 
 from flask_cors import CORS
@@ -683,9 +686,13 @@ def perform_planned_calculations(plan_calculations_section, retrieved_data, full
 
 @app.route('/chat', methods=['POST'])
 def chat():
+    # Force logs to stderr so they show up in Azure Log Stream immediately
+    print("DEBUG: Entering /chat endpoint...", file=sys.stderr)
+    
     try:
         data = request.get_json(force=True)
         print("DEBUG: Request JSON parsed successfully.", file=sys.stderr)
+        
         user_question = data.get('question', '').strip()
         selected_model = data.get('model', 'o4-mini')
         analysis_key = data.get('analysis_key')
@@ -693,92 +700,70 @@ def chat():
         if not analysis_key:
              return jsonify({'answer': 'Analysis key is missing. Please analyze a stock first.'}), 200
 
-        # --- ROBUST RETRIEVAL LOGIC ---
+        # =====================================================
+        # PART 1: DIRECT REDIS RETRIEVAL (Bypassing Flask-Cache)
+        # =====================================================
         last_analysis = None
-        retry_count = 0
-        max_retries = 2
         
-        while retry_count < max_retries:
-            try:
-                # Fetch the compressed bytes from Redis
-                print(f"DEBUG: Attempting Redis Fetch {retry_count+1}...", file=sys.stderr)
-                cached_blob = cache.get(analysis_key)
-                
-                if cached_blob:
-                    print(f"DEBUG: Blob found. Size: {len(cached_blob)} bytes. Decompressing...", file=sys.stderr)
-                    # Decompress and Unpickle
-                    try:
-                        decompressed_data = zlib.decompress(cached_blob)
-                        print(f"DEBUG: Decompressed. Size: {len(decompressed_data)} bytes. Unpickling...", file=sys.stderr)
-
-                        last_analysis = pickle.loads(decompressed_data)
-                        print("DEBUG: Unpickle Successful.", file=sys.stderr)
-                        print(f"INFO: Successfully decompressed chat data.")
-                        break # Success!
-                    except Exception as unpack_error:
-                        print(f"WARN: Failed to decompress data (might be raw?): {unpack_error}")
-                        # Fallback: Maybe it wasn't compressed?
-                        last_analysis = cached_blob
-                        break
-                
-            except Exception as e:
-                print(f"WARN: Redis fetch failed (Attempt {retry_count+1}). Error: {e}", file=sys.stderr)
-                time.sleep(0.5)
-            retry_count += 1
+        try:
+            import redis
             
-        if not last_analysis or not last_analysis.get("ticker"):
-            print("ERROR: Final Decision - Context unavailable.", file=sys.stderr)
-            return jsonify({'answer': 'Context data unavailable (Cache Miss). Please re-analyze the stock.'}), 200
-
-        # while retry_count < max_retries:
-        #     try:
-        #         print(f"INFO: Fetching data from Redis for Chat (Attempt {retry_count+1})...")
-        #         last_analysis = cache.get(analysis_key)
-        #         if last_analysis:
-        #             break # Success!
-        #     except Exception as e:
-        #         print(f"WARN: Redis fetch failed on attempt {retry_count+1}: {e}")
-        #         time.sleep(0.2) # Wait half a second before retrying
-        #     retry_count += 1
+            # 1. Get the connection string configured in Flask
+            redis_url = app.config.get("CACHE_REDIS_URL")
             
-        # # If still None after retries, we can't proceed
-        # if not last_analysis or not last_analysis.get("ticker"):
-        #     print("ERROR: Could not retrieve analysis data from cache.")
-        #     return jsonify({'answer': 'Context data unavailable (Cache Miss). Please re-analyze the stock.'}), 200
+            # 2. Create a FRESH connection client
+            # We use from_url which handles the rediss:// format and password parsing automatically
+            # We add explicit socket timeouts to prevent hanging
+            r_client = redis.from_url(
+                redis_url,
+                socket_timeout=10.0,        # Wait max 10s for data
+                socket_connect_timeout=5.0, # Wait max 5s to connect
+                decode_responses=False      # Keep data as bytes (needed for zlib)
+            )
+            
+            # 3. Fetch Data
+            print(f"DEBUG: Fetching key directly from Redis: {analysis_key}", file=sys.stderr)
+            cached_blob = r_client.get(analysis_key)
+            
+            # 4. Close connection immediately to free resources
+            r_client.close()
 
-        if last_analysis:
-            size_kb = sys.getsizeof(str(last_analysis)) / 1024
-            print(f"INFO: Chat Data Loaded. Size: {size_kb:.2f} KB. Keys: {list(last_analysis.keys())}", file=sys.stderr)
-        else:
-            print("ERROR: Chat Data is None after fetch.", file=sys.stderr)
-        # ------------------------------
+            # 5. Decompress and Load
+            if cached_blob:
+                print(f"DEBUG: Blob found. Size: {len(cached_blob)} bytes. Decompressing...", file=sys.stderr)
+                try:
+                    decompressed_data = zlib.decompress(cached_blob)
+                    print(f"DEBUG: Decompressed. Size: {len(decompressed_data)} bytes. Unpickling...", file=sys.stderr)
+                    last_analysis = pickle.loads(decompressed_data)
+                    print("DEBUG: Unpickle Successful.", file=sys.stderr)
+                except Exception as unpack_error:
+                    print(f"WARN: Failed to decompress data: {unpack_error}", file=sys.stderr)
+                    # Fallback in case it wasn't compressed
+                    last_analysis = cached_blob
+            else:
+                print("DEBUG: Redis returned None (Key not found).", file=sys.stderr)
 
-        print(f"AI chatbot received question with selected model: {selected_model}")
+        except Exception as redis_e:
+            print(f"CRITICAL WARN: Direct Redis Fetch failed: {redis_e}", file=sys.stderr)
+            # If this fails, we can't proceed
+            
+        # =====================================================
+        # PART 2: VALIDATION
+        # =====================================================
+        if not last_analysis or not isinstance(last_analysis, dict) or not last_analysis.get("ticker"):
+            print("ERROR: Context unavailable after fetch.", file=sys.stderr)
+            return jsonify({'answer': 'Context data unavailable (Cache Miss or Network Timeout). Please re-analyze the stock.'}), 200
 
-
-    # try:
-    #     data = request.get_json(force=True)
-    #     user_question = data.get('question', '').strip()
-    #     selected_model = data.get('model', 'o4-mini')
+        # Log success size
+        size_kb = sys.getsizeof(str(last_analysis)) / 1024
+        print(f"INFO: Chat Data Loaded. Size: {size_kb:.2f} KB. Keys: {list(last_analysis.keys())}", file=sys.stderr)
         
-    #     # --- THIS IS THE NEW LOGIC ---
-    #     # Get the unique analysis key from the frontend request
-    #     analysis_key = data.get('analysis_key')
-    #     if not analysis_key:
-    #          return jsonify({'answer': 'Analysis key is missing. Please analyze a stock first.'}), 200
+        print(f"AI chatbot received question with selected model: {selected_model}", file=sys.stderr)
 
-    #     # Retrieve the specific analysis data using the key
-    #     last_analysis = cache.get(analysis_key)
-    #     # --- END OF NEW LOGIC ---
-
-    #     print(f"AI chatbot received question with selected model: {selected_model}")
-
-
-        if not user_question:
-            return jsonify({'error': 'No question provided'}), 400
-        if not last_analysis or not last_analysis.get("ticker"):
-            return jsonify({'answer': 'Please analyze a stock first. No data context is available.'}), 200
-
+        # =====================================================
+        # PART 3: AI BRAIN Logic (Preserved from your code)
+        # =====================================================
+        
         is_best_mode = selected_model == 'best'
         central_brain_plan = None
         parsed_plan = {}
@@ -786,10 +771,10 @@ def chat():
         thought_process_str = "No thought process generated."
 
         if is_best_mode:
-            # =================================================================
-            # STAGE 1: CENTRAL BRAIN - STRATEGIC PLANNING
-            # =================================================================
+            # --- STAGE 1: CENTRAL BRAIN ---
             log_progress("Central Brain is analyzing the query and forming a strategy...")
+            print("INFO: Central Brain running...", file=sys.stderr)
+            
             central_brain_prompt = get_central_brain_prompt()
             brain_messages = [
                 {"role": "system", "content": central_brain_prompt},
@@ -800,27 +785,22 @@ def chat():
 
             try:
                 json_match = re.search(r"```json\s*([\s\S]*?)\s*```", central_brain_response_str, re.MULTILINE)
-                
                 if json_match:
-                    # If a block is found, extract and parse it
-                    central_brain_plan_str = json_match.group(1)
-                    central_brain_plan = json.loads(central_brain_plan_str)
+                    central_brain_plan = json.loads(json_match.group(1))
                 else:
-                    # If no block is found, try to parse the entire response string directly
-                    # This handles cases where the model returns pure JSON without markdown
                     central_brain_plan = json.loads(central_brain_response_str)
 
                 thought_process_str = central_brain_plan.get("thought_process", "Central Brain planning complete.")
-                print(f"--- Central Brain Plan ---\n{json.dumps(central_brain_plan, indent=2)}\n--------------------------")
+                print(f"--- Central Brain Plan ---\n{json.dumps(central_brain_plan, indent=2)}\n--------------------------", file=sys.stderr)
                 
             except (json.JSONDecodeError, AttributeError) as e:
-                print(f"ERROR: Could not parse Central Brain plan. Error: {e}. Response: {central_brain_response_str}")
-                return jsonify({'error': 'Failed to generate a strategic plan. Please try rephrasing your question.'}), 500
+                print(f"ERROR: Could not parse Central Brain plan: {e}", file=sys.stderr)
+                return jsonify({'error': 'Failed to generate a strategic plan.'}), 500
 
-            # =================================================================
-            # STAGE 2: TACTICAL PLANNER - CREATING EXECUTABLE JSON
-            # =================================================================
+            # --- STAGE 2: TACTICAL PLANNER ---
             log_progress("Tactical Planner is creating a detailed data retrieval plan...")
+            print("INFO: Tactical Planner running...", file=sys.stderr)
+            
             schema_description = get_data_schema_description(last_analysis)
             planning_system_prompt = get_planning_system_prompt()
             
@@ -828,7 +808,7 @@ def chat():
                 f"User Question: \"{user_question}\"\n\n"
                 f"Central Brain Directives:\n{json.dumps(central_brain_plan, indent=2)}\n\n"
                 f"Data Schema Description:\n{schema_description}\n\n"
-                f"Full 'last_analysis' context (for reference, e.g., current price):\n{json.dumps(last_analysis, indent=2, default=str)[:2000]}"
+                f"Full 'last_analysis' context (summary):\n{str(last_analysis.get('summary', ''))[:2000]}"
             )
 
             planner_messages = [
@@ -838,38 +818,29 @@ def chat():
             
             tactical_plan_response_str = call_openai_api(planner_messages, model='o4-mini', expect_json_format_flag=True, temperature=1)
             
-            # ===================================================================
-            # START: CORRECTED TACTICAL PLAN PARSING LOGIC
-            # ===================================================================
             try:
-                # Use regex to robustly find the JSON block, even if the model includes extra text.
                 json_match = re.search(r"```json\s*([\s\S]*?)\s*```", tactical_plan_response_str, re.MULTILINE)
-                
                 if json_match:
                     ai_plan_json_str = json_match.group(1)
                     parsed_plan = json.loads(ai_plan_json_str)
                 else:
-                    # Fallback: If no ```json``` block is found, try to parse the whole string.
-                    # This handles cases where the model correctly returns *only* JSON.
                     parsed_plan = json.loads(tactical_plan_response_str)
                     ai_plan_json_str = tactical_plan_response_str
 
-                print(f"--- Tactical Execution Plan ---\n{json.dumps(parsed_plan, indent=2)}\n--------------------------")
+                print(f"--- Tactical Execution Plan ---\n{json.dumps(parsed_plan, indent=2)}\n--------------------------", file=sys.stderr)
 
             except json.JSONDecodeError as e:
-                print(f"ERROR: Could not parse Tactical Plan. Error: {e}. Response: {tactical_plan_response_str}")
+                print(f"ERROR: Could not parse Tactical Plan: {e}", file=sys.stderr)
                 return jsonify({'error': 'Failed to create a detailed execution plan.'}), 500
-            # ===================================================================
-            # END: CORRECTED TACTICAL PLAN PARSING LOGIC
-            # ===================================================================
 
-        else: # Standard, single-agent flow
+        else: 
+            # Standard, single-agent flow
             log_progress("Creating a plan to answer the user's question...")
             schema_description = get_data_schema_description(last_analysis)
             planning_system_prompt = get_planning_system_prompt()
             planning_messages = [
                 {"role": "system", "content": planning_system_prompt},
-                {"role": "user", "content": f"User Question: \"{user_question}\"\n\nData Schema Description:\n{schema_description}\n\nFull 'last_analysis' context:\n{json.dumps(last_analysis, indent=2, default=str)[:2000]}"}
+                {"role": "user", "content": f"User Question: \"{user_question}\"\n\nData Schema Description:\n{schema_description}\n\nFull 'last_analysis' context:\n{str(last_analysis.get('summary', ''))[:2000]}"}
             ]
             
             full_response_str = call_openai_api(planning_messages, model='o4-mini', expect_json_format_flag=False, temperature=1)
@@ -883,22 +854,23 @@ def chat():
                 else:
                     raise ValueError("No JSON plan found in planner response.")
             except Exception as e:
-                 print(f"ERROR: Could not parse standard plan. Error: {e}. Response: {full_response_str}", file=sys.stderr)
+                 print(f"ERROR: Could not parse standard plan: {e}", file=sys.stderr)
                  return jsonify({'error': 'Failed to create a standard execution plan.'}), 500
 
-        # =================================================================
-        # STAGE 3: EXECUTION (Common to both modes)
-        # =================================================================
+        # --- STAGE 3: EXECUTION ---
         log_progress("Executing plan: Fetching news and internal data...")
+        print("INFO: Execution Stage...", file=sys.stderr)
+        
         news_summary = None
         news_plan = parsed_plan.get("fetch_external_news", {})
         if news_plan.get("needed"):
             sonar_prompt = news_plan.get("prompt_for_sonar", f"Get the latest news for {last_analysis.get('ticker')}")
             try:
                 news_messages = [{"role": "user", "content": sonar_prompt}]
+                # Added timeout to prevent hanging
                 news_summary = call_perplexity_api(news_messages, model="sonar")
             except Exception as e:
-                print(f"ERROR: News fetching failed: {e}")
+                print(f"ERROR: News fetching failed: {e}", file=sys.stderr)
                 news_summary = f"Error: Failed to fetch real-time news. {e}"
 
         retrieve_data_spec = parsed_plan.get("retrieve_data", {})
@@ -908,11 +880,10 @@ def chat():
         calculations_spec = parsed_plan.get("perform_calculations", [])
         calculation_results_obj = perform_planned_calculations(calculations_spec, retrieved_fundamental_data, last_analysis)
 
-
-        # =================================================================
-        # STAGE 4: SYNTHESIS (Common to both modes, guided by brain_plan if present)
-        # =================================================================
+        # --- STAGE 4: SYNTHESIS ---
         log_progress("Synthesizing the final response...")
+        print("INFO: Synthesis Stage...", file=sys.stderr)
+        
         final_context_for_answer = {
             "user_question": user_question,
             "central_brain_plan": central_brain_plan,
@@ -926,7 +897,7 @@ def chat():
         
         answering_messages = [
             {"role": "system", "content": answering_system_prompt},
-            {"role": "user", "content": f"Please synthesize an answer based on the following consolidated data:\n{json.dumps(final_context_for_answer, indent=2, default=str)}"}
+            {"role": "user", "content": f"Please synthesize an answer based on: {json.dumps(final_context_for_answer, indent=2, default=str)[:100000]}"}
         ]
         
         answerer_model = 'gpt-4.1-mini' if is_best_mode else selected_model
@@ -944,9 +915,244 @@ def chat():
         })
 
     except Exception as e:
-        print(f"ERROR: General Error in /chat: {e}")
-        traceback.print_exc()
+        print(f"CRITICAL ERROR in /chat: {e}", file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
         return jsonify({'error': f'An unexpected error occurred: {str(e)}', 'trace': traceback.format_exc()}), 500
+
+# @app.route('/chat', methods=['POST'])
+# def chat():
+#     try:
+#         data = request.get_json(force=True)
+#         print("DEBUG: Request JSON parsed successfully.", file=sys.stderr)
+#         user_question = data.get('question', '').strip()
+#         selected_model = data.get('model', 'o4-mini')
+#         analysis_key = data.get('analysis_key')
+
+#         if not analysis_key:
+#              return jsonify({'answer': 'Analysis key is missing. Please analyze a stock first.'}), 200
+
+#         # --- ROBUST RETRIEVAL LOGIC ---
+#         last_analysis = None
+#         retry_count = 0
+#         max_retries = 2
+        
+#         while retry_count < max_retries:
+#             try:
+#                 # Fetch the compressed bytes from Redis
+#                 print(f"DEBUG: Attempting Redis Fetch {retry_count+1}...", file=sys.stderr)
+#                 cached_blob = cache.get(analysis_key)
+                
+#                 if cached_blob:
+#                     print(f"DEBUG: Blob found. Size: {len(cached_blob)} bytes. Decompressing...", file=sys.stderr)
+#                     # Decompress and Unpickle
+#                     try:
+#                         decompressed_data = zlib.decompress(cached_blob)
+#                         print(f"DEBUG: Decompressed. Size: {len(decompressed_data)} bytes. Unpickling...", file=sys.stderr)
+
+#                         last_analysis = pickle.loads(decompressed_data)
+#                         print("DEBUG: Unpickle Successful.", file=sys.stderr)
+#                         print(f"INFO: Successfully decompressed chat data.")
+#                         break # Success!
+#                     except Exception as unpack_error:
+#                         print(f"WARN: Failed to decompress data (might be raw?): {unpack_error}")
+#                         # Fallback: Maybe it wasn't compressed?
+#                         last_analysis = cached_blob
+#                         break
+                
+#             except Exception as e:
+#                 print(f"WARN: Redis fetch failed (Attempt {retry_count+1}). Error: {e}", file=sys.stderr)
+#                 time.sleep(0.5)
+#             retry_count += 1
+            
+#         if not last_analysis or not last_analysis.get("ticker"):
+#             print("ERROR: Final Decision - Context unavailable.", file=sys.stderr)
+#             return jsonify({'answer': 'Context data unavailable (Cache Miss). Please re-analyze the stock.'}), 200
+
+
+#         if last_analysis:
+#             size_kb = sys.getsizeof(str(last_analysis)) / 1024
+#             print(f"INFO: Chat Data Loaded. Size: {size_kb:.2f} KB. Keys: {list(last_analysis.keys())}", file=sys.stderr)
+#         else:
+#             print("ERROR: Chat Data is None after fetch.", file=sys.stderr)
+#         # ------------------------------
+
+#         print(f"AI chatbot received question with selected model: {selected_model}")
+
+
+
+#         if not user_question:
+#             return jsonify({'error': 'No question provided'}), 400
+#         if not last_analysis or not last_analysis.get("ticker"):
+#             return jsonify({'answer': 'Please analyze a stock first. No data context is available.'}), 200
+
+#         is_best_mode = selected_model == 'best'
+#         central_brain_plan = None
+#         parsed_plan = {}
+#         ai_plan_json_str = "{}"
+#         thought_process_str = "No thought process generated."
+
+#         if is_best_mode:
+#             # =================================================================
+#             # STAGE 1: CENTRAL BRAIN - STRATEGIC PLANNING
+#             # =================================================================
+#             log_progress("Central Brain is analyzing the query and forming a strategy...")
+#             central_brain_prompt = get_central_brain_prompt()
+#             brain_messages = [
+#                 {"role": "system", "content": central_brain_prompt},
+#                 {"role": "user", "content": f"User Question: \"{user_question}\""}
+#             ]
+            
+#             central_brain_response_str = call_generative_ai_model("gpt-4.1-mini", brain_messages, temperature=1)
+
+#             try:
+#                 json_match = re.search(r"```json\s*([\s\S]*?)\s*```", central_brain_response_str, re.MULTILINE)
+                
+#                 if json_match:
+#                     # If a block is found, extract and parse it
+#                     central_brain_plan_str = json_match.group(1)
+#                     central_brain_plan = json.loads(central_brain_plan_str)
+#                 else:
+#                     # If no block is found, try to parse the entire response string directly
+#                     # This handles cases where the model returns pure JSON without markdown
+#                     central_brain_plan = json.loads(central_brain_response_str)
+
+#                 thought_process_str = central_brain_plan.get("thought_process", "Central Brain planning complete.")
+#                 print(f"--- Central Brain Plan ---\n{json.dumps(central_brain_plan, indent=2)}\n--------------------------")
+                
+#             except (json.JSONDecodeError, AttributeError) as e:
+#                 print(f"ERROR: Could not parse Central Brain plan. Error: {e}. Response: {central_brain_response_str}")
+#                 return jsonify({'error': 'Failed to generate a strategic plan. Please try rephrasing your question.'}), 500
+
+#             # =================================================================
+#             # STAGE 2: TACTICAL PLANNER - CREATING EXECUTABLE JSON
+#             # =================================================================
+#             log_progress("Tactical Planner is creating a detailed data retrieval plan...")
+#             schema_description = get_data_schema_description(last_analysis)
+#             planning_system_prompt = get_planning_system_prompt()
+            
+#             planner_user_content = (
+#                 f"User Question: \"{user_question}\"\n\n"
+#                 f"Central Brain Directives:\n{json.dumps(central_brain_plan, indent=2)}\n\n"
+#                 f"Data Schema Description:\n{schema_description}\n\n"
+#                 f"Full 'last_analysis' context (for reference, e.g., current price):\n{json.dumps(last_analysis, indent=2, default=str)[:2000]}"
+#             )
+
+#             planner_messages = [
+#                 {"role": "system", "content": planning_system_prompt},
+#                 {"role": "user", "content": planner_user_content}
+#             ]
+            
+#             tactical_plan_response_str = call_openai_api(planner_messages, model='o4-mini', expect_json_format_flag=True, temperature=1)
+            
+#             # ===================================================================
+#             # START: CORRECTED TACTICAL PLAN PARSING LOGIC
+#             # ===================================================================
+#             try:
+#                 # Use regex to robustly find the JSON block, even if the model includes extra text.
+#                 json_match = re.search(r"```json\s*([\s\S]*?)\s*```", tactical_plan_response_str, re.MULTILINE)
+                
+#                 if json_match:
+#                     ai_plan_json_str = json_match.group(1)
+#                     parsed_plan = json.loads(ai_plan_json_str)
+#                 else:
+#                     # Fallback: If no ```json``` block is found, try to parse the whole string.
+#                     # This handles cases where the model correctly returns *only* JSON.
+#                     parsed_plan = json.loads(tactical_plan_response_str)
+#                     ai_plan_json_str = tactical_plan_response_str
+
+#                 print(f"--- Tactical Execution Plan ---\n{json.dumps(parsed_plan, indent=2)}\n--------------------------")
+
+#             except json.JSONDecodeError as e:
+#                 print(f"ERROR: Could not parse Tactical Plan. Error: {e}. Response: {tactical_plan_response_str}")
+#                 return jsonify({'error': 'Failed to create a detailed execution plan.'}), 500
+#             # ===================================================================
+#             # END: CORRECTED TACTICAL PLAN PARSING LOGIC
+#             # ===================================================================
+
+#         else: # Standard, single-agent flow
+#             log_progress("Creating a plan to answer the user's question...")
+#             schema_description = get_data_schema_description(last_analysis)
+#             planning_system_prompt = get_planning_system_prompt()
+#             planning_messages = [
+#                 {"role": "system", "content": planning_system_prompt},
+#                 {"role": "user", "content": f"User Question: \"{user_question}\"\n\nData Schema Description:\n{schema_description}\n\nFull 'last_analysis' context:\n{json.dumps(last_analysis, indent=2, default=str)[:2000]}"}
+#             ]
+            
+#             full_response_str = call_openai_api(planning_messages, model='o4-mini', expect_json_format_flag=False, temperature=1)
+            
+#             try:
+#                 json_match = re.search(r"```json\s*([\s\S]*?)\s*```", full_response_str, re.MULTILINE)
+#                 thought_process_str = re.split(r"```json", full_response_str)[0].replace("**Thought Process:**", "").strip()
+#                 if json_match:
+#                     ai_plan_json_str = json_match.group(1)
+#                     parsed_plan = json.loads(ai_plan_json_str)
+#                 else:
+#                     raise ValueError("No JSON plan found in planner response.")
+#             except Exception as e:
+#                  print(f"ERROR: Could not parse standard plan. Error: {e}. Response: {full_response_str}", file=sys.stderr)
+#                  return jsonify({'error': 'Failed to create a standard execution plan.'}), 500
+
+#         # =================================================================
+#         # STAGE 3: EXECUTION (Common to both modes)
+#         # =================================================================
+#         log_progress("Executing plan: Fetching news and internal data...")
+#         news_summary = None
+#         news_plan = parsed_plan.get("fetch_external_news", {})
+#         if news_plan.get("needed"):
+#             sonar_prompt = news_plan.get("prompt_for_sonar", f"Get the latest news for {last_analysis.get('ticker')}")
+#             try:
+#                 news_messages = [{"role": "user", "content": sonar_prompt}]
+#                 news_summary = call_perplexity_api(news_messages, model="sonar")
+#             except Exception as e:
+#                 print(f"ERROR: News fetching failed: {e}")
+#                 news_summary = f"Error: Failed to fetch real-time news. {e}"
+
+#         retrieve_data_spec = parsed_plan.get("retrieve_data", {})
+#         retrieved_fundamental_data = retrieve_data_based_on_plan(retrieve_data_spec, last_analysis)
+
+#         log_progress("Performing financial calculations...")
+#         calculations_spec = parsed_plan.get("perform_calculations", [])
+#         calculation_results_obj = perform_planned_calculations(calculations_spec, retrieved_fundamental_data, last_analysis)
+
+
+#         # =================================================================
+#         # STAGE 4: SYNTHESIS (Common to both modes, guided by brain_plan if present)
+#         # =================================================================
+#         log_progress("Synthesizing the final response...")
+#         final_context_for_answer = {
+#             "user_question": user_question,
+#             "central_brain_plan": central_brain_plan,
+#             "retrieved_data": retrieved_fundamental_data,
+#             "calculated_metrics": calculation_results_obj.get("results", {}),
+#             "documents": last_analysis.get('documents', []),
+#             "news_summary": news_summary
+#         }
+
+#         answering_system_prompt = get_answering_system_prompt()
+        
+#         answering_messages = [
+#             {"role": "system", "content": answering_system_prompt},
+#             {"role": "user", "content": f"Please synthesize an answer based on the following consolidated data:\n{json.dumps(final_context_for_answer, indent=2, default=str)}"}
+#         ]
+        
+#         answerer_model = 'gpt-4.1-mini' if is_best_mode else selected_model
+#         final_answer = call_generative_ai_model(
+#             model=answerer_model,
+#             messages=answering_messages,
+#             temperature=0.7
+#         )
+
+#         return jsonify({
+#             'answer': final_answer,
+#             'thought_process': thought_process_str,
+#             'planning_data': ai_plan_json_str,
+#             'raw_news_summary': news_summary
+#         })
+
+#     except Exception as e:
+#         print(f"ERROR: General Error in /chat: {e}")
+#         traceback.print_exc()
+#         return jsonify({'error': f'An unexpected error occurred: {str(e)}', 'trace': traceback.format_exc()}), 500
 
 
 
