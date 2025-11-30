@@ -28,6 +28,8 @@ from flask import send_from_directory
 
 from flask import Flask, request, jsonify, send_from_directory, Response, stream_with_context
 from flask_caching import Cache
+from flask_compress import Compress
+
 # from a2wsgi import ASGIMiddleware
 
 from flask_cors import CORS
@@ -72,6 +74,16 @@ from tech_calculations import (
 # Initialize Flask app and enable CORS
 app = Flask(__name__, static_folder='.', static_url_path='')
 CORS(app)
+app.config["COMPRESS_MIMETYPES"] = [
+    'text/html', 
+    'text/css', 
+    'text/xml', 
+    'application/json', 
+    'application/javascript'
+]
+app.config["COMPRESS_LEVEL"] = 6  # Balance between speed and CPU usage
+app.config["COMPRESS_MIN_SIZE"] = 500 # Don't bother compressing tiny responses
+Compress(app)
 
 # --- FINAL, ROBUST CACHE CONFIGURATION ---
 
