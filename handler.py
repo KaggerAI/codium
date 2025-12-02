@@ -765,6 +765,10 @@ def chat():
                 # OPTION A: Direct Redis (Production)
                 if redis_url:
                     # Create a fresh client for this request to avoid stale connections
+                    # Force SSL (rediss://) if port 6380 is used, even if not explicitly in URL
+                    if ':6380' in redis_url and not redis_url.startswith('rediss://'):
+                        redis_url = redis_url.replace('redis://', 'rediss://')
+                        print("DEBUG: Port 6380 detected. Forcing rediss:// scheme.", file=sys.stderr)
                     # Log the URL (masking password) to confirm we are using rediss:// if expected
                     safe_url_log = redis_url.split('@')[-1] if '@' in redis_url else "REDACTED"
                     print(f"DEBUG: Connecting to Redis at ...@{safe_url_log}", file=sys.stderr)
@@ -774,6 +778,7 @@ def chat():
                         socket_timeout=30.0,        # Increased from 10s to 30s
                         socket_connect_timeout=30.0, # Increased from 5s to 30s
                         retry_on_timeout=True,       # Ensure retries happen
+                        ssl_cert_reqs=None,          # Disable strict SSL validation for Azure
                         decode_responses=False 
                     )
                     print(f"DEBUG: Fetching key from Redis (Attempt {retry_count+1}): {analysis_key}", file=sys.stderr)
