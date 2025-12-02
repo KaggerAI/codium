@@ -113,7 +113,6 @@ if azure_redis_conn_string:
         
         for part in parts[1:]:
             # Use split('=', 1) to ensure we only split on the FIRST equals sign
-            # This protects passwords that contain '=' characters (like base64)
             if '=' in part:
                 key, value = part.split('=', 1)
                 if key.lower() == 'password':
@@ -124,48 +123,63 @@ if azure_redis_conn_string:
         if not password:
             raise ValueError("Password not found in Redis connection string")
 
-        # Use 'rediss://' for SSL connections, which Azure requires
+        # Use 'rediss://' for SSL connections
         scheme = "rediss://" if ssl_enabled else "redis://"
         
-        # Construct the final, standard Redis URL
-        # host_part looks like "name.redis.cache.windows.net:6380"
-        formatted_redis_url = f"{scheme}:{password}@{host_part}?socket_timeout=30&socket_connect_timeout=30"
-        # formatted_redis_url = f"{scheme}:{password}@{host_part}"
+        # --- FIX 1: URL ENCODE THE PASSWORD ---
+        # This handles special characters like /=+ in Azure passwords
+        safe_password = urllib.parse.quote(password)
+        
+        # --- FIX 2: ADD TIMEOUTS & HEALTH CHECKS ---
+        # socket_timeout=30: Wait up to 30s for data
+        # health_check_interval=10: Ping Azure every 10s to keep connection alive
+        # retry_on_timeout=true: Automatically retry if Azure kills the link
+        formatted_redis_url = f"{scheme}:{safe_password}@{host_part}?socket_timeout=30&socket_connect_timeout=30&health_check_interval=10&retry_on_timeout=true"
 
         config = {
             "CACHE_TYPE": "RedisCache",
             "CACHE_DEFAULT_TIMEOUT": 21600, # 6 hours
             "CACHE_REDIS_URL": formatted_redis_url
         }
-        print("INFO: Configuring cache for PRODUCTION (Redis)")
+        print("INFO: Configuring cache for PRODUCTION (Redis)", file=sys.stderr)
 
     except Exception as e:
-        print(f"CRITICAL ERROR: Failed to parse Redis connection string. Error: {e}")
-        # Fallback to SimpleCache if parsing fails
+        print(f"CRITICAL ERROR: Failed to parse Redis connection string. Error: {e}", file=sys.stderr)
         config = {"CACHE_TYPE": "SimpleCache"}
 
+
     # try:
-    #     # Split the string by commas to separate the parts
+    #     # Split the string by commas
     #     parts = azure_redis_conn_string.split(',')
         
     #     # The host and port are always the first part
-    #     host, port = parts[0].split(':')
+    #     host_part = parts[0]
         
-    #     # Find the password and ssl parts in the rest of the string
-    #     # We create a dictionary of the other options
-    #     options = {p.split('=')[0]: p.split('=')[1] for p in parts[1:]}
+    #     # Robustly find password and ssl
+    #     password = None
+    #     ssl_enabled = False
         
-    #     password = options.get('password')
-    #     ssl = options.get('ssl', 'false').lower() == 'true'
+    #     for part in parts[1:]:
+    #         # Use split('=', 1) to ensure we only split on the FIRST equals sign
+    #         # This protects passwords that contain '=' characters (like base64)
+    #         if '=' in part:
+    #             key, value = part.split('=', 1)
+    #             if key.lower() == 'password':
+    #                 password = value
+    #             elif key.lower() == 'ssl':
+    #                 ssl_enabled = value.lower() == 'true'
 
     #     if not password:
     #         raise ValueError("Password not found in Redis connection string")
 
     #     # Use 'rediss://' for SSL connections, which Azure requires
-    #     scheme = "rediss://" if ssl else "redis://"
+    #     scheme = "rediss://" if ssl_enabled else "redis://"
         
     #     # Construct the final, standard Redis URL
-    #     formatted_redis_url = f"{scheme}:{password}@{host}:{port}"
+    #     # host_part looks like "name.redis.cache.windows.net:6380"
+    #     formatted_redis_url = f"{scheme}:{safe_password}@{host_part}?socket_timeout=30&socket_connect_timeout=30&health_check_interval=10&retry_on_timeout=true"
+    #     # formatted_redis_url = f"{scheme}:{password}@{host_part}?socket_timeout=30&socket_connect_timeout=30"
+    #     # formatted_redis_url = f"{scheme}:{password}@{host_part}"
 
     #     config = {
     #         "CACHE_TYPE": "RedisCache",
@@ -176,8 +190,10 @@ if azure_redis_conn_string:
 
     # except Exception as e:
     #     print(f"CRITICAL ERROR: Failed to parse Redis connection string. Error: {e}")
-    #     # Fallback to SimpleCache if parsing fails, so the app doesn't crash
+    #     # Fallback to SimpleCache if parsing fails
     #     config = {"CACHE_TYPE": "SimpleCache"}
+
+
 else:
     # Fallback for local development
     print("INFO: CACHE_REDIS_URL not found. Configuring cache for DEVELOPMENT (SimpleCache)")
@@ -614,31 +630,6 @@ def retrieve_data_based_on_plan(plan_retrieve_data_section, full_context):
     return focused_data
 
 
-# def call_openai_api(messages, model="o4-mini", expect_json_format_flag=False, temperature=1):
-#     # ... (Your existing call_openai_api function remains the same) ...
-#     try:
-#         completion_params = {
-#             "model": model,
-#             "messages": messages,
-#             "temperature": temperature,
-#         }
-#         if expect_json_format_flag and (model == "o4-mini" or model.startswith("gpt-4-turbo") or model.startswith("gpt-3.5-turbo-1106")):
-#             completion_params["response_format"] = {"type": "json_object"}
-
-#         # print(f"DEBUG: Making OpenAI call to model {model}. Expect JSON mode: {expect_json_format_flag}. Messages: {json.dumps(messages, indent=2)}")
-#         response = openai.chat.completions.create(**completion_params)
-#         content = response.choices[0].message.content
-#         # print(f"DEBUG: OpenAI Raw Response Content:\n{content}") 
-#         return content
-#     except openai.RateLimitError as rle:
-#         print(f"ERROR: OpenAI Rate Limit Error: {rle}")
-#         raise rle # Re-raise to be caught by the route's error handler
-#     except Exception as e:
-#         print(f"ERROR: Error in OpenAI API call: {e}")
-#         traceback.print_exc()
-#         # It's better to raise a custom exception or re-raise 'e' so the route handler can give a 500
-#         raise Exception(f"OpenAI API call failed: {str(e)}")
-
 # =====================================================================
 # END: Data Schema Description Function and RAG Function for AI Planner
 # =====================================================================
@@ -684,15 +675,76 @@ def perform_planned_calculations(plan_calculations_section, retrieved_data, full
 
 ### 2. The Complete `def chat` Function from `handler.py`
 
+# @app.route('/chat', methods=['POST'])
+# def chat():
+#     # Force logs to stderr so they show up in Azure Log Stream immediately
+#     print("DEBUG: Entering /chat endpoint...", file=sys.stderr)
+    
+#     try:
+#         data = request.get_json(force=True)
+#         print("DEBUG: Request JSON parsed successfully.", file=sys.stderr)
+        
+#         user_question = data.get('question', '').strip()
+#         selected_model = data.get('model', 'o4-mini')
+#         analysis_key = data.get('analysis_key')
+
+#         if not analysis_key:
+#              return jsonify({'answer': 'Analysis key is missing. Please analyze a stock first.'}), 200
+
+#         # =====================================================
+#         # PART 1: DIRECT REDIS RETRIEVAL (Bypassing Flask-Cache)
+#         # =====================================================
+#         last_analysis = None
+        
+#         try:
+#             import redis
+            
+#             # 1. Get the connection string configured in Flask
+#             redis_url = app.config.get("CACHE_REDIS_URL")
+            
+#             # 2. Create a FRESH connection client
+#             # We use from_url which handles the rediss:// format and password parsing automatically
+#             # We add explicit socket timeouts to prevent hanging
+#             r_client = redis.from_url(
+#                 redis_url,
+#                 socket_timeout=10.0,        # Wait max 10s for data
+#                 socket_connect_timeout=5.0, # Wait max 5s to connect
+#                 decode_responses=False      # Keep data as bytes (needed for zlib)
+#             )
+            
+#             # 3. Fetch Data
+#             print(f"DEBUG: Fetching key directly from Redis: {analysis_key}", file=sys.stderr)
+#             cached_blob = r_client.get(analysis_key)
+            
+#             # 4. Close connection immediately to free resources
+#             r_client.close()
+
+#             # 5. Decompress and Load
+#             if cached_blob:
+#                 print(f"DEBUG: Blob found. Size: {len(cached_blob)} bytes. Decompressing...", file=sys.stderr)
+#                 try:
+#                     decompressed_data = zlib.decompress(cached_blob)
+#                     print(f"DEBUG: Decompressed. Size: {len(decompressed_data)} bytes. Unpickling...", file=sys.stderr)
+#                     last_analysis = pickle.loads(decompressed_data)
+#                     print("DEBUG: Unpickle Successful.", file=sys.stderr)
+#                 except Exception as unpack_error:
+#                     print(f"WARN: Failed to decompress data: {unpack_error}", file=sys.stderr)
+#                     # Fallback in case it wasn't compressed
+#                     last_analysis = cached_blob
+#             else:
+#                 print("DEBUG: Redis returned None (Key not found).", file=sys.stderr)
+
+#         except Exception as redis_e:
+#             print(f"CRITICAL WARN: Direct Redis Fetch failed: {redis_e}", file=sys.stderr)
+#             # If this fails, we can't proceed
+
+
 @app.route('/chat', methods=['POST'])
 def chat():
-    # Force logs to stderr so they show up in Azure Log Stream immediately
     print("DEBUG: Entering /chat endpoint...", file=sys.stderr)
     
     try:
         data = request.get_json(force=True)
-        print("DEBUG: Request JSON parsed successfully.", file=sys.stderr)
-        
         user_question = data.get('question', '').strip()
         selected_model = data.get('model', 'o4-mini')
         analysis_key = data.get('analysis_key')
@@ -700,52 +752,55 @@ def chat():
         if not analysis_key:
              return jsonify({'answer': 'Analysis key is missing. Please analyze a stock first.'}), 200
 
-        # =====================================================
-        # PART 1: DIRECT REDIS RETRIEVAL (Bypassing Flask-Cache)
-        # =====================================================
+        # --- ROBUST RETRIEVAL LOGIC WITH RETRIES ---
         last_analysis = None
+        retry_count = 0
+        max_retries = 3
         
-        try:
-            import redis
-            
-            # 1. Get the connection string configured in Flask
-            redis_url = app.config.get("CACHE_REDIS_URL")
-            
-            # 2. Create a FRESH connection client
-            # We use from_url which handles the rediss:// format and password parsing automatically
-            # We add explicit socket timeouts to prevent hanging
-            r_client = redis.from_url(
-                redis_url,
-                socket_timeout=10.0,        # Wait max 10s for data
-                socket_connect_timeout=5.0, # Wait max 5s to connect
-                decode_responses=False      # Keep data as bytes (needed for zlib)
-            )
-            
-            # 3. Fetch Data
-            print(f"DEBUG: Fetching key directly from Redis: {analysis_key}", file=sys.stderr)
-            cached_blob = r_client.get(analysis_key)
-            
-            # 4. Close connection immediately to free resources
-            r_client.close()
+        while retry_count < max_retries:
+            try:
+                redis_url = app.config.get("CACHE_REDIS_URL")
+                cached_blob = None
 
-            # 5. Decompress and Load
-            if cached_blob:
-                print(f"DEBUG: Blob found. Size: {len(cached_blob)} bytes. Decompressing...", file=sys.stderr)
-                try:
-                    decompressed_data = zlib.decompress(cached_blob)
-                    print(f"DEBUG: Decompressed. Size: {len(decompressed_data)} bytes. Unpickling...", file=sys.stderr)
-                    last_analysis = pickle.loads(decompressed_data)
-                    print("DEBUG: Unpickle Successful.", file=sys.stderr)
-                except Exception as unpack_error:
-                    print(f"WARN: Failed to decompress data: {unpack_error}", file=sys.stderr)
-                    # Fallback in case it wasn't compressed
-                    last_analysis = cached_blob
-            else:
-                print("DEBUG: Redis returned None (Key not found).", file=sys.stderr)
+                # OPTION A: Direct Redis (Production)
+                if redis_url:
+                    # Create a fresh client for this request to avoid stale connections
+                    r_client = redis.from_url(
+                        redis_url,
+                        socket_timeout=10.0,
+                        socket_connect_timeout=5.0,
+                        decode_responses=False 
+                    )
+                    print(f"DEBUG: Fetching key from Redis (Attempt {retry_count+1}): {analysis_key}", file=sys.stderr)
+                    cached_blob = r_client.get(analysis_key)
+                    r_client.close()
+                
+                # OPTION B: SimpleCache (Localhost / Fallback)
+                else:
+                    print(f"DEBUG: No Redis URL found. Using SimpleCache (Attempt {retry_count+1}).", file=sys.stderr)
+                    cached_blob = cache.get(analysis_key)
 
-        except Exception as redis_e:
-            print(f"CRITICAL WARN: Direct Redis Fetch failed: {redis_e}", file=sys.stderr)
-            # If this fails, we can't proceed
+                # --- COMMON DECOMPRESSION LOGIC ---
+                if cached_blob:
+                    try:
+                        # Try to decompress (zlib)
+                        decompressed_data = zlib.decompress(cached_blob)
+                        last_analysis = pickle.loads(decompressed_data)
+                        print("DEBUG: Successfully retrieved and decompressed data.", file=sys.stderr)
+                        break # Success!
+                    except Exception as unpack_error:
+                        print(f"WARN: Decompression failed: {unpack_error}", file=sys.stderr)
+                        # Fallback: Maybe it wasn't compressed?
+                        last_analysis = cached_blob
+                        break
+                else:
+                    print("DEBUG: Cache returned None (Key not found).", file=sys.stderr)
+            
+            except Exception as e:
+                print(f"WARN: Cache fetch failed (Attempt {retry_count+1}). Error: {e}", file=sys.stderr)
+                time.sleep(1)
+            
+            retry_count += 1
             
         # =====================================================
         # PART 2: VALIDATION
@@ -1523,96 +1578,6 @@ def generate_ai_scores(ticker, last_analysis):
         return [], None
 
 
-# def generate_ai_scores(ticker, last_analysis):
-#     """
-#     MODIFIED: Now generates a downloadable Excel debug file for the Valuation Score.
-#     It now returns a tuple: (score_html_list, debug_filename_or_none)
-#     """
-#     debug_filename = None # Initialize filename as None
-#     try:
-#         ai_scores = AIScores(ticker, last_analysis)
-#         ai_scores.calculate_all_scores()
-
-#         # --- START: NEW DEBUG FILE GENERATION LOGIC ---
-#         try:
-#             val_score_obj = ai_scores.scores.get('valuation')
-#             if val_score_obj and not val_score_obj.df.empty:
-#                 # Define the columns we want to inspect
-#                 features = val_score_obj.features
-#                 proxy_col = val_score_obj.proxy_score_col
-#                 regime_col = val_score_obj.regime_labels_col
-                
-#                 # Ensure all required columns exist before proceeding
-#                 required_cols = features + [proxy_col, regime_col]
-#                 if all(col in val_score_obj.df.columns for col in required_cols):
-#                     # Select only the data we need
-#                     debug_df = val_score_obj.df[required_cols]
-
-#                     # Generate a unique, temporary filename
-#                     unique_id = uuid.uuid4()
-#                     debug_filename = f"debug_valuation_{ticker}_{unique_id}.xlsx"
-                    
-#                     # --- START: MODIFIED FILE SAVING LOGIC ---
-                    
-#                     # 1. Define the dedicated debug directory
-#                     debug_dir = "debug_files"
-                    
-#                     # 2. Create the directory if it doesn't already exist
-#                     os.makedirs(debug_dir, exist_ok=True)
-                    
-#                     # 3. Create the full, explicit path to the file
-#                     full_file_path = os.path.join(debug_dir, debug_filename)
-                    
-#                     # 4. Save the DataFrame to the specific path
-#                     debug_df.to_excel(full_file_path)
-                    
-#                     print(f"INFO: Successfully created debug file at: {full_file_path}")
-
-#         except Exception as e:
-#             print(f"ERROR: Could not create debug file. Reason: {e}")
-#         # --- END: NEW DEBUG FILE GENERATION LOGIC ---
-
-#         # The rest of the function continues as before...
-#         final_scaled_scores = {}
-#         for field in ['valuation', 'technical']:
-#             # ... (rest of the logic is unchanged)
-#             score_obj = ai_scores.scores[field]
-#             proxy_score_history = score_obj.df[score_obj.proxy_score_col]
-#             latest_proxy_score = proxy_score_history.iloc[-1]
-#             hist_min = proxy_score_history.min()
-#             hist_max = proxy_score_history.max()
-#             hist_range = hist_max - hist_min if (hist_max - hist_min) != 0 else 1
-#             scaled_proxy_score_0_1 = (latest_proxy_score - hist_min) / hist_range
-#             latest_regime = score_obj.df[score_obj.regime_labels_col].iloc[-1]
-#             final_scaled_scores[field.capitalize()] = (scaled_proxy_score_0_1, latest_regime.replace('_', ' ').title())
-
-#         data_dict_for_relative_scaling = {}
-#         for field, score_obj in ai_scores.scores.items():
-#             if field in ['liquidity', 'volatility']:
-#                 raw_score_value = score_obj.get_score().tail(30).mean()
-#                 regime_label = score_obj.df[f'{field}_regime_labels'].iloc[-1]
-#                 data_dict_for_relative_scaling[field.capitalize()] = (raw_score_value, regime_label.replace('_', ' ').title())
-
-#         if data_dict_for_relative_scaling:
-#             relatively_scaled = AIScores._scale_radar_scores(data_dict_for_relative_scaling)
-#             final_scaled_scores.update(relatively_scaled)
-            
-#         ai_score_html = []
-#         for field_key in ['Valuation', 'Technical', 'Liquidity', 'Volatility']:
-#             if field_key in final_scaled_scores:
-#                 score_obj = ai_scores.scores[field_key.lower()]
-#                 scaled_value, description = final_scaled_scores[field_key]
-                
-#                 json_dict = { 'label': field_key, 'value': round(scaled_value * 10, 1), 'description': description, 'chart1_json': score_obj.plot().to_json(), 'chart2_json': score_obj.plot_violin().to_json() }
-#                 ai_score_html.append(json_dict)
-                
-#         return ai_score_html, debug_filename # Return both the HTML and the filename
-        
-#     except Exception as e:
-#         print(f"CRITICAL ERROR in generate_ai_scores for {ticker}.")
-#         print(f"Error: {e}")
-#         traceback.print_exc()
-#         return [], None # Return empty list and None on failure
     
 
 # ------------- Analysis & Respond -------------
@@ -1833,32 +1798,6 @@ async def get_analysis_for_ticker_async(tick):
 # --- END: OPTIMIZED PARALLEL PROCESSING ---
 
 
-    # close_j=build_close_figure(df,company_name).to_json()
-    # hl_j   =build_hl_figure(df,company_name).to_json()
-    # ema_j  =build_ema_figure(df,company_name).to_json()
-    # rsi_j  =build_rsi_figure(df,company_name).to_json()
-    # adl_j  =build_adl_figure(df,company_name).to_json()
-    # rs_j   =build_rs_figure(df,company_name).to_json()
-    
-    # fund_data_for_frontend, fund_data_for_ai_context = {}, {}
-    # if tables_from_screener:
-    #     for table_name, df_original_table in tables_from_screener.items():
-    #         fund_data_for_frontend[table_name] = df_original_table.reset_index().T.to_json(orient='split')
-    #         temp_rows_for_cleaning = df_original_table.reset_index().to_dict(orient='records')
-    #         cleaned_rows_for_ai = []
-    #         for row_dict in temp_rows_for_cleaning:
-    #             cleaned_row = { (str(k).strip() if isinstance(k, str) else k): (str(v).strip() if isinstance(v, str) else v) for k, v in row_dict.items() }
-    #             cleaned_rows_for_ai.append(cleaned_row)
-    #         fund_data_for_ai_context[table_name] = cleaned_rows_for_ai
-    
-    # log_progress(f"Generating AI company summary for {tick}...")
-    # ai_company_summary_html = generate_ai_company_summary(
-    #     ticker=tick,
-    #     description=company_description,
-    #     fundamentals=tables_from_screener,
-    #     documents=latest_documents
-    # )
-    # log_progress("AI summary generated successfully.")
     
     analysis_result_for_cache = {
     "ticker": tick, "company_name": company_name, "summary": cleaned_technical_summary, 
@@ -1866,29 +1805,14 @@ async def get_analysis_for_ticker_async(tick):
     "documents": latest_documents,
     "technical_data_df": df
     }
-    # Store the analysis data in the shared Redis cache
-    # cache.set("last_analysis_data", analysis_result_for_cache)
-    
-    # last_analysis = {
-    #    "ticker": tick, "company_name": company_name, "summary": cleaned_technical_summary, 
-    #    "fundamentals": fund_data_for_ai_context, "valuation_and_margin_data": parsed_valuation_data, 
-    #    "documents": latest_documents
-    # }
+
 
     log_progress(f"Generating AI scores for {tick}...")
     ai_scores_data = generate_ai_scores(tick, analysis_result_for_cache)
     log_progress("AI scores generated successfully.")
 
     log_progress("Analysis complete. Loading results ...")
-   
-    # return {
-    #     'ticker': tick, 'company_name': company_name, 'company_summary_html': ai_company_summary_html,
-    #     'summary': cleaned_technical_summary, 'ai_scores': ai_scores_data,
-    #     'chart_close_json': close_j, 'chart_hl_json': hl_j, 'chart_ema_json': ema_j,
-    #     'chart_rsi_json': rsi_j, 'chart_adl_json': adl_j, 'chart_rs_json': rs_j,
-    #     'fundamentals': fund_data_for_frontend, 'metric_charts': metric_charts_for_frontend,
-    #     'documents': latest_documents, 'scanx_data': scanx_data
-    # }
+
 
     # This dictionary is what the AI needs. It uses the Python objects.
     analysis_for_cache = {
@@ -1980,19 +1904,6 @@ def analyze():
             
         except Exception as e:
             print(f"WARNING: Cache write failed. Error: {e}")
-
-
-        # try:
-        #     import sys
-        #     size_mb = sys.getsizeof(str(light_analysis_data)) / (1024 * 1024)
-        #     print(f"INFO: Caching LIGHT data for Chat (Key: {analysis_key}). Est Size: {size_mb:.2f} MB")
-            
-        #     cache.set(analysis_key, light_analysis_data, timeout=21600)
-
-        #     cache.set(heavy_key, heavy_analysis_data, timeout=21600)
-            
-        # except Exception as e:
-        #     print(f"WARNING: Cache write failed despite split. Error: {e}")
 
 
         
