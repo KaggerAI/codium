@@ -765,10 +765,15 @@ def chat():
                 # OPTION A: Direct Redis (Production)
                 if redis_url:
                     # Create a fresh client for this request to avoid stale connections
+                    # Log the URL (masking password) to confirm we are using rediss:// if expected
+                    safe_url_log = redis_url.split('@')[-1] if '@' in redis_url else "REDACTED"
+                    print(f"DEBUG: Connecting to Redis at ...@{safe_url_log}", file=sys.stderr)
+
                     r_client = redis.from_url(
                         redis_url,
-                        socket_timeout=10.0,
-                        socket_connect_timeout=5.0,
+                        socket_timeout=30.0,        # Increased from 10s to 30s
+                        socket_connect_timeout=30.0, # Increased from 5s to 30s
+                        retry_on_timeout=True,       # Ensure retries happen
                         decode_responses=False 
                     )
                     print(f"DEBUG: Fetching key from Redis (Attempt {retry_count+1}): {analysis_key}", file=sys.stderr)
