@@ -765,9 +765,10 @@ def chat():
                 # OPTION A: Direct Redis (Production)
                 if redis_url:
                     # Create a fresh client for this request to avoid stale connections
-                    # Force SSL (rediss://) if port 6380 is used, even if not explicitly in URL
-                    if ':6380' in redis_url and not redis_url.startswith('rediss://'):
-                        redis_url = redis_url.replace('redis://', 'rediss://')
+                    # Clean URL: Remove any query parameters to avoid conflicts with kwargs
+
+                    if '?' in redis_url:
+                        redis_url = redis_url.split('?')[0]
                         print("DEBUG: Port 6380 detected. Forcing rediss:// scheme.", file=sys.stderr)
                     # Log the URL (masking password) to confirm we are using rediss:// if expected
                     safe_url_log = redis_url.split('@')[-1] if '@' in redis_url else "REDACTED"
