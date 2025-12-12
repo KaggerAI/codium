@@ -747,10 +747,21 @@ def chat():
         data = request.get_json(force=True)
         user_question = data.get('question', '').strip()
         selected_model = data.get('model', 'o4-mini')
-        analysis_key = data.get('analysis_key')
+        # analysis_key = data.get('analysis_key')
+        analysis_key = str(data.get('analysis_key')) if data.get('analysis_key') is not None else None
+
 
         if not analysis_key:
-             return jsonify({'answer': 'Analysis key is missing. Please analyze a stock first.'}), 200
+            return jsonify({'answer': 'Analysis key is missing. Please analyze a stock first.'}), 200
+
+        # Quick connectivity check if we're using a Redis backend
+        cache_backend = getattr(cache, "cache", None)
+        if cache_backend and hasattr(cache_backend, "ping"):
+            try:
+                cache_backend.ping()
+                print("DEBUG: Redis cache ping succeeded before retrieval.", file=sys.stderr)
+            except Exception as ping_err:
+                print(f"WARN: Redis cache ping failed: {ping_err}", file=sys.stderr)
 
         # --- ROBUST RETRIEVAL LOGIC WITH RETRIES ---
         # Use Flask-Caching for both read and write paths so key prefixes/serialization stay aligned
