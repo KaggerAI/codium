@@ -753,43 +753,47 @@ def chat():
              return jsonify({'answer': 'Analysis key is missing. Please analyze a stock first.'}), 200
 
         # --- ROBUST RETRIEVAL LOGIC WITH RETRIES ---
+        # Use Flask-Caching for both read and write paths so key prefixes/serialization stay aligned
         last_analysis = None
         retry_count = 0
         max_retries = 3
         
         while retry_count < max_retries:
             try:
-                redis_url = app.config.get("CACHE_REDIS_URL")
-                cached_blob = None
+                # redis_url = app.config.get("CACHE_REDIS_URL")
+                # cached_blob = None
 
-                # OPTION A: Direct Redis (Production)
-                if redis_url:
-                    # Create a fresh client for this request to avoid stale connections
-                    # Clean URL: Remove any query parameters to avoid conflicts with kwargs
+                # # OPTION A: Direct Redis (Production)
+                # if redis_url:
+                #     # Create a fresh client for this request to avoid stale connections
+                #     # Clean URL: Remove any query parameters to avoid conflicts with kwargs
 
-                    if '?' in redis_url:
-                        redis_url = redis_url.split('?')[0]
-                        print("DEBUG: Port 6380 detected. Forcing rediss:// scheme.", file=sys.stderr)
-                    # Log the URL (masking password) to confirm we are using rediss:// if expected
-                    safe_url_log = redis_url.split('@')[-1] if '@' in redis_url else "REDACTED"
-                    print(f"DEBUG: Connecting to Redis at ...@{safe_url_log}", file=sys.stderr)
+                #     if '?' in redis_url:
+                #         redis_url = redis_url.split('?')[0]
+                #         print("DEBUG: Port 6380 detected. Forcing rediss:// scheme.", file=sys.stderr)
+                #     # Log the URL (masking password) to confirm we are using rediss:// if expected
+                #     safe_url_log = redis_url.split('@')[-1] if '@' in redis_url else "REDACTED"
+                #     print(f"DEBUG: Connecting to Redis at ...@{safe_url_log}", file=sys.stderr)
 
-                    r_client = redis.from_url(
-                        redis_url,
-                        socket_timeout=30.0,        # Increased from 10s to 30s
-                        socket_connect_timeout=30.0, # Increased from 5s to 30s
-                        retry_on_timeout=True,       # Ensure retries happen
-                        ssl_cert_reqs=None,          # Disable strict SSL validation for Azure
-                        decode_responses=False 
-                    )
-                    print(f"DEBUG: Fetching key from Redis (Attempt {retry_count+1}): {analysis_key}", file=sys.stderr)
-                    cached_blob = r_client.get(analysis_key)
-                    r_client.close()
+                #     r_client = redis.from_url(
+                #         redis_url,
+                #         socket_timeout=30.0,        # Increased from 10s to 30s
+                #         socket_connect_timeout=30.0, # Increased from 5s to 30s
+                #         retry_on_timeout=True,       # Ensure retries happen
+                #         ssl_cert_reqs=None,          # Disable strict SSL validation for Azure
+                #         decode_responses=False 
+                #     )
+                #     print(f"DEBUG: Fetching key from Redis (Attempt {retry_count+1}): {analysis_key}", file=sys.stderr)
+                #     cached_blob = r_client.get(analysis_key)
+                #     r_client.close()
                 
-                # OPTION B: SimpleCache (Localhost / Fallback)
-                else:
-                    print(f"DEBUG: No Redis URL found. Using SimpleCache (Attempt {retry_count+1}).", file=sys.stderr)
-                    cached_blob = cache.get(analysis_key)
+                # # OPTION B: SimpleCache (Localhost / Fallback)
+                # else:
+                #     print(f"DEBUG: No Redis URL found. Using SimpleCache (Attempt {retry_count+1}).", file=sys.stderr)
+                #     cached_blob = cache.get(analysis_key)
+                
+                print(f"DEBUG: Fetching cached analysis via Flask-Caching (Attempt {retry_count+1}).", file=sys.stderr)
+                cached_blob = cache.get(analysis_key)
 
                 # --- COMMON DECOMPRESSION LOGIC ---
                 if cached_blob:
