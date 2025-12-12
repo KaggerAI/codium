@@ -11,7 +11,7 @@ Before running, ensure you have installed system TA-Lib and Python packages:
 2. Python packages:
    pip install flask flask-cors tradingview-datafeed yfinance pandas numpy matplotlib openai yfinance pdfplumber plotly matplotlib scikit-learn feedparser openai google-generativeai
 """
-import sys, os
+import sys, os, socket
 sys.path.append(os.path.dirname(__file__))
 from prompts import get_central_brain_prompt, get_planning_system_prompt, get_answering_system_prompt
 
@@ -89,6 +89,50 @@ app.config["COMPRESS_MIMETYPES"] = [
 app.config["COMPRESS_LEVEL"] = 6  # Balance between speed and CPU usage
 app.config["COMPRESS_MIN_SIZE"] = 500 # Don't bother compressing tiny responses
 Compress(app)
+
+from urllib.parse import urlparse
+
+def log_redis_target(app, cache=None, context=""):
+    cache_type = app.config.get("CACHE_TYPE")
+
+    # Prefer URL if present (most reliable)
+    redis_url = app.config.get("CACHE_REDIS_URL")
+
+    host = app.config.get("CACHE_REDIS_HOST")
+    port = app.config.get("CACHE_REDIS_PORT")
+    ssl_enabled = app.config.get("CACHE_REDIS_SSL")
+
+    if redis_url:
+        u = urlparse(redis_url)
+        host = u.hostname or host
+        port = u.port or port
+        ssl_enabled = (u.scheme == "rediss")
+
+    # DNS check (helps detect Private Endpoint vs Public)
+    dns_ip = None
+    try:
+        if host and port:
+            dns_ip = socket.getaddrinfo(host, int(port))[0][4][0]
+    except Exception as e:
+        dns_ip = f"DNS_ERROR:{e}"
+
+    backend_name = None
+    try:
+        backend_name = getattr(cache, "cache", None).__class__.__name__ if cache else None
+    except Exception:
+        backend_name = None
+
+    print(
+        "REDIS_DEBUG "
+        f"ctx={context} "
+        f"pid={os.getpid()} "
+        f"instance={socket.gethostname()} "
+        f"cache_type={cache_type} "
+        f"backend={backend_name} "
+        f"target={host}:{port} "
+        f"ssl={ssl_enabled} "
+        f"dns_ip={dns_ip}"
+    )
 
 # --- FINAL, ROBUST CACHE CONFIGURATION ---
 
@@ -204,6 +248,7 @@ else:
 
 app.config.from_mapping(config)
 cache = Cache(app)
+log_redis_target(app, cache, context="startup_after_cache_init")
 
 # Configure a simple in-memory cache.
 # Data will be cached for 6 hours (21600 seconds).
@@ -741,6 +786,7 @@ def perform_planned_calculations(plan_calculations_section, retrieved_data, full
 
 @app.route('/chat', methods=['POST'])
 def chat():
+    log_redis_target(app, cache, context="chat_entry")
     print("DEBUG: Entering /chat endpoint...", file=sys.stderr)
     
     try:
