@@ -339,7 +339,7 @@ def call_openai_api(messages, model="gpt-4.1-mini", expect_json_format_flag=Fals
         print(f"ERROR in call_openai_api: {e}")
         raise
 
-def call_perplexity_api(messages, model="sonar-pro", temperature=1):
+def call_perplexity_api(messages, model="sonar", temperature=1):
     if not PERPLEXITY_API_KEY:
         raise ValueError("Perplexity API key is not configured.")
     try:
@@ -995,7 +995,7 @@ def chat():
             try:
                 news_messages = [{"role": "user", "content": sonar_prompt}]
                 # Added timeout to prevent hanging
-                news_summary = call_perplexity_api(news_messages, model="sonar-pro")
+                news_summary = call_perplexity_api(news_messages, model="sonar")
             except Exception as e:
                 print(f"ERROR: News fetching failed: {e}", file=sys.stderr)
                 news_summary = f"Error: Failed to fetch real-time news. {e}"
