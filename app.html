@@ -277,32 +277,33 @@
       color: #475569;
     }
 
-    /* Paragraphs after headings */
-    .industry-report h1+p,
-    .industry-report h1+ul,
-    .industry-report h1+ol,
-    .industry-report h1+table {
+    /* Content indentation within heading sections */
+    /* Use general sibling selector ~ to apply to ALL siblings, not just first */
+    .industry-report h1~p:not(h2~p):not(h3~p):not(h4~p),
+    .industry-report h1~ul:not(h2~ul):not(h3~ul):not(h4~ul),
+    .industry-report h1~ol:not(h2~ol):not(h3~ol):not(h4~ol),
+    .industry-report h1~table:not(h2~table):not(h3~table):not(h4~table) {
       margin-left: 0;
     }
 
-    .industry-report h2+p,
-    .industry-report h2+ul,
-    .industry-report h2+ol,
-    .industry-report h2+table {
+    .industry-report h2~p:not(h3~p):not(h4~p),
+    .industry-report h2~ul:not(h3~ul):not(h4~ul),
+    .industry-report h2~ol:not(h3~ol):not(h4~ol),
+    .industry-report h2~table:not(h3~table):not(h4~table) {
       margin-left: 1rem;
     }
 
-    .industry-report h3+p,
-    .industry-report h3+ul,
-    .industry-report h3+ol,
-    .industry-report h3+table {
+    .industry-report h3~p:not(h4~p),
+    .industry-report h3~ul:not(h4~ul),
+    .industry-report h3~ol:not(h4~ol),
+    .industry-report h3~table:not(h4~table) {
       margin-left: 2rem;
     }
 
-    .industry-report h4+p,
-    .industry-report h4+ul,
-    .industry-report h4+ol,
-    .industry-report h4+table {
+    .industry-report h4~p,
+    .industry-report h4~ul,
+    .industry-report h4~ol,
+    .industry-report h4~table {
       margin-left: 3rem;
     }
 
@@ -324,8 +325,15 @@
 
     .industry-report ol {
       list-style-type: decimal;
+      list-style-position: outside;
       padding-left: 2rem;
       margin: 1rem 0;
+      counter-reset: item;
+    }
+
+    .industry-report ol li {
+      display: list-item;
+      list-style-type: decimal;
     }
 
     .industry-report li {
@@ -984,66 +992,62 @@
         return;
       }
 
-      // Get industry name from header
-      const industryName = document.querySelector('#industryResults h2')?.textContent?.replace('📊', '').trim() || 'Industry_Research';
-      const filename = `${industryName.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`;
-
-      // Show loading state on button
+      // Hide the download button
       const downloadBtn = document.getElementById('downloadPdfBtn');
-      const originalText = downloadBtn.innerHTML;
-      downloadBtn.innerHTML = '<svg class="w-5 h-5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg><span>Generating PDF...</span>';
-      downloadBtn.disabled = true;
-
-      // Clone the report container to avoid modifying the original
-      const clone = reportContainer.cloneNode(true);
-
-      // Remove the download button from clone
-      const btnInClone = clone.querySelector('#downloadPdfBtn');
-      if (btnInClone && btnInClone.parentElement) {
-        btnInClone.parentElement.remove();
+      if (downloadBtn) {
+        downloadBtn.style.display = 'none';
       }
 
-      // Create a temporary container for the PDF
-      const tempDiv = document.createElement('div');
-      tempDiv.style.position = 'absolute';
-      tempDiv.style.left = '-9999px';
-      tempDiv.style.width = '210mm'; // A4 width
-      tempDiv.style.backgroundColor = 'white';
-      tempDiv.style.padding = '20px';
-      tempDiv.appendChild(clone);
-      document.body.appendChild(tempDiv);
-
-      const opt = {
-        margin: 10,
-        filename: filename,
-        image: { type: 'jpeg', quality: 0.95 },
-        html2canvas: {
-          scale: 2,
-          useCORS: true,
-          letterRendering: true,
-          logging: false,
-          scrollY: -window.scrollY,
-          scrollX: -window.scrollX,
-          windowWidth: tempDiv.scrollWidth,
-          windowHeight: tempDiv.scrollHeight
-        },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-        pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
-      };
-
-      html2pdf().set(opt).from(tempDiv).save().then(() => {
-        document.body.removeChild(tempDiv);
-        downloadBtn.innerHTML = originalText;
-        downloadBtn.disabled = false;
-      }).catch((error) => {
-        console.error('PDF generation error:', error);
-        if (tempDiv.parentElement) {
-          document.body.removeChild(tempDiv);
+      // Create print-specific styles
+      const printStyle = document.createElement('style');
+      printStyle.id = 'print-styles';
+      printStyle.textContent = `
+        @media print {
+          body * {
+            visibility: hidden;
+          }
+          #industryResults, #industryResults * {
+            visibility: visible;
+          }
+          #industryResults {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+          }
+          @page {
+            size: A4;
+            margin: 15mm;
+          }
+          /* Ensure colors print */
+          * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color-adjust: exact !important;
+          }
+          /* Better page breaks */
+          h2, h3, h4 {
+            page-break-after: avoid;
+            break-after: avoid;
+          }
+          table, figure {
+            page-break-inside: avoid;
+            break-inside: avoid;
+          }
         }
-        downloadBtn.innerHTML = originalText;
-        downloadBtn.disabled = false;
-        alert('Failed to generate PDF. Please try again.');
-      });
+      `;
+      document.head.appendChild(printStyle);
+
+      // Trigger print dialog
+      window.print();
+
+      // Cleanup after print
+      setTimeout(() => {
+        document.getElementById('print-styles')?.remove();
+        if (downloadBtn) {
+          downloadBtn.style.display = '';
+        }
+      }, 1000);
     }
 
     function copyMessageToClipboard(button) {
