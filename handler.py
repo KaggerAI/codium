@@ -25,6 +25,7 @@ import httpx
 import uuid
 import zlib
 import pickle
+import threading
 
 from flask import send_from_directory
 
@@ -89,6 +90,10 @@ app.config["COMPRESS_MIMETYPES"] = [
 app.config["COMPRESS_LEVEL"] = 6  # Balance between speed and CPU usage
 app.config["COMPRESS_MIN_SIZE"] = 500 # Don't bother compressing tiny responses
 Compress(app)
+
+# Storage for background industry research jobs (in-memory for single instance)
+# For multi-instance deployment, use Redis or DB
+industry_research_jobs = {}
 
 from urllib.parse import urlparse
 
@@ -1025,6 +1030,7 @@ End with:
 def industry_research():
     """
     Endpoint for generating comprehensive industry research reports using sonar-deep-research.
+    Uses background processing to handle long-running API calls (Azure has 230s timeout).
     """
     print("DEBUG: Entering /industry-research endpoint...", file=sys.stderr)
     
@@ -1038,41 +1044,109 @@ def industry_research():
         if not industry:
             return jsonify({'error': 'Industry is required'}), 400
         
-        log_progress(f"Starting deep research for {industry} industry...")
+        # Generate a unique job ID
+        job_id = str(uuid.uuid4())
         
-        # Build the prompt with user inputs
-        prompt = INDUSTRY_RESEARCH_PROMPT.format(
-            INDUSTRY=industry,
-            HORIZON_YEARS=horizon_years,
-            OPTIONAL_TICKERS=optional_tickers if optional_tickers else "None specified",
-            DEPTH=depth
-        )
+        # Initialize job status
+        industry_research_jobs[job_id] = {
+            'status': 'processing',
+            'progress': 'Starting deep research...',
+            'result': None,
+            'error': None,
+            'industry': industry,
+            'horizon_years': horizon_years,
+            'depth': depth,
+            'started_at': time.time()
+        }
         
-        log_progress(f"Generating comprehensive {depth} report for {industry}...")
-        print(f"INFO: Calling sonar-deep-research for industry: {industry}, horizon: {horizon_years}y, depth: {depth}", file=sys.stderr)
+        # Start background thread for the long-running API call
+        def run_research():
+            try:
+                log_progress(f"Starting deep research for {industry} industry...")
+                
+                # Build the prompt with user inputs
+                prompt = INDUSTRY_RESEARCH_PROMPT.format(
+                    INDUSTRY=industry,
+                    HORIZON_YEARS=horizon_years,
+                    OPTIONAL_TICKERS=optional_tickers if optional_tickers else "None specified",
+                    DEPTH=depth
+                )
+                
+                industry_research_jobs[job_id]['progress'] = f"Generating comprehensive {depth} report for {industry}..."
+                print(f"INFO: Calling sonar-deep-research for industry: {industry}, horizon: {horizon_years}y, depth: {depth}", file=sys.stderr)
+                
+                # Call Perplexity's sonar-deep-research with extended timeout
+                messages = [{"role": "user", "content": prompt}]
+                report = call_perplexity_api(messages, model="sonar-deep-research", timeout=900)
+                
+                # Store the result
+                industry_research_jobs[job_id]['status'] = 'complete'
+                industry_research_jobs[job_id]['progress'] = 'Industry report generation complete!'
+                industry_research_jobs[job_id]['result'] = {
+                    'report': report,
+                    'industry': industry,
+                    'horizon_years': horizon_years,
+                    'depth': depth
+                }
+                print(f"INFO: Industry research complete for job_id: {job_id}", file=sys.stderr)
+                
+            except Exception as api_error:
+                print(f"ERROR: sonar-deep-research API call failed: {api_error}", file=sys.stderr)
+                industry_research_jobs[job_id]['status'] = 'error'
+                industry_research_jobs[job_id]['error'] = str(api_error)
         
-        # Call Perplexity's sonar-deep-research with extended timeout
-        messages = [{"role": "user", "content": prompt}]
+        # Start the background thread
+        thread = threading.Thread(target=run_research)
+        thread.daemon = True
+        thread.start()
         
-        try:
-            report = call_perplexity_api(messages, model="sonar-deep-research", timeout=800)
-            log_progress("Industry report generation complete!")
-            
-            return jsonify({
-                'report': report,
-                'industry': industry,
-                'horizon_years': horizon_years,
-                'depth': depth
-            })
-            
-        except Exception as api_error:
-            print(f"ERROR: sonar-deep-research API call failed: {api_error}", file=sys.stderr)
-            return jsonify({'error': f'Deep research API call failed: {str(api_error)}'}), 500
+        # Return the job ID immediately (within Azure's timeout)
+        return jsonify({
+            'job_id': job_id,
+            'status': 'processing',
+            'message': f'Research job started for {industry}. Poll /industry-research/{job_id}/status for results.'
+        })
             
     except Exception as e:
         print(f"CRITICAL ERROR in /industry-research: {e}", file=sys.stderr)
         traceback.print_exc(file=sys.stderr)
         return jsonify({'error': f'An unexpected error occurred: {str(e)}'}), 500
+
+
+@app.route('/industry-research/<job_id>/status', methods=['GET'])
+def industry_research_status(job_id):
+    """
+    Poll endpoint to check status of a background industry research job.
+    Returns the result when complete.
+    """
+    if job_id not in industry_research_jobs:
+        return jsonify({'error': 'Job not found'}), 404
+    
+    job = industry_research_jobs[job_id]
+    
+    if job['status'] == 'processing':
+        return jsonify({
+            'status': 'processing',
+            'progress': job['progress'],
+            'elapsed_seconds': int(time.time() - job['started_at'])
+        })
+    
+    elif job['status'] == 'complete':
+        # Return the result and clean up
+        result = job['result']
+        # Keep job for 5 minutes after completion, then it can be garbage collected
+        return jsonify({
+            'status': 'complete',
+            **result
+        })
+    
+    elif job['status'] == 'error':
+        return jsonify({
+            'status': 'error',
+            'error': job['error']
+        }), 500
+    
+    return jsonify({'error': 'Unknown job status'}), 500
 
 # =====================================================================
 # END: INDUSTRY RESEARCH ENDPOINT

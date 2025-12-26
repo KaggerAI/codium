@@ -988,26 +988,58 @@
       const industryName = document.querySelector('#industryResults h2')?.textContent?.replace('📊', '').trim() || 'Industry_Research';
       const filename = `${industryName.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`;
 
-      const opt = {
-        margin: [15, 15, 15, 15],
-        filename: filename,
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true, letterRendering: true },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-        pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
-      };
-
       // Show loading state on button
       const downloadBtn = document.getElementById('downloadPdfBtn');
       const originalText = downloadBtn.innerHTML;
       downloadBtn.innerHTML = '<svg class="w-5 h-5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg><span>Generating PDF...</span>';
       downloadBtn.disabled = true;
 
-      html2pdf().set(opt).from(reportContainer).save().then(() => {
+      // Clone the report container to avoid modifying the original
+      const clone = reportContainer.cloneNode(true);
+
+      // Remove the download button from clone
+      const btnInClone = clone.querySelector('#downloadPdfBtn');
+      if (btnInClone && btnInClone.parentElement) {
+        btnInClone.parentElement.remove();
+      }
+
+      // Create a temporary container for the PDF
+      const tempDiv = document.createElement('div');
+      tempDiv.style.position = 'absolute';
+      tempDiv.style.left = '-9999px';
+      tempDiv.style.width = '210mm'; // A4 width
+      tempDiv.style.backgroundColor = 'white';
+      tempDiv.style.padding = '20px';
+      tempDiv.appendChild(clone);
+      document.body.appendChild(tempDiv);
+
+      const opt = {
+        margin: 10,
+        filename: filename,
+        image: { type: 'jpeg', quality: 0.95 },
+        html2canvas: {
+          scale: 2,
+          useCORS: true,
+          letterRendering: true,
+          logging: false,
+          scrollY: -window.scrollY,
+          scrollX: -window.scrollX,
+          windowWidth: tempDiv.scrollWidth,
+          windowHeight: tempDiv.scrollHeight
+        },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+        pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+      };
+
+      html2pdf().set(opt).from(tempDiv).save().then(() => {
+        document.body.removeChild(tempDiv);
         downloadBtn.innerHTML = originalText;
         downloadBtn.disabled = false;
       }).catch((error) => {
         console.error('PDF generation error:', error);
+        if (tempDiv.parentElement) {
+          document.body.removeChild(tempDiv);
+        }
         downloadBtn.innerHTML = originalText;
         downloadBtn.disabled = false;
         alert('Failed to generate PDF. Please try again.');
@@ -1302,14 +1334,16 @@
             <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500"></div>
             <div>
               <p class="text-lg font-semibold text-slate-700">Generating Industry Report...</p>
-              <p class="text-sm text-slate-500">This may take 3-5 minutes for deep research</p>
+              <p class="text-sm text-slate-500" id="researchProgress">Starting deep research... (this may take 5-10 minutes)</p>
+              <p class="text-xs text-slate-400 mt-1" id="researchTimer">Elapsed: 0 seconds</p>
             </div>
           </div>
         </div>
       `;
 
       try {
-        const res = await fetch('/industry-research', {
+        // Step 1: Start the research job
+        const startRes = await fetch('/industry-research', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -1320,52 +1354,83 @@
           })
         });
 
-        const payload = await res.json();
-        if (!res.ok) throw new Error(payload.error || 'Unknown error');
+        const startPayload = await startRes.json();
+        if (!startRes.ok) throw new Error(startPayload.error || 'Failed to start research');
 
-        if (sseConnection) sseConnection.close();
-        document.getElementById('progress-container').classList.remove('visible');
+        const jobId = startPayload.job_id;
+        console.log('Research job started:', jobId);
 
-        // Render the industry report with TOC
-        const { html: reportHtml, toc: tocHtml } = renderMarkdownToHtml(payload.report);
-        industryResultsContainer.innerHTML = `
-          <div class="bg-white p-8 rounded-xl shadow-lg">
-            <div class="flex items-center justify-between mb-6 pb-4 border-b border-slate-200">
-              <div>
-                <h2 class="text-2xl font-bold text-blue-800">📊 ${industry} Industry Report</h2>
-                <p class="text-sm text-slate-500 mt-1">Generated ${new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
-              </div>
-              <div class="flex items-center space-x-3">
-                <div class="flex space-x-2">
-                  <span class="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm font-medium">${horizon} Year Horizon</span>
-                  <span class="px-3 py-1 bg-slate-100 text-slate-700 rounded-full text-sm font-medium">${depth} Depth</span>
+        // Step 2: Poll for results
+        const pollInterval = 5000; // 5 seconds
+        let isComplete = false;
+
+        while (!isComplete) {
+          await new Promise(resolve => setTimeout(resolve, pollInterval));
+
+          const statusRes = await fetch(`/industry-research/${jobId}/status`);
+          const statusPayload = await statusRes.json();
+
+          if (statusPayload.status === 'processing') {
+            // Update progress display
+            const progressEl = document.getElementById('researchProgress');
+            const timerEl = document.getElementById('researchTimer');
+            if (progressEl) progressEl.textContent = statusPayload.progress || 'Processing...';
+            if (timerEl) timerEl.textContent = `Elapsed: ${statusPayload.elapsed_seconds || 0} seconds`;
+            continue;
+          }
+
+          if (statusPayload.status === 'error') {
+            throw new Error(statusPayload.error || 'Research failed');
+          }
+
+          if (statusPayload.status === 'complete') {
+            isComplete = true;
+
+            if (sseConnection) sseConnection.close();
+            document.getElementById('progress-container').classList.remove('visible');
+
+            // Render the industry report with TOC
+            const { html: reportHtml, toc: tocHtml } = renderMarkdownToHtml(statusPayload.report);
+            industryResultsContainer.innerHTML = `
+              <div class="bg-white p-8 rounded-xl shadow-lg">
+                <div class="flex items-center justify-between mb-6 pb-4 border-b border-slate-200">
+                  <div>
+                    <h2 class="text-2xl font-bold text-blue-800">📊 ${industry} Industry Report</h2>
+                    <p class="text-sm text-slate-500 mt-1">Generated ${new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+                  </div>
+                  <div class="flex items-center space-x-3">
+                    <div class="flex space-x-2">
+                      <span class="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm font-medium">${horizon} Year Horizon</span>
+                      <span class="px-3 py-1 bg-slate-100 text-slate-700 rounded-full text-sm font-medium">${depth} Depth</span>
+                    </div>
+                    <button id="downloadPdfBtn" onclick="downloadIndustryReportPDF()" class="bg-gradient-to-r from-blue-500 to-blue-600 text-white px-4 py-2 rounded-lg hover:from-blue-600 hover:to-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-150 ease-in-out flex items-center space-x-2 shadow-md hover:shadow-lg">
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                      </svg>
+                      <span class="text-sm font-medium">PDF</span>
+                    </button>
+                  </div>
                 </div>
-                <button id="downloadPdfBtn" onclick="downloadIndustryReportPDF()" class="bg-gradient-to-r from-blue-500 to-blue-600 text-white px-4 py-2 rounded-lg hover:from-blue-600 hover:to-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-150 ease-in-out flex items-center space-x-2 shadow-md hover:shadow-lg">
-                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-                  </svg>
-                  <span class="text-sm font-medium">PDF</span>
-                </button>
+                ${tocHtml}
+                <div class="industry-report">
+                  ${reportHtml}
+                </div>
               </div>
-            </div>
-            ${tocHtml}
-            <div class="industry-report">
-              ${reportHtml}
-            </div>
-          </div>
-        `;
+            `;
 
-        // Add smooth scrolling for TOC links
-        industryResultsContainer.querySelectorAll('.toc-link').forEach(link => {
-          link.addEventListener('click', (e) => {
-            e.preventDefault();
-            const targetId = link.getAttribute('href').substring(1);
-            const targetElement = document.getElementById(targetId);
-            if (targetElement) {
-              targetElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }
-          });
-        });
+            // Add smooth scrolling for TOC links
+            industryResultsContainer.querySelectorAll('.toc-link').forEach(link => {
+              link.addEventListener('click', (e) => {
+                e.preventDefault();
+                const targetId = link.getAttribute('href').substring(1);
+                const targetElement = document.getElementById(targetId);
+                if (targetElement) {
+                  targetElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+              });
+            });
+          }
+        }
 
       } catch (err) {
         if (sseConnection) sseConnection.close();
