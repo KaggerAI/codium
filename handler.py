@@ -1055,7 +1055,7 @@ def industry_research():
         messages = [{"role": "user", "content": prompt}]
         
         try:
-            report = call_perplexity_api(messages, model="sonar-deep-research", timeout=600)
+            report = call_perplexity_api(messages, model="sonar-deep-research", timeout=800)
             log_progress("Industry report generation complete!")
             
             return jsonify({

@@ -7,6 +7,7 @@
   <title>Kagger.AI — Interactive AI Stock Research for Indian Markets</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
   <style>
     /* === THEME VARIABLES === */
@@ -973,6 +974,71 @@
     // ===================================================================================
 
     // ===================================================================================
+    // START: PDF DOWNLOAD & COPY UTILITIES
+    // ===================================================================================
+
+    function downloadIndustryReportPDF() {
+      const reportContainer = document.querySelector('#industryResults .bg-white');
+      if (!reportContainer) {
+        alert('No report available to download');
+        return;
+      }
+
+      // Get industry name from header
+      const industryName = document.querySelector('#industryResults h2')?.textContent?.replace('📊', '').trim() || 'Industry_Research';
+      const filename = `${industryName.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`;
+
+      const opt = {
+        margin: [15, 15, 15, 15],
+        filename: filename,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, letterRendering: true },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+        pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+      };
+
+      // Show loading state on button
+      const downloadBtn = document.getElementById('downloadPdfBtn');
+      const originalText = downloadBtn.innerHTML;
+      downloadBtn.innerHTML = '<svg class="w-5 h-5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg><span>Generating PDF...</span>';
+      downloadBtn.disabled = true;
+
+      html2pdf().set(opt).from(reportContainer).save().then(() => {
+        downloadBtn.innerHTML = originalText;
+        downloadBtn.disabled = false;
+      }).catch((error) => {
+        console.error('PDF generation error:', error);
+        downloadBtn.innerHTML = originalText;
+        downloadBtn.disabled = false;
+        alert('Failed to generate PDF. Please try again.');
+      });
+    }
+
+    function copyMessageToClipboard(button) {
+      const messageDiv = button.closest('.bot-message').querySelector('.message-content');
+      const textToCopy = messageDiv.innerText || messageDiv.textContent;
+
+      navigator.clipboard.writeText(textToCopy).then(() => {
+        // Show feedback
+        const originalHtml = button.innerHTML;
+        button.innerHTML = '✓ Copied!';
+        button.classList.add('bg-green-100', 'text-green-700');
+
+        setTimeout(() => {
+          button.innerHTML = originalHtml;
+          button.classList.remove('bg-green-100', 'text-green-700');
+        }, 2000);
+      }).catch((err) => {
+        console.error('Failed to copy:', err);
+        alert('Failed to copy to clipboard');
+      });
+    }
+
+    // ===================================================================================
+    // END: PDF DOWNLOAD & COPY UTILITIES
+    // ===================================================================================
+
+    // ===================================================================================
     // START: INDUSTRY RESEARCH FUNCTIONALITY
     // ===================================================================================
 
@@ -1269,9 +1335,17 @@
                 <h2 class="text-2xl font-bold text-blue-800">📊 ${industry} Industry Report</h2>
                 <p class="text-sm text-slate-500 mt-1">Generated ${new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
               </div>
-              <div class="flex space-x-2">
-                <span class="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm font-medium">${horizon} Year Horizon</span>
-                <span class="px-3 py-1 bg-slate-100 text-slate-700 rounded-full text-sm font-medium">${depth} Depth</span>
+              <div class="flex items-center space-x-3">
+                <div class="flex space-x-2">
+                  <span class="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm font-medium">${horizon} Year Horizon</span>
+                  <span class="px-3 py-1 bg-slate-100 text-slate-700 rounded-full text-sm font-medium">${depth} Depth</span>
+                </div>
+                <button id="downloadPdfBtn" onclick="downloadIndustryReportPDF()" class="bg-gradient-to-r from-blue-500 to-blue-600 text-white px-4 py-2 rounded-lg hover:from-blue-600 hover:to-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-150 ease-in-out flex items-center space-x-2 shadow-md hover:shadow-lg">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                  </svg>
+                  <span class="text-sm font-medium">PDF</span>
+                </button>
               </div>
             </div>
             ${tocHtml}
@@ -1699,10 +1773,17 @@
         messageDiv.classList.add('max-w-[80%]', 'bg-green-500', 'text-white', 'self-end', 'rounded-br-none');
         messageDiv.textContent = text;
       } else if (sender === 'bot') {
-        messageDiv.classList.add('max-w-full', 'bg-slate-200', 'text-slate-700', 'self-start', 'rounded-bl-none', 'industry-report');
+        messageDiv.classList.add('max-w-full', 'bg-slate-200', 'text-slate-700', 'self-start', 'rounded-bl-none', 'industry-report', 'bot-message', 'relative', 'pr-12');
         // Use the enhanced markdown renderer (without TOC)
         const { html } = renderMarkdownToHtml(text, false);
-        messageDiv.innerHTML = html;
+        messageDiv.innerHTML = `
+          <div class="message-content">${html}</div>
+          <button onclick="copyMessageToClipboard(this)" class="absolute top-2 right-2 p-2 hover:bg-slate-300 rounded transition-colors copy-msg-btn" title="Copy message">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+            </svg>
+          </button>
+        `;
       } else if (sender === 'info') {
         messageDiv.classList.add('w-full', 'max-w-full', 'bg-yellow-50', 'text-yellow-900', 'border', 'border-yellow-200', 'my-2');
         const title = document.createElement('h4');
