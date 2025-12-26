@@ -339,7 +339,7 @@ def call_openai_api(messages, model="gpt-4.1-mini", expect_json_format_flag=Fals
         print(f"ERROR in call_openai_api: {e}")
         raise
 
-def call_perplexity_api(messages, model="sonar-pro", temperature=1):
+def call_perplexity_api(messages, model="sonar-pro", temperature=1, timeout=120):
     if not PERPLEXITY_API_KEY:
         raise ValueError("Perplexity API key is not configured.")
     try:
@@ -356,7 +356,7 @@ def call_perplexity_api(messages, model="sonar-pro", temperature=1):
             "Content-Type": "application/json"
         }
         
-        response = requests.post(url, headers=headers, json=payload, timeout=120)
+        response = requests.post(url, headers=headers, json=payload, timeout=timeout)
         
         # Check for HTTP errors
         response.raise_for_status()
@@ -784,6 +784,300 @@ def perform_planned_calculations(plan_calculations_section, retrieved_data, full
 #             # If this fails, we can't proceed
 
 
+# =====================================================================
+# START: INDUSTRY RESEARCH ENDPOINT
+# =====================================================================
+
+INDUSTRY_RESEARCH_PROMPT = '''You are a buy-side equity research analyst writing an investor-grade INDIA industry report for a GROWTH stock investor.
+
+Fixed assumptions (do not ask the user):
+- Geography: India (include exports from India and imports into India where relevant)
+- Primary currency: INR; Secondary currency: USD (use USD mainly for global comps, commodities, trade, and FDI context)
+- Listed market focus: NSE & BSE
+- Company universe: ALL publicly listed entities (including conglomerates/proxies; clearly label exposure)
+- Risk tolerance: Medium to High (seek growth + rerating potential; accept some cyclicality but quantify it)
+
+User inputs (only these vary):
+- Industry: {INDUSTRY}
+- Time horizon: {HORIZON_YEARS} years (default 5)
+- Optional: specific companies/tickers to include: {OPTIONAL_TICKERS}
+- Optional: preferred depth: {DEPTH} (default STANDARD)
+
+Hard rules:
+- Be specific and numbers-driven. Prefer ranges and scenarios over vague statements.
+- Separate FACTS vs ASSUMPTIONS vs OPINIONS explicitly.
+- Use the most recent data available; always state "Data as of: <month year>".
+- Provide citations/sources for key claims (market size, growth, shares, regulation, FDI, pricing, input costs). If you cannot verify a number, write "Unknown", give a plausible range, and list what must be checked.
+- Tie every section back to revenue growth, margin trajectory, ROIC/ROCE, cash flows, and valuation/rerating potential for Indian listed companies.
+- Avoid fluff. If something doesn't impact investor outcomes, drop it.
+
+OUTPUT FORMAT: Markdown with clear headings and tables. Start with a decisive executive summary.
+
+========================================
+1) Executive Summary (Investor Verdict)
+========================================
+- One-line verdict: "Structurally Attractive / Mixed / Unattractive" for a 3–5 year growth investor.
+- 5 bullet "So what?" takeaways linking: growth drivers → pricing power → margins/ROIC → winners → risks.
+- Profit pools: where value is created/captured in the value chain (highest ROIC pockets).
+- Best ways to invest (NSE/BSE):
+  - Top 3–5 listed picks (Growth-style) with 1–2 line rationale each.
+  - 2–3 "optionalities" (smaller caps / emerging winners) if risk appetite allows.
+- "Pickaxes vs Gold" upfront call: Is the best wealth-creation likely in the core industry or adjacent layers (upstream/downstream/enablers)? State which layer and why.
+- Thesis breakers (Top 5) + early warning indicators.
+- 6–18 month catalysts (policy, capacity, price cycle, demand inflection, export tailwinds, tech shifts).
+
+========================================
+2) Industry Definition & Segmentation (India-first)
+========================================
+- Define the industry precisely (include/exclude).
+- Segment revenue pools (product/service categories, customer segments, price tiers, geography within India).
+- India vs global: what is uniquely Indian vs globally driven?
+
+========================================
+3) Market Size, Penetration, and Growth (History + Forecast)
+========================================
+- Current market size in INR and volume units (and USD where relevant).
+- Historical growth: 5–10 year CAGR + key inflection points (policy, commodity cycle, tech, demand shocks).
+- Forecast next {HORIZON_YEARS} years with Base/Bull/Bear:
+  - Market size, CAGR, and key assumptions.
+  - Penetration runway (if applicable): current penetration vs peers/China/US.
+Table:
+Year | Market size (INR) | YoY% | Key driver | Confidence (H/M/L)
+
+========================================
+4) Demand Engine (What grows it?)
+========================================
+- Demand drivers: income, demographics, urbanization, capex cycle, exports, regulation, substitution.
+- Elasticity & pricing: discretionary vs non-discretionary; replacement/upgrade cycles.
+- Customer power & concentration (B2B/B2C) and impact on margins.
+- Cyclicality: sensitivity to GDP, rates, INR/USD, commodity prices.
+
+========================================
+5) Supply Engine (What constrains it?)
+========================================
+- Capacity landscape in India: utilization, constraints (raw material, energy, logistics, permits).
+- Capex pipeline: who is adding capacity, how much, when it comes online.
+- Demand vs supply balance: implications for pricing and margins for participants.
+
+========================================
+6) Competitive Landscape (Shares + Winners)
+========================================
+Provide a table:
+Company (NSE/BSE) | Exposure type (Pure/Mixed/Proxy) | Est. % revenue from industry | Market share (if applicable) | 3Y growth | Margins | ROCE | Net debt/EBITDA | Moat | Notes
+Include:
+- Top participants and share estimates (with method/source).
+- Fastest-growing participants and WHY (distribution, capacity, product, cost, tech).
+- Most profitable participants and WHY (cost position, branding, regulation, scale, integration).
+
+========================================
+7) Value Chain Map (Upstream → Midstream → Downstream)
+========================================
+- Upstream industries + key suppliers (India/import dependence), concentration risk, alternative sourcing.
+- Midstream/core processes: where value add occurs and key bottlenecks.
+- Downstream industries + key customers/end markets and their health.
+- Identify who holds bargaining power and where margins structurally sit.
+
+========================================
+8) "Pickaxes vs Gold" Allocation: Where to Invest in the Value Chain
+========================================
+Objective: Assess whether an investor is better off investing in upstream or downstream industries/companies (NSE/BSE listed) rather than the focal industry, using a "pickaxes vs gold" framework.
+
+Do this in 4 parts:
+
+A) Profit Pool & Pricing Power by Layer
+- For each layer (Upstream / Core industry / Downstream / Enablers), rate:
+  - Pricing power (High/Med/Low)
+  - Margin stability (High/Med/Low)
+  - ROIC durability (High/Med/Low)
+  - Cyclicality exposure (High/Med/Low)
+  - Disruption risk (High/Med/Low)
+- Explain, in investor terms, where the structurally better economics likely sit and why.
+
+B) When Upstream Wins vs When Downstream Wins (Rules of Thumb)
+- List conditions under which upstream is the superior wealth creator (e.g., input scarcity, strong supplier concentration, commodity upcycle with tight supply, regulated pricing downstream, high switching costs).
+- List conditions under which downstream is superior (e.g., strong branding/distribution moat, customer lock-in, value-added services, fragmented suppliers, ability to pass through costs, premiumization).
+- Call out the current regime for India in this industry: upstream-favoring, downstream-favoring, or balanced—and why.
+
+C) India Listed "Alternative Bets" (Investable)
+- Provide a shortlist of NSE/BSE listed companies that represent:
+  - Upstream beneficiaries ("shovel sellers")
+  - Downstream beneficiaries ("distribution/consumption toll booths")
+  - Enablers (logistics, testing/certification, software, capital goods, staffing, financing, infrastructure)
+- For each alternative bet, specify:
+  - Exposure type (Pure/Mixed/Proxy) + estimated % linkage to the focal industry
+  - Why it benefits (mechanism)
+  - Key KPI to track
+  - Biggest risk to the alternative thesis
+
+D) Recommendation: Best Risk-Adjusted Exposure
+- Recommend the best layer to invest in (Upstream vs Core vs Downstream vs Enablers) for a Growth investor with medium–high risk tolerance.
+- Provide 1–2 portfolio constructions:
+  - "Conservative Growth": higher quality/less cyclical layer mix
+  - "Aggressive Growth": higher beta/optionalities
+- State what would change this recommendation (trigger points).
+
+Include a summary table:
+Layer | Why it wins | Typical winners | Typical losers | Best listed routes (examples) | Key KPIs | Risk flags
+
+========================================
+9) Input Cost & Margin Sensitivity (Critical for investors)
+========================================
+- Break down typical cost structure: raw materials, energy, labor, logistics, S&M, depreciation.
+- Top 5–10 inputs: domestic vs imported; INR/USD sensitivity; hedging practices.
+- Pass-through ability: contract vs spot; reset frequency.
+- Sensitivity table (ranges ok):
+Input +10% | EBITDA margin impact (bps) | Who is most/least protected (companies)
+
+========================================
+10) Unit Economics & ROIC Durability
+========================================
+- Unit economics (where applicable): CAC/LTV, payback, contribution margin, utilization leverage.
+- Working capital dynamics: inventory/receivables/payables; cash conversion cycle.
+- ROIC/ROCE drivers: why returns are high/low; sustainability of returns.
+
+========================================
+11) Regulation, Policy, and Compliance (India)
+========================================
+- Current framework: key regulators, licenses, tariffs/duties, price controls, standards, environmental norms.
+- Recent changes (3–5 years) and real impact on industry structure and profitability.
+- Potential upcoming changes: policy drafts, litigation/court risk, political direction.
+- Investor impact: winners/losers + probability x impact assessment.
+Add "Policy Watchlist" and "Compliance Cost" discussion.
+
+========================================
+12) Trade, FX, and Global Linkages (Exports/Imports)
+========================================
+- Imports: dependency, key source countries, duty structure, vulnerability.
+- Exports: addressable markets, competitiveness, trade barriers, currency impact (INR/USD).
+- How FX and global commodity cycles flow into Indian margins/realizations.
+
+========================================
+13) Foreign Capital & Ownership (FII/FDI/PE/VC)
+========================================
+- FDI trends: major projects/deals, where capital is going and why.
+- FII trends: sector ownership patterns, flows, and sensitivity triggers.
+- PE/VC and M&A: consolidation signals, typical multiples, strategic buyers.
+
+========================================
+14) Technology, Disruption, and Substitution Risk
+========================================
+- Tech shifts changing cost curves/product superiority/route-to-market.
+- Substitute threats (imports, new materials, new business models).
+- Time-to-disruption: near/medium/far + who is best positioned.
+
+========================================
+15) ESG, Litigation, and Hidden Risk Map
+========================================
+- Material ESG risks (emissions, water, safety, governance, product liability).
+- Regulatory/litigation tail risks.
+- Company preparedness differences and potential valuation impact.
+
+========================================
+16) Scenario Analysis (Base/Bull/Bear) + What to Track
+========================================
+For each scenario, quantify:
+- Demand growth, pricing, input costs, utilization
+- Expected impact on revenue growth, EBITDA margin, ROCE, and cash flows
+Then provide:
+- "5 KPIs to track quarterly" (industry + company level)
+- "Early warning signals" (leading indicators)
+
+========================================
+17) Investable Conclusions (Growth Investor Playbook)
+========================================
+- Rank listed companies into:
+  A) Top Picks (best growth + quality of growth + rerating odds)
+  B) Watchlist (needs trigger/price)
+  C) Avoid/Underweight (structural issues)
+For each Top Pick include:
+- Why it wins (2–3 bullets)
+- Key catalysts (6–18 months)
+- Key risks + what would change your mind
+- Valuation anchors: what multiple is justified and why (relative + historical bands if available)
+- Preferred entry conditions (what you'd wait for / what confirms breakout)
+
+========================================
+18) Valuation Context & Rerating Framework
+========================================
+- Typical sector multiples (P/E, EV/EBITDA, P/B where relevant) and what drives them.
+- Historical multiple bands (if available) and cycle positioning.
+- What causes rerating vs derating (ROIC inflection, margin expansion, governance, policy, cycle turn).
+
+========================================
+19) Due Diligence Checklist (Actionable)
+========================================
+- 10–15 questions for management/channel checks specific to this industry.
+- Data sources to verify (government, regulator, trade data, tenders, industry bodies, company filings).
+- Common accounting red flags and how to detect them.
+
+========================================
+20) Appendix: Assumptions, Sources, Confidence
+========================================
+- List key assumptions and uncertainty areas.
+- Sources & links grouped by: market sizing, regulation, trade, input prices, company shares.
+- Confidence score for the overall verdict: High/Med/Low + why.
+
+End with:
+"If I could only track 3 things to validate this industry thesis over the next 12 months, they are: …"
+'''
+
+@app.route('/industry-research', methods=['POST'])
+def industry_research():
+    """
+    Endpoint for generating comprehensive industry research reports using sonar-deep-research.
+    """
+    print("DEBUG: Entering /industry-research endpoint...", file=sys.stderr)
+    
+    try:
+        data = request.get_json(force=True)
+        industry = data.get('industry', '').strip()
+        horizon_years = data.get('horizon_years', 5)
+        depth = data.get('depth', 'STANDARD')
+        optional_tickers = data.get('optional_tickers', '')
+        
+        if not industry:
+            return jsonify({'error': 'Industry is required'}), 400
+        
+        log_progress(f"Starting deep research for {industry} industry...")
+        
+        # Build the prompt with user inputs
+        prompt = INDUSTRY_RESEARCH_PROMPT.format(
+            INDUSTRY=industry,
+            HORIZON_YEARS=horizon_years,
+            OPTIONAL_TICKERS=optional_tickers if optional_tickers else "None specified",
+            DEPTH=depth
+        )
+        
+        log_progress(f"Generating comprehensive {depth} report for {industry}...")
+        print(f"INFO: Calling sonar-deep-research for industry: {industry}, horizon: {horizon_years}y, depth: {depth}", file=sys.stderr)
+        
+        # Call Perplexity's sonar-deep-research with extended timeout
+        messages = [{"role": "user", "content": prompt}]
+        
+        try:
+            report = call_perplexity_api(messages, model="sonar-deep-research", timeout=600)
+            log_progress("Industry report generation complete!")
+            
+            return jsonify({
+                'report': report,
+                'industry': industry,
+                'horizon_years': horizon_years,
+                'depth': depth
+            })
+            
+        except Exception as api_error:
+            print(f"ERROR: sonar-deep-research API call failed: {api_error}", file=sys.stderr)
+            return jsonify({'error': f'Deep research API call failed: {str(api_error)}'}), 500
+            
+    except Exception as e:
+        print(f"CRITICAL ERROR in /industry-research: {e}", file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
+        return jsonify({'error': f'An unexpected error occurred: {str(e)}'}), 500
+
+# =====================================================================
+# END: INDUSTRY RESEARCH ENDPOINT
+# =====================================================================
+
 @app.route('/chat', methods=['POST'])
 def chat():
     log_redis_target(app, cache, context="chat_entry")
@@ -891,7 +1185,8 @@ def chat():
         # PART 3: AI BRAIN Logic (Preserved from your code)
         # =====================================================
         
-        is_best_mode = selected_model == 'best'
+        is_best_mode = selected_model in ('best', 'best-deep-research')
+        is_deep_research_mode = selected_model == 'best-deep-research'
         central_brain_plan = None
         parsed_plan = {}
         ai_plan_json_str = "{}"
@@ -994,8 +1289,11 @@ def chat():
             sonar_prompt = news_plan.get("prompt_for_sonar", f"Get the latest news for {last_analysis.get('ticker')}")
             try:
                 news_messages = [{"role": "user", "content": sonar_prompt}]
-                # Added timeout to prevent hanging
-                news_summary = call_perplexity_api(news_messages, model="sonar-pro")
+                # Use sonar-deep-research with extended timeout for deep research mode
+                if is_deep_research_mode:
+                    news_summary = call_perplexity_api(news_messages, model="sonar-deep-research", timeout=600)
+                else:
+                    news_summary = call_perplexity_api(news_messages, model="sonar-pro")
             except Exception as e:
                 print(f"ERROR: News fetching failed: {e}", file=sys.stderr)
                 news_summary = f"Error: Failed to fetch real-time news. {e}"
@@ -1437,6 +1735,161 @@ from scanx_fetcher import scrape_scanx_company_async
 tv = TvDatafeed()
 
 
+def extract_key_metrics_from_fundamentals(fundamentals_data):
+    """
+    Extract key financial metrics from screener.in fundamentals tables.
+    Returns a dictionary with formatted metric values.
+    """
+    metrics = {}
+    
+    if not fundamentals_data:
+        print("DEBUG: No fundamentals data provided")
+        return metrics
+    
+    print(f"DEBUG: Available tables in fundamentals: {list(fundamentals_data.keys())}")
+    
+    # DEBUG: Print all metric names in Financial Ratios table
+    if "Financial Ratios" in fundamentals_data:
+        ratios_table = fundamentals_data["Financial Ratios"]
+        metric_names = [row.get("") for row in ratios_table if row.get("")]
+        print(f"DEBUG: Available metrics in Financial Ratios table: {metric_names}")
+    
+    # Helper: Get latest value from a table
+    def get_latest(table_name, metric_name):
+        if table_name in fundamentals_data:
+            table = fundamentals_data[table_name]  # Already a list of dicts
+            print(f"DEBUG: Looking for '{metric_name}' in '{table_name}' table with {len(table)} rows")
+            for row in table:
+                if row.get("") == metric_name:  # Metric names are in "" key
+                    print(f"DEBUG: Found metric '{metric_name}'")
+                    # Get the latest period (last non-empty column)
+                    for key in reversed(list(row.keys())):
+                        if key and key != "" and row.get(key):
+                            value = row[key]
+                            print(f"DEBUG: Latest value for '{metric_name}': {value}")
+                            return value
+            print(f"DEBUG: Metric '{metric_name}' not found in table")
+        else:
+            print(f"DEBUG: Table '{table_name}' not found in fundamentals")
+        return None
+    
+    # Helper: Calculate YoY growth from quarterly data
+    def calc_quarterly_yoy_growth(table_name, metric_name):
+        if table_name in fundamentals_data:
+            table = fundamentals_data[table_name]
+            for row in table:
+                if row.get("") == metric_name:
+                    periods = [k for k in row.keys() if k and k != ""]
+                    if len(periods) >= 5:  # Need at least 5 quarters for YoY (current + 4 quarters back)
+                        try:
+                            latest_val = row.get(periods[-1], "").replace(',', '')
+                            year_ago_val = row.get(periods[-5], "").replace(',', '')
+                            
+                            if latest_val and year_ago_val:
+                                latest = float(latest_val)
+                                year_ago = float(year_ago_val)
+                                if year_ago != 0:
+                                    growth = ((latest - year_ago) / abs(year_ago)) * 100
+                                    return f"{growth:+.1f}%"
+                        except (ValueError, IndexError):
+                            pass
+        return None
+    
+    # Helper: Calculate Net Profit Margin from quarterly data
+    def calc_npm_from_quarterly():
+        if "Quarterly Results" in fundamentals_data:
+            table = fundamentals_data["Quarterly Results"]
+            sales_row = None
+            net_profit_row = None
+            
+            # Find Sales and Net Profit rows
+            for row in table:
+                metric = row.get("")
+                if metric == "Sales":
+                    sales_row = row
+                elif metric == "Net Profit":
+                    net_profit_row = row
+            
+            if sales_row and net_profit_row:
+                periods = [k for k in sales_row.keys() if k and k != ""]
+                if periods:
+                    try:
+                        latest_period = periods[-1]
+                        sales_val = sales_row.get(latest_period, "").replace(',', '')
+                        profit_val = net_profit_row.get(latest_period, "").replace(',', '')
+                        
+                        if sales_val and profit_val:
+                            sales = float(sales_val)
+                            profit = float(profit_val)
+                            if sales != 0:
+                                npm = (profit / sales) * 100
+                                return f"{npm:.2f} %"
+                    except (ValueError, KeyError):
+                        pass
+        return None
+    
+    # Extract from Financial Ratios table (not "Ratios")
+    metrics['pe_ratio'] = get_latest("Financial Ratios", "Stock P/E")
+    metrics['pb_ratio'] = get_latest("Financial Ratios", "Stock P/B")
+    metrics['dividend_yield'] = get_latest("Financial Ratios", "Dividend Yield %")
+    metrics['roce'] = get_latest("Financial Ratios", "ROCE %")
+    metrics['roe'] = get_latest("Financial Ratios", "ROE %")
+    
+    # Extract from Quarterly Results  
+    metrics['sales_growth_yoy'] = calc_quarterly_yoy_growth("Quarterly Results", "Sales")
+    metrics['ebitda_growth_yoy'] = calc_quarterly_yoy_growth("Quarterly Results", "Operating Profit")
+    
+    # Calculate NPM correctly: Net Profit / Sales
+    metrics['npm'] = calc_npm_from_quarterly()
+    
+    print(f"DEBUG: Extracted metrics: {metrics}")
+    return metrics
+
+
+def get_yfinance_metrics(ticker):
+    """
+    Extract Market Cap, Industry, Sector, and Current Price from yfinance.
+    Returns a dictionary with formatted values.
+    """
+    metrics = {
+        'market_cap': 'N/A',
+        'industry': 'N/A',
+        'sector': 'N/A',
+        'current_price': 'N/A'
+    }
+    
+    try:
+        ticker_obj = yf.Ticker(f"{ticker}.NS")
+        info = ticker_obj.info
+        
+        # Market Cap - Always show in Crores
+        market_cap = info.get('marketCap')
+        if market_cap:
+            # Convert to Crores
+            market_cap_cr = market_cap / 10000000
+            metrics['market_cap'] = f"₹{market_cap_cr:,.2f} Cr."
+        
+        # Industry
+        industry = info.get('industry')
+        if industry:
+            metrics['industry'] = industry
+        
+        # Sector
+        sector = info.get('sector')
+        if sector:
+            metrics['sector'] = sector
+        
+        # Current Price
+        current_price = info.get('currentPrice') or info.get('regularMarketPrice')
+        if current_price:
+            metrics['current_price'] = f"₹{current_price:.2f}"
+        
+    except Exception as e:
+        print(f"WARNING: Failed to fetch yfinance metrics for {ticker}: {e}")
+    
+    return metrics
+
+
 def generate_ai_company_summary(ticker, description, fundamentals, documents):
     """
     REWRITTEN: The AI is now tasked with interpreting the raw text from the
@@ -1574,6 +2027,7 @@ You must follow these writing rules exactly. Any failure to follow a negative di
             {"role": "user", "content": f"Generate the HTML summary for the following company based on this data:\n\n{full_context}"}
         ]
         
+        # Use OpenAI for summary generation
         summary_html = call_openai_api(messages, model="gpt-4.1-mini", temperature=1)
         return summary_html
 
@@ -1581,6 +2035,83 @@ You must follow these writing rules exactly. Any failure to follow a negative di
         print(f"CRITICAL ERROR: Failed to generate AI company summary for {ticker}.")
         # ... (error logging is unchanged) ...
         return "<p><strong>Error:</strong> The AI-powered summary could not be generated at this time.</p>"
+
+
+def extract_metrics_via_ai(ticker):
+    """
+    Extract financial metrics using Perplexity sonar model with web search.
+    Returns a dictionary with P/E, P/B, Dividend Yield, ROCE, ROE.
+    """
+    system_prompt = f"""You are a financial data specialist. Your task is to find the latest financial metrics for the company with ticker symbol {ticker} (NSE India).
+
+**SEARCH INSTRUCTIONS:**
+1. Search multiple reliable Indian financial websites: screener.in, moneycontrol.com, investing.com
+2. Use the NSE ticker symbol "{ticker}.NS" or just "{ticker}" when searching
+3. Look for the MOST RECENT data available (TTM or latest quarter/year)
+4. If one source shows "N/A" or blank, try another source
+5. Try at least 2-3 different sources per metric before giving up
+
+**Required Metrics:**
+1. **P/E Ratio** (Price-to-Earnings) - Also search for "PE Ratio", "Price Earnings Ratio"
+2. **P/B Ratio** (Price-to-Book) - Also search for "PB Ratio", "Price to Book Value"  
+3. **Dividend Yield** (%) - Also search for "Annual Dividend Yield", "Dividend %"
+4. **ROCE** (Return on Capital Employed) in % - Also search for "Return on Capital"
+5. **ROE** (Return on Equity) in % - Also search for "Return on Equity"
+
+**Search Strategy:**
+- Try screener.in: "screener.in {ticker} financial ratios"
+- Try moneycontrol: "moneycontrol {ticker} key ratios"
+- Try investing.com: "investing.com {ticker} ratios"
+
+**Output Format:**
+
+Return ONLY a valid JSON object with these exact keys:
+
+```json
+{{
+  "pe_ratio": "25.3",
+  "pb_ratio": "3.2",
+  "dividend_yield": "1.5 %",
+  "roce": "18.5 %",
+  "roe": "16.2 %"
+}}
+```
+
+**CRITICAL RULES:**
+- ONLY use "N/A" if you genuinely cannot find the metric after searching 2-3 sources
+- Include the % symbol for percentage metrics (dividend_yield, roce, roe)
+- Return just the number for P/E and P/B (no % symbol)
+- All values must be strings (in quotes)
+- Return ONLY the JSON object, nothing else
+"""
+    
+    try:
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"Find the latest financial metrics for {ticker}"}
+        ]
+        
+        # Use Perplexity sonar for web search
+        response = call_perplexity_api(messages, model="sonar")
+        
+        # Try to parse JSON from response
+        json_match = re.search(r'```json\s*(\{.*?\})\s*```', response, re.DOTALL)
+        if json_match:
+            metrics = json.loads(json_match.group(1))
+        else:
+            # Try to parse if response is pure JSON
+            metrics = json.loads(response.strip())
+        
+        print(f"DEBUG: AI extracted metrics via sonar: {metrics}")
+        return metrics
+        
+    except json.JSONDecodeError as e:
+        print(f"WARNING: Failed to parse AI metrics JSON: {e}")
+        print(f"DEBUG: Raw response: {response[:500]}")
+        return {}
+    except Exception as e:
+        print(f"WARNING: Failed to extract metrics via AI for {ticker}: {e}")
+        return {}
 
 
 def generate_ai_scores(ticker, last_analysis):
@@ -1857,14 +2388,15 @@ async def get_analysis_for_ticker_async(tick):
     task_adl   = loop.run_in_executor(None, make_chart_json, build_adl_figure, df, company_name)
     task_rs    = loop.run_in_executor(None, make_chart_json, build_rs_figure, df, company_name)
     
-    # Run AI Summary in parallel (Network Bound)
+    # Run AI Summary (OpenAI) and Metrics Extraction (Perplexity sonar) in parallel
     task_ai_sum = loop.run_in_executor(None, generate_ai_company_summary, tick, company_description, tables_from_screener, latest_documents)
+    task_ai_metrics = loop.run_in_executor(None, extract_metrics_via_ai, tick)
 
     # EXECUTE ALL AT ONCE
-    parallel_results = await asyncio.gather(task_close, task_hl, task_ema, task_rsi, task_adl, task_rs, task_ai_sum)
+    parallel_results = await asyncio.gather(task_close, task_hl, task_ema, task_rsi, task_adl, task_rs, task_ai_sum, task_ai_metrics)
 
     # Unpack the results
-    close_j, hl_j, ema_j, rsi_j, adl_j, rs_j, ai_company_summary_html = parallel_results
+    close_j, hl_j, ema_j, rsi_j, adl_j, rs_j, ai_company_summary_html, ai_extracted_metrics = parallel_results
     
     log_progress("Charts and AI Summary generated successfully.")
 # --- END: OPTIMIZED PARALLEL PROCESSING ---
@@ -1885,6 +2417,21 @@ async def get_analysis_for_ticker_async(tick):
 
     log_progress("Analysis complete. Loading results ...")
 
+    # Extract key metrics for frontend table
+    log_progress("Extracting key metrics...")
+    key_metrics_from_fundamentals = extract_key_metrics_from_fundamentals(fund_data_for_ai_context)
+    key_metrics_from_yfinance = get_yfinance_metrics(tick)
+    
+    # Combine metrics: yfinance baseline, then fundamentals, then AI as ultimate fallback
+    key_metrics = {**key_metrics_from_yfinance, **key_metrics_from_fundamentals}
+    
+    # Use AI-extracted metrics as fallback for None values
+    for key in ['pe_ratio', 'pb_ratio', 'dividend_yield', 'roce', 'roe']:
+        if not key_metrics.get(key) or key_metrics.get(key) == 'N/A':
+            if key in ai_extracted_metrics:
+                key_metrics[key] = ai_extracted_metrics[key]
+                print(f"DEBUG: Using AI fallback for {key}: {ai_extracted_metrics[key]}")
+
 
     # This dictionary is what the AI needs. It uses the Python objects.
     analysis_for_cache = {
@@ -1903,7 +2450,8 @@ async def get_analysis_for_ticker_async(tick):
         'chart_rsi_json': rsi_j, 'chart_adl_json': adl_j, 'chart_rs_json': rs_j,
         'fundamentals': fund_data_for_frontend, # <-- The frontend-friendly version
         'metric_charts': metric_charts_for_frontend,
-        'documents': latest_documents, 'scanx_data': scanx_data
+        'documents': latest_documents, 'scanx_data': scanx_data,
+        'key_metrics': key_metrics  # <-- NEW: Key metrics table data
     }
 
     # Pass BOTH dictionaries back to the synchronous wrapper

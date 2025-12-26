@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -8,120 +9,478 @@
   <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
 
   <style>
-    #results { width: 100% !important; }
+    /* === THEME VARIABLES === */
+    :root {
+      --primary-50: #f0fdf4;
+      --primary-100: #dcfce7;
+      --primary-200: #bbf7d0;
+      --primary-400: #4ade80;
+      --primary-500: #22c55e;
+      --primary-600: #16a34a;
+      --primary-700: #15803d;
+      --primary-800: #166534;
+      --primary-900: #14532d;
+    }
+
+    body.theme-industry {
+      --primary-50: #eff6ff;
+      --primary-100: #dbeafe;
+      --primary-200: #bfdbfe;
+      --primary-400: #60a5fa;
+      --primary-500: #3b82f6;
+      --primary-600: #2563eb;
+      --primary-700: #1d4ed8;
+      --primary-800: #1e40af;
+      --primary-900: #1e3a8a;
+    }
+
+    /* Smooth transition for all themed elements */
+    .theme-transition {
+      transition: background-color 0.4s ease, border-color 0.4s ease, color 0.4s ease, box-shadow 0.4s ease;
+    }
+
+    /* === TOGGLE SWITCH === */
+    .mode-toggle-container {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .mode-label {
+      font-weight: 600;
+      font-size: 0.95rem;
+      transition: color 0.3s ease, opacity 0.3s ease;
+      cursor: pointer;
+    }
+
+    .mode-label.inactive {
+      opacity: 0.5;
+    }
+
+    .toggle-switch {
+      position: relative;
+      width: 70px;
+      height: 36px;
+      background: linear-gradient(135deg, var(--primary-500), var(--primary-600));
+      border-radius: 18px;
+      cursor: pointer;
+      transition: background 0.4s ease;
+      box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1), 0 2px 8px rgba(0, 0, 0, 0.15);
+    }
+
+    .toggle-switch::before {
+      content: '';
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      width: 30px;
+      height: 30px;
+      background: white;
+      border-radius: 50%;
+      transition: transform 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+    }
+
+    .toggle-switch.industry::before {
+      transform: translateX(34px);
+    }
+
+    /* === RESULTS CONTAINER === */
+    #results {
+      width: 100% !important;
+    }
+
+    #companyResults,
+    #industryResults {
+      transition: opacity 0.3s ease;
+    }
+
+    /* === CHAT SCROLLBAR === */
     #chatLog::-webkit-scrollbar {
       width: 6px;
     }
+
     #chatLog::-webkit-scrollbar-thumb {
-      background-color: #94a3b8; /* slate-400 */
+      background-color: #94a3b8;
       border-radius: 3px;
     }
+
     #chatLog::-webkit-scrollbar-track {
-      background-color: #e2e8f0; /* slate-200 */
-    }
-    /* Simple styling for the AI summary content if prose plugin fails */
-    .summary-content h4 {
-        font-size: 1.125rem; /* text-lg */
-        font-weight: 600; /* font-semibold */
-        margin-top: 1rem;
-        margin-bottom: 0.5rem;
-        color: #334155; /* slate-700 */
-    }
-    .summary-content p, .summary-content ul {
-        margin-bottom: 1rem;
-        line-height: 1.6;
-    }
-    .summary-content ul {
-        list-style-position: inside;
-        list-style-type: disc;
-        padding-left: 1rem;
+      background-color: #e2e8f0;
     }
 
-    /* === PROGRESS BAR CSS === */
+    /* === AI SUMMARY CONTENT === */
+    .summary-content h4 {
+      font-size: 1.125rem;
+      font-weight: 600;
+      margin-top: 1rem;
+      margin-bottom: 0.5rem;
+      color: #334155;
+    }
+
+    .summary-content p,
+    .summary-content ul {
+      margin-bottom: 1rem;
+      line-height: 1.6;
+    }
+
+    .summary-content ul {
+      list-style-position: inside;
+      list-style-type: disc;
+      padding-left: 1rem;
+    }
+
+    /* === PROGRESS BAR === */
     #progress-container {
-        height: 30px; 
-        width: 90%;
-        max-width: 700px;
-        margin: 0 auto 2rem auto;
-        background-color: #14532d; /* Tailwind's green-900 */
-        border-radius: 8px;
-        overflow: hidden;
-        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
-        border: 1px solid #166534; /* Tailwind's green-800 */
-        opacity: 0;
-        max-height: 0;
-        transition: opacity 0.4s ease-out, max-height 0.4s ease-in-out, margin-bottom 0.4s;
+      height: 30px;
+      width: 90%;
+      max-width: 700px;
+      margin: 0 auto 2rem auto;
+      background-color: var(--primary-900);
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+      border: 1px solid var(--primary-800);
+      opacity: 0;
+      max-height: 0;
+      transition: opacity 0.4s ease-out, max-height 0.4s ease-in-out, margin-bottom 0.4s, background-color 0.4s ease, border-color 0.4s ease;
     }
+
     #progress-container.visible {
-        opacity: 1;
-        max-height: 30px; 
-        margin-bottom: 2rem;
+      opacity: 1;
+      max-height: 30px;
+      margin-bottom: 2rem;
     }
+
     #progress-messages {
-        position: relative;
-        height: 100%;
+      position: relative;
+      height: 100%;
     }
+
     #progress-messages p {
-        position: absolute;
-        width: 100%;
-        margin: 0;
-        padding: 0 1rem;
-        height: 30px;
-        line-height: 30px;
-        text-align: center;
-        color: #bbf7d0; /* Tailwind's green-200 */
-        font-family: 'SF Mono', 'Courier New', Courier, monospace;
-        font-size: 14px;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        opacity: 0;
-        transform: translateY(100%);
-        transition: opacity 0.4s ease-out, transform 0.4s ease-out;
+      position: absolute;
+      width: 100%;
+      margin: 0;
+      padding: 0 1rem;
+      height: 30px;
+      line-height: 30px;
+      text-align: center;
+      color: var(--primary-200);
+      font-family: 'SF Mono', 'Courier New', Courier, monospace;
+      font-size: 14px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      opacity: 0;
+      transform: translateY(100%);
+      transition: opacity 0.4s ease-out, transform 0.4s ease-out, color 0.4s ease;
     }
+
     #progress-messages p.visible {
-        opacity: 1;
-        transform: translateY(0);
+      opacity: 1;
+      transform: translateY(0);
     }
+
     #progress-messages p.exiting {
-        opacity: 0;
-        transform: translateY(-100%);
+      opacity: 0;
+      transform: translateY(-100%);
     }
 
     .hidden {
-        display: none;
+      display: none;
     }
-    
-    /* === NEW STYLES FOR TABS === */
+
+    /* === TABS === */
     .tab-button {
       transition: all 0.2s ease-in-out;
     }
+
     .tab-button.active {
-      border-color: #22c55e; /* green-500 */
-      color: #166534; /* green-800 */
-      background-color: #f0fdf4; /* green-50 */
+      border-color: var(--primary-500);
+      color: var(--primary-800);
+      background-color: var(--primary-50);
     }
+
     .tab-panel {
-        border-top: 1px solid #e2e8f0; /* slate-200 */
-        padding-top: 1.5rem;
+      border-top: 1px solid #e2e8f0;
+      padding-top: 1.5rem;
+    }
+
+    /* === INDUSTRY SEARCH FIELDS === */
+    .industry-fields {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1rem;
+      margin-top: 1rem;
+    }
+
+    .industry-fields label {
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: #64748b;
+      margin-bottom: 0.25rem;
+      display: block;
+    }
+
+    .industry-fields select,
+    .industry-fields input {
+      width: 100%;
+      padding: 0.5rem 0.75rem;
+      border: 1px solid #cbd5e1;
+      border-radius: 0.375rem;
+      font-size: 0.875rem;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .industry-fields select:focus,
+    .industry-fields input:focus {
+      outline: none;
+      border-color: var(--primary-500);
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    }
+
+    /* === INDUSTRY REPORT MARKDOWN === */
+    .industry-report {
+      line-height: 1.7;
+    }
+
+    .industry-report h1 {
+      font-size: 1.75rem;
+      font-weight: 700;
+      margin: 2rem 0 1rem;
+      color: #1e40af;
+      border-bottom: 2px solid #3b82f6;
+      padding-bottom: 0.5rem;
+    }
+
+    .industry-report h2 {
+      font-size: 1.5rem;
+      font-weight: 600;
+      margin: 1.75rem 0 0.875rem 1rem;
+      color: #1e3a8a;
+    }
+
+    .industry-report h3 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      margin: 1.5rem 0 0.75rem 2rem;
+      color: #334155;
+    }
+
+    .industry-report h4 {
+      font-size: 1.1rem;
+      font-weight: 500;
+      margin: 1.25rem 0 0.625rem 3rem;
+      color: #475569;
+    }
+
+    /* Paragraphs after headings */
+    .industry-report h1+p,
+    .industry-report h1+ul,
+    .industry-report h1+ol,
+    .industry-report h1+table {
+      margin-left: 0;
+    }
+
+    .industry-report h2+p,
+    .industry-report h2+ul,
+    .industry-report h2+ol,
+    .industry-report h2+table {
+      margin-left: 1rem;
+    }
+
+    .industry-report h3+p,
+    .industry-report h3+ul,
+    .industry-report h3+ol,
+    .industry-report h3+table {
+      margin-left: 2rem;
+    }
+
+    .industry-report h4+p,
+    .industry-report h4+ul,
+    .industry-report h4+ol,
+    .industry-report h4+table {
+      margin-left: 3rem;
+    }
+
+    /* Paragraph spacing */
+    .industry-report p {
+      margin-bottom: 1rem;
+    }
+
+    .industry-report p+p {
+      margin-top: 0.75rem;
+    }
+
+    /* List styling */
+    .industry-report ul {
+      list-style-type: disc;
+      padding-left: 2rem;
+      margin: 1rem 0;
+    }
+
+    .industry-report ol {
+      list-style-type: decimal;
+      padding-left: 2rem;
+      margin: 1rem 0;
+    }
+
+    .industry-report li {
+      margin-bottom: 0.5rem;
+      line-height: 1.6;
+    }
+
+    .industry-report ul ul {
+      list-style-type: circle;
+      margin-top: 0.5rem;
+    }
+
+    .industry-report ul ul ul {
+      list-style-type: square;
+    }
+
+    /* Table spacing */
+    .industry-report table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1.5rem 0;
+      font-size: 0.875rem;
+    }
+
+    .industry-report th {
+      background: #f1f5f9;
+      padding: 0.75rem;
+      text-align: left;
+      font-weight: 600;
+      border: 1px solid #e2e8f0;
+    }
+
+    .industry-report td {
+      padding: 0.75rem;
+      border: 1px solid #e2e8f0;
+    }
+
+    .industry-report tr:nth-child(even) {
+      background: #f8fafc;
+    }
+
+    .industry-report strong {
+      font-weight: 600;
+    }
+
+    .industry-report code {
+      background: #f1f5f9;
+      padding: 0.125rem 0.375rem;
+      border-radius: 0.25rem;
+      font-size: 0.875em;
+    }
+
+    .industry-report blockquote {
+      border-left: 4px solid #3b82f6;
+      padding-left: 1rem;
+      margin: 1rem 0;
+      color: #64748b;
+      font-style: italic;
+    }
+
+    .industry-report hr {
+      border: none;
+      border-top: 1px solid #e2e8f0;
+      margin: 2rem 0;
+    }
+
+    /* === TABLE OF CONTENTS === */
+    .toc-container {
+      background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+      border: 1px solid #bfdbfe;
+      border-radius: 0.75rem;
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 2rem;
+    }
+
+    .toc-title {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: #1e40af;
+      margin: 0 0 0.75rem 0;
+      padding-bottom: 0.5rem;
+      border-bottom: 2px solid #3b82f6;
+    }
+
+    .toc-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      max-height: 400px;
+      overflow-y: auto;
+    }
+
+    .toc-list li {
+      margin: 0.35rem 0;
+    }
+
+    .toc-link {
+      color: #1e40af;
+      text-decoration: none;
+      font-size: 0.9rem;
+      padding: 0.25rem 0.5rem;
+      border-radius: 0.25rem;
+      display: inline-block;
+      transition: all 0.2s ease;
+    }
+
+    .toc-link:hover {
+      background: #3b82f6;
+      color: white;
+      transform: translateX(4px);
+    }
+
+    .toc-number {
+      display: inline-block;
+      font-weight: 600;
+      color: #2563eb;
+      min-width: 2.5rem;
+    }
+
+    .toc-link:hover .toc-number {
+      color: white;
+    }
+
+    /* Logo color transition */
+    #navLogo {
+      transition: color 0.4s ease;
+    }
+
+    /* Smooth scroll behavior */
+    html {
+      scroll-behavior: smooth;
     }
   </style>
 
 </head>
+
 <body class="bg-slate-100 text-slate-800 antialiased">
   <!-- NAVBAR -->
   <nav class="bg-white shadow-md sticky top-0 z-50">
     <div class="container mx-auto px-6 py-4 flex items-center justify-between">
-      <a href="#" class="text-3xl font-extrabold text-green-600 hover:text-green-700 transition-colors">kagger.ai</a>
+      <a href="#" id="navLogo"
+        class="text-3xl font-extrabold text-green-600 hover:text-green-700 transition-colors">kagger.ai</a>
       <ul class="flex space-x-8 items-center">
         <li><a href="#" class="text-slate-600 hover:text-green-600 font-medium transition-colors">Home</a></li>
         <li><a href="#" class="text-slate-600 hover:text-green-600 font-medium transition-colors">AI Screens</a></li>
         <li class="relative group">
           <button class="text-slate-600 hover:text-green-600 font-medium transition-colors flex items-center">
-            Tools <svg class="ml-1 w-4 h-4 fill-current" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
+            Tools <svg class="ml-1 w-4 h-4 fill-current" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+              <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" />
+            </svg>
           </button>
-          <div class="absolute left-0 mt-2 w-56 bg-white border border-slate-200 rounded-md shadow-xl opacity-0 group-hover:opacity-100 transform scale-95 group-hover:scale-100 transition-all duration-200 ease-in-out origin-top-left z-20">
-            <a href="#" class="block px-4 py-3 text-sm text-slate-700 hover:bg-slate-100 hover:text-green-600 transition-colors">Create a technical screen</a>
+          <div
+            class="absolute left-0 mt-2 w-56 bg-white border border-slate-200 rounded-md shadow-xl opacity-0 group-hover:opacity-100 transform scale-95 group-hover:scale-100 transition-all duration-200 ease-in-out origin-top-left z-20">
+            <a href="#"
+              class="block px-4 py-3 text-sm text-slate-700 hover:bg-slate-100 hover:text-green-600 transition-colors">Create
+              a technical screen</a>
           </div>
         </li>
       </ul>
@@ -130,38 +489,107 @@
 
   <!-- MAIN -->
   <main class="container mx-auto mt-8 mb-12 px-4">
-    <div class="bg-white p-8 rounded-xl shadow-lg w-full max-w-3xl mx-auto mb-12">
-      <h1 class="text-4xl font-bold mb-2 text-center text-slate-700">AI-based Stock Research</h1>
-      <p class="text-center text-slate-500 mb-8">Analyze stocks using Kagger's Multi-agentic AI system created exclusively for Indian Companies</p>
-      <div class="flex">
-        <input
-          id="tickerInput"
-          type="text"
-          placeholder="Enter a stock ticker (e.g. TCS.NS or RELIANCE)"
-          class="flex-grow border border-slate-300 rounded-l-md px-4 py-3 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-lg"
-        />
-        <button id="goBtn" class="bg-gradient-to-r from-green-500 to-green-600 text-white px-8 py-3 rounded-r-md hover:from-green-600 hover:to-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-all duration-150 ease-in-out font-semibold text-lg">
-          Analyze
-        </button>
+    <div id="searchCard" class="bg-white p-8 rounded-xl shadow-lg w-full max-w-3xl mx-auto mb-12 theme-transition">
+      <!-- Toggle Switch -->
+      <div class="mode-toggle-container">
+        <span id="companyLabel" class="mode-label text-green-700">🏢 Company Search</span>
+        <div id="modeToggle" class="toggle-switch theme-transition" role="switch" aria-checked="false" tabindex="0">
+        </div>
+        <span id="industryLabel" class="mode-label text-blue-700 inactive">🏭 Industry Research</span>
+      </div>
+
+      <!-- Dynamic Title -->
+      <h1 id="mainTitle" class="text-4xl font-bold mb-2 text-center text-slate-700 theme-transition">AI-based Stock
+        Research</h1>
+      <p id="mainSubtitle" class="text-center text-slate-500 mb-8 theme-transition">Analyze stocks using Kagger's
+        Multi-agentic AI system created exclusively for Indian Companies</p>
+
+      <!-- Company Search Form -->
+      <div id="companyForm">
+        <div class="flex">
+          <input id="tickerInput" type="text" placeholder="Enter a stock ticker (e.g. TCS.NS or RELIANCE)"
+            class="flex-grow border border-slate-300 rounded-l-md px-4 py-3 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-lg theme-transition" />
+          <button id="goBtn"
+            class="bg-gradient-to-r from-green-500 to-green-600 text-white px-8 py-3 rounded-r-md hover:from-green-600 hover:to-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-all duration-150 ease-in-out font-semibold text-lg theme-transition">
+            Analyze
+          </button>
+        </div>
+      </div>
+
+      <!-- Industry Search Form -->
+      <div id="industryForm" class="hidden">
+        <div class="flex">
+          <input id="industryInput" type="text"
+            placeholder="Enter an industry (e.g. EV Battery, Generic Pharma, Specialty Chemicals)"
+            class="flex-grow border border-slate-300 rounded-l-md px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-lg" />
+          <button id="industryGoBtn"
+            class="bg-gradient-to-r from-blue-500 to-blue-600 text-white px-8 py-3 rounded-r-md hover:from-blue-600 hover:to-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-150 ease-in-out font-semibold text-lg">
+            🔍 Research
+          </button>
+        </div>
+
+        <!-- Industry Options -->
+        <div class="industry-fields">
+          <div>
+            <label for="horizonSelect">Time Horizon</label>
+            <select id="horizonSelect">
+              <option value="3">3 Years</option>
+              <option value="5" selected>5 Years</option>
+              <option value="7">7 Years</option>
+              <option value="10">10 Years</option>
+            </select>
+          </div>
+          <div>
+            <label for="depthSelect">Research Depth</label>
+            <select id="depthSelect">
+              <option value="BRIEF">Brief</option>
+              <option value="STANDARD" selected>Standard</option>
+              <option value="DEEP">Deep</option>
+            </select>
+          </div>
+          <div>
+            <label for="tickersInput">Specific Tickers (optional)</label>
+            <input id="tickersInput" type="text" placeholder="e.g. TATAMOTORS, M&M" />
+          </div>
+        </div>
+
+        <p class="text-xs text-slate-400 mt-3 text-center">⏱️ Deep research may take 3-5 minutes. Results are
+          comprehensive investor-grade reports.</p>
       </div>
     </div>
 
-    <div id="progress-container">
+    <div id="progress-container" class="theme-transition">
       <div id="progress-messages"></div>
     </div>
 
-    <!-- Results -->
-    <div id="results" class="w-full space-y-10">
-      <!-- Content will be dynamically inserted here -->
+    <!-- Results - Separate containers for caching -->
+    <div id="companyResults" class="w-full space-y-10">
+      <!-- Company analysis results will be dynamically inserted here -->
+    </div>
+    <div id="industryResults" class="w-full space-y-10 hidden">
+      <!-- Industry research results will be dynamically inserted here -->
     </div>
     <div id="debug-link-container" class="text-center mt-6"></div>
   </main>
 
   <!-- Chat launcher button -->
   <button id="chatBtn"
-          class="fixed bottom-6 right-6 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-full p-4 shadow-xl hover:from-green-600 hover:to-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-all duration-150 ease-in-out hover:scale-110"
-          title="Ask me anything">
-    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 5.523-4.477 10-10 10S1 17.523 1 12 5.477 2 11 2s10 4.477 10 10z"></path></svg>
+    class="fixed bottom-6 right-6 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-full p-4 shadow-xl hover:from-green-600 hover:to-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-all duration-150 ease-in-out hover:scale-110"
+    title="Ask me anything">
+    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+        d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z">
+      </path>
+    </svg>
+  </button>
+
+  <!-- Back to Top button -->
+  <button id="backToTopBtn"
+    class="fixed bottom-6 right-24 bg-slate-700 text-white rounded-full p-3 shadow-xl hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-offset-2 transition-all duration-300 ease-in-out opacity-0 invisible hover:scale-110"
+    title="Back to Top">
+    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18"></path>
+    </svg>
   </button>
 
   <!-- Chat modal -->
@@ -169,294 +597,830 @@
     <div class="bg-white w-full max-w-lg h-[70vh] max-h-[600px] rounded-xl shadow-2xl flex flex-col overflow-hidden">
       <div class="bg-gradient-to-r from-green-500 to-green-600 px-4 py-3 flex justify-between items-center text-white">
         <div class="flex flex-col">
-            <span class="font-semibold text-lg">Ask about this analysis</span>
+          <span class="font-semibold text-lg">Ask about this analysis</span>
         </div>
         <div class="flex items-center space-x-3">
-            <select id="aiModelSelector" class="bg-green-700/50 text-white text-sm rounded-md p-1 border border-green-400 focus:ring-2 focus:ring-white/80 focus:outline-none">
-                <optgroup label="Recommended"><option value="best" selected>Best (Multi-Agent)</option></optgroup>
-                <optgroup label="ChatGPT"><option value="gpt-4.1">GPT-4.1</option><option value="gpt-4.1-mini">GPT-4.1 Mini</option><option value="gpt-4o">GPT-4o</option><option value="gpt-4o-mini">GPT-4o Mini</option><option value="o4-mini">o4-mini</option></optgroup>
-                <optgroup label="Perplexity"><option value="sonar">Sonar (Online)</option><option value="sonar-pro">Sonar Pro (Online)</option><option value="sonar-reasoning">Sonar Reasoning (Online)</option><option value="sonar-reasoning-pro">Sonar Reasoning Pro (Online)</option></optgroup>
-                <optgroup label="Deepseek"><option value="r1-1776">Deepseek R1</option></optgroup>
-                <optgroup label="Google Gemini"><option value="gemini-2.5-flash-preview-05-20">Gemini 2.5 Flash</option><option value="gemini-2.5-pro-preview-06-05">Gemini 2.5 Pro</option></optgroup>
-            </select>
-            <button id="chatClose" class="text-green-100 hover:text-white transition-colors text-2xl leading-none">×</button>
+          <select id="aiModelSelector"
+            class="bg-green-700/50 text-white text-sm rounded-md p-1 border border-green-400 focus:ring-2 focus:ring-white/80 focus:outline-none">
+            <optgroup label="Recommended">
+              <option value="best" selected>Best (Multi-Agent)</option>
+              <option value="best-deep-research">Best Model - Deep Research</option>
+            </optgroup>
+            <optgroup label="ChatGPT">
+              <option value="gpt-4.1">GPT-4.1</option>
+              <option value="gpt-4.1-mini">GPT-4.1 Mini</option>
+              <option value="gpt-4o">GPT-4o</option>
+              <option value="gpt-4o-mini">GPT-4o Mini</option>
+              <option value="o4-mini">o4-mini</option>
+            </optgroup>
+            <optgroup label="Perplexity">
+              <option value="sonar">Sonar (Online)</option>
+              <option value="sonar-pro">Sonar Pro (Online)</option>
+              <option value="sonar-reasoning">Sonar Reasoning (Online)</option>
+              <option value="sonar-reasoning-pro">Sonar Reasoning Pro (Online)</option>
+            </optgroup>
+            <optgroup label="Deepseek">
+              <option value="r1-1776">Deepseek R1</option>
+            </optgroup>
+            <optgroup label="Google Gemini">
+              <option value="gemini-2.5-flash-preview-05-20">Gemini 2.5 Flash</option>
+              <option value="gemini-2.5-pro-preview-06-05">Gemini 2.5 Pro</option>
+            </optgroup>
+          </select>
+          <button id="chatExpand" title="Fullscreen"
+            class="text-green-100 hover:text-white transition-colors text-xl leading-none">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path>
+            </svg>
+          </button>
+          <button id="chatClose"
+            class="text-green-100 hover:text-white transition-colors text-2xl leading-none">×</button>
         </div>
       </div>
       <div id="chatLog" class="flex-1 p-4 space-y-3 overflow-y-auto bg-slate-50"></div>
       <form id="chatForm" class="p-4 flex border-t border-slate-300 bg-white">
         <input id="chatInput" type="text" placeholder="Type your question…"
-               class="flex-grow border border-slate-300 rounded-l-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent" />
-        <button class="bg-gradient-to-r from-green-500 to-green-600 text-white px-6 py-2 rounded-r-md hover:from-green-600 hover:to-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-1 transition-all duration-150 ease-in-out font-semibold">Send</button>
+          class="flex-grow border border-slate-300 rounded-l-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent" />
+        <button
+          class="bg-gradient-to-r from-green-500 to-green-600 text-white px-6 py-2 rounded-r-md hover:from-green-600 hover:to-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-1 transition-all duration-150 ease-in-out font-semibold">Send</button>
       </form>
     </div>
   </div>
 
   <script>
-      // ===================================================================================
-      // START: HELPER FUNCTIONS FOR RENDERING
-      // ===================================================================================
+    // ===================================================================================
+    // START: HELPER FUNCTIONS FOR RENDERING
+    // ===================================================================================
 
-      const MONTH_MAP = {"Jan":1, "Feb":2, "Mar":3, "Apr":4, "May":5, "Jun":6, "Jul":7, "Aug":8, "Sept":9, "Oct":10, "Nov":11, "Dec":12};
+    const MONTH_MAP = { "Jan": 1, "Feb": 2, "Mar": 3, "Apr": 4, "May": 5, "Jun": 6, "Jul": 7, "Aug": 8, "Sept": 9, "Oct": 10, "Nov": 11, "Dec": 12 };
 
-      function parseDateString(dateStr) {
-          if (!dateStr) return new Date(0);
-          const parts = dateStr.split(' ');
-          if (parts.length === 2 && MONTH_MAP[parts[0]]) {
-              return new Date(parseInt(parts[1]), MONTH_MAP[parts[0]] - 1, 1);
-          } else if (parts.length === 1 && /^\d{4}$/.test(parts[0])) {
-              return new Date(parseInt(parts[0]), 0, 1);
-          }
-          return new Date(0);
+    function parseDateString(dateStr) {
+      if (!dateStr) return new Date(0);
+      const parts = dateStr.split(' ');
+      if (parts.length === 2 && MONTH_MAP[parts[0]]) {
+        return new Date(parseInt(parts[1]), MONTH_MAP[parts[0]] - 1, 1);
+      } else if (parts.length === 1 && /^\d{4}$/.test(parts[0])) {
+        return new Date(parseInt(parts[0]), 0, 1);
       }
+      return new Date(0);
+    }
 
-      function renderFundTable(fundData) {
-          let html = `<div class="overflow-x-auto"><table class="w-full bg-white rounded-lg shadow-md mx-auto mb-8 border border-slate-200"><thead class="bg-slate-200 text-slate-700"><tr><th class="px-4 py-3 border-b border-slate-300 text-left text-sm font-semibold">Particulars</th>`;
+    function renderFundTable(fundData) {
+      let html = `<div class="overflow-x-auto"><table class="w-full bg-white rounded-lg shadow-md mx-auto mb-8 border border-slate-200"><thead class="bg-slate-200 text-slate-700"><tr><th class="px-4 py-3 border-b border-slate-300 text-left text-sm font-semibold">Particulars</th>`;
+      if (fundData.index && Array.isArray(fundData.index)) {
+        fundData.index.forEach(periodLabel => {
+          const isIndexColumn = periodLabel && periodLabel.toString().toLowerCase() === 'index';
+          const visibilityClass = isIndexColumn ? 'opacity-0 pointer-events-none' : '';
+          const alignmentClass = isIndexColumn ? 'text-left' : 'text-right';
+          html += `<th class="px-4 py-3 border-b border-slate-300 text-sm font-semibold ${alignmentClass} ${visibilityClass}">${periodLabel}</th>`;
+        });
+      }
+      html += `</tr></thead><tbody>`;
+      if (fundData.columns && Array.isArray(fundData.columns)) {
+        fundData.columns.forEach((metricName, metric_idx) => {
+          html += `<tr class="even:bg-slate-50 hover:bg-slate-100 transition-colors duration-150"><td class="px-4 py-3 border-b border-slate-200 font-medium text-sm text-slate-700 text-left">${metricName}</td>`;
           if (fundData.index && Array.isArray(fundData.index)) {
-              fundData.index.forEach(periodLabel => {
-                  const isIndexColumn = periodLabel && periodLabel.toString().toLowerCase() === 'index';
-                  const visibilityClass = isIndexColumn ? 'opacity-0 pointer-events-none' : '';
-                  const alignmentClass = isIndexColumn ? 'text-left' : 'text-right';
-                  html += `<th class="px-4 py-3 border-b border-slate-300 text-sm font-semibold ${alignmentClass} ${visibilityClass}">${periodLabel}</th>`;
-              });
+            fundData.index.forEach((periodLabel, period_idx) => {
+              const isIndexColumnValue = periodLabel && periodLabel.toString().toLowerCase() === 'index';
+              const visibilityClass = isIndexColumnValue ? 'opacity-0 pointer-events-none' : '';
+              let v = (fundData.data && fundData.data[period_idx] && fundData.data[period_idx][metric_idx] !== undefined) ? fundData.data[period_idx][metric_idx] : null;
+              let displayValue = 'N/A', cellClass = 'text-right';
+              if (v != null && v.toString().trim() !== '') {
+                const s = v.toString().replace(/,/g, ''), isPercent = s.endsWith('%'), numPart = isPercent ? s.substring(0, s.length - 1) : s;
+                if (!isNaN(parseFloat(numPart)) && isFinite(numPart)) {
+                  let numVal = parseFloat(numPart);
+                  displayValue = numVal.toLocaleString('en-IN', { minimumFractionDigits: (numVal % 1 !== 0 || numPart.includes('.')) ? Math.min(2, (numPart.split('.')[1] || '').length || 2) : 0, maximumFractionDigits: 2 });
+                  if (isPercent) displayValue += '%';
+                } else { displayValue = v; cellClass = 'text-left'; }
+              } else { cellClass = 'text-center'; }
+              if (isIndexColumnValue) cellClass = 'text-left';
+              html += `<td class="px-4 py-3 border-b border-slate-200 text-sm ${cellClass} ${visibilityClass}">${displayValue}</td>`;
+            });
           }
-          html += `</tr></thead><tbody>`;
-          if (fundData.columns && Array.isArray(fundData.columns)) {
-              fundData.columns.forEach((metricName, metric_idx) => {
-                  html += `<tr class="even:bg-slate-50 hover:bg-slate-100 transition-colors duration-150"><td class="px-4 py-3 border-b border-slate-200 font-medium text-sm text-slate-700 text-left">${metricName}</td>`;
-                  if (fundData.index && Array.isArray(fundData.index)) {
-                      fundData.index.forEach((periodLabel, period_idx) => {
-                          const isIndexColumnValue = periodLabel && periodLabel.toString().toLowerCase() === 'index';
-                          const visibilityClass = isIndexColumnValue ? 'opacity-0 pointer-events-none' : '';
-                          let v = (fundData.data && fundData.data[period_idx] && fundData.data[period_idx][metric_idx] !== undefined) ? fundData.data[period_idx][metric_idx] : null;
-                          let displayValue = 'N/A', cellClass = 'text-right';
-                          if (v != null && v.toString().trim() !== '') {
-                              const s = v.toString().replace(/,/g, ''), isPercent = s.endsWith('%'), numPart = isPercent ? s.substring(0, s.length - 1) : s;
-                              if (!isNaN(parseFloat(numPart)) && isFinite(numPart)) {
-                                  let numVal = parseFloat(numPart);
-                                  displayValue = numVal.toLocaleString('en-IN', { minimumFractionDigits: (numVal % 1 !== 0 || numPart.includes('.')) ? Math.min(2, (numPart.split('.')[1] || '').length || 2) : 0, maximumFractionDigits: 2 });
-                                  if (isPercent) displayValue += '%';
-                              } else { displayValue = v; cellClass = 'text-left'; }
-                          } else { cellClass = 'text-center'; }
-                          if (isIndexColumnValue) cellClass = 'text-left';
-                          html += `<td class="px-4 py-3 border-b border-slate-200 text-sm ${cellClass} ${visibilityClass}">${displayValue}</td>`;
-                      });
-                  }
-                  html += `</tr>`;
-              });
-          }
-          html += `</tbody></table></div>`;
-          return html;
+          html += `</tr>`;
+        });
       }
+      html += `</tbody></table></div>`;
+      return html;
+    }
 
-      function render_scanx_grid(data) {
-          let html = '<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">';
-          for (const [key, value] of Object.entries(data)) {
-              const formattedKey = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-              html += `<div class="bg-slate-50 p-3 rounded-lg border border-slate-200"><p class="text-xs text-slate-500 font-medium">${formattedKey}</p><p class="text-base font-semibold text-slate-800">${value || 'N/A'}</p></div>`;
-          }
-          html += '</div>';
-          return html;
+    function render_scanx_grid(data) {
+      let html = '<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">';
+      for (const [key, value] of Object.entries(data)) {
+        const formattedKey = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+        html += `<div class="bg-slate-50 p-3 rounded-lg border border-slate-200"><p class="text-xs text-slate-500 font-medium">${formattedKey}</p><p class="text-base font-semibold text-slate-800">${value || 'N/A'}</p></div>`;
       }
+      html += '</div>';
+      return html;
+    }
 
-      function render_analyst_rating(data) {
-          let html = '<div class="bg-slate-50 p-4 rounded-lg border border-slate-200">';
-          if (data.analyst_count) {
-              html += `<p class="text-sm text-slate-600 mb-3">Based on <strong>${data.analyst_count} analysts</strong></p>`;
-          }
-          html += '<div class="flex items-center space-x-6">';
-          if (data.buy_percentage) html += `<div><span class="font-bold text-green-600">${data.buy_percentage}</span><span class="text-sm text-slate-500 ml-1">Buy</span></div>`;
-          if (data.hold_percentage) html += `<div><span class="font-bold text-yellow-500">${data.hold_percentage}</span><span class="text-sm text-slate-500 ml-1">Hold</span></div>`;
-          if (data.sell_percentage) html += `<div><span class="font-bold text-red-600">${data.sell_percentage}</span><span class="text-sm text-slate-500 ml-1">Sell</span></div>`;
-          html += '</div></div>';
-          return html;
+    function render_analyst_rating(data) {
+      let html = '<div class="bg-slate-50 p-4 rounded-lg border border-slate-200">';
+      if (data.analyst_count) {
+        html += `<p class="text-sm text-slate-600 mb-3">Based on <strong>${data.analyst_count} analysts</strong></p>`;
       }
+      html += '<div class="flex items-center space-x-6">';
+      if (data.buy_percentage) html += `<div><span class="font-bold text-green-600">${data.buy_percentage}</span><span class="text-sm text-slate-500 ml-1">Buy</span></div>`;
+      if (data.hold_percentage) html += `<div><span class="font-bold text-yellow-500">${data.hold_percentage}</span><span class="text-sm text-slate-500 ml-1">Hold</span></div>`;
+      if (data.sell_percentage) html += `<div><span class="font-bold text-red-600">${data.sell_percentage}</span><span class="text-sm text-slate-500 ml-1">Sell</span></div>`;
+      html += '</div></div>';
+      return html;
+    }
 
-      function render_generic_scanx_table(data) {
-          if (!data || data.length === 0) return '';
-          
-          const allHeaders = Object.keys(data[0]);
-          const fixedHeaders = allHeaders.filter(h => h === 'metric' || h === 'company');
-          let dateHeaders = allHeaders.filter(h => h !== 'metric' && h !== 'company');
-          
-          dateHeaders.sort((a, b) => parseDateString(a) - parseDateString(b));
-          const limitedDateHeaders = dateHeaders.slice(-13);
-          
-          const sortedHeaders = [...fixedHeaders, ...limitedDateHeaders];
+    function render_generic_scanx_table(data) {
+      if (!data || data.length === 0) return '';
 
-          let html = '<div class="overflow-x-auto rounded-lg border border-slate-200"><table class="w-full text-sm border-collapse">';
-          html += '<thead class="bg-slate-100 text-slate-600"><tr class="text-left">';
-          sortedHeaders.forEach(h => {
-              const formattedHeader = h.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-              const alignClass = fixedHeaders.includes(h) ? 'text-left' : 'text-right';
-              html += `<th class="p-2 border-b border-slate-300 font-semibold ${alignClass}">${formattedHeader}</th>`;
-          });
-          html += '</tr></thead>';
-          html += '<tbody class="bg-white divide-y divide-slate-200">';
-          data.forEach(row => {
-              html += '<tr class="hover:bg-slate-50">';
-              sortedHeaders.forEach(header => {
-                  const cellClass = fixedHeaders.includes(header) ? 'font-medium text-slate-700 text-left' : 'text-slate-600 text-right';
-                  const cellValue = row[header] || 'N/A';
-                  html += `<td class="p-2 whitespace-nowrap ${cellClass}">${cellValue}</td>`;
-              });
-              html += '</tr>';
-          });
-          html += '</tbody></table></div>';
-          return html;
-      }
+      const allHeaders = Object.keys(data[0]);
+      const fixedHeaders = allHeaders.filter(h => h === 'metric' || h === 'company');
+      let dateHeaders = allHeaders.filter(h => h !== 'metric' && h !== 'company');
 
-      function render_shareholding_table(data) {
-          if (!data || Object.keys(data).length === 0) return '';
-          
-          const allPeriods = new Set();
-          Object.values(data).forEach(periodData => {
-              Object.keys(periodData).forEach(p => allPeriods.add(p));
-          });
+      dateHeaders.sort((a, b) => parseDateString(a) - parseDateString(b));
+      const limitedDateHeaders = dateHeaders.slice(-13);
 
-          const sortedPeriods = Array.from(allPeriods)
-                                     .sort((a, b) => parseDateString(a) - parseDateString(b))
-                                     .slice(-13);
+      const sortedHeaders = [...fixedHeaders, ...limitedDateHeaders];
 
-          let html = '<div class="overflow-x-auto rounded-lg border border-slate-200"><table class="w-full text-sm border-collapse">';
-          html += '<thead class="bg-slate-100 text-slate-600"><tr class="text-left">';
-          html += '<th class="p-2 border-b border-slate-300 font-semibold">Category</th>';
-          sortedPeriods.forEach(p => { html += `<th class="p-2 border-b border-slate-300 font-semibold text-right">${p}</th>`; });
-          html += '</tr></thead>';
-          html += '<tbody class="bg-white divide-y divide-slate-200">';
-          Object.entries(data).forEach(([category, periodData]) => {
-              html += '<tr class="hover:bg-slate-50">';
-              html += `<td class="p-2 whitespace-nowrap font-medium text-slate-700">${category}</td>`;
-              sortedPeriods.forEach(period => {
-                  const value = periodData[period] || 'N/A';
-                  html += `<td class="p-2 whitespace-nowrap text-slate-600 text-right">${value}</td>`;
-              });
-              html += '</tr>';
-          });
-          html += '</tbody></table></div>';
-          return html;
-      }
+      let html = '<div class="overflow-x-auto rounded-lg border border-slate-200"><table class="w-full text-sm border-collapse">';
+      html += '<thead class="bg-slate-100 text-slate-600"><tr class="text-left">';
+      sortedHeaders.forEach(h => {
+        const formattedHeader = h.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+        const alignClass = fixedHeaders.includes(h) ? 'text-left' : 'text-right';
+        html += `<th class="p-2 border-b border-slate-300 font-semibold ${alignClass}">${formattedHeader}</th>`;
+      });
+      html += '</tr></thead>';
+      html += '<tbody class="bg-white divide-y divide-slate-200">';
+      data.forEach(row => {
+        html += '<tr class="hover:bg-slate-50">';
+        sortedHeaders.forEach(header => {
+          const cellClass = fixedHeaders.includes(header) ? 'font-medium text-slate-700 text-left' : 'text-slate-600 text-right';
+          const cellValue = row[header] || 'N/A';
+          html += `<td class="p-2 whitespace-nowrap ${cellClass}">${cellValue}</td>`;
+        });
+        html += '</tr>';
+      });
+      html += '</tbody></table></div>';
+      return html;
+    }
 
-      function render_filings_list(data) {
-          let html = '<ul class="space-y-3">';
-          data.forEach(filing => {
-              html += `<li class="flex items-start justify-between p-3 rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors">
+    function render_shareholding_table(data) {
+      if (!data || Object.keys(data).length === 0) return '';
+
+      const allPeriods = new Set();
+      Object.values(data).forEach(periodData => {
+        Object.keys(periodData).forEach(p => allPeriods.add(p));
+      });
+
+      const sortedPeriods = Array.from(allPeriods)
+        .sort((a, b) => parseDateString(a) - parseDateString(b))
+        .slice(-13);
+
+      let html = '<div class="overflow-x-auto rounded-lg border border-slate-200"><table class="w-full text-sm border-collapse">';
+      html += '<thead class="bg-slate-100 text-slate-600"><tr class="text-left">';
+      html += '<th class="p-2 border-b border-slate-300 font-semibold">Category</th>';
+      sortedPeriods.forEach(p => { html += `<th class="p-2 border-b border-slate-300 font-semibold text-right">${p}</th>`; });
+      html += '</tr></thead>';
+      html += '<tbody class="bg-white divide-y divide-slate-200">';
+      Object.entries(data).forEach(([category, periodData]) => {
+        html += '<tr class="hover:bg-slate-50">';
+        html += `<td class="p-2 whitespace-nowrap font-medium text-slate-700">${category}</td>`;
+        sortedPeriods.forEach(period => {
+          const value = periodData[period] || 'N/A';
+          html += `<td class="p-2 whitespace-nowrap text-slate-600 text-right">${value}</td>`;
+        });
+        html += '</tr>';
+      });
+      html += '</tbody></table></div>';
+      return html;
+    }
+
+    function render_filings_list(data) {
+      let html = '<ul class="space-y-3">';
+      data.forEach(filing => {
+        html += `<li class="flex items-start justify-between p-3 rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors">
                           <div>
                               <p class="font-medium text-slate-700">${filing.type}</p>
                               <p class="text-xs text-slate-500">${filing.month_year}</p>
                           </div>
                           ${filing.url && filing.url !== "URL not found" ? `<a href="${filing.url}" target="_blank" rel="noopener noreferrer" class="px-3 py-1 text-sm font-semibold text-white bg-green-500 rounded-md hover:bg-green-600 self-center">View PDF</a>` : '<span class="text-sm text-slate-400 self-center">Not Found</span>'}
                        </li>`;
+      });
+      html += '</ul>';
+      return html;
+    }
+
+    let sseConnection = null;
+
+    function setupSseListener() {
+      const progressContainer = document.getElementById('progress-container');
+      const progressMessages = document.getElementById('progress-messages');
+      progressMessages.innerHTML = '';
+      progressContainer.classList.add('visible');
+      sseConnection = new EventSource('/progress-stream');
+      let messageElement = null, isAnimating = false;
+      sseConnection.onmessage = function (event) {
+        if (event.data === "__END__" || isAnimating) {
+          if (event.data === "__END__" && sseConnection) sseConnection.close();
+          return;
+        }
+        isAnimating = true;
+        if (!messageElement) {
+          messageElement = document.createElement('p');
+          progressMessages.appendChild(messageElement);
+        }
+        const showNewMessage = () => {
+          messageElement.textContent = `> ${event.data}`;
+          requestAnimationFrame(() => {
+            messageElement.classList.add('visible');
+            messageElement.addEventListener('transitionend', () => { isAnimating = false; }, { once: true });
           });
-          html += '</ul>';
-          return html;
+        };
+        if (messageElement.classList.contains('visible')) {
+          messageElement.classList.remove('visible');
+          messageElement.classList.add('exiting');
+          messageElement.addEventListener('transitionend', () => {
+            messageElement.classList.remove('exiting');
+            void messageElement.offsetHeight;
+            showNewMessage();
+          }, { once: true });
+        } else { showNewMessage(); }
+      };
+      sseConnection.onerror = function (error) {
+        console.error("SSE connection error:", error);
+        if (sseConnection) sseConnection.close();
+        progressContainer.classList.remove('visible');
+        isAnimating = false;
+      };
+    }
+
+    // ===================================================================================
+    // END: HELPER FUNCTIONS FOR RENDERING
+    // ===================================================================================
+
+    // ===================================================================================
+    // START: BACK TO TOP BUTTON
+    // ===================================================================================
+
+    const backToTopBtn = document.getElementById('backToTopBtn');
+
+    // Show/hide button based on scroll position
+    window.addEventListener('scroll', () => {
+      if (window.pageYOffset > 300) {
+        backToTopBtn.classList.remove('opacity-0', 'invisible');
+        backToTopBtn.classList.add('opacity-100', 'visible');
+      } else {
+        backToTopBtn.classList.remove('opacity-100', 'visible');
+        backToTopBtn.classList.add('opacity-0', 'invisible');
       }
-      
-      let sseConnection = null;
+    });
 
-      function setupSseListener() {
-          const progressContainer = document.getElementById('progress-container');
-          const progressMessages = document.getElementById('progress-messages');
-          progressMessages.innerHTML = '';
-          progressContainer.classList.add('visible');
-          sseConnection = new EventSource('/progress-stream');
-          let messageElement = null, isAnimating = false;
-          sseConnection.onmessage = function(event) {
-              if (event.data === "__END__" || isAnimating) {
-                  if (event.data === "__END__" && sseConnection) sseConnection.close();
-                  return;
-              }
-              isAnimating = true;
-              if (!messageElement) {
-                  messageElement = document.createElement('p');
-                  progressMessages.appendChild(messageElement);
-              }
-              const showNewMessage = () => {
-                  messageElement.textContent = `> ${event.data}`;
-                  requestAnimationFrame(() => {
-                      messageElement.classList.add('visible');
-                      messageElement.addEventListener('transitionend', () => { isAnimating = false; }, { once: true });
-                  });
-              };
-              if (messageElement.classList.contains('visible')) {
-                  messageElement.classList.remove('visible');
-                  messageElement.classList.add('exiting');
-                  messageElement.addEventListener('transitionend', () => {
-                      messageElement.classList.remove('exiting');
-                      void messageElement.offsetHeight;
-                      showNewMessage();
-                  }, { once: true });
-              } else { showNewMessage(); }
-          };
-          sseConnection.onerror = function(error) {
-              console.error("SSE connection error:", error);
-              if (sseConnection) sseConnection.close();
-              progressContainer.classList.remove('visible');
-              isAnimating = false;
-          };
+    // Scroll to top when clicked
+    backToTopBtn.addEventListener('click', () => {
+      window.scrollTo({
+        top: 0,
+        behavior: 'smooth'
+      });
+    });
+
+    // ===================================================================================
+    // END: BACK TO TOP BUTTON
+    // ===================================================================================
+
+    // ===================================================================================
+    // START: MODE TOGGLE FUNCTIONALITY
+    // ===================================================================================
+
+    let currentMode = 'company'; // 'company' or 'industry'
+
+    const modeToggle = document.getElementById('modeToggle');
+    const companyLabel = document.getElementById('companyLabel');
+    const industryLabel = document.getElementById('industryLabel');
+    const companyForm = document.getElementById('companyForm');
+    const industryForm = document.getElementById('industryForm');
+    const companyResultsContainer = document.getElementById('companyResults');
+    const industryResultsContainer = document.getElementById('industryResults');
+    const mainTitle = document.getElementById('mainTitle');
+    const mainSubtitle = document.getElementById('mainSubtitle');
+    const body = document.body;
+
+    function setMode(mode) {
+      currentMode = mode;
+      const navLogo = document.getElementById('navLogo');
+
+      if (mode === 'industry') {
+        // Switch to industry mode
+        body.classList.add('theme-industry');
+        modeToggle.classList.add('industry');
+        modeToggle.setAttribute('aria-checked', 'true');
+
+        companyLabel.classList.add('inactive');
+        industryLabel.classList.remove('inactive');
+
+        companyForm.classList.add('hidden');
+        industryForm.classList.remove('hidden');
+
+        companyResultsContainer.classList.add('hidden');
+        industryResultsContainer.classList.remove('hidden');
+
+        mainTitle.textContent = 'AI Industry Research';
+        mainSubtitle.textContent = 'Generate comprehensive investor-grade industry reports using Deep Research AI';
+
+        // Change logo to blue
+        navLogo.classList.remove('text-green-600', 'hover:text-green-700');
+        navLogo.classList.add('text-blue-600', 'hover:text-blue-700');
+      } else {
+        // Switch to company mode
+        body.classList.remove('theme-industry');
+        modeToggle.classList.remove('industry');
+        modeToggle.setAttribute('aria-checked', 'false');
+
+        companyLabel.classList.remove('inactive');
+        industryLabel.classList.add('inactive');
+
+        companyForm.classList.remove('hidden');
+        industryForm.classList.add('hidden');
+
+        companyResultsContainer.classList.remove('hidden');
+        industryResultsContainer.classList.add('hidden');
+
+        mainTitle.textContent = 'AI-based Stock Research';
+        mainSubtitle.textContent = "Analyze stocks using Kagger's Multi-agentic AI system created exclusively for Indian Companies";
+
+        // Change logo to green
+        navLogo.classList.remove('text-blue-600', 'hover:text-blue-700');
+        navLogo.classList.add('text-green-600', 'hover:text-green-700');
       }
-    
-      // ===================================================================================
-      // END: HELPER FUNCTIONS FOR RENDERING
-      // ===================================================================================
+    }
 
-      document.getElementById('goBtn').addEventListener('click', async () => {
-        const ticker = document.getElementById('tickerInput').value.trim().toUpperCase();
-        if (!ticker) return alert('Please enter a ticker.');
-        
-        const resultsContainer = document.getElementById('results');
-        resultsContainer.innerHTML = '';
-        setupSseListener();
+    // Toggle click handler
+    modeToggle.addEventListener('click', () => {
+      setMode(currentMode === 'company' ? 'industry' : 'company');
+    });
 
-        try {
-          const res = await fetch('/analyze', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ticker })
-          });
-          const payload = await res.json();
-          if (!res.ok) throw new Error(payload.error || 'Unknown error');
+    // Keyboard accessibility
+    modeToggle.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        setMode(currentMode === 'company' ? 'industry' : 'company');
+      }
+    });
 
-          currentAnalysisKey = payload.analysis_key; // <<<--- ADD THIS LINE to save the key
+    // Label click handlers
+    companyLabel.addEventListener('click', () => setMode('company'));
+    industryLabel.addEventListener('click', () => setMode('industry'));
 
-          const debugContainer = document.getElementById('debug-link-container');
-          debugContainer.innerHTML = ''; // Clear previous link
-          if (payload.debug_file_url) {
-              const link = document.createElement('a');
-              link.href = payload.debug_file_url;
-              link.textContent = 'Download Valuation Score Debug File (Excel)';
-              link.className = 'inline-block bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition-colors';
-              debugContainer.appendChild(link);
+    // ===================================================================================
+    // END: MODE TOGGLE FUNCTIONALITY
+    // ===================================================================================
+
+    // ===================================================================================
+    // START: INDUSTRY RESEARCH FUNCTIONALITY
+    // ===================================================================================
+
+    // Enhanced markdown to HTML converter for industry reports
+    function renderMarkdownToHtml(markdown, includeToc = true) {
+      if (!markdown) return { html: '', toc: '' };
+
+      // Step 1: Remove <think>...</think> blocks (AI thinking process)
+      let content = markdown.replace(/<think>[\s\S]*?<\/think>/gi, '');
+
+      // Step 2: Extract ALL headings in order and assign IDs
+      const headings = [];
+      const lines = content.split('\n');
+
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const nextLine = i < lines.length - 1 ? lines[i + 1] : '';
+
+        // Check for # style headings (prioritize these)
+        const hashMatch = line.match(/^(#{1,4})\s+(.+)$/);
+        if (hashMatch) {
+          const level = hashMatch[1].length;
+          const text = hashMatch[2].trim();
+          // Only add if text is not empty after trimming
+          if (text && text.length > 0) {
+            headings.push({ level, text, lineIndex: i, type: 'hash' });
           }
-          
-          
+          continue;
+        }
 
-          if (sseConnection) sseConnection.close();
-          document.getElementById('progress-container').classList.remove('visible');
+        // Check for === and --- style headings (only if line isn't already a hash heading)
+        if (nextLine.match(/^={3,}$/)) {
+          const text = line.trim();
+          if (text && text.length > 0 && !text.startsWith('#')) {
+            headings.push({ level: 1, text, lineIndex: i, type: 'underline', underlineIndex: i + 1 });
+          }
+        } else if (nextLine.match(/^-{3,}$/) && !line.match(/^-{3,}$/) && !line.match(/^\s*$/)) {
+          const text = line.trim();
+          if (text && text.length > 0 && !text.startsWith('#')) {
+            headings.push({ level: 2, text, lineIndex: i, type: 'underline', underlineIndex: i + 1 });
+          }
+        }
+      }
 
-          const companyName = payload.company_name || payload.ticker;
-          // --- START: TEMPORARY TEST DATA ---
-          const dummyScores = [
-              { label: "Valuation", value: "7.8", description: "Mildly Undervalued", chart1_json: '{"data": [], "layout": {"title": "Valuation History"}}', chart2_json: '{"data": [], "layout": {"title": "Valuation vs Returns"}}' },
-              { label: "Technical", value: "8.5", description: "Strongly Overbought", chart1_json: '{"data": [], "layout": {"title": "Technical History"}}', chart2_json: '{"data": [], "layout": {"title": "Technicals vs Returns"}}' },
-              { label: "Liquidity", value: "6.2", description: "Moderately Liquid", chart1_json: '{"data": [], "layout": {"title": "Liquidity History"}}', chart2_json: '{"data": [], "layout": {"title": "Liquidity vs Returns"}}' },
-              { label: "Volatility", value: "4.1", description: "Low Volatility", chart1_json: '{"data": [], "layout": {"title": "Volatility History"}}', chart2_json: '{"data": [], "layout": {"title": "Volatility vs Returns"}}' }
+      // Step 3: IMMEDIATELY Replace headings with HTML (BEFORE any other processing)
+      // This is critical to prevent line index mismatches
+      const linesArray = content.split('\n');
+      const processedLines = [];
+
+      for (let i = 0; i < linesArray.length; i++) {
+        const heading = headings.find(h => h.lineIndex === i);
+
+        if (heading) {
+          // Assign ID
+          heading.id = 'section-' + headings.indexOf(heading);
+
+          // This line is a heading - replace with HTML
+          const id = heading.id;
+          const text = heading.text;
+          const level = heading.level;
+          processedLines.push(`<h${level} id="${id}">${text}</h${level}>`);
+
+          // Skip underline if it's an underline-style heading
+          if (heading.type === 'underline' && heading.underlineIndex === i + 1) {
+            i++; // Skip the next line (the underline)
+          }
+        } else {
+          // Not a heading, keep as is
+          processedLines.push(linesArray[i]);
+        }
+      }
+
+      content = processedLines.join('\n');
+
+      // Step 4: Build TOC with hierarchical numbering (now that IDs are assigned)
+      const tocItems = [];
+      const numberStack = [0, 0, 0, 0]; // Track numbers at each level
+
+      headings.forEach((heading) => {
+        if (heading.level <= 3 && includeToc) {
+          // Update numbering
+          numberStack[heading.level - 1]++;
+          // Reset all deeper levels
+          for (let i = heading.level; i < 4; i++) {
+            numberStack[i] = 0;
+          }
+
+          // Build number string (e.g., "1", "1.1", "1.1.2")
+          const number = numberStack.slice(0, heading.level)
+            .filter(n => n > 0)
+            .join('.');
+
+          tocItems.push({
+            level: heading.level,
+            text: heading.text,
+            id: heading.id,
+            number: number
+          });
+        }
+      });
+
+      // Step 5: Process remaining markdown content
+      // Process tables first
+      content = content.replace(/\n(\|.+\|)\n(\|[-:| ]+\|)\n((?:\|.+\|\n?)+)/g, (match, headerRow, separatorRow, bodyRows) => {
+        const headers = headerRow.split('|').filter(cell => cell.trim()).map(cell => cell.trim());
+        const alignments = separatorRow.split('|').filter(cell => cell.trim()).map(cell => {
+          const trimmed = cell.trim();
+          if (trimmed.startsWith(':') && trimmed.endsWith(':')) return 'center';
+          if (trimmed.endsWith(':')) return 'right';
+          return 'left';
+        });
+
+        let tableHtml = '<table><thead><tr>';
+        headers.forEach((header, i) => {
+          const align = alignments[i] || 'left';
+          tableHtml += `<th style="text-align:${align}">${header}</th>`;
+        });
+        tableHtml += '</tr></thead><tbody>';
+
+        const rows = bodyRows.trim().split('\n');
+        rows.forEach(row => {
+          const cells = row.split('|').filter(cell => cell.trim() !== '').map(cell => cell.trim());
+          tableHtml += '<tr>';
+          cells.forEach((cell, i) => {
+            const align = alignments[i] || 'left';
+            tableHtml += `<td style="text-align:${align}">${cell}</td>`;
+          });
+          tableHtml += '</tr>';
+        });
+        tableHtml += '</tbody></table>';
+        return '\n' + tableHtml + '\n';
+      });
+
+      // Bold and italic
+      content = content
+        .replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>')
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*(.+?)\*/g, '<em>$1</em>')
+        .replace(/___(.+?)___/g, '<strong><em>$1</em></strong>')
+        .replace(/__(.+?)__/g, '<strong>$1</strong>')
+        .replace(/_(.+?)_/g, '<em>$1</em>');
+
+      // Code blocks and inline code
+      content = content
+        .replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>')
+        .replace(/`([^`]+)`/g, '<code>$1</code>');
+
+      // Blockquotes
+      content = content.replace(/^> (.+)$/gm, '<blockquote>$1</blockquote>');
+
+      // Process lists - FIXED: Process entire blocks together
+      // Unordered lists (-, *, +)
+      const unorderedListRegex = /^([-*+])\s+(.+)$/gm;
+      const linesWithLists = content.split('\n');
+      const listProcessedLines = [];
+      let i = 0;
+
+      while (i < linesWithLists.length) {
+        const line = linesWithLists[i];
+        const unorderedMatch = line.match(/^[-*+]\s+(.+)$/);
+
+        if (unorderedMatch) {
+          // Start of unordered list block
+          const listItems = [];
+          while (i < linesWithLists.length && linesWithLists[i].match(/^[-*+]\s+(.+)$/)) {
+            const itemMatch = linesWithLists[i].match(/^[-*+]\s+(.+)$/);
+            if (itemMatch) {
+              listItems.push(`<li>${itemMatch[1]}</li>`);
+            }
+            i++;
+          }
+          listProcessedLines.push(`<ul>${listItems.join('')}</ul>`);
+          continue;
+        }
+
+        const orderedMatch = line.match(/^\d+\.\s+(.+)$/);
+        if (orderedMatch) {
+          // Start of ordered list block
+          const listItems = [];
+          while (i < linesWithLists.length && linesWithLists[i].match(/^\d+\.\s+(.+)$/)) {
+            const itemMatch = linesWithLists[i].match(/^\d+\.\s+(.+)$/);
+            if (itemMatch) {
+              listItems.push(`<li>${itemMatch[1]}</li>`);
+            }
+            i++;
+          }
+          listProcessedLines.push(`<ol>${listItems.join('')}</ol>`);
+          continue;
+        }
+
+        listProcessedLines.push(line);
+        i++;
+      }
+
+      content = listProcessedLines.join('\n');
+
+      // Horizontal rules
+      content = content
+        .replace(/^-{3,}$/gm, '<hr>')
+        .replace(/^={3,}$/gm, '<hr>')
+        .replace(/^\*{3,}$/gm, '<hr>');
+
+      // Links
+      content = content.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+
+      // Paragraphs
+      content = content.replace(/\n\n+/g, '</p><p>');
+      content = content.replace(/\n/g, '<br>');
+
+      if (!content.startsWith('<')) {
+        content = '<p>' + content + '</p>';
+      }
+
+      // Clean up
+      content = content
+        .replace(/<p>\s*<\/p>/g, '')
+        .replace(/<p>\s*(<h[1-4])/g, '$1')
+        .replace(/(<\/h[1-4]>)\s*<\/p>/g, '$1')
+        .replace(/<p>\s*(<table)/g, '$1')
+        .replace(/(<\/table>)\s*<\/p>/g, '$1')
+        .replace(/<p>\s*(<ul)/g, '$1')
+        .replace(/(<\/ul>)\s*<\/p>/g, '$1')
+        .replace(/<p>\s*(<ol)/g, '$1')
+        .replace(/(<\/ol>)\s*<\/p>/g, '$1')
+        .replace(/<p>\s*(<hr)/g, '$1')
+        .replace(/(<hr>)\s*<\/p>/g, '$1')
+        .replace(/<p>\s*(<blockquote)/g, '$1')
+        .replace(/(<\/blockquote>)\s*<\/p>/g, '$1')
+        .replace(/<br>\s*(<\/p>)/g, '</p>')
+        .replace(/(<p>)\s*<br>/g, '<p>');
+
+      // Build TOC HTML with numbering
+      let tocHtml = '';
+      if (includeToc && tocItems.length > 0) {
+        tocHtml = '<nav class="toc-container"><h3 class="toc-title">📑 Table of Contents</h3><ul class="toc-list">';
+        tocItems.forEach(item => {
+          const indent = (item.level - 1) * 16;
+          tocHtml += `<li style="margin-left: ${indent}px"><a href="#${item.id}" class="toc-link"><span class="toc-number">${item.number}</span> ${item.text}</a></li>`;
+        });
+        tocHtml += '</ul></nav>';
+      }
+
+      return { html: content, toc: tocHtml };
+    }
+
+    document.getElementById('industryGoBtn').addEventListener('click', async () => {
+      const industry = document.getElementById('industryInput').value.trim();
+      if (!industry) return alert('Please enter an industry to research.');
+
+      const horizon = document.getElementById('horizonSelect').value;
+      const depth = document.getElementById('depthSelect').value;
+      const tickers = document.getElementById('tickersInput').value.trim();
+
+      industryResultsContainer.innerHTML = '';
+      setupSseListener();
+
+      // Show loading state
+      industryResultsContainer.innerHTML = `
+        <div class="bg-white p-8 rounded-xl shadow-lg">
+          <div class="flex items-center justify-center space-x-4">
+            <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500"></div>
+            <div>
+              <p class="text-lg font-semibold text-slate-700">Generating Industry Report...</p>
+              <p class="text-sm text-slate-500">This may take 3-5 minutes for deep research</p>
+            </div>
+          </div>
+        </div>
+      `;
+
+      try {
+        const res = await fetch('/industry-research', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            industry,
+            horizon_years: parseInt(horizon),
+            depth,
+            optional_tickers: tickers || null
+          })
+        });
+
+        const payload = await res.json();
+        if (!res.ok) throw new Error(payload.error || 'Unknown error');
+
+        if (sseConnection) sseConnection.close();
+        document.getElementById('progress-container').classList.remove('visible');
+
+        // Render the industry report with TOC
+        const { html: reportHtml, toc: tocHtml } = renderMarkdownToHtml(payload.report);
+        industryResultsContainer.innerHTML = `
+          <div class="bg-white p-8 rounded-xl shadow-lg">
+            <div class="flex items-center justify-between mb-6 pb-4 border-b border-slate-200">
+              <div>
+                <h2 class="text-2xl font-bold text-blue-800">📊 ${industry} Industry Report</h2>
+                <p class="text-sm text-slate-500 mt-1">Generated ${new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+              </div>
+              <div class="flex space-x-2">
+                <span class="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm font-medium">${horizon} Year Horizon</span>
+                <span class="px-3 py-1 bg-slate-100 text-slate-700 rounded-full text-sm font-medium">${depth} Depth</span>
+              </div>
+            </div>
+            ${tocHtml}
+            <div class="industry-report">
+              ${reportHtml}
+            </div>
+          </div>
+        `;
+
+        // Add smooth scrolling for TOC links
+        industryResultsContainer.querySelectorAll('.toc-link').forEach(link => {
+          link.addEventListener('click', (e) => {
+            e.preventDefault();
+            const targetId = link.getAttribute('href').substring(1);
+            const targetElement = document.getElementById(targetId);
+            if (targetElement) {
+              targetElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+          });
+        });
+
+      } catch (err) {
+        if (sseConnection) sseConnection.close();
+        document.getElementById('progress-container').classList.remove('visible');
+        industryResultsContainer.innerHTML = `
+          <div class="bg-red-100 border border-red-400 text-red-700 px-6 py-4 rounded-lg shadow-md" role="alert">
+            <strong class="font-bold">Error:</strong>
+            <span class="block sm:inline">${err.message}</span>
+          </div>
+        `;
+        console.error('Industry research error:', err);
+      }
+    });
+
+    // ===================================================================================
+    // END: INDUSTRY RESEARCH FUNCTIONALITY
+    // ===================================================================================
+
+    // ===================================================================================
+    // START: COMPANY ANALYSIS FUNCTIONALITY
+    // ===================================================================================
+    document.getElementById('goBtn').addEventListener('click', async () => {
+      const ticker = document.getElementById('tickerInput').value.trim().toUpperCase();
+      if (!ticker) return alert('Please enter a ticker.');
+
+      const resultsContainer = document.getElementById('companyResults');
+      resultsContainer.innerHTML = '';
+      setupSseListener();
+
+      try {
+        const res = await fetch('/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ticker })
+        });
+        const payload = await res.json();
+        if (!res.ok) throw new Error(payload.error || 'Unknown error');
+
+        currentAnalysisKey = payload.analysis_key; // <<<--- ADD THIS LINE to save the key
+
+        const debugContainer = document.getElementById('debug-link-container');
+        debugContainer.innerHTML = ''; // Clear previous link
+        if (payload.debug_file_url) {
+          const link = document.createElement('a');
+          link.href = payload.debug_file_url;
+          link.textContent = 'Download Valuation Score Debug File (Excel)';
+          link.className = 'inline-block bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition-colors';
+          debugContainer.appendChild(link);
+        }
+
+
+
+        if (sseConnection) sseConnection.close();
+        document.getElementById('progress-container').classList.remove('visible');
+
+        const companyName = payload.company_name || payload.ticker;
+        // --- START: TEMPORARY TEST DATA ---
+        const dummyScores = [
+          { label: "Valuation", value: "7.8", description: "Mildly Undervalued", chart1_json: '{"data": [], "layout": {"title": "Valuation History"}}', chart2_json: '{"data": [], "layout": {"title": "Valuation vs Returns"}}' },
+          { label: "Technical", value: "8.5", description: "Strongly Overbought", chart1_json: '{"data": [], "layout": {"title": "Technical History"}}', chart2_json: '{"data": [], "layout": {"title": "Technicals vs Returns"}}' },
+          { label: "Liquidity", value: "6.2", description: "Moderately Liquid", chart1_json: '{"data": [], "layout": {"title": "Liquidity History"}}', chart2_json: '{"data": [], "layout": {"title": "Liquidity vs Returns"}}' },
+          { label: "Volatility", value: "4.1", description: "Low Volatility", chart1_json: '{"data": [], "layout": {"title": "Volatility History"}}', chart2_json: '{"data": [], "layout": {"title": "Volatility vs Returns"}}' }
+        ];
+        // --- END: TEMPORARY TEST DATA ---
+
+        // Helper function to render key metrics table
+        function renderKeyMetricsTable(metrics) {
+          if (!metrics || Object.keys(metrics).length === 0) return '';
+
+          const metricCards = [
+            { label: 'Market Cap', key: 'market_cap' },
+            { label: 'Industry', key: 'industry' },
+            { label: 'Sector', key: 'sector' },
+            { label: 'Current Price', key: 'current_price' },
+            { label: 'P/E Ratio', key: 'pe_ratio' },
+            { label: 'P/B Ratio', key: 'pb_ratio' },
+            { label: 'Dividend Yield', key: 'dividend_yield' },
+            { label: 'ROCE', key: 'roce' },
+            { label: 'ROE', key: 'roe' },
+            { label: 'Sales Growth (YoY)', key: 'sales_growth_yoy' },
+            { label: 'EBITDA Growth (YoY)', key: 'ebitda_growth_yoy' },
+            { label: 'Net Profit Margin', key: 'npm' }
           ];
-          // --- END: TEMPORARY TEST DATA ---
 
-          // =====================================================================
-          // START: MODIFIED SECTION FOR SCORES INTEGRATION
-          // =====================================================================
-          
-          // --- RENDER BLOCK 1: AI Summary, Scores, & Technical Analysis ---
-          let summarySectionHTML = '';
-          if (payload.company_summary_html) {
-              summarySectionHTML = `<div class="bg-white p-6 rounded-xl shadow-lg"><h2 class="text-2xl font-bold mb-4 text-slate-700">AI Summary for ${companyName}</h2><div class="summary-content prose prose-slate max-w-none text-slate-600">${payload.company_summary_html}</div></div>`;
-          }
+          const cards = metricCards.map(m => {
+            const value = metrics[m.key] || 'N/A';
+            const isGrowth = m.key.includes('growth');
+            const isPositive = isGrowth && value.includes('+');
+            const isNegative = isGrowth && value.includes('-');
 
-          let aiScoreHTML = '';
-          // We use the dummy data for this test
-          if (payload.ai_scores && Array.isArray(payload.ai_scores) && payload.ai_scores.length) {
-            aiScoreHTML = `
+            return `
+              <div class="bg-white p-4 rounded-lg shadow-sm border border-green-100 hover:shadow-md transition-all hover:border-green-300">
+                <div class="text-xs text-slate-500 font-medium mb-1">${m.label}</div>
+                <div class="text-base font-bold ${isPositive ? 'text-green-600' : isNegative ? 'text-red-600' : 'text-slate-800'}">${value}</div>
+              </div>
+            `;
+          }).join('');
+
+          return `
+            <div class="bg-gradient-to-br from-green-50 to-emerald-50 p-6 rounded-xl shadow-md border border-green-200 mb-8">
+              <h3 class="text-xl font-bold text-green-800 mb-4">📊 Key Metrics Snapshot</h3>
+              <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                ${cards}
+              </div>
+            </div>
+          `;
+        }
+
+        // =====================================================================
+        // START: MODIFIED SECTION FOR SCORES INTEGRATION
+        // =====================================================================
+
+        // --- RENDER BLOCK 1: Key Metrics Table, AI Summary, Scores, & Technical Analysis ---
+
+        // Key Metrics Table (NEW)
+        let keyMetricsHTML = '';
+        if (payload.key_metrics) {
+          keyMetricsHTML = renderKeyMetricsTable(payload.key_metrics);
+        }
+
+        let summarySectionHTML = '';
+        if (payload.company_summary_html) {
+          summarySectionHTML = `<div class="bg-white p-6 rounded-xl shadow-lg"><h2 class="text-2xl font-bold mb-4 text-slate-700">AI Summary for ${companyName}</h2><div class="summary-content prose prose-slate max-w-none text-slate-600">${payload.company_summary_html}</div></div>`;
+        }
+
+        let aiScoreHTML = '';
+        // We use the dummy data for this test
+        if (payload.ai_scores && Array.isArray(payload.ai_scores) && payload.ai_scores.length) {
+          aiScoreHTML = `
             <div class="bg-white p-6 rounded-xl shadow-lg">
                 <h2 class="text-2xl font-bold mb-4 text-slate-700">AI Score</h2>
                 <div class="space-y-6">
@@ -480,135 +1444,135 @@
                 </div>
             </div>
             `;
-          }
-          
-          
-          
-          let technicalSummaryHTML = '';
-          if (payload.summary) {
-              technicalSummaryHTML = `<div class="bg-white p-6 rounded-xl shadow-lg"><h2 class="text-2xl font-bold mb-6 text-slate-700">AI Technical Analysis</h2><div class="overflow-x-auto"><table class="w-full border border-slate-200"><tbody class="text-sm">${payload.summary.map(row => `<tr class="even:bg-slate-50 hover:bg-slate-100 transition-colors duration-150"><td class="px-4 py-3 border-b border-slate-200 font-medium text-slate-600">${row.key}</td><td class="px-4 py-3 border-b border-slate-200 text-slate-700 relative">${row.value}</td></tr>`).join('')}</tbody></table></div></div>`;
-          }
+        }
 
-          resultsContainer.innerHTML = summarySectionHTML + aiScoreHTML + technicalSummaryHTML;
 
-          // Attach click handlers for AI Score charts
-          // We check our payload.ai_scores variable for the test
-          if (payload.ai_scores && Array.isArray(payload.ai_scores)) {
-            document.querySelectorAll('.expandChartsBtn').forEach(btn => {
-              btn.onclick = function () {
-                const idx = btn.dataset.idx;
-                const chartRow = document.getElementById(`aiChartsRow${idx}`);
-                const isHidden = chartRow.classList.toggle('hidden');
-                if (!isHidden) {
-                  // THE FIX IS HERE: We now use payload.ai_scores to get the chart data
-                  const chart1Data = JSON.parse(payload.ai_scores[idx].chart1_json);
-                  const chart2Data = JSON.parse(payload.ai_scores[idx].chart2_json);
-                  Plotly.newPlot(`aiChart1_${idx}`, chart1Data.data, chart1Data.layout || {}, { responsive: true });
-                  Plotly.newPlot(`aiChart2_${idx}`, chart2Data.data, chart2Data.layout || {}, { responsive: true });
-                  btn.innerHTML = 'Hide Charts <span class="ml-1">▲</span>';
-                } else {
-                  btn.innerHTML = 'Show Charts <span class="ml-1">▼</span>';
-                }
-              };
-            });
-          }
-          
-          // =====================================================================
-          // END: MODIFIED SECTION FOR SCORES INTEGRATION
-          // =====================================================================
 
-          // Attach charts to technical analysis table
-          const techCharts = [
-              { key: 'Price-Action Trend (based on Close prices)', json: payload.chart_close_json, id: 'chart-close' }, { key: 'Price-Action Trend (based on High/Low prices)', json: payload.chart_hl_json, id: 'chart-hl' }, { key: 'Market Structure (based on EMA Stack)', json: payload.chart_ema_json, id: 'chart-ema' }, { key: 'Market Sentiment (based on RSI)', json: payload.chart_rsi_json, id: 'chart-rsi' }, { key: 'Accumulating or Distributing (based on Volume)', json: payload.chart_adl_json, id: 'chart-adl' }, { key: 'Relative Strength vs Nifty', json: payload.chart_rs_json, id: 'chart-rs' },
+        let technicalSummaryHTML = '';
+        if (payload.summary) {
+          technicalSummaryHTML = `<div class="bg-white p-6 rounded-xl shadow-lg"><h2 class="text-2xl font-bold mb-6 text-slate-700">AI Technical Analysis</h2><div class="overflow-x-auto"><table class="w-full border border-slate-200"><tbody class="text-sm">${payload.summary.map(row => `<tr class="even:bg-slate-50 hover:bg-slate-100 transition-colors duration-150"><td class="px-4 py-3 border-b border-slate-200 font-medium text-slate-600">${row.key}</td><td class="px-4 py-3 border-b border-slate-200 text-slate-700 relative">${row.value}</td></tr>`).join('')}</tbody></table></div></div>`;
+        }
+
+        resultsContainer.innerHTML = keyMetricsHTML + summarySectionHTML + aiScoreHTML + technicalSummaryHTML;
+
+        // Attach click handlers for AI Score charts
+        // We check our payload.ai_scores variable for the test
+        if (payload.ai_scores && Array.isArray(payload.ai_scores)) {
+          document.querySelectorAll('.expandChartsBtn').forEach(btn => {
+            btn.onclick = function () {
+              const idx = btn.dataset.idx;
+              const chartRow = document.getElementById(`aiChartsRow${idx}`);
+              const isHidden = chartRow.classList.toggle('hidden');
+              if (!isHidden) {
+                // THE FIX IS HERE: We now use payload.ai_scores to get the chart data
+                const chart1Data = JSON.parse(payload.ai_scores[idx].chart1_json);
+                const chart2Data = JSON.parse(payload.ai_scores[idx].chart2_json);
+                Plotly.newPlot(`aiChart1_${idx}`, chart1Data.data, chart1Data.layout || {}, { responsive: true });
+                Plotly.newPlot(`aiChart2_${idx}`, chart2Data.data, chart2Data.layout || {}, { responsive: true });
+                btn.innerHTML = 'Hide Charts <span class="ml-1">▲</span>';
+              } else {
+                btn.innerHTML = 'Show Charts <span class="ml-1">▼</span>';
+              }
+            };
+          });
+        }
+
+        // =====================================================================
+        // END: MODIFIED SECTION FOR SCORES INTEGRATION
+        // =====================================================================
+
+        // Attach charts to technical analysis table
+        const techCharts = [
+          { key: 'Price-Action Trend (based on Close prices)', json: payload.chart_close_json, id: 'chart-close' }, { key: 'Price-Action Trend (based on High/Low prices)', json: payload.chart_hl_json, id: 'chart-hl' }, { key: 'Market Structure (based on EMA Stack)', json: payload.chart_ema_json, id: 'chart-ema' }, { key: 'Market Sentiment (based on RSI)', json: payload.chart_rsi_json, id: 'chart-rsi' }, { key: 'Accumulating or Distributing (based on Volume)', json: payload.chart_adl_json, id: 'chart-adl' }, { key: 'Relative Strength vs Nifty', json: payload.chart_rs_json, id: 'chart-rs' },
+        ];
+        const summaryTable = resultsContainer.querySelector('table tbody');
+        if (summaryTable) {
+          techCharts.forEach(({ key, json, id }) => {
+            if (!json) return;
+            const row = Array.from(summaryTable.querySelectorAll('tr')).find(tr => tr.children[0].textContent.trim() === key);
+            if (!row) return;
+            const cell = row.children[1], valueContent = cell.textContent.trim();
+            cell.innerHTML = `<span>${valueContent}</span><button class="ml-3 px-2 py-1 text-xs font-medium text-white bg-green-500 rounded-md hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-green-400 transition-colors">Expand Chart <span class="ml-1 text-xs">▼</span></button>`;
+            const chartRow = document.createElement('tr');
+            chartRow.className = 'hidden';
+            chartRow.innerHTML = `<td colspan="2" class="p-0 border-b border-slate-200"><div id="${id}" style="width:100%;height:450px;"></div></td>`;
+            row.parentNode.insertBefore(chartRow, row.nextSibling);
+            cell.querySelector('button').onclick = (e) => {
+              const btn = e.currentTarget;
+              const isHidden = chartRow.classList.toggle('hidden');
+              if (!isHidden) {
+                Plotly.newPlot(id, JSON.parse(json).data, JSON.parse(json).layout, { responsive: true });
+                btn.innerHTML = 'Hide Chart <span class="ml-1 text-xs">▲</span>';
+              } else {
+                btn.innerHTML = 'Expand Chart <span class="ml-1 text-xs">▼</span>';
+              }
+            };
+          });
+        }
+
+        // --- RENDER BLOCK 2: FUNDAMENTALS (NEW TABBED INTERFACE) ---
+
+        let screenerHTML = '';
+        if (payload.fundamentals && Object.keys(payload.fundamentals).length > 0) {
+          const order = ["Quarterly Results", "Annual Results", "Growth Patterns", "Balance Sheet", "Cash Flow", "Financial Ratios", "Quarterly Shareholding Pattern", "Annual Shareholding Pattern"];
+          order.forEach(name => {
+            if (!payload.fundamentals[name]) return;
+            try {
+              const data = JSON.parse(payload.fundamentals[name]);
+              if (data && data.index && data.columns && data.data) {
+                screenerHTML += `<h3 class="text-xl font-semibold mb-3 mt-6 text-slate-600">${name}</h3>${renderFundTable(data)}`;
+              }
+            } catch (e) { console.error(`Error parsing fundamental table "${name}":`, e); }
+          });
+        }
+        if (payload.documents && Array.isArray(payload.documents) && payload.documents.length > 0) {
+          screenerHTML += `<h3 class="text-xl font-semibold mb-3 mt-6 text-slate-600">Latest Documents</h3><ul class="space-y-3">`;
+          payload.documents.forEach(doc => {
+            screenerHTML += `<li class="flex items-center justify-between p-3 rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors"><span class="font-medium text-slate-700">${doc.text} (${doc.type})</span><a href="${doc.link}" target="_blank" rel="noopener noreferrer" class="px-3 py-1 text-sm font-semibold text-white bg-green-500 rounded-md hover:bg-green-600">View PDF</a></li>`;
+          });
+          screenerHTML += `</ul>`;
+        }
+        if (payload.metric_charts && Object.keys(payload.metric_charts).length > 0) {
+          screenerHTML += `<h3 class="text-xl font-semibold mb-3 mt-8 text-slate-600">Valuation & Margin History</h3>`;
+          Object.entries(payload.metric_charts).forEach(([label, json]) => {
+            if (!json) return;
+            const id = 'metric-' + label.replace(/\W+/g, '').toLowerCase();
+            screenerHTML += `<div class="overflow-x-auto mb-6"><table class="w-full bg-white rounded-lg shadow-md border border-slate-200"><tbody><tr class="even:bg-slate-50"><td class="px-4 py-3 border-b border-slate-200 font-medium text-slate-600">${label}</td><td class="px-4 py-3 border-b border-slate-200 text-right"><button class="toggleMetric px-3 py-1 text-xs font-medium text-white bg-green-500 rounded-md" data-chart-id="${id}" data-chart-json='${json}'>Expand Chart <span class="ml-1 text-xs">▼</span></button></td></tr><tr class="chartRowMetric hidden"><td colspan="2" class="p-0 border-b border-slate-200"><div id="${id}" style="width:100%;height:450px;"></div></td></tr></tbody></table></div>`;
+          });
+        }
+
+        let scanxHTML = '';
+        if (payload.scanx_data && !payload.scanx_data.error) {
+          const sections = [
+            { key: 'basic_metrics', title: 'Key Metrics', type: 'grid' },
+            { key: 'price_performance', title: 'Price Performance', type: 'grid' },
+            { key: 'analyst_rating', title: 'Analyst Rating', type: 'analyst' },
+            { key: 'company_filings', title: 'Company Filings', type: 'filings_list' },
+            { key: 'peer_comparison', title: 'Peer Comparison', type: 'table' },
+            { key: 'quarterly_financials', title: 'Quarterly Financials', type: 'table' },
+            { key: 'balance_sheet', title: 'Balance Sheet', type: 'table' },
+            { key: 'cash_flow', title: 'Cash Flow', type: 'table' },
+            { key: 'shareholding_pattern', title: 'Shareholding Pattern', type: 'shareholding_table' }
           ];
-          const summaryTable = resultsContainer.querySelector('table tbody');
-          if (summaryTable) {
-              techCharts.forEach(({ key, json, id }) => {
-                  if (!json) return;
-                  const row = Array.from(summaryTable.querySelectorAll('tr')).find(tr => tr.children[0].textContent.trim() === key);
-                  if (!row) return;
-                  const cell = row.children[1], valueContent = cell.textContent.trim();
-                  cell.innerHTML = `<span>${valueContent}</span><button class="ml-3 px-2 py-1 text-xs font-medium text-white bg-green-500 rounded-md hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-green-400 transition-colors">Expand Chart <span class="ml-1 text-xs">▼</span></button>`;
-                  const chartRow = document.createElement('tr');
-                  chartRow.className = 'hidden';
-                  chartRow.innerHTML = `<td colspan="2" class="p-0 border-b border-slate-200"><div id="${id}" style="width:100%;height:450px;"></div></td>`;
-                  row.parentNode.insertBefore(chartRow, row.nextSibling);
-                  cell.querySelector('button').onclick = (e) => {
-                      const btn = e.currentTarget;
-                      const isHidden = chartRow.classList.toggle('hidden');
-                      if (!isHidden) {
-                          Plotly.newPlot(id, JSON.parse(json).data, JSON.parse(json).layout, { responsive: true });
-                          btn.innerHTML = 'Hide Chart <span class="ml-1 text-xs">▲</span>';
-                      } else {
-                          btn.innerHTML = 'Expand Chart <span class="ml-1 text-xs">▼</span>';
-                      }
-                  };
-              });
-          }
-          
-          // --- RENDER BLOCK 2: FUNDAMENTALS (NEW TABBED INTERFACE) ---
-          
-          let screenerHTML = '';
-          if (payload.fundamentals && Object.keys(payload.fundamentals).length > 0) {
-              const order = ["Quarterly Results", "Annual Results", "Growth Patterns", "Balance Sheet", "Cash Flow", "Financial Ratios", "Quarterly Shareholding Pattern", "Annual Shareholding Pattern"];
-              order.forEach(name => {
-                if (!payload.fundamentals[name]) return;
-                try {
-                    const data = JSON.parse(payload.fundamentals[name]);
-                    if (data && data.index && data.columns && data.data) {
-                        screenerHTML += `<h3 class="text-xl font-semibold mb-3 mt-6 text-slate-600">${name}</h3>${renderFundTable(data)}`;
-                    }
-                } catch (e) { console.error(`Error parsing fundamental table "${name}":`, e); }
-              });
-          }
-          if (payload.documents && Array.isArray(payload.documents) && payload.documents.length > 0) {
-              screenerHTML += `<h3 class="text-xl font-semibold mb-3 mt-6 text-slate-600">Latest Documents</h3><ul class="space-y-3">`;
-              payload.documents.forEach(doc => {
-                  screenerHTML += `<li class="flex items-center justify-between p-3 rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors"><span class="font-medium text-slate-700">${doc.text} (${doc.type})</span><a href="${doc.link}" target="_blank" rel="noopener noreferrer" class="px-3 py-1 text-sm font-semibold text-white bg-green-500 rounded-md hover:bg-green-600">View PDF</a></li>`;
-              });
-              screenerHTML += `</ul>`;
-          }
-          if (payload.metric_charts && Object.keys(payload.metric_charts).length > 0) {
-              screenerHTML += `<h3 class="text-xl font-semibold mb-3 mt-8 text-slate-600">Valuation & Margin History</h3>`;
-              Object.entries(payload.metric_charts).forEach(([label, json]) => {
-                if (!json) return;
-                const id = 'metric-' + label.replace(/\W+/g, '').toLowerCase();
-                screenerHTML += `<div class="overflow-x-auto mb-6"><table class="w-full bg-white rounded-lg shadow-md border border-slate-200"><tbody><tr class="even:bg-slate-50"><td class="px-4 py-3 border-b border-slate-200 font-medium text-slate-600">${label}</td><td class="px-4 py-3 border-b border-slate-200 text-right"><button class="toggleMetric px-3 py-1 text-xs font-medium text-white bg-green-500 rounded-md" data-chart-id="${id}" data-chart-json='${json}'>Expand Chart <span class="ml-1 text-xs">▼</span></button></td></tr><tr class="chartRowMetric hidden"><td colspan="2" class="p-0 border-b border-slate-200"><div id="${id}" style="width:100%;height:450px;"></div></td></tr></tbody></table></div>`;
-              });
-          }
+          sections.forEach(section => {
+            const data = payload.scanx_data[section.key];
+            if (data && Object.keys(data).length > 0) {
+              scanxHTML += `<h3 class="text-xl font-semibold mb-4 mt-8 text-slate-600">${section.title}</h3>`;
+              switch (section.type) {
+                case 'grid': scanxHTML += render_scanx_grid(data); break;
+                case 'analyst': scanxHTML += render_analyst_rating(data); break;
+                case 'table': scanxHTML += render_generic_scanx_table(data); break;
+                case 'shareholding_table': scanxHTML += render_shareholding_table(data); break;
+                case 'filings_list': scanxHTML += render_filings_list(data); break;
+              }
+            }
+          });
+        }
 
-          let scanxHTML = '';
-          if (payload.scanx_data && !payload.scanx_data.error) {
-              const sections = [
-                  { key: 'basic_metrics', title: 'Key Metrics', type: 'grid' },
-                  { key: 'price_performance', title: 'Price Performance', type: 'grid' },
-                  { key: 'analyst_rating', title: 'Analyst Rating', type: 'analyst' },
-                  { key: 'company_filings', title: 'Company Filings', type: 'filings_list' },
-                  { key: 'peer_comparison', title: 'Peer Comparison', type: 'table' },
-                  { key: 'quarterly_financials', title: 'Quarterly Financials', type: 'table' },
-                  { key: 'balance_sheet', title: 'Balance Sheet', type: 'table' },
-                  { key: 'cash_flow', title: 'Cash Flow', type: 'table' },
-                  { key: 'shareholding_pattern', title: 'Shareholding Pattern', type: 'shareholding_table' }
-              ];
-              sections.forEach(section => {
-                  const data = payload.scanx_data[section.key];
-                  if (data && Object.keys(data).length > 0) {
-                      scanxHTML += `<h3 class="text-xl font-semibold mb-4 mt-8 text-slate-600">${section.title}</h3>`;
-                      switch(section.type) {
-                          case 'grid': scanxHTML += render_scanx_grid(data); break;
-                          case 'analyst': scanxHTML += render_analyst_rating(data); break;
-                          case 'table': scanxHTML += render_generic_scanx_table(data); break;
-                          case 'shareholding_table': scanxHTML += render_shareholding_table(data); break;
-                          case 'filings_list': scanxHTML += render_filings_list(data); break;
-                      }
-                  }
-              });
-          }
-
-          if (screenerHTML || scanxHTML) {
-            const tabsContainer = document.createElement('div');
-            tabsContainer.className = 'bg-white p-6 rounded-xl shadow-lg mt-10';
-            tabsContainer.innerHTML = `
+        if (screenerHTML || scanxHTML) {
+          const tabsContainer = document.createElement('div');
+          tabsContainer.className = 'bg-white p-6 rounded-xl shadow-lg mt-10';
+          tabsContainer.innerHTML = `
                 <h2 class="text-2xl font-bold mb-4 text-slate-700">AI Fundamental Analysis</h2>
                 <div class="border-b border-slate-200">
                     <nav class="-mb-px flex space-x-6" aria-label="Tabs">
@@ -623,110 +1587,146 @@
                     ${scanxHTML || '<p class="text-slate-500">No data available from ScanX.trade.</p>'}
                 </div>
             `;
-            resultsContainer.appendChild(tabsContainer);
+          resultsContainer.appendChild(tabsContainer);
 
-            tabsContainer.querySelectorAll('.tab-button').forEach(button => {
-                button.addEventListener('click', () => {
-                    const targetPanelId = button.dataset.target;
-                    tabsContainer.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
-                    button.classList.add('active');
-                    tabsContainer.querySelectorAll('.tab-panel').forEach(panel => {
-                        panel.classList.add('hidden');
-                    });
-                    tabsContainer.querySelector(targetPanelId).classList.remove('hidden');
-                });
+          tabsContainer.querySelectorAll('.tab-button').forEach(button => {
+            button.addEventListener('click', () => {
+              const targetPanelId = button.dataset.target;
+              tabsContainer.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+              button.classList.add('active');
+              tabsContainer.querySelectorAll('.tab-panel').forEach(panel => {
+                panel.classList.add('hidden');
+              });
+              tabsContainer.querySelector(targetPanelId).classList.remove('hidden');
             });
-          }
-          
-          document.querySelectorAll('.toggleMetric').forEach(btn => {
-                btn.onclick = () => {
-                  const chartRow = btn.closest('tr').nextElementSibling;
-                  const isHidden = chartRow.classList.toggle('hidden');
-                  if (!isHidden) {
-                    const fig = JSON.parse(btn.dataset.chartJson);
-                    Plotly.newPlot(btn.dataset.chartId, fig.data, fig.layout, { responsive: true });
-                    btn.innerHTML = 'Hide Chart <span class="ml-1 text-xs">▲</span>';
-                  } else {
-                    btn.innerHTML = 'Expand Chart <span class="ml-1 text-xs">▼</span>';
-                  }
-                };
-            });
-
-          localStorage.setItem('KaggerAI_' + payload.ticker, JSON.stringify(payload.summary));
-        } catch (err) {
-          if (sseConnection) sseConnection.close();
-          document.getElementById('progress-container').classList.remove('visible');
-          resultsContainer.innerHTML = `<div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg shadow-md" role="alert"><strong class="font-bold">Error:</strong><span class="block sm:inline">${err.message}</span></div>`;
-          console.error('Analysis error:', err);
+          });
         }
-      });
 
-      // Chat functionality
-      const chatBtn = document.getElementById('chatBtn'), chatModal = document.getElementById('chatModal'), chatClose = document.getElementById('chatClose'), chatLog = document.getElementById('chatLog'), chatForm = document.getElementById('chatForm'), chatInput = document.getElementById('chatInput'), modelSelector = document.getElementById('aiModelSelector');
-      chatBtn.onclick = () => chatModal.classList.remove('hidden');
-      chatClose.onclick = () => chatModal.classList.add('hidden');
-      window.addEventListener('keydown', (event) => { if (event.key === 'Escape' && !chatModal.classList.contains('hidden')) { chatModal.classList.add('hidden'); } });
-      chatModal.addEventListener('click', (event) => { if (event.target === chatModal) { chatModal.classList.add('hidden'); } });
-      chatForm.addEventListener('submit', async e => {
-        e.preventDefault();
-        const q = chatInput.value.trim();
-        if (!q) return;
-        appendMessage(q, 'user');
-        chatInput.value = '';
-        chatInput.disabled = true;
-        appendMessage('...', 'bot', true);
-        try {
-          const selectedModel = modelSelector.value;
-          const res = await fetch('/chat', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ question: q, model: selectedModel, analysis_key: currentAnalysisKey}) });
-          const { answer, error, raw_news_summary } = await res.json();
-          removeTypingIndicator();
-          if (error) { appendMessage(`Error: ${error}`, 'error'); } 
-          else {
-            if (raw_news_summary) { appendMessage({ title: 'Latest News Summary', content: raw_news_summary }, 'info'); }
-            appendMessage(answer, 'bot');
-          }
-        } catch(err) { removeTypingIndicator(); appendMessage(`Network error: ${err.message}`, 'error'); }
-        chatInput.disabled = false;
-        chatInput.focus();
-      });
+        document.querySelectorAll('.toggleMetric').forEach(btn => {
+          btn.onclick = () => {
+            const chartRow = btn.closest('tr').nextElementSibling;
+            const isHidden = chartRow.classList.toggle('hidden');
+            if (!isHidden) {
+              const fig = JSON.parse(btn.dataset.chartJson);
+              Plotly.newPlot(btn.dataset.chartId, fig.data, fig.layout, { responsive: true });
+              btn.innerHTML = 'Hide Chart <span class="ml-1 text-xs">▲</span>';
+            } else {
+              btn.innerHTML = 'Expand Chart <span class="ml-1 text-xs">▼</span>';
+            }
+          };
+        });
 
-      function appendMessage(text, sender, isTyping = false) {
-        const messageDiv = document.createElement('div');
-        messageDiv.classList.add('p-3', 'rounded-lg', 'text-sm', 'leading-relaxed', 'break-words');
-        if (isTyping) {
-          messageDiv.id = 'typingIndicator';
-          messageDiv.classList.add('max-w-[80%]', 'bg-slate-200', 'text-slate-700', 'self-start', 'rounded-bl-none');
-          messageDiv.innerHTML = `<div class="flex items-center space-x-1"><div class="w-2 h-2 bg-slate-400 rounded-full animate-pulse delay-75"></div><div class="w-2 h-2 bg-slate-400 rounded-full animate-pulse delay-150"></div><div class="w-2 h-2 bg-slate-400 rounded-full animate-pulse delay-300"></div></div>`;
-        } else if (sender === 'user') {
-          messageDiv.classList.add('max-w-[80%]', 'bg-green-500', 'text-white', 'self-end', 'rounded-br-none');
-          messageDiv.textContent = text;
-        } else if (sender === 'bot') {
-          messageDiv.classList.add('max-w-[80%]', 'bg-slate-200', 'text-slate-700', 'self-start', 'rounded-bl-none');
-          let formattedText = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\*(.*?)\*/g, '<em>$1</em>').replace(/^- (.*$)/gm, '<li class="ml-4 list-disc">$1</li>').replace(/^(\d+)\. (.*$)/gm, '<li class="ml-4 list-decimal">$2</li>').replace(/\n/g, '<br>');
-          messageDiv.innerHTML = formattedText;
-        } else if (sender === 'info') {
-          messageDiv.classList.add('w-full', 'max-w-full', 'bg-yellow-50', 'text-yellow-900', 'border', 'border-yellow-200', 'my-2');
-          const title = document.createElement('h4');
-          title.className = 'font-semibold mb-2 text-yellow-800';
-          title.textContent = text.title;
-          const content = document.createElement('pre');
-          content.className = 'text-xs whitespace-pre-wrap break-words font-mono bg-yellow-100/50 p-2 rounded';
-          content.textContent = text.content;
-          messageDiv.appendChild(title);
-          messageDiv.appendChild(content);
-        } else if (sender === 'error') {
-          messageDiv.classList.add('max-w-full', 'bg-red-100', 'text-red-700', 'self-center', 'w-full', 'text-center');
-          messageDiv.textContent = text;
+        localStorage.setItem('KaggerAI_' + payload.ticker, JSON.stringify(payload.summary));
+      } catch (err) {
+        if (sseConnection) sseConnection.close();
+        document.getElementById('progress-container').classList.remove('visible');
+        resultsContainer.innerHTML = `<div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg shadow-md" role="alert"><strong class="font-bold">Error:</strong><span class="block sm:inline">${err.message}</span></div>`;
+        console.error('Analysis error:', err);
+      }
+    });
+
+    // Chat functionality
+    const chatBtn = document.getElementById('chatBtn'), chatModal = document.getElementById('chatModal'), chatClose = document.getElementById('chatClose'), chatExpand = document.getElementById('chatExpand'), chatLog = document.getElementById('chatLog'), chatForm = document.getElementById('chatForm'), chatInput = document.getElementById('chatInput'), modelSelector = document.getElementById('aiModelSelector');
+
+    let isFullscreen = false;
+    const chatContainer = chatModal.querySelector('div.bg-white');
+
+    chatBtn.onclick = () => chatModal.classList.remove('hidden');
+    chatClose.onclick = () => {
+      chatModal.classList.add('hidden');
+      if (isFullscreen) toggleFullscreen(); // Exit fullscreen when closing
+    };
+
+    // Fullscreen toggle
+    chatExpand.onclick = () => toggleFullscreen();
+
+    function toggleFullscreen() {
+      isFullscreen = !isFullscreen;
+      if (isFullscreen) {
+        chatContainer.classList.remove('w-full', 'max-w-lg', 'h-[70vh]', 'max-h-[600px]');
+        chatContainer.classList.add('w-full', 'h-screen', 'max-w-none', 'max-h-none', 'rounded-none');
+        chatExpand.innerHTML = `
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+          </svg>
+        `;
+        chatExpand.title = "Exit Fullscreen";
+      } else {
+        chatContainer.classList.remove('w-full', 'h-screen', 'max-w-none', 'max-h-none', 'rounded-none');
+        chatContainer.classList.add('w-full', 'max-w-lg', 'h-[70vh]', 'max-h-[600px]', 'rounded-xl');
+        chatExpand.innerHTML = `
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path>
+          </svg>
+        `;
+        chatExpand.title = "Fullscreen";
+      }
+    }
+
+    window.addEventListener('keydown', (event) => { if (event.key === 'Escape' && !chatModal.classList.contains('hidden')) { chatModal.classList.add('hidden'); if (isFullscreen) toggleFullscreen(); } });
+    chatModal.addEventListener('click', (event) => { if (event.target === chatModal) { chatModal.classList.add('hidden'); if (isFullscreen) toggleFullscreen(); } });
+    chatForm.addEventListener('submit', async e => {
+      e.preventDefault();
+      const q = chatInput.value.trim();
+      if (!q) return;
+      appendMessage(q, 'user');
+      chatInput.value = '';
+      chatInput.disabled = true;
+      appendMessage('...', 'bot', true);
+      try {
+        const selectedModel = modelSelector.value;
+        const res = await fetch('/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question: q, model: selectedModel, analysis_key: currentAnalysisKey }) });
+        const { answer, error, raw_news_summary } = await res.json();
+        removeTypingIndicator();
+        if (error) { appendMessage(`Error: ${error}`, 'error'); }
+        else {
+          if (raw_news_summary) { appendMessage({ title: 'Latest News Summary', content: raw_news_summary }, 'info'); }
+          appendMessage(answer, 'bot');
         }
-        chatLog.appendChild(messageDiv);
-        chatLog.scrollTop = chatLog.scrollHeight;
+      } catch (err) { removeTypingIndicator(); appendMessage(`Network error: ${err.message}`, 'error'); }
+      chatInput.disabled = false;
+      chatInput.focus();
+    });
+
+    function appendMessage(text, sender, isTyping = false) {
+      const messageDiv = document.createElement('div');
+      messageDiv.classList.add('p-3', 'rounded-lg', 'text-sm', 'leading-relaxed', 'break-words');
+      if (isTyping) {
+        messageDiv.id = 'typingIndicator';
+        messageDiv.classList.add('max-w-[80%]', 'bg-slate-200', 'text-slate-700', 'self-start', 'rounded-bl-none');
+        messageDiv.innerHTML = `<div class="flex items-center space-x-1"><div class="w-2 h-2 bg-slate-400 rounded-full animate-pulse delay-75"></div><div class="w-2 h-2 bg-slate-400 rounded-full animate-pulse delay-150"></div><div class="w-2 h-2 bg-slate-400 rounded-full animate-pulse delay-300"></div></div>`;
+      } else if (sender === 'user') {
+        messageDiv.classList.add('max-w-[80%]', 'bg-green-500', 'text-white', 'self-end', 'rounded-br-none');
+        messageDiv.textContent = text;
+      } else if (sender === 'bot') {
+        messageDiv.classList.add('max-w-full', 'bg-slate-200', 'text-slate-700', 'self-start', 'rounded-bl-none', 'industry-report');
+        // Use the enhanced markdown renderer (without TOC)
+        const { html } = renderMarkdownToHtml(text, false);
+        messageDiv.innerHTML = html;
+      } else if (sender === 'info') {
+        messageDiv.classList.add('w-full', 'max-w-full', 'bg-yellow-50', 'text-yellow-900', 'border', 'border-yellow-200', 'my-2');
+        const title = document.createElement('h4');
+        title.className = 'font-semibold mb-2 text-yellow-800';
+        title.textContent = text.title;
+        const content = document.createElement('pre');
+        content.className = 'text-xs whitespace-pre-wrap break-words font-mono bg-yellow-100/50 p-2 rounded';
+        content.textContent = text.content;
+        messageDiv.appendChild(title);
+        messageDiv.appendChild(content);
+      } else if (sender === 'error') {
+        messageDiv.classList.add('max-w-full', 'bg-red-100', 'text-red-700', 'self-center', 'w-full', 'text-center');
+        messageDiv.textContent = text;
       }
-      
-      function removeTypingIndicator() {
-        const typingIndicator = document.getElementById('typingIndicator');
-        if (typingIndicator) typingIndicator.remove();
-      }
-  let currentAnalysisKey = null; 
+      chatLog.appendChild(messageDiv);
+      chatLog.scrollTop = chatLog.scrollHeight;
+    }
+
+    function removeTypingIndicator() {
+      const typingIndicator = document.getElementById('typingIndicator');
+      if (typingIndicator) typingIndicator.remove();
+    }
+    let currentAnalysisKey = null; 
   </script>
-</body> 
+</body>
+
 </html>
