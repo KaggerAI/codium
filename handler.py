@@ -2149,75 +2149,62 @@ def extract_metrics_via_ai(ticker):
     Extract financial metrics using Perplexity sonar model with web search.
     Returns a dictionary with P/E, P/B, Dividend Yield, ROCE, ROE.
     """
-    system_prompt = f"""You are a financial data specialist. Your task is to find the latest financial metrics for the company with ticker symbol {ticker} (NSE India).
+    print(f"INFO: Starting AI metrics extraction for {ticker}...")
+    
+    # Much simpler, more direct prompt
+    user_prompt = f"""Search the web and find the latest financial ratios for {ticker} stock (NSE India). 
 
-**SEARCH INSTRUCTIONS:**
-1. Search multiple reliable Indian financial websites: screener.in, moneycontrol.com, investing.com
-2. Use the NSE ticker symbol "{ticker}.NS" or just "{ticker}" when searching
-3. Look for the MOST RECENT data available (TTM or latest quarter/year)
-4. If one source shows "N/A" or blank, try another source
-5. Try at least 2-3 different sources per metric before giving up
+Find these 5 metrics from screener.in, moneycontrol.com, or investing.com:
+1. P/E Ratio (Price to Earnings)
+2. P/B Ratio (Price to Book)
+3. Dividend Yield percentage
+4. ROCE percentage (Return on Capital Employed)
+5. ROE percentage (Return on Equity)
 
-**Required Metrics:**
-1. **P/E Ratio** (Price-to-Earnings) - Also search for "PE Ratio", "Price Earnings Ratio"
-2. **P/B Ratio** (Price-to-Book) - Also search for "PB Ratio", "Price to Book Value"  
-3. **Dividend Yield** (%) - Also search for "Annual Dividend Yield", "Dividend %"
-4. **ROCE** (Return on Capital Employed) in % - Also search for "Return on Capital"
-5. **ROE** (Return on Equity) in % - Also search for "Return on Equity"
+Return ONLY this JSON format, nothing else:
+{{"pe_ratio": "value", "pb_ratio": "value", "dividend_yield": "value %", "roce": "value %", "roe": "value %"}}
 
-**Search Strategy:**
-- Try screener.in: "screener.in {ticker} financial ratios"
-- Try moneycontrol: "moneycontrol {ticker} key ratios"
-- Try investing.com: "investing.com {ticker} ratios"
-
-**Output Format:**
-
-Return ONLY a valid JSON object with these exact keys:
-
-```json
-{{
-  "pe_ratio": "25.3",
-  "pb_ratio": "3.2",
-  "dividend_yield": "1.5 %",
-  "roce": "18.5 %",
-  "roe": "16.2 %"
-}}
-```
-
-**CRITICAL RULES:**
-- ONLY use "N/A" if you genuinely cannot find the metric after searching 2-3 sources
-- Include the % symbol for percentage metrics (dividend_yield, roce, roe)
-- Return just the number for P/E and P/B (no % symbol)
-- All values must be strings (in quotes)
-- Return ONLY the JSON object, nothing else
-"""
+Use "N/A" only if you cannot find the metric after searching multiple sources."""
     
     try:
         messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"Find the latest financial metrics for {ticker}"}
+            {"role": "user", "content": user_prompt}
         ]
         
         # Use Perplexity sonar for web search
-        response = call_perplexity_api(messages, model="sonar")
+        print(f"INFO: Calling Perplexity sonar API for {ticker} metrics...")
+        response = call_perplexity_api(messages, model="sonar", temperature=0.3, timeout=30)
+        print(f"INFO: Received response from Perplexity (length: {len(response)} chars)")
+        print(f"DEBUG: Response: {response}")
         
         # Try to parse JSON from response
-        json_match = re.search(r'```json\s*(\{.*?\})\s*```', response, re.DOTALL)
+        # First try in code fence
+        json_match = re.search(r'```(?:json)?\s*(\{[^}]+\})\s*```', response, re.DOTALL)
         if json_match:
+            print("DEBUG: Found JSON in code fence")
             metrics = json.loads(json_match.group(1))
         else:
-            # Try to parse if response is pure JSON
-            metrics = json.loads(response.strip())
+            # Try to find JSON object anywhere in response
+            json_obj_match = re.search(r'\{[^{}]*"pe_ratio"[^{}]*"roe"[^{}]*\}', response, re.DOTALL)
+            if json_obj_match:
+                print("DEBUG: Found JSON object in response")
+                metrics = json.loads(json_obj_match.group(0))
+            else:
+                # Last resort: try to parse entire response
+                print("DEBUG: Trying to parse entire response as JSON")
+                metrics = json.loads(response.strip())
         
-        print(f"DEBUG: AI extracted metrics via sonar: {metrics}")
+        print(f"SUCCESS: AI extracted metrics via sonar: {metrics}")
         return metrics
         
     except json.JSONDecodeError as e:
-        print(f"WARNING: Failed to parse AI metrics JSON: {e}")
-        print(f"DEBUG: Raw response: {response[:500]}")
+        print(f"ERROR: Failed to parse AI metrics JSON: {e}")
+        print(f"DEBUG: Full response was: {response}")
         return {}
     except Exception as e:
-        print(f"WARNING: Failed to extract metrics via AI for {ticker}: {e}")
+        print(f"ERROR: Failed to extract metrics via AI for {ticker}: {e}")
+        import traceback
+        traceback.print_exc()
         return {}
 
 
