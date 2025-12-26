@@ -344,7 +344,11 @@ def call_openai_api(messages, model="gpt-4.1-mini", expect_json_format_flag=Fals
         print(f"ERROR in call_openai_api: {e}")
         raise
 
-def call_perplexity_api(messages, model="sonar-pro", temperature=1, timeout=120):
+def call_perplexity_api(messages, model="sonar-pro", temperature=1, timeout=120, use_streaming=False):
+    """
+    Call Perplexity API with optional streaming support.
+    Streaming keeps the connection alive for long-running requests (Azure compatibility).
+    """
     if not PERPLEXITY_API_KEY:
         raise ValueError("Perplexity API key is not configured.")
     try:
@@ -356,21 +360,50 @@ def call_perplexity_api(messages, model="sonar-pro", temperature=1, timeout=120)
             "temperature": temperature,
         }
         
+        # Enable streaming for long-running models
+        if use_streaming or model == "sonar-deep-research":
+            payload["stream"] = True
+        
         headers = {
             "Authorization": f"Bearer {PERPLEXITY_API_KEY}",
             "Content-Type": "application/json"
         }
         
-        response = requests.post(url, headers=headers, json=payload, timeout=timeout)
-        
-        # Check for HTTP errors
-        response.raise_for_status()
-        
-        # Ensure we have valid JSON
-        if response.content.strip():
-            return response.json()['choices'][0]['message']['content']
+        if payload.get("stream"):
+            # Streaming mode - read chunks as they come
+            full_content = ""
+            with requests.post(url, headers=headers, json=payload, timeout=timeout, stream=True) as response:
+                response.raise_for_status()
+                
+                for line in response.iter_lines():
+                    if line:
+                        line_str = line.decode('utf-8')
+                        if line_str.startswith('data: '):
+                            data_str = line_str[6:]  # Remove 'data: ' prefix
+                            if data_str.strip() == '[DONE]':
+                                break
+                            try:
+                                chunk_data = json.loads(data_str)
+                                if 'choices' in chunk_data and len(chunk_data['choices']) > 0:
+                                    delta = chunk_data['choices'][0].get('delta', {})
+                                    content = delta.get('content', '')
+                                    if content:
+                                        full_content += content
+                            except json.JSONDecodeError:
+                                continue
+            
+            if not full_content:
+                raise ValueError("Empty streaming response from Perplexity API")
+            return full_content
         else:
-            raise ValueError("Empty response from Perplexity API")
+            # Non-streaming mode (original behavior)
+            response = requests.post(url, headers=headers, json=payload, timeout=timeout)
+            response.raise_for_status()
+            
+            if response.content.strip():
+                return response.json()['choices'][0]['message']['content']
+            else:
+                raise ValueError("Empty response from Perplexity API")
             
     except requests.exceptions.JSONDecodeError:
         print(f"Non-JSON response: {response.text}")
