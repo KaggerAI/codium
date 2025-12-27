@@ -569,6 +569,15 @@ def get_data_schema_description(current_analysis_context):
         schema_lines.append("   - This is the **primary source for all management commentary, financial results, KPIs, and future guidance.**")
         schema_lines.append("   - To retrieve this data, specify in your plan: `\"documents\": {\"retrieve\": true}`.")
 
+    # 5. Peer Comparison Data
+    peer_comparison_data = current_analysis_context.get("peer_comparison")
+    if peer_comparison_data and isinstance(peer_comparison_data, list):
+        schema_lines.append("\n**5. Peer Comparison (section_name: 'peer_comparison')**")
+        schema_lines.append("   - A list of peer company dictionaries with financial metrics for competitive analysis.")
+        schema_lines.append("   - Each peer has: ticker, name, cmp (current price), market_cap, pe_ratio, pb_ratio, dividend_yield, roce, roe, sales_growth_yoy, ebitda_growth_yoy, npm.")
+        schema_lines.append("   - **Use this for comparative questions** like 'How does the company compare to peers?', 'Which peer has best ROE?', 'Is P/E higher than peers?'")
+        schema_lines.append("   - To retrieve peer data, specify in your plan: `\"peer_comparison\": {\"retrieve\": true}`.")
+
     schema_lines.append("\n**General Instructions for AI Planner (Detailed in System Prompt):**")
     schema_lines.append("Your primary goal is to determine what data is needed (direct or for calculation) to answer the user.")
     schema_lines.append("You MUST use the exact names for tables, metrics, summary keys, and series names AS LISTED ABOVE in this dynamically generated schema when forming your `retrieve_data` plan.")
@@ -712,6 +721,12 @@ def retrieve_data_based_on_plan(plan_retrieve_data_section, full_context):
         if focused_data["documents"]:
             retrieved_something = True
     # print(f"DEBUG: Retrieved Documents: {focused_data.get('documents')}") 
+
+    # Retrieve from Peer Comparison (section_name: 'peer_comparison')
+    if "peer_comparison" in plan and plan["peer_comparison"].get("retrieve") and full_context.get("peer_comparison"):
+        focused_data["peer_comparison"] = full_context.get("peer_comparison")
+        if focused_data["peer_comparison"]:
+            retrieved_something = True
 
     if not retrieved_something and "error" not in focused_data :
         focused_data["retrieval_info"] = "AI plan's 'retrieve_data' section did not specify any known data sections or the requested data was not found."
@@ -2369,7 +2384,8 @@ async def get_analysis_for_ticker_async(tick):
         "fundamentals": fund_data_for_ai_context,  # <-- The AI-friendly version
         "valuation_and_margin_data": parsed_valuation_data, 
         "documents": latest_documents,
-        "technical_data_df": df
+        "technical_data_df": df,
+        "peer_comparison": peer_comparison_data  # <-- NEW: For AI chatbot access
     }
     
     # This dictionary is what the frontend needs. It uses the JSON strings.
