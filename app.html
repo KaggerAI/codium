@@ -466,6 +466,62 @@
     html {
       scroll-behavior: smooth;
     }
+
+    /* === PEER COMPARISON TABLE === */
+    .peer-comparison-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+    }
+
+    .peer-comparison-table th {
+      background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+      color: white;
+      padding: 0.75rem 0.5rem;
+      text-align: center;
+      font-weight: 600;
+      position: sticky;
+      top: 0;
+      white-space: nowrap;
+    }
+
+    .peer-comparison-table td {
+      padding: 0.6rem 0.5rem;
+      text-align: center;
+      border-bottom: 1px solid #e2e8f0;
+    }
+
+    .peer-comparison-table tr:hover {
+      background-color: #f1f5f9;
+    }
+
+    .peer-comparison-table tr.highlight-company {
+      background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%);
+      font-weight: 600;
+    }
+
+    .peer-comparison-table tr.highlight-company:hover {
+      background: linear-gradient(135deg, #bbf7d0 0%, #86efac 100%);
+    }
+
+    .peer-comparison-table .company-name {
+      text-align: left;
+      font-weight: 600;
+      color: #1e40af;
+    }
+
+    .peer-comparison-table .positive {
+      color: #16a34a;
+    }
+
+    .peer-comparison-table .negative {
+      color: #dc2626;
+    }
+
+    .peer-table-container {
+      overflow-x: auto;
+      max-width: 100%;
+    }
   </style>
 
 </head>
@@ -1520,10 +1576,17 @@
           ];
 
           const cards = metricCards.map(m => {
-            const value = metrics[m.key] || 'N/A';
+            let value = metrics[m.key] || 'N/A';
             const isGrowth = m.key.includes('growth');
-            const isPositive = isGrowth && value.includes('+');
-            const isNegative = isGrowth && value.includes('-');
+
+            // Add % suffix for percentage metrics if not already present
+            const percentageMetrics = ['dividend_yield', 'roce', 'roe', 'npm', 'sales_growth_yoy', 'ebitda_growth_yoy'];
+            if (percentageMetrics.includes(m.key) && value !== 'N/A' && !String(value).includes('%')) {
+              value = value + ' %';
+            }
+
+            const isPositive = isGrowth && String(value).includes('+');
+            const isNegative = isGrowth && String(value).includes('-');
 
             return `
               <div class="bg-white p-4 rounded-lg shadow-sm border border-green-100 hover:shadow-md transition-all hover:border-green-300">
@@ -1538,6 +1601,101 @@
               <h3 class="text-xl font-bold text-green-800 mb-4">📊 Key Metrics Snapshot</h3>
               <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                 ${cards}
+              </div>
+            </div>
+          `;
+        }
+
+        // Render Peer Comparison Table
+        function renderPeerComparisonTable(peerData) {
+          if (!peerData || (!peerData.company && !peerData.peers?.length)) return '';
+
+          const company = peerData.company || {};
+          const peers = peerData.peers || [];
+
+          // If no data at all, return empty
+          if (Object.keys(company).length === 0 && peers.length === 0) return '';
+
+          // Helper to format and add positive/negative classes
+          const formatValue = (value, isGrowthMetric = false) => {
+            if (!value || value === 'N/A') return '<span class="text-slate-400">N/A</span>';
+            let strVal = String(value).trim();
+
+            // For growth metrics, add color coding and ensure % suffix
+            if (isGrowthMetric) {
+              // Add % if not present
+              if (!strVal.includes('%')) {
+                strVal = strVal + ' %';
+              }
+
+              if (strVal.includes('-') && !strVal.includes('N/A')) {
+                return `<span class="negative">${strVal}</span>`;
+              } else if (parseFloat(strVal) > 0 || strVal.includes('+')) {
+                return `<span class="positive">${strVal}</span>`;
+              }
+            }
+            return strVal;
+          };
+
+          // Helper to add % suffix for percentage metrics
+          const formatPercent = (value) => {
+            if (!value || value === 'N/A') return '<span class="text-slate-400">N/A</span>';
+            const strVal = String(value).trim();
+            // Already has % sign
+            if (strVal.includes('%')) return strVal;
+            // Add % if it's a number
+            if (!isNaN(parseFloat(strVal))) return strVal + ' %';
+            return strVal;
+          };
+
+          // Build table rows - company first (highlighted), then peers
+          const allRows = [company, ...peers];
+          const rowsHtml = allRows.map((row, idx) => {
+            const isMainCompany = idx === 0;
+            const rowClass = isMainCompany ? 'highlight-company' : '';
+
+            return `
+              <tr class="${rowClass}">
+                <td class="company-name">${row.name || row.ticker || 'N/A'}</td>
+                <td>${formatValue(row.cmp)}</td>
+                <td>${formatValue(row.market_cap)}</td>
+                <td>${formatValue(row.pe_ratio)}</td>
+                <td>${formatValue(row.pb_ratio)}</td>
+                <td>${formatPercent(row.dividend_yield)}</td>
+                <td>${formatPercent(row.roce)}</td>
+                <td>${formatPercent(row.roe)}</td>
+                <td>${formatValue(row.sales_growth_yoy, true)}</td>
+                <td>${formatValue(row.ebitda_growth_yoy, true)}</td>
+                <td>${formatPercent(row.npm)}</td>
+              </tr>
+            `;
+          }).join('');
+
+          return `
+            <div class="bg-white p-6 rounded-xl shadow-lg mb-8">
+              <h2 class="text-2xl font-bold mb-4 text-slate-700">📊 Peer Comparison</h2>
+              <p class="text-sm text-slate-500 mb-4">Compare key financial metrics across industry peers. Main company is highlighted.</p>
+              <div class="peer-table-container">
+                <table class="peer-comparison-table">
+                  <thead>
+                    <tr>
+                      <th>Company</th>
+                      <th>CMP (₹)</th>
+                      <th>Market Cap (Cr)</th>
+                      <th>P/E</th>
+                      <th>P/B</th>
+                      <th>Div Yield</th>
+                      <th>ROCE</th>
+                      <th>ROE</th>
+                      <th>Sales Gr.</th>
+                      <th>EBITDA Gr.</th>
+                      <th>NPM</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${rowsHtml}
+                  </tbody>
+                </table>
               </div>
             </div>
           `;
@@ -1561,14 +1719,29 @@
         }
 
         let aiScoreHTML = '';
-        // We use the dummy data for this test
+        // AI Scores with horizontal tabs instead of vertical stack
         if (payload.ai_scores && Array.isArray(payload.ai_scores) && payload.ai_scores.length) {
           aiScoreHTML = `
             <div class="bg-white p-6 rounded-xl shadow-lg">
                 <h2 class="text-2xl font-bold mb-4 text-slate-700">AI Score</h2>
-                <div class="space-y-6">
+                
+                <!-- Tab Headers - 4 horizontal tabs -->
+                <div class="flex border-b border-slate-200 mb-4">
                     ${payload.ai_scores.map((score, idx) => `
-                        <div class="p-4 rounded-lg border border-slate-200 shadow-sm bg-slate-50">
+                        <button class="ai-score-tab flex-1 px-4 py-3 text-sm font-medium transition-colors border-b-2 ${idx === 0 ? 'border-green-500 text-green-700 bg-green-50' : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50'}"
+                                data-tab-idx="${idx}">
+                            <div class="text-center">
+                                <div class="font-semibold">${score.label}</div>
+                                <div class="text-xl font-bold mt-1">${score.value}/10</div>
+                            </div>
+                        </button>
+                    `).join('')}
+                </div>
+                
+                <!-- Tab Content Panels -->
+                ${payload.ai_scores.map((score, idx) => `
+                    <div class="ai-score-panel ${idx === 0 ? '' : 'hidden'}" data-panel-idx="${idx}">
+                        <div class="p-4 rounded-lg border border-slate-200 bg-slate-50">
                             <div class="flex items-center justify-between">
                                 <div>
                                     <div class="text-lg font-semibold text-green-700">${score.label}</div>
@@ -1583,8 +1756,8 @@
                                 <div id="aiChart2_${idx}" style="height:300px;"></div>
                             </div>
                         </div>
-                    `).join('')}
-                </div>
+                    </div>
+                `).join('')}
             </div>
             `;
         }
@@ -1593,10 +1766,16 @@
 
         let technicalSummaryHTML = '';
         if (payload.summary) {
-          technicalSummaryHTML = `<div class="bg-white p-6 rounded-xl shadow-lg"><h2 class="text-2xl font-bold mb-6 text-slate-700">AI Technical Analysis</h2><div class="overflow-x-auto"><table class="w-full border border-slate-200"><tbody class="text-sm">${payload.summary.map(row => `<tr class="even:bg-slate-50 hover:bg-slate-100 transition-colors duration-150"><td class="px-4 py-3 border-b border-slate-200 font-medium text-slate-600">${row.key}</td><td class="px-4 py-3 border-b border-slate-200 text-slate-700 relative">${row.value}</td></tr>`).join('')}</tbody></table></div></div>`;
+          technicalSummaryHTML = `<div class="bg-white p-6 rounded-xl shadow-lg"><h2 class="text-2xl font-bold mb-6 text-slate-700">AI Technical Analysis</h2><div class="overflow-x-auto"><table id="technicalSummaryTable" class="w-full border border-slate-200"><tbody class="text-sm">${payload.summary.map(row => `<tr class="even:bg-slate-50 hover:bg-slate-100 transition-colors duration-150"><td class="px-4 py-3 border-b border-slate-200 font-medium text-slate-600">${row.key}</td><td class="px-4 py-3 border-b border-slate-200 text-slate-700 relative">${row.value}</td></tr>`).join('')}</tbody></table></div></div>`;
         }
 
-        resultsContainer.innerHTML = keyMetricsHTML + summarySectionHTML + aiScoreHTML + technicalSummaryHTML;
+        // NEW: Peer Comparison Table
+        let peerComparisonHTML = '';
+        if (payload.peer_comparison) {
+          peerComparisonHTML = renderPeerComparisonTable(payload.peer_comparison);
+        }
+
+        resultsContainer.innerHTML = keyMetricsHTML + summarySectionHTML + peerComparisonHTML + aiScoreHTML + technicalSummaryHTML;
 
         // Attach click handlers for AI Score charts
         // We check our payload.ai_scores variable for the test
@@ -1618,6 +1797,33 @@
               }
             };
           });
+
+          // Tab switching for AI Scores
+          document.querySelectorAll('.ai-score-tab').forEach(tab => {
+            tab.onclick = function () {
+              const tabIdx = tab.dataset.tabIdx;
+
+              // Update tab styles
+              document.querySelectorAll('.ai-score-tab').forEach((t, i) => {
+                if (i == tabIdx) {
+                  t.classList.add('border-green-500', 'text-green-700', 'bg-green-50');
+                  t.classList.remove('border-transparent', 'text-slate-500');
+                } else {
+                  t.classList.remove('border-green-500', 'text-green-700', 'bg-green-50');
+                  t.classList.add('border-transparent', 'text-slate-500');
+                }
+              });
+
+              // Show/hide panels
+              document.querySelectorAll('.ai-score-panel').forEach((panel, i) => {
+                if (i == tabIdx) {
+                  panel.classList.remove('hidden');
+                } else {
+                  panel.classList.add('hidden');
+                }
+              });
+            };
+          });
         }
 
         // =====================================================================
@@ -1628,7 +1834,7 @@
         const techCharts = [
           { key: 'Price-Action Trend (based on Close prices)', json: payload.chart_close_json, id: 'chart-close' }, { key: 'Price-Action Trend (based on High/Low prices)', json: payload.chart_hl_json, id: 'chart-hl' }, { key: 'Market Structure (based on EMA Stack)', json: payload.chart_ema_json, id: 'chart-ema' }, { key: 'Market Sentiment (based on RSI)', json: payload.chart_rsi_json, id: 'chart-rsi' }, { key: 'Accumulating or Distributing (based on Volume)', json: payload.chart_adl_json, id: 'chart-adl' }, { key: 'Relative Strength vs Nifty', json: payload.chart_rs_json, id: 'chart-rs' },
         ];
-        const summaryTable = resultsContainer.querySelector('table tbody');
+        const summaryTable = document.querySelector('#technicalSummaryTable tbody');
         if (summaryTable) {
           techCharts.forEach(({ key, json, id }) => {
             if (!json) return;

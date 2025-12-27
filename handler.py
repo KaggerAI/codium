@@ -344,10 +344,11 @@ def call_openai_api(messages, model="gpt-4.1-mini", expect_json_format_flag=Fals
         print(f"ERROR in call_openai_api: {e}")
         raise
 
-def call_perplexity_api(messages, model="sonar-pro", temperature=1, timeout=120, use_streaming=False):
+def call_perplexity_api(messages, model="sonar-pro", temperature=1, timeout=120, use_streaming=False, enable_pro_search=False):
     """
-    Call Perplexity API with optional streaming support.
+    Call Perplexity API with optional streaming support and Pro Search.
     Streaming keeps the connection alive for long-running requests (Azure compatibility).
+    Pro Search enables multi-step reasoning and deeper web research.
     """
     if not PERPLEXITY_API_KEY:
         raise ValueError("Perplexity API key is not configured.")
@@ -359,6 +360,12 @@ def call_perplexity_api(messages, model="sonar-pro", temperature=1, timeout=120,
             "messages": messages,
             "temperature": temperature,
         }
+        
+        # Enable Pro Search for better research capabilities
+        if enable_pro_search:
+            payload["web_search_options"] = {
+                "search_type": "pro"  # Enables multi-step reasoning and deeper search
+            }
         
         # Enable streaming for long-running models
         if use_streaming or model == "sonar-deep-research":
@@ -1451,241 +1458,6 @@ def chat():
         traceback.print_exc(file=sys.stderr)
         return jsonify({'error': f'An unexpected error occurred: {str(e)}', 'trace': traceback.format_exc()}), 500
 
-# @app.route('/chat', methods=['POST'])
-# def chat():
-#     try:
-#         data = request.get_json(force=True)
-#         print("DEBUG: Request JSON parsed successfully.", file=sys.stderr)
-#         user_question = data.get('question', '').strip()
-#         selected_model = data.get('model', 'o4-mini')
-#         analysis_key = data.get('analysis_key')
-
-#         if not analysis_key:
-#              return jsonify({'answer': 'Analysis key is missing. Please analyze a stock first.'}), 200
-
-#         # --- ROBUST RETRIEVAL LOGIC ---
-#         last_analysis = None
-#         retry_count = 0
-#         max_retries = 2
-        
-#         while retry_count < max_retries:
-#             try:
-#                 # Fetch the compressed bytes from Redis
-#                 print(f"DEBUG: Attempting Redis Fetch {retry_count+1}...", file=sys.stderr)
-#                 cached_blob = cache.get(analysis_key)
-                
-#                 if cached_blob:
-#                     print(f"DEBUG: Blob found. Size: {len(cached_blob)} bytes. Decompressing...", file=sys.stderr)
-#                     # Decompress and Unpickle
-#                     try:
-#                         decompressed_data = zlib.decompress(cached_blob)
-#                         print(f"DEBUG: Decompressed. Size: {len(decompressed_data)} bytes. Unpickling...", file=sys.stderr)
-
-#                         last_analysis = pickle.loads(decompressed_data)
-#                         print("DEBUG: Unpickle Successful.", file=sys.stderr)
-#                         print(f"INFO: Successfully decompressed chat data.")
-#                         break # Success!
-#                     except Exception as unpack_error:
-#                         print(f"WARN: Failed to decompress data (might be raw?): {unpack_error}")
-#                         # Fallback: Maybe it wasn't compressed?
-#                         last_analysis = cached_blob
-#                         break
-                
-#             except Exception as e:
-#                 print(f"WARN: Redis fetch failed (Attempt {retry_count+1}). Error: {e}", file=sys.stderr)
-#                 time.sleep(0.5)
-#             retry_count += 1
-            
-#         if not last_analysis or not last_analysis.get("ticker"):
-#             print("ERROR: Final Decision - Context unavailable.", file=sys.stderr)
-#             return jsonify({'answer': 'Context data unavailable (Cache Miss). Please re-analyze the stock.'}), 200
-
-
-#         if last_analysis:
-#             size_kb = sys.getsizeof(str(last_analysis)) / 1024
-#             print(f"INFO: Chat Data Loaded. Size: {size_kb:.2f} KB. Keys: {list(last_analysis.keys())}", file=sys.stderr)
-#         else:
-#             print("ERROR: Chat Data is None after fetch.", file=sys.stderr)
-#         # ------------------------------
-
-#         print(f"AI chatbot received question with selected model: {selected_model}")
-
-
-
-#         if not user_question:
-#             return jsonify({'error': 'No question provided'}), 400
-#         if not last_analysis or not last_analysis.get("ticker"):
-#             return jsonify({'answer': 'Please analyze a stock first. No data context is available.'}), 200
-
-#         is_best_mode = selected_model == 'best'
-#         central_brain_plan = None
-#         parsed_plan = {}
-#         ai_plan_json_str = "{}"
-#         thought_process_str = "No thought process generated."
-
-#         if is_best_mode:
-#             # =================================================================
-#             # STAGE 1: CENTRAL BRAIN - STRATEGIC PLANNING
-#             # =================================================================
-#             log_progress("Central Brain is analyzing the query and forming a strategy...")
-#             central_brain_prompt = get_central_brain_prompt()
-#             brain_messages = [
-#                 {"role": "system", "content": central_brain_prompt},
-#                 {"role": "user", "content": f"User Question: \"{user_question}\""}
-#             ]
-            
-#             central_brain_response_str = call_generative_ai_model("gpt-4.1-mini", brain_messages, temperature=1)
-
-#             try:
-#                 json_match = re.search(r"```json\s*([\s\S]*?)\s*```", central_brain_response_str, re.MULTILINE)
-                
-#                 if json_match:
-#                     # If a block is found, extract and parse it
-#                     central_brain_plan_str = json_match.group(1)
-#                     central_brain_plan = json.loads(central_brain_plan_str)
-#                 else:
-#                     # If no block is found, try to parse the entire response string directly
-#                     # This handles cases where the model returns pure JSON without markdown
-#                     central_brain_plan = json.loads(central_brain_response_str)
-
-#                 thought_process_str = central_brain_plan.get("thought_process", "Central Brain planning complete.")
-#                 print(f"--- Central Brain Plan ---\n{json.dumps(central_brain_plan, indent=2)}\n--------------------------")
-                
-#             except (json.JSONDecodeError, AttributeError) as e:
-#                 print(f"ERROR: Could not parse Central Brain plan. Error: {e}. Response: {central_brain_response_str}")
-#                 return jsonify({'error': 'Failed to generate a strategic plan. Please try rephrasing your question.'}), 500
-
-#             # =================================================================
-#             # STAGE 2: TACTICAL PLANNER - CREATING EXECUTABLE JSON
-#             # =================================================================
-#             log_progress("Tactical Planner is creating a detailed data retrieval plan...")
-#             schema_description = get_data_schema_description(last_analysis)
-#             planning_system_prompt = get_planning_system_prompt()
-            
-#             planner_user_content = (
-#                 f"User Question: \"{user_question}\"\n\n"
-#                 f"Central Brain Directives:\n{json.dumps(central_brain_plan, indent=2)}\n\n"
-#                 f"Data Schema Description:\n{schema_description}\n\n"
-#                 f"Full 'last_analysis' context (for reference, e.g., current price):\n{json.dumps(last_analysis, indent=2, default=str)[:2000]}"
-#             )
-
-#             planner_messages = [
-#                 {"role": "system", "content": planning_system_prompt},
-#                 {"role": "user", "content": planner_user_content}
-#             ]
-            
-#             tactical_plan_response_str = call_openai_api(planner_messages, model='o4-mini', expect_json_format_flag=True, temperature=1)
-            
-#             # ===================================================================
-#             # START: CORRECTED TACTICAL PLAN PARSING LOGIC
-#             # ===================================================================
-#             try:
-#                 # Use regex to robustly find the JSON block, even if the model includes extra text.
-#                 json_match = re.search(r"```json\s*([\s\S]*?)\s*```", tactical_plan_response_str, re.MULTILINE)
-                
-#                 if json_match:
-#                     ai_plan_json_str = json_match.group(1)
-#                     parsed_plan = json.loads(ai_plan_json_str)
-#                 else:
-#                     # Fallback: If no ```json``` block is found, try to parse the whole string.
-#                     # This handles cases where the model correctly returns *only* JSON.
-#                     parsed_plan = json.loads(tactical_plan_response_str)
-#                     ai_plan_json_str = tactical_plan_response_str
-
-#                 print(f"--- Tactical Execution Plan ---\n{json.dumps(parsed_plan, indent=2)}\n--------------------------")
-
-#             except json.JSONDecodeError as e:
-#                 print(f"ERROR: Could not parse Tactical Plan. Error: {e}. Response: {tactical_plan_response_str}")
-#                 return jsonify({'error': 'Failed to create a detailed execution plan.'}), 500
-#             # ===================================================================
-#             # END: CORRECTED TACTICAL PLAN PARSING LOGIC
-#             # ===================================================================
-
-#         else: # Standard, single-agent flow
-#             log_progress("Creating a plan to answer the user's question...")
-#             schema_description = get_data_schema_description(last_analysis)
-#             planning_system_prompt = get_planning_system_prompt()
-#             planning_messages = [
-#                 {"role": "system", "content": planning_system_prompt},
-#                 {"role": "user", "content": f"User Question: \"{user_question}\"\n\nData Schema Description:\n{schema_description}\n\nFull 'last_analysis' context:\n{json.dumps(last_analysis, indent=2, default=str)[:2000]}"}
-#             ]
-            
-#             full_response_str = call_openai_api(planning_messages, model='o4-mini', expect_json_format_flag=False, temperature=1)
-            
-#             try:
-#                 json_match = re.search(r"```json\s*([\s\S]*?)\s*```", full_response_str, re.MULTILINE)
-#                 thought_process_str = re.split(r"```json", full_response_str)[0].replace("**Thought Process:**", "").strip()
-#                 if json_match:
-#                     ai_plan_json_str = json_match.group(1)
-#                     parsed_plan = json.loads(ai_plan_json_str)
-#                 else:
-#                     raise ValueError("No JSON plan found in planner response.")
-#             except Exception as e:
-#                  print(f"ERROR: Could not parse standard plan. Error: {e}. Response: {full_response_str}", file=sys.stderr)
-#                  return jsonify({'error': 'Failed to create a standard execution plan.'}), 500
-
-#         # =================================================================
-#         # STAGE 3: EXECUTION (Common to both modes)
-#         # =================================================================
-#         log_progress("Executing plan: Fetching news and internal data...")
-#         news_summary = None
-#         news_plan = parsed_plan.get("fetch_external_news", {})
-#         if news_plan.get("needed"):
-#             sonar_prompt = news_plan.get("prompt_for_sonar", f"Get the latest news for {last_analysis.get('ticker')}")
-#             try:
-#                 news_messages = [{"role": "user", "content": sonar_prompt}]
-#                 news_summary = call_perplexity_api(news_messages, model="sonar")
-#             except Exception as e:
-#                 print(f"ERROR: News fetching failed: {e}")
-#                 news_summary = f"Error: Failed to fetch real-time news. {e}"
-
-#         retrieve_data_spec = parsed_plan.get("retrieve_data", {})
-#         retrieved_fundamental_data = retrieve_data_based_on_plan(retrieve_data_spec, last_analysis)
-
-#         log_progress("Performing financial calculations...")
-#         calculations_spec = parsed_plan.get("perform_calculations", [])
-#         calculation_results_obj = perform_planned_calculations(calculations_spec, retrieved_fundamental_data, last_analysis)
-
-
-#         # =================================================================
-#         # STAGE 4: SYNTHESIS (Common to both modes, guided by brain_plan if present)
-#         # =================================================================
-#         log_progress("Synthesizing the final response...")
-#         final_context_for_answer = {
-#             "user_question": user_question,
-#             "central_brain_plan": central_brain_plan,
-#             "retrieved_data": retrieved_fundamental_data,
-#             "calculated_metrics": calculation_results_obj.get("results", {}),
-#             "documents": last_analysis.get('documents', []),
-#             "news_summary": news_summary
-#         }
-
-#         answering_system_prompt = get_answering_system_prompt()
-        
-#         answering_messages = [
-#             {"role": "system", "content": answering_system_prompt},
-#             {"role": "user", "content": f"Please synthesize an answer based on the following consolidated data:\n{json.dumps(final_context_for_answer, indent=2, default=str)}"}
-#         ]
-        
-#         answerer_model = 'gpt-4.1-mini' if is_best_mode else selected_model
-#         final_answer = call_generative_ai_model(
-#             model=answerer_model,
-#             messages=answering_messages,
-#             temperature=0.7
-#         )
-
-#         return jsonify({
-#             'answer': final_answer,
-#             'thought_process': thought_process_str,
-#             'planning_data': ai_plan_json_str,
-#             'raw_news_summary': news_summary
-#         })
-
-#     except Exception as e:
-#         print(f"ERROR: General Error in /chat: {e}")
-#         traceback.print_exc()
-#         return jsonify({'error': f'An unexpected error occurred: {str(e)}', 'trace': traceback.format_exc()}), 500
-
 
 
 
@@ -2147,65 +1919,79 @@ You must follow these writing rules exactly. Any failure to follow a negative di
 def extract_metrics_via_ai(ticker):
     """
     Extract financial metrics using Perplexity sonar model with web search.
-    Returns a dictionary with P/E, P/B, Dividend Yield, ROCE, ROE.
+    Returns metrics for the main company AND 4-6 peer competitors.
     """
     print(f"INFO: Starting AI metrics extraction for {ticker}...")
     
-    # Much simpler, more direct prompt
-    user_prompt = f"""Search the web and find the latest financial ratios for {ticker} stock (NSE India). 
+    # Improved prompt - explicitly asks to find existing peer comparison tables
+    user_prompt = f"""Search for "{ticker} peer comparison" on screener.in and find the peer comparison table.
 
-Find these 5 metrics from screener.in, moneycontrol.com, or investing.com:
-1. P/E Ratio (Price to Earnings)
-2. P/B Ratio (Price to Book)
-3. Dividend Yield percentage
-4. ROCE percentage (Return on Capital Employed)
-5. ROE percentage (Return on Equity)
+Screener.in shows a peer comparison table with companies and their metrics. Find this table for {ticker} and extract data for {ticker} plus 4-6 of its closest peers.
 
-Return ONLY this JSON format, nothing else:
-{{"pe_ratio": "value", "pb_ratio": "value", "dividend_yield": "value %", "roce": "value %", "roe": "value %"}}
+Metrics needed per company:
+- CMP (Current Price)
+- Market Cap (Cr.)
+- P/E Ratio
+- P/B Ratio  
+- Dividend Yield (%)
+- ROCE (%)
+- ROE (%)
+- Sales Growth YoY (Q)
+- EBITDA Growth YoY (Q)
+- NPM (%)
 
-Use "N/A" only if you cannot find the metric after searching multiple sources."""
+Also search "moneycontrol {ticker} peer comparison" and "trendlyne {ticker} peers" for any missing data.
+
+Return ONLY valid JSON in this exact format:
+{{
+  "company": {{"ticker": "{ticker}", "name": "Full Name", "cmp": "value", "market_cap": "value", "pe_ratio": "value", "pb_ratio": "value", "dividend_yield": "value", "roce": "value", "roe": "value", "sales_growth_yoy": "value", "ebitda_growth_yoy": "value", "npm": "value"}},
+  "peers": [
+    {{"ticker": "XXX", "name": "Full Name", "cmp": "value", "market_cap": "value", "pe_ratio": "value", "pb_ratio": "value", "dividend_yield": "value", "roce": "value", "roe": "value", "sales_growth_yoy": "value", "ebitda_growth_yoy": "value", "npm": "value"}}
+  ]
+}}
+
+IMPORTANT: The peer comparison table on screener.in has ALL this data. Extract actual values, not N/A."""
     
     try:
         messages = [
             {"role": "user", "content": user_prompt}
         ]
         
-        # Use Perplexity sonar for web search
-        print(f"INFO: Calling Perplexity sonar API for {ticker} metrics...")
-        response = call_perplexity_api(messages, model="sonar", temperature=0.3, timeout=30)
+        # Use Perplexity sonar-pro with Pro Search for best results
+        print(f"INFO: Calling Perplexity sonar-pro API with Pro Search for {ticker} peer comparison...")
+        response = call_perplexity_api(messages, model="sonar-pro", temperature=0.2, timeout=90, enable_pro_search=True)
         print(f"INFO: Received response from Perplexity (length: {len(response)} chars)")
-        print(f"DEBUG: Response: {response}")
+        print(f"DEBUG: Response: {response[:1000]}...")
         
         # Try to parse JSON from response
         # First try in code fence
-        json_match = re.search(r'```(?:json)?\s*(\{[^}]+\})\s*```', response, re.DOTALL)
+        json_match = re.search(r'```(?:json)?\s*(\{[\s\S]*?\})\s*```', response, re.DOTALL)
         if json_match:
             print("DEBUG: Found JSON in code fence")
-            metrics = json.loads(json_match.group(1))
+            result = json.loads(json_match.group(1))
         else:
-            # Try to find JSON object anywhere in response
-            json_obj_match = re.search(r'\{[^{}]*"pe_ratio"[^{}]*"roe"[^{}]*\}', response, re.DOTALL)
+            # Try to find JSON object with "company" and "peers" keys
+            json_obj_match = re.search(r'\{[\s\S]*"company"[\s\S]*"peers"[\s\S]*\}', response, re.DOTALL)
             if json_obj_match:
-                print("DEBUG: Found JSON object in response")
-                metrics = json.loads(json_obj_match.group(0))
+                print("DEBUG: Found JSON object with company/peers in response")
+                result = json.loads(json_obj_match.group(0))
             else:
                 # Last resort: try to parse entire response
                 print("DEBUG: Trying to parse entire response as JSON")
-                metrics = json.loads(response.strip())
+                result = json.loads(response.strip())
         
-        print(f"SUCCESS: AI extracted metrics via sonar: {metrics}")
-        return metrics
+        print(f"SUCCESS: AI extracted metrics with {len(result.get('peers', []))} peers")
+        return result
         
     except json.JSONDecodeError as e:
         print(f"ERROR: Failed to parse AI metrics JSON: {e}")
         print(f"DEBUG: Full response was: {response}")
-        return {}
+        return {"company": {}, "peers": []}
     except Exception as e:
         print(f"ERROR: Failed to extract metrics via AI for {ticker}: {e}")
         import traceback
         traceback.print_exc()
-        return {}
+        return {"company": {}, "peers": []}
 
 
 def generate_ai_scores(ticker, last_analysis):
@@ -2329,12 +2115,39 @@ async def get_analysis_for_ticker_async(tick):
             print(f"WARN: yfinance name fetch failed for '{ticker}': {e}")
             return ticker
 
+    # Function to fetch futures volume data using ticker1! naming convention
+    def get_futures_volume(ticker):
+        try:
+            futures_symbol = f"{ticker}1!"  # e.g., RELIANCE1!
+            print(f"DEBUG: Attempting to fetch futures volume for {futures_symbol}...")
+            futures_data = tv.get_hist(symbol=futures_symbol, exchange="NSE", interval=Interval.in_daily, n_bars=1000)
+            print(f"DEBUG: Futures data result: type={type(futures_data)}, is None={futures_data is None}")
+            if futures_data is not None and not futures_data.empty:
+                print(f"DEBUG: Futures data columns: {list(futures_data.columns)}")
+                if 'volume' in futures_data.columns:
+                    print(f"DEBUG: Successfully fetched futures volume for {futures_symbol}, rows: {len(futures_data)}")
+                    return futures_data[['volume']].rename(columns={'volume': 'VOLUME_FUTURE'})
+                else:
+                    print(f"DEBUG: Futures data available but no 'volume' column")
+            else:
+                print(f"DEBUG: No futures data available for {futures_symbol}")
+            return None
+        except Exception as e:
+            import traceback
+            print(f"WARN: Failed to fetch futures volume for {ticker}: {e}")
+            traceback.print_exc()
+            return None
+
     # Define all tasks that can run without dependencies on each other
+    print("=" * 50)
+    print("DEBUG: Creating parallel tasks including futures_volume")
+    print("=" * 50)
     tasks = {
         "yfinance_name": asyncio.to_thread(get_yfinance_data, tick),
         "tech_data": asyncio.to_thread(evaluate_ticker_signal, tick),
         "screener_tables": fetch_consolidated_async(tick),
         "documents": fetch_latest_documents_async(tick),
+        "futures_volume": asyncio.to_thread(get_futures_volume, tick),  # NEW: Fetch futures volume
     }
     
     # Run them all in parallel and wait for all to complete
@@ -2342,8 +2155,10 @@ async def get_analysis_for_ticker_async(tick):
     results_dict = dict(zip(tasks.keys(), results))
 
     # --- Check for critical failures from Stage 1 ---
+    # Note: futures_volume is optional (not all stocks have F&O), so skip it in critical check
+    critical_tasks = ["yfinance_name", "tech_data", "screener_tables", "documents"]
     for task_name, result in results_dict.items():
-        if isinstance(result, Exception):
+        if task_name in critical_tasks and isinstance(result, Exception):
             log_progress(f"Critical error during initial data fetch: {task_name} failed.")
             return ({'error': f'Failed to fetch critical data: {task_name}. Reason: {result}'}, 500)
 
@@ -2351,6 +2166,15 @@ async def get_analysis_for_ticker_async(tick):
     res = results_dict["tech_data"]
     tables_from_screener, company_description = results_dict["screener_tables"]
     latest_documents = results_dict["documents"]
+    
+    # Futures volume is optional - not all stocks have F&O contracts
+    futures_volume_df = None
+    print(f"DEBUG: futures_volume result type: {type(results_dict.get('futures_volume'))}")
+    print(f"DEBUG: futures_volume result value: {results_dict.get('futures_volume')}")
+    if "futures_volume" in results_dict and not isinstance(results_dict["futures_volume"], Exception):
+        futures_volume_df = results_dict["futures_volume"]
+        if futures_volume_df is not None:
+            print(f"DEBUG: Futures volume data available with {len(futures_volume_df)} rows")
 
     # --- Stage 2: Gather dependent I/O tasks ---
     
@@ -2501,7 +2325,8 @@ async def get_analysis_for_ticker_async(tick):
     "ticker": tick, "company_name": company_name, "summary": cleaned_technical_summary, 
     "fundamentals": fund_data_for_ai_context, "valuation_and_margin_data": parsed_valuation_data, 
     "documents": latest_documents,
-    "technical_data_df": df
+    "technical_data_df": df,
+    "futures_volume_df": futures_volume_df  # NEW: For Liquidity Score
     }
 
 
@@ -2519,12 +2344,23 @@ async def get_analysis_for_ticker_async(tick):
     # Combine metrics: yfinance baseline, then fundamentals, then AI as ultimate fallback
     key_metrics = {**key_metrics_from_yfinance, **key_metrics_from_fundamentals}
     
-    # Use AI-extracted metrics as fallback for None values
-    for key in ['pe_ratio', 'pb_ratio', 'dividend_yield', 'roce', 'roe']:
-        if not key_metrics.get(key) or key_metrics.get(key) == 'N/A':
-            if key in ai_extracted_metrics:
-                key_metrics[key] = ai_extracted_metrics[key]
-                print(f"DEBUG: Using AI fallback for {key}: {ai_extracted_metrics[key]}")
+    # Extract metrics from new AI structure: {company: {...}, peers: [...]}
+    ai_company_metrics = ai_extracted_metrics.get('company', {})
+    peer_comparison_data = ai_extracted_metrics.get('peers', [])
+    
+    # Use AI-extracted company metrics as fallback for None values
+    ai_to_key_mapping = {
+        'pe_ratio': 'pe_ratio',
+        'pb_ratio': 'pb_ratio', 
+        'dividend_yield': 'dividend_yield',
+        'roce': 'roce',
+        'roe': 'roe'
+    }
+    for ai_key, metric_key in ai_to_key_mapping.items():
+        if not key_metrics.get(metric_key) or key_metrics.get(metric_key) == 'N/A':
+            if ai_key in ai_company_metrics:
+                key_metrics[metric_key] = ai_company_metrics[ai_key]
+                print(f"DEBUG: Using AI fallback for {metric_key}: {ai_company_metrics[ai_key]}")
 
 
     # This dictionary is what the AI needs. It uses the Python objects.
@@ -2545,7 +2381,25 @@ async def get_analysis_for_ticker_async(tick):
         'fundamentals': fund_data_for_frontend, # <-- The frontend-friendly version
         'metric_charts': metric_charts_for_frontend,
         'documents': latest_documents, 'scanx_data': scanx_data,
-        'key_metrics': key_metrics  # <-- NEW: Key metrics table data
+        'key_metrics': key_metrics,  # <-- Key metrics table data
+        'peer_comparison': {  # <-- NEW: Peer comparison data
+            # Use key_metrics for main company to ensure consistency with Key Metrics Snapshot
+            'company': {
+                'ticker': tick,
+                'name': company_name,
+                'cmp': key_metrics.get('current_price', 'N/A'),
+                'market_cap': key_metrics.get('market_cap', 'N/A'),
+                'pe_ratio': key_metrics.get('pe_ratio', 'N/A'),
+                'pb_ratio': key_metrics.get('pb_ratio', 'N/A'),
+                'dividend_yield': key_metrics.get('dividend_yield', 'N/A'),
+                'roce': key_metrics.get('roce', 'N/A'),
+                'roe': key_metrics.get('roe', 'N/A'),
+                'sales_growth_yoy': key_metrics.get('sales_growth_yoy', 'N/A'),
+                'ebitda_growth_yoy': key_metrics.get('ebitda_growth_yoy', 'N/A'),
+                'npm': key_metrics.get('npm', 'N/A')
+            },
+            'peers': peer_comparison_data  # AI-extracted peer data
+        }
     }
 
     # Pass BOTH dictionaries back to the synchronous wrapper
@@ -2577,6 +2431,7 @@ def analyze():
         # --- START MODIFICATION ---
         # Generate the AI scores and get the debug filename
         ai_scores_data, debug_filename = generate_ai_scores(tick, analysis_for_cache)
+        print(f"DEBUG: AI scores generated - count: {len(ai_scores_data) if ai_scores_data else 0}")
         result_for_frontend['ai_scores'] = ai_scores_data
 
         # If a debug file was created, add its download URL to the response

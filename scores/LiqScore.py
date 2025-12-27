@@ -14,12 +14,14 @@ class LiqScore(BaseScore):
             4: 'highly_liquid'
         }
         self.n_regimes = len(self.regime_labels)
-        self.features = ['IMPLIED_BID_ASK', 'VOLUME','VOLUME_FUTURE', 'FII', 'DII']
+        # MODIFIED: Only using features with REAL data (VOLUME, IMPLIED_BID_ASK)
+        # Excluding: VOLUME_FUTURE (not fetched yet), FII, DII (no implementation)
+        self.features = ['IMPLIED_BID_ASK', 'VOLUME']
         super().__init__(name='liquidity', description = f'Liquidity Score of {symbol}' ,df=df, feaures=self.features, n_regimes=self.n_regimes, regime_labels=self.regime_labels)
 
     def _calculate_simple_score(self):
-        # Scale and apply weights
-        weights_label = [('IMPLIED_BID_ASK',1), ('VOLUME',1), ('VOLUME_FUTURE',1), ('FII',1), ('DII',1)]
+        # Scale and apply weights - using only real data features
+        weights_label = [('IMPLIED_BID_ASK', 1), ('VOLUME', 1)]
         weights = np.array([weight for _, weight in weights_label])
         Xscaled = StandardScaler().fit_transform(self.df[self.features])
         self.df[self.proxy_score_col] = Xscaled @ weights

@@ -17,15 +17,16 @@ class AIScores:
         """
         self.symbol = symbol
         
-        # 1. Extract both valuation and technical data from the main analysis object
+        # 1. Extract valuation, technical, and futures volume data
         valuation_data = last_analysis.get("valuation_and_margin_data", {})
         technical_df = last_analysis.get("technical_data_df", None)
+        futures_volume_df = last_analysis.get("futures_volume_df", None)  # NEW: Futures volume
         
         # 2. Instantiate Data class
         data_loader = Data(symbol)
         
-        # 3. Call load_data with BOTH arguments, satisfying the function's requirement
-        self.df = data_loader.load_data(valuation_data, technical_df)
+        # 3. Call load_data with ALL arguments (futures_volume is optional)
+        self.df = data_loader.load_data(valuation_data, technical_df, futures_volume_df)
 
         # 4. Initialize the score calculators with the fully populated DataFrame
         self.scores = {
