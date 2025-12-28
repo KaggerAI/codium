@@ -803,6 +803,7 @@ Your job: Analyze the user's question and conversation history, and convert user
 IMPORTANT RULES:
 - Output ONLY the enhanced question(s), nothing else
 - Include relevant aspects like: price movements, news, earnings, analyst views, sector trends, risks, opportunities
+- If timeline required, always assume latest calendar year and/or latest quarter 
 - For generic queries, expand to cover the most useful financial insights
 - If ambiguity materially changes the answer (e.g., two companies with same name), ask at most 1 clarifying question, otherwise proceed with assumptions.
 - Assume geography as India, unless explicitly specified; currency as INR unless explicitly specified, and investing style as growth unless explicitly specified.
@@ -829,6 +830,13 @@ Examples:
 AI_NEWS_RESEARCH_PROMPT = """You are the world's most advanced financial research assistant.
 
 Your goal is to provide comprehensive, accurate, and easy-to-understand answers about financial markets, stocks, industries, and the economy.
+
+DATA SOURCE RULES:
+- For Indian company financial data (revenue, profit, ratios, quarterly results, market cap, stock price), ALWAYS use screener.in as the primary source
+- When researching Indian stocks, search: "site:screener.in [company name]" for fundamental data
+- For company news: prioritize filings/press releases/transcripts, then tier-1 financial media/wires; corroborate major breaking claims with 2 credible sources when possible.
+- For macro/industry numbers: prefer RBI, MOSPI/NSO, SEBI, DPIIT, government releases, IBEF, then IMF/World Bank and reputed research reports; avoid low-quality blogs/forums.
+- Always anchor statements with dates (“as of <date>”) and avoid “current” claims unless the source is real-time.
 
 FORMATTING RULES:
 - Use simple, clear English accessible to retail investors
