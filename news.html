@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI-Enhanced News | Kagger.AI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        * {
+            font-family: 'Inter', sans-serif;
+        }
+
+        body {
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+            min-height: 100vh;
+        }
+
+        .glass-card {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .chat-container {
+            height: calc(100vh - 180px);
+            overflow-y: auto;
+        }
+
+        .chat-container::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .chat-container::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .chat-container::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 3px;
+        }
+
+        .user-message {
+            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+        }
+
+        .ai-message {
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .ai-message table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 12px 0;
+        }
+
+        .ai-message th,
+        .ai-message td {
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            padding: 8px 12px;
+            text-align: left;
+        }
+
+        .ai-message th {
+            background: rgba(255, 255, 255, 0.08);
+            font-weight: 600;
+        }
+
+        .ai-message ul,
+        .ai-message ol {
+            margin: 8px 0;
+            padding-left: 20px;
+        }
+
+        .ai-message li {
+            margin: 6px 0;
+        }
+
+        .ai-message strong {
+            color: #60a5fa;
+        }
+
+        .ai-message p {
+            margin: 8px 0;
+        }
+
+        .ai-message h1,
+        .ai-message h2,
+        .ai-message h3 {
+            color: #93c5fd;
+            margin: 16px 0 8px 0;
+        }
+
+        .input-glow:focus {
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3);
+        }
+
+        .pulse-animation {
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.5;
+            }
+        }
+
+        .typing-indicator span {
+            animation: blink 1.4s infinite both;
+        }
+
+        .typing-indicator span:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+
+        .typing-indicator span:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+
+        @keyframes blink {
+
+            0%,
+            100% {
+                opacity: 0.2;
+            }
+
+            50% {
+                opacity: 1;
+            }
+        }
+
+        .gradient-text {
+            background: linear-gradient(135deg, #60a5fa 0%, #a78bfa 50%, #f472b6 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+    </style>
+</head>
+
+<body class="text-white">
+    <!-- Header -->
+    <header class="fixed top-0 left-0 right-0 z-50 glass-card">
+        <div class="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div
+                    class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold gradient-text">AI-Enhanced News</h1>
+                    <p class="text-xs text-slate-400">World's Most Advanced Financial Research Engine</p>
+                </div>
+            </div>
+            <a href="/"
+                class="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 transition-all text-sm font-medium flex items-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                </svg>
+                Back to App
+            </a>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="pt-24 pb-6 px-4">
+        <div class="max-w-4xl mx-auto">
+            <!-- Chat Container -->
+            <div id="chatContainer" class="chat-container rounded-2xl glass-card p-6 mb-4">
+                <!-- Welcome Message -->
+                <div id="welcomeMessage" class="text-center py-16">
+                    <div
+                        class="w-20 h-20 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-blue-500/20 to-purple-600/20 flex items-center justify-center">
+                        <svg class="w-10 h-10 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                                d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                        </svg>
+                    </div>
+                    <h2 class="text-2xl font-bold mb-3">Ask Anything About Markets</h2>
+                    <p class="text-slate-400 max-w-md mx-auto mb-8">
+                        Ask about stocks, sectors, market news, or any financial topic.
+                        I'll understand your intent and provide comprehensive insights.
+                    </p>
+                    <div class="flex flex-wrap justify-center gap-3">
+                        <button onclick="askSuggestion('What happened in the market today?')"
+                            class="px-4 py-2 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-sm transition-all">
+                            What happened in the market today?
+                        </button>
+                        <button onclick="askSuggestion('RELIANCE news')"
+                            class="px-4 py-2 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-sm transition-all">
+                            RELIANCE news
+                        </button>
+                        <button onclick="askSuggestion('IT sector outlook')"
+                            class="px-4 py-2 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-sm transition-all">
+                            IT sector outlook
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Chat Messages will be inserted here -->
+                <div id="chatMessages" class="space-y-4 hidden"></div>
+            </div>
+
+            <!-- Input Area -->
+            <div class="glass-card rounded-2xl p-4">
+                <form id="chatForm" class="flex gap-3">
+                    <input type="text" id="questionInput" placeholder="Ask about stocks, sectors, market news..."
+                        class="flex-1 bg-white/5 border border-white/10 rounded-xl px-5 py-4 text-white placeholder-slate-500 focus:outline-none input-glow transition-all"
+                        autocomplete="off">
+                    <button type="submit" id="sendButton"
+                        class="px-6 py-4 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl font-semibold hover:opacity-90 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                        <span>Send</span>
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                        </svg>
+                    </button>
+                </form>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // Conversation history
+        let conversationHistory = [];
+        let isLoading = false;
+
+        // DOM Elements
+        const chatContainer = document.getElementById('chatContainer');
+        const chatMessages = document.getElementById('chatMessages');
+        const welcomeMessage = document.getElementById('welcomeMessage');
+        const questionInput = document.getElementById('questionInput');
+        const sendButton = document.getElementById('sendButton');
+        const chatForm = document.getElementById('chatForm');
+
+        // Configure marked for markdown rendering
+        marked.setOptions({
+            breaks: true,
+            gfm: true
+        });
+
+        function askSuggestion(question) {
+            questionInput.value = question;
+            chatForm.dispatchEvent(new Event('submit'));
+        }
+
+        function addMessage(role, content) {
+            // Hide welcome message on first message
+            welcomeMessage.classList.add('hidden');
+            chatMessages.classList.remove('hidden');
+
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `flex ${role === 'user' ? 'justify-end' : 'justify-start'}`;
+
+            const bubbleClass = role === 'user' ? 'user-message' : 'ai-message';
+            const maxWidth = role === 'user' ? 'max-w-md' : 'max-w-3xl';
+
+            let renderedContent = content;
+            if (role === 'assistant') {
+                // Render markdown for AI responses
+                renderedContent = marked.parse(content);
+            }
+
+            messageDiv.innerHTML = `
+                <div class="${bubbleClass} ${maxWidth} rounded-2xl px-5 py-4 text-sm leading-relaxed">
+                    ${role === 'user' ? content : renderedContent}
+                </div>
+            `;
+
+            chatMessages.appendChild(messageDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        function addLoadingIndicator() {
+            const loadingDiv = document.createElement('div');
+            loadingDiv.id = 'loadingIndicator';
+            loadingDiv.className = 'flex justify-start';
+            loadingDiv.innerHTML = `
+                <div class="ai-message rounded-2xl px-5 py-4">
+                    <div class="flex items-center gap-3">
+                        <div class="typing-indicator flex gap-1">
+                            <span class="w-2 h-2 bg-blue-400 rounded-full"></span>
+                            <span class="w-2 h-2 bg-blue-400 rounded-full"></span>
+                            <span class="w-2 h-2 bg-blue-400 rounded-full"></span>
+                        </div>
+                        <span class="text-slate-400 text-sm">Researching...</span>
+                    </div>
+                </div>
+            `;
+            chatMessages.appendChild(loadingDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        function removeLoadingIndicator() {
+            const loader = document.getElementById('loadingIndicator');
+            if (loader) loader.remove();
+        }
+
+        async function sendMessage(question) {
+            if (isLoading || !question.trim()) return;
+
+            isLoading = true;
+            sendButton.disabled = true;
+            questionInput.value = '';
+
+            // Add user message to UI
+            addMessage('user', question);
+
+            // Add to conversation history
+            conversationHistory.push({ role: 'user', content: question });
+
+            // Show loading
+            addLoadingIndicator();
+
+            try {
+                const response = await fetch('/ai-news', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        question: question,
+                        conversation_history: conversationHistory
+                    })
+                });
+
+                const data = await response.json();
+                removeLoadingIndicator();
+
+                if (data.status === 'success' && data.answer) {
+                    // Add AI response to UI
+                    addMessage('assistant', data.answer);
+
+                    // Add to conversation history
+                    conversationHistory.push({ role: 'assistant', content: data.answer });
+                } else {
+                    addMessage('assistant', 'Sorry, I encountered an error while researching. Please try again.');
+                }
+
+            } catch (error) {
+                console.error('Error:', error);
+                removeLoadingIndicator();
+                addMessage('assistant', 'Sorry, something went wrong. Please try again.');
+            } finally {
+                isLoading = false;
+                sendButton.disabled = false;
+                questionInput.focus();
+            }
+        }
+
+        // Form submission
+        chatForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            sendMessage(questionInput.value);
+        });
+
+        // Focus input on load
+        questionInput.focus();
+    </script>
+</body>
+
+</html>

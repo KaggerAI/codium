@@ -285,6 +285,11 @@ def debug_env():
 def index():
     return send_from_directory('.', 'app.html')
 
+# Serve AI-Enhanced News page
+@app.route('/news')
+def news_page():
+    return send_from_directory('.', 'news.html')
+
 # # at the top of handler.py
 # import os
 # import openai
@@ -776,77 +781,155 @@ def perform_planned_calculations(plan_calculations_section, retrieved_data, full
             
     return {"info": "Calculations performed.", "results": calculated_metrics_output}
 
-# new endpoint, below your /analyze route
-
-### 2. The Complete `def chat` Function from `handler.py`
-
-# @app.route('/chat', methods=['POST'])
-# def chat():
-#     # Force logs to stderr so they show up in Azure Log Stream immediately
-#     print("DEBUG: Entering /chat endpoint...", file=sys.stderr)
-    
-#     try:
-#         data = request.get_json(force=True)
-#         print("DEBUG: Request JSON parsed successfully.", file=sys.stderr)
-        
-#         user_question = data.get('question', '').strip()
-#         selected_model = data.get('model', 'o4-mini')
-#         analysis_key = data.get('analysis_key')
-
-#         if not analysis_key:
-#              return jsonify({'answer': 'Analysis key is missing. Please analyze a stock first.'}), 200
-
-#         # =====================================================
-#         # PART 1: DIRECT REDIS RETRIEVAL (Bypassing Flask-Cache)
-#         # =====================================================
-#         last_analysis = None
-        
-#         try:
-#             import redis
-            
-#             # 1. Get the connection string configured in Flask
-#             redis_url = app.config.get("CACHE_REDIS_URL")
-            
-#             # 2. Create a FRESH connection client
-#             # We use from_url which handles the rediss:// format and password parsing automatically
-#             # We add explicit socket timeouts to prevent hanging
-#             r_client = redis.from_url(
-#                 redis_url,
-#                 socket_timeout=10.0,        # Wait max 10s for data
-#                 socket_connect_timeout=5.0, # Wait max 5s to connect
-#                 decode_responses=False      # Keep data as bytes (needed for zlib)
-#             )
-            
-#             # 3. Fetch Data
-#             print(f"DEBUG: Fetching key directly from Redis: {analysis_key}", file=sys.stderr)
-#             cached_blob = r_client.get(analysis_key)
-            
-#             # 4. Close connection immediately to free resources
-#             r_client.close()
-
-#             # 5. Decompress and Load
-#             if cached_blob:
-#                 print(f"DEBUG: Blob found. Size: {len(cached_blob)} bytes. Decompressing...", file=sys.stderr)
-#                 try:
-#                     decompressed_data = zlib.decompress(cached_blob)
-#                     print(f"DEBUG: Decompressed. Size: {len(decompressed_data)} bytes. Unpickling...", file=sys.stderr)
-#                     last_analysis = pickle.loads(decompressed_data)
-#                     print("DEBUG: Unpickle Successful.", file=sys.stderr)
-#                 except Exception as unpack_error:
-#                     print(f"WARN: Failed to decompress data: {unpack_error}", file=sys.stderr)
-#                     # Fallback in case it wasn't compressed
-#                     last_analysis = cached_blob
-#             else:
-#                 print("DEBUG: Redis returned None (Key not found).", file=sys.stderr)
-
-#         except Exception as redis_e:
-#             print(f"CRITICAL WARN: Direct Redis Fetch failed: {redis_e}", file=sys.stderr)
-#             # If this fails, we can't proceed
-
 
 # =====================================================================
-# START: INDUSTRY RESEARCH ENDPOINT
+# AI-ENHANCED NEWS ENDPOINT
 # =====================================================================
+
+AI_NEWS_INTENT_PROMPT = """Your role is to convert the user’s message into an Enhanced Research Query that will be answered by Perplexity Sonar-Pro with Pro Search.
+
+Users often ask incomplete questions due to:
+- Lack of clarity on what they want
+- Inability to articulate their thoughts properly
+- Being too brief or lazy in typing
+
+Your job: Analyze the user's question and conversation history, and convert user's question regarding any stock/company/industry/economy/policy/theme into a clear, complete, investing-grade research prompt that:
+1. Captures the explicit ask
+2. Infer what the user likely meant, fill in missing details using reasonable assumptions, and include those assumptions briefly
+3. Adds relevant financial context the user likely wants but didn't explicitly ask for
+4. Maintain conversation continuity: use the provided conversation context to resolve references like “this company”, “that sector”, “the last one”, etc.
+5. Do not store or request access to older queries beyond the provided conversation context. Treat each run as self-contained.
+
+IMPORTANT RULES:
+- Output ONLY the enhanced question(s), nothing else
+- Include relevant aspects like: price movements, news, earnings, analyst views, sector trends, risks, opportunities
+- For generic queries, expand to cover the most useful financial insights
+- If ambiguity materially changes the answer (e.g., two companies with same name), ask at most 1 clarifying question, otherwise proceed with assumptions.
+- Assume geography as India, unless explicitly specified; currency as INR unless explicitly specified, and investing style as growth unless explicitly specified.
+
+HOW TO WRITE THE ENHANCED QUERY
+The enhanced_query must:
+1. Be a single, detailed research request suitable for Sonar-Pro Pro Search.
+2. Include: (a) entity + context, (b) timeframe, (c) what happened, (d) why it matters for investors, (e) bull/base/bear, (f) catalysts & risks, (g) what to watch next.
+3. If it's a company/stock query, request: “latest material developments”, “earnings/guidance”, “segment drivers”, “regulatory issues”, “competitive landscape”, “valuation context (directional, not exact unless sourced)”, and “near-term catalysts”.
+4. If it's an industry/macro query, request: “drivers”, “data points”, “policy/regulation”, “winners/losers”, “second-order effects”, “leading indicators”, and “implications for listed Indian companies”.
+5. If user asks for “quick” or “summary”, still generate a thorough query but request a concise output.
+
+CONVERSATION CONTEXT USAGE
+- Use prior assistant/user messages in the current thread to resolve pronouns and continuity.
+- Do not invent prior conversations. If context is missing, state an assumption or ask one clarifier.
+
+Examples:
+- "RELIANCE news" → "What are the latest news, stock movements, earnings updates, management commentary, and analyst recommendations for Reliance Industries Ltd that could impact its stock price?"
+- "IT sector" → "What is the current state of the Indian IT sector including major companies' performance, hiring trends, deal wins, revenue growth outlook, and key risks?"
+- "market today" → "What happened in the Indian stock market today including Nifty and Sensex movements, sector performers, FII/DII activity, and key news driving the market?"
+- "Tata Motors EV" → "What is Tata Motors' electric vehicle strategy, current EV sales performance, upcoming EV launches, market share, and how it compares to competitors?"
+"""
+
+AI_NEWS_RESEARCH_PROMPT = """You are the world's most advanced financial research assistant.
+
+Your goal is to provide comprehensive, accurate, and easy-to-understand answers about financial markets, stocks, industries, and the economy.
+
+FORMATTING RULES:
+- Use simple, clear English accessible to retail investors
+- Use bullet points for lists and key points
+- Use tables for comparisons (use markdown table format)
+- Keep paragraphs short (2-3 sentences max)
+- Use **bold** ONLY for headings and section titles (e.g., ## Latest Developments, ### Key Metrics)
+- Do NOT bold random words, numbers, or percentages in the middle of sentences
+- Do NOT include citations, source links, or references
+- Do NOT mention where the information came from
+
+CONTENT RULES:
+- Be comprehensive but concise
+- Focus on actionable insights
+- Include relevant numbers and data points
+- Mention both positives and negatives/risks when applicable
+- For stocks: include price, key metrics, recent performance
+- For sectors: include major players, trends, outlook
+"""
+
+@app.route('/ai-news', methods=['POST'])
+def ai_news_chat():
+    """
+    AI-Enhanced News endpoint - the world's most advanced financial research engine.
+    Uses two-stage processing:
+    1. Intent Enhancement: GPT-4.1-mini deciphers hidden intent
+    2. Research: Perplexity sonar-pro with Pro Search answers the enhanced query
+    """
+    try:
+        data = request.get_json(force=True)
+        user_question = data.get('question', '').strip()
+        conversation_history = data.get('conversation_history', [])
+        
+        if not user_question:
+            return jsonify({'error': 'No question provided'}), 400
+        
+        print(f"INFO: AI-News received question: {user_question[:100]}...")
+        
+        # --- STAGE 1: Intent Enhancement ---
+        # Build context from conversation history
+        history_context = ""
+        if conversation_history:
+            recent_history = conversation_history[-6:]  # Last 3 exchanges
+            history_context = "\n".join([
+                f"{'User' if msg['role'] == 'user' else 'Assistant'}: {msg['content'][:200]}"
+                for msg in recent_history
+            ])
+        
+        enhancement_messages = [
+            {"role": "system", "content": AI_NEWS_INTENT_PROMPT},
+            {"role": "user", "content": f"Conversation History:\n{history_context}\n\nCurrent User Question: {user_question}"}
+        ]
+        
+        print("INFO: Stage 1 - Enhancing user intent...")
+        enhanced_question = call_generative_ai_model("gpt-4.1-mini", enhancement_messages, temperature=1)
+        enhanced_question = enhanced_question.strip().strip('"')  # Clean up quotes if any
+        print(f"INFO: Enhanced question: {enhanced_question[:800]}...")
+        
+        # --- STAGE 2: Research via Perplexity ---
+        # NOTE: Perplexity API doesn't support system messages well - combine into user message
+        research_prompt = AI_NEWS_RESEARCH_PROMPT + "\n\n"
+        
+        # Add conversation history for context continuity
+        if conversation_history:
+            research_prompt += "Previous Conversation:\n"
+            for msg in conversation_history[-6:]:
+                role_label = "User" if msg["role"] == "user" else "Assistant"
+                research_prompt += f"{role_label}: {msg['content'][:300]}\n"
+            research_prompt += "\n"
+        
+        # Add the enhanced question
+        research_prompt += f"Current Question: {enhanced_question}"
+        
+        research_messages = [{"role": "user", "content": research_prompt}]
+        
+        print("INFO: Stage 2 - Researching via Perplexity...")
+        response = call_perplexity_api(
+            research_messages, 
+            model="sonar-pro", 
+            temperature=1, 
+            timeout=120,
+            use_streaming=False,
+            enable_pro_search=True
+        )
+        
+        print(f"INFO: AI-News response generated ({len(response)} chars)")
+        
+        return jsonify({
+            'answer': response,
+            'status': 'success'
+        })
+        
+    except Exception as e:
+        print(f"ERROR: AI-News endpoint failed: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'error': f'Research failed: {str(e)}',
+            'status': 'error'
+        }), 500
+
 
 INDUSTRY_RESEARCH_PROMPT = '''You are a buy-side equity research analyst writing an investor-grade INDIA industry report for a GROWTH stock investor.
 
@@ -1974,7 +2057,7 @@ IMPORTANT: The peer comparison table on screener.in has ALL this data. Extract a
         
         # Use Perplexity sonar-pro with Pro Search for best results
         print(f"INFO: Calling Perplexity sonar-pro API with Pro Search for {ticker} peer comparison...")
-        response = call_perplexity_api(messages, model="sonar-pro", temperature=0.2, timeout=90, enable_pro_search=True)
+        response = call_perplexity_api(messages, model="sonar-pro", temperature=0.2, timeout=90, enable_pro_search=False)
         print(f"INFO: Received response from Perplexity (length: {len(response)} chars)")
         print(f"DEBUG: Response: {response[:1000]}...")
         
