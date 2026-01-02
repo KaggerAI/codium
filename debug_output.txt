@@ -1,0 +1,43 @@
+﻿Status: 200
+
+Found 10 panels
+
+=== First Panel Analysis ===
+
+1. Links with '/get-document/report/pdf/': 1
+   href: 
+                            https://trendlyne.com/get-document/report/pdf/92971/
+
+2. Links with 'pdf' anywhere in href: 1
+   href: 
+                            https://trendlyne.com/get-document/report/pdf/92971/
+
+3. Links with '/posts/': 2
+   href: https://trendlyne.com/posts/alert-modal/10/
+   href: https://trendlyne.com/posts/5432499/container-led-momentum-continues-integrated-logistics-platform-enhances-long-term-visibility
+   -> Document ID: 5432499
+
+4. Links with title containing 'download': 0
+
+5. ALL links in first panel (17 total):
+   1. https://trendlyne.com/equity/27/ADANIPORTS/adani-ports-special-economi
+   2. https://trendlyne.com/equity/27/ADANIPORTS/adani-ports-special-economi
+   3. None
+   4. https://trendlyne.com/visitor/loginmodal.html?next=/research-reports/p
+   5. 
+                            https://trendlyne.com/get-document/report
+   6. https://trendlyne.com/equity/27/ADANIPORTS/adani-ports-special-economi
+   7. https://trendlyne.com/research-reports/broker-recommendation-posts/Mot
+   8. https://trendlyne.com/visitor/loginmodal.html?next=/research-reports/p
+   9. None
+   10. None
+   11. https://trendlyne.com/trendit/5432499
+   12. https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Ftrendlyne.c
+   13. https://twitter.com/intent/tweet?source=https%3A%2F%2Ftrendlyne.com&te
+   14. https://www.linkedin.com/shareArticle?mini=true&url=https%3A%2F%2Ftren
+   15. https://trendlyne.com/posts/alert-modal/10/
+   16. https://trendlyne.com/posts/5432499/container-led-momentum-continues-i
+   17. https://trendlyne.com/research-reports/stock/27/ADANIPORTS/adani-ports
+
+6. Searching raw HTML for '/get-document/' pattern:
+   Found 12 matches: ['/get-document/report/pdf/92971/', '/get-document/report/pdf/92971/', '/get-document/report/pdf/91972/', '/get-document/report/pdf/91972/', '/get-document/report/pdf/91856/']

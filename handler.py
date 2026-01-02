@@ -9,9 +9,18 @@ Before running, ensure you have installed system TA-Lib and Python packages:
      | tar xj -C /usr/lib/x86_64-linux-gnu/ lib --strip-components=1"
 
 2. Python packages:
-   pip install flask flask-cors tradingview-datafeed yfinance pandas numpy matplotlib openai yfinance pdfplumber plotly matplotlib scikit-learn feedparser openai google-generativeai
+   pip install flask flask-cors tradingview-datafeed yfinance pandas numpy matplotlib openai yfinance pdfplumber plotly matplotlib scikit-learn feedparser openai google-generativeai python-dotenv
 """
 import sys, os, socket
+
+# Load environment variables from .env file for local development
+try:
+    from dotenv import load_dotenv
+    load_dotenv()  # This will load variables from .env file if it exists
+    print("INFO: Loaded environment variables from .env file (if present)")
+except ImportError:
+    print("INFO: python-dotenv not installed. Using system environment variables only.")
+
 sys.path.append(os.path.dirname(__file__))
 from prompts import get_central_brain_prompt, get_planning_system_prompt, get_answering_system_prompt
 
@@ -62,6 +71,9 @@ from io import BytesIO
 from progress_logger import progress_queue, log_progress, log_final_message
 
 from scores.AIScores import AIScores
+from analyst_reports.trendlyne_fetcher import fetch_analyst_reports_async
+# Use cookie-based authentication (easier than programmatic login)
+from analyst_reports.pdf_summarizer_cookies import summarize_analyst_pdf_async
 
 from tech_calculations import (
     evaluate_ticker_signal,
@@ -276,6 +288,8 @@ def debug_env():
         "AZURE_OPENAI_DEPLOYMENT",
         "PERPLEXITY_API_KEY",
         "GOOGLE_API_KEY",
+        "TRENDLYNE_USERNAME",
+        "TRENDLYNE_PASSWORD",
     ]
     # returns True/False (no secrets leaked)
     return jsonify({k: bool(os.getenv(k)) for k in keys})
@@ -290,8 +304,44 @@ def index():
 def news_page():
     return send_from_directory('.', 'news.html')
 
+# AI Summarize Analyst PDF
+@app.route('/summarize-analyst-pdf', methods=['POST'])
+def summarize_analyst_pdf():
+    """
+    Endpoint to summarize analyst report PDFs from Trendlyne using Gemini AI.
+    Requires Trendlyne authentication credentials to download PDFs.
+    """
+    try:
+        data = request.get_json(force=True)
+        pdf_url = data.get('pdf_url', '').strip()
+        
+        if not pdf_url:
+            return jsonify({'error': 'No pdf_url provided'}), 400
+        
+        # Validate that this is a Trendlyne URL
+        if 'trendlyne.com' not in pdf_url:
+            return jsonify({'error': 'Invalid PDF URL. Must be from Trendlyne.'}), 400
+        
+        log_progress(f"Summarizing analyst PDF: {pdf_url}")
+        
+        # Run the async function
+        summary = asyncio.run(summarize_analyst_pdf_async(pdf_url))
+        
+        log_final_message("Analyst PDF summarized successfully!")
+        
+        return jsonify({
+            'success': True,
+            'summary': summary,
+            'pdf_url': pdf_url
+        })
+        
+    except Exception as e:
+        error_msg = f"Failed to summarize analyst PDF: {str(e)}"
+        log_final_message(error_msg)
+        traceback.print_exc()
+        return jsonify({'error': error_msg}), 500
+
 # # at the top of handler.py
-# import os
 # import openai
 
 # =====================================================================
@@ -2254,6 +2304,7 @@ async def get_analysis_for_ticker_async(tick):
         "screener_tables": fetch_consolidated_async(tick),
         "documents": fetch_latest_documents_async(tick),
         "futures_volume": asyncio.to_thread(get_futures_volume, tick),  # NEW: Fetch futures volume
+        "analyst_reports": fetch_analyst_reports_async(tick),  # NEW: Fetch Trendlyne analyst reports
     }
     
     # Run them all in parallel and wait for all to complete
@@ -2281,6 +2332,12 @@ async def get_analysis_for_ticker_async(tick):
         futures_volume_df = results_dict["futures_volume"]
         if futures_volume_df is not None:
             print(f"DEBUG: Futures volume data available with {len(futures_volume_df)} rows")
+
+    # Analyst reports - optional, gracefully handle errors
+    analyst_reports = []
+    if "analyst_reports" in results_dict and not isinstance(results_dict["analyst_reports"], Exception):
+        analyst_reports = results_dict["analyst_reports"] or []
+        print(f"DEBUG: Found {len(analyst_reports)} analyst reports for {tick}")
 
     # --- Stage 2: Gather dependent I/O tasks ---
     
@@ -2506,7 +2563,8 @@ async def get_analysis_for_ticker_async(tick):
                 'npm': key_metrics.get('npm', 'N/A')
             },
             'peers': peer_comparison_data  # AI-extracted peer data
-        }
+        },
+        'analyst_reports': analyst_reports  # NEW: Trendlyne analyst reports
     }
 
     # Pass BOTH dictionaries back to the synchronous wrapper

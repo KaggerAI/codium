@@ -193,6 +193,291 @@
       display: none;
     }
 
+    /* === ANALYST REPORTS === */
+    .analyst-tabs {
+      display: flex;
+      gap: 0;
+      border-bottom: 2px solid #e2e8f0;
+    }
+
+    .analyst-tab {
+      padding: 0.75rem 1.5rem;
+      cursor: pointer;
+      border: none;
+      background: transparent;
+      color: #64748b;
+      font-weight: 500;
+      transition: all 0.2s;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -2px;
+      font-size: 0.875rem;
+    }
+
+    .analyst-tab.active {
+      color: #10b981;
+      border-bottom-color: #10b981;
+      background: #ecfdf5;
+    }
+
+    .analyst-tab:hover {
+      color: #059669;
+      background: #f0fdf4;
+    }
+
+    .analyst-panel {
+      display: none;
+      padding: 1rem 0;
+    }
+
+    .analyst-panel.active {
+      display: block;
+    }
+
+    .reco-badge {
+      display: inline-block;
+      padding: 0.35rem 1rem;
+      border-radius: 9999px;
+      font-weight: 600;
+      font-size: 0.875rem;
+      letter-spacing: 0.025em;
+    }
+
+    .reco-buy {
+      background: #d1fae5;
+      color: #065f46;
+    }
+
+    .reco-hold {
+      background: #fef3c7;
+      color: #92400e;
+    }
+
+    .reco-sell {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+
+    /* === AI SUMMARY RICH FORMATTING === */
+    #ai-summary-0 .prose,
+    #ai-summary-1 .prose,
+    #ai-summary-2 .prose,
+    #ai-summary-3 .prose,
+    #ai-summary-4 .prose,
+    #ai-summary-5 .prose,
+    #ai-summary-6 .prose,
+    #ai-summary-7 .prose {
+      max-width: none !important;
+    }
+
+    /* Tables in AI Summary */
+    #ai-summary-0 table,
+    #ai-summary-1 table,
+    #ai-summary-2 table,
+    #ai-summary-3 table,
+    #ai-summary-4 table,
+    #ai-summary-5 table,
+    #ai-summary-6 table,
+    #ai-summary-7 table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1rem 0;
+      background: white;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+
+    #ai-summary-0 table thead,
+    #ai-summary-1 table thead,
+    #ai-summary-2 table thead,
+    #ai-summary-3 table thead,
+    #ai-summary-4 table thead,
+    #ai-summary-5 table thead,
+    #ai-summary-6 table thead,
+    #ai-summary-7 table thead {
+      background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+      color: white;
+    }
+
+    #ai-summary-0 table th,
+    #ai-summary-1 table th,
+    #ai-summary-2 table th,
+    #ai-summary-3 table th,
+    #ai-summary-4 table th,
+    #ai-summary-5 table th,
+    #ai-summary-6 table th,
+    #ai-summary-7 table th {
+      padding: 0.75rem 1rem;
+      text-align: left;
+      font-weight: 600;
+      font-size: 0.875rem;
+      letter-spacing: 0.025em;
+    }
+
+    #ai-summary-0 table td,
+    #ai-summary-1 table td,
+    #ai-summary-2 table td,
+    #ai-summary-3 table td,
+    #ai-summary-4 table td,
+    #ai-summary-5 table td,
+    #ai-summary-6 table td,
+    #ai-summary-7 table td {
+      padding: 0.75rem 1rem;
+      border-bottom: 1px solid #e5e7eb;
+      font-size: 0.875rem;
+    }
+
+    #ai-summary-0 table tbody tr:nth-child(even),
+    #ai-summary-1 table tbody tr:nth-child(even),
+    #ai-summary-2 table tbody tr:nth-child(even),
+    #ai-summary-3 table tbody tr:nth-child(even),
+    #ai-summary-4 table tbody tr:nth-child(even),
+    #ai-summary-5 table tbody tr:nth-child(even),
+    #ai-summary-6 table tbody tr:nth-child(even),
+    #ai-summary-7 table tbody tr:nth-child(even) {
+      background: #f9fafb;
+    }
+
+    #ai-summary-0 table tbody tr:hover,
+    #ai-summary-1 table tbody tr:hover,
+    #ai-summary-2 table tbody tr:hover,
+    #ai-summary-3 table tbody tr:hover,
+    #ai-summary-4 table tbody tr:hover,
+    #ai-summary-5 table tbody tr:hover,
+    #ai-summary-6 table tbody tr:hover,
+    #ai-summary-7 table tbody tr:hover {
+      background: #eff6ff;
+    }
+
+    /* Headers in AI Summary */
+    #ai-summary-0 h2,
+    #ai-summary-1 h2,
+    #ai-summary-2 h2,
+    #ai-summary-3 h2,
+    #ai-summary-4 h2,
+    #ai-summary-5 h2,
+    #ai-summary-6 h2,
+    #ai-summary-7 h2 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: #1e40af;
+      margin: 2rem 0 1rem 0;
+      padding-bottom: 0.5rem;
+      border-bottom: 3px solid #3b82f6;
+    }
+
+    #ai-summary-0 h3,
+    #ai-summary-1 h3,
+    #ai-summary-2 h3,
+    #ai-summary-3 h3,
+    #ai-summary-4 h3,
+    #ai-summary-5 h3,
+    #ai-summary-6 h3,
+    #ai-summary-7 h3 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: #1e3a8a;
+      margin: 1.5rem 0 0.75rem 0;
+    }
+
+    /* Blockquotes in AI Summary */
+    #ai-summary-0 blockquote,
+    #ai-summary-1 blockquote,
+    #ai-summary-2 blockquote,
+    #ai-summary-3 blockquote,
+    #ai-summary-4 blockquote,
+    #ai-summary-5 blockquote,
+    #ai-summary-6 blockquote,
+    #ai-summary-7 blockquote {
+      border-left: 4px solid #3b82f6;
+      background: #eff6ff;
+      padding: 1rem 1.5rem;
+      margin: 1rem 0;
+      border-radius: 0 8px 8px 0;
+      font-style: italic;
+      color: #1e40af;
+    }
+
+    /* Lists in AI Summary */
+    #ai-summary-0 ul,
+    #ai-summary-1 ul,
+    #ai-summary-2 ul,
+    #ai-summary-3 ul,
+    #ai-summary-4 ul,
+    #ai-summary-5 ul,
+    #ai-summary-6 ul,
+    #ai-summary-7 ul {
+      list-style-type: disc;
+      padding-left: 1.5rem;
+      margin: 0.5rem 0;
+    }
+
+    #ai-summary-0 ol,
+    #ai-summary-1 ol,
+    #ai-summary-2 ol,
+    #ai-summary-3 ol,
+    #ai-summary-4 ol,
+    #ai-summary-5 ol,
+    #ai-summary-6 ol,
+    #ai-summary-7 ol {
+      list-style-type: decimal;
+      padding-left: 1.5rem;
+      margin: 0.5rem 0;
+    }
+
+    #ai-summary-0 li,
+    #ai-summary-1 li,
+    #ai-summary-2 li,
+    #ai-summary-3 li,
+    #ai-summary-4 li,
+    #ai-summary-5 li,
+    #ai-summary-6 li,
+    #ai-summary-7 li {
+      margin: 0.25rem 0;
+      line-height: 1.6;
+    }
+
+    /* Horizontal rules */
+    #ai-summary-0 hr,
+    #ai-summary-1 hr,
+    #ai-summary-2 hr,
+    #ai-summary-3 hr,
+    #ai-summary-4 hr,
+    #ai-summary-5 hr,
+    #ai-summary-6 hr,
+    #ai-summary-7 hr {
+      border: none;
+      border-top: 2px solid #e5e7eb;
+      margin: 2rem 0;
+    }
+
+    /* Strong/Bold text */
+    #ai-summary-0 strong,
+    #ai-summary-1 strong,
+    #ai-summary-2 strong,
+    #ai-summary-3 strong,
+    #ai-summary-4 strong,
+    #ai-summary-5 strong,
+    #ai-summary-6 strong,
+    #ai-summary-7 strong {
+      color: #1e40af;
+      font-weight: 700;
+    }
+
+    /* Paragraphs */
+    #ai-summary-0 p,
+    #ai-summary-1 p,
+    #ai-summary-2 p,
+    #ai-summary-3 p,
+    #ai-summary-4 p,
+    #ai-summary-5 p,
+    #ai-summary-6 p,
+    #ai-summary-7 p {
+      margin: 0.75rem 0;
+      line-height: 1.7;
+      color: #374151;
+    }
+
     /* === TABS === */
     .tab-button {
       transition: all 0.2s ease-in-out;
@@ -1711,6 +1996,182 @@
           `;
         }
 
+        // Render Analyst Reports Tabbed Interface
+        function renderAnalystReports(reports) {
+          if (!reports || reports.length === 0) {
+            return `<div class="bg-white p-6 rounded-xl shadow-lg mb-8">
+              <h2 class="text-2xl font-bold mb-4 text-slate-700">📊 Top Analyst Recommendations</h2>
+              <p class="text-slate-500 italic">No analyst reports available for this stock.</p>
+            </div>`;
+          }
+
+          let tabsHtml = '<div class="analyst-tabs">';
+          let panelsHtml = '';
+
+          reports.forEach((r, i) => {
+            const active = i === 0 ? 'active' : '';
+            const recoClass = r.recommendation.toLowerCase() === 'buy' ? 'reco-buy' :
+              r.recommendation.toLowerCase() === 'sell' ? 'reco-sell' : 'reco-hold';
+
+            tabsHtml += `<button class="analyst-tab ${active}" onclick="switchAnalystTab(${i})">${r.brokerage}</button>`;
+
+            panelsHtml += `
+              <div class="analyst-panel ${active}" id="analyst-panel-${i}">
+                <div class="flex items-center gap-4 mb-4 flex-wrap">
+                  <span class="reco-badge ${recoClass}">${r.recommendation.toUpperCase()}</span>
+                  <span class="text-sm text-slate-500">${r.date}</span>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                  <div class="bg-gradient-to-br from-green-50 to-emerald-50 p-4 rounded-lg border border-green-200">
+                    <p class="text-xs text-slate-500 font-medium mb-1">Target Price</p>
+                    <p class="text-2xl font-bold text-green-600">₹${r.target_price}</p>
+                  </div>
+                  <div class="bg-slate-50 p-4 rounded-lg border border-slate-200">
+                    <p class="text-xs text-slate-500 font-medium mb-1">Upside Potential</p>
+                    <p class="text-2xl font-bold text-slate-700">${r.upside}</p>
+                  </div>
+                </div>
+                <p class="text-slate-600 leading-relaxed">${r.summary}</p>
+                ${r.pdf_url ? `
+                  <button onclick="getAnalystAISummary('${r.pdf_url}', '${r.brokerage}', ${i})" 
+                          class="mt-4 w-full bg-gradient-to-r from-blue-500 to-blue-600 text-white px-4 py-2 rounded-lg hover:from-blue-600 hover:to-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-150 ease-in-out flex items-center justify-center space-x-2 shadow-md hover:shadow-lg"
+                          id="ai-summary-btn-${i}">
+                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                      <path d="M10 12a2 2 0 100-4 2 2 0 000 4z"/>
+                      <path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd"/>
+                    </svg>
+                    <span>Get Full AI Summary</span>
+                  </button>
+                  <div id="ai-summary-${i}" class="hidden mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg"></div>
+                ` : ''}
+              </div>`;
+          });
+
+          tabsHtml += '</div>';
+          return `<div class="bg-white p-6 rounded-xl shadow-lg mb-8">
+            <h2 class="text-2xl font-bold mb-4 text-slate-700">📊 Analyst Recommendations</h2>
+            ${tabsHtml}
+            ${panelsHtml}
+          </div>`;
+        }
+
+        // Tab switching function for Analyst Reports
+        window.switchAnalystTab = function (index) {
+          document.querySelectorAll('.analyst-tab').forEach((t, i) => t.classList.toggle('active', i === index));
+          document.querySelectorAll('.analyst-panel').forEach((p, i) => p.classList.toggle('active', i === index));
+        };
+
+        // AI Summary function for Analyst Reports with caching
+        const summaryCache = new Map(); // Cache for storing generated summaries
+
+        window.getAnalystAISummary = async function (pdfUrl, brokerage, index) {
+          const btn = document.getElementById(`ai-summary-btn-${index}`);
+          const summaryDiv = document.getElementById(`ai-summary-${index}`);
+
+          // Check if summary is already cached
+          if (summaryCache.has(pdfUrl)) {
+            console.log('Using cached summary for', pdfUrl);
+
+            // Toggle visibility if already generated
+            if (summaryDiv.classList.contains('hidden')) {
+              summaryDiv.classList.remove('hidden');
+              btn.innerHTML = `
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/>
+                </svg>
+                <span>Hide AI Summary</span>
+              `;
+              btn.className = "mt-4 w-full bg-gradient-to-r from-red-500 to-red-600 text-white px-4 py-2 rounded-lg hover:from-red-600 hover:to-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 transition-all duration-150 ease-in-out flex items-center justify-center space-x-2 shadow-md hover:shadow-lg";
+            } else {
+              summaryDiv.classList.add('hidden');
+              btn.innerHTML = `
+                <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M10 12a2 2 0 100-4 2 2 0 000 4z"/>
+                  <path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd"/>
+                </svg>
+                <span>Get Full AI Summary</span>
+              `;
+              btn.className = "mt-4 w-full bg-gradient-to-r from-blue-500 to-blue-600 text-white px-4 py-2 rounded-lg hover:from-blue-600 hover:to-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-150 ease-in-out flex items-center justify-center space-x-2 shadow-md hover:shadow-lg";
+            }
+            return; // Don't fetch again
+          }
+
+          // Show loading state
+          btn.disabled = true;
+          btn.innerHTML = `
+            <svg class="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <span>Generating AI Summary...</span>
+          `;
+
+          try {
+            const response = await fetch('/summarize-analyst-pdf', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ pdf_url: pdfUrl })
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) throw new Error(data.error || 'Failed to summarize PDF');
+
+            // Show summary with markdown rendering
+            const { html } = renderMarkdownToHtml(data.summary, false);
+            summaryDiv.innerHTML = `
+              <div class="prose prose-sm max-w-none">
+                <h4 class="font-bold text-blue-800 mb-2">Full AI Summary - ${brokerage}</h4>
+                ${html}
+              </div>
+            `;
+            summaryDiv.classList.remove('hidden');
+
+            // Cache the summary for instant re-display
+            summaryCache.set(pdfUrl, { html, brokerage });
+            console.log('Cached summary for', pdfUrl);
+
+            // Change button to "Hide Summary" with better styling
+            btn.innerHTML = `
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/>
+              </svg>
+              <span>Hide AI Summary</span>
+            `;
+            btn.disabled = false;
+            btn.className = "mt-4 w-full bg-gradient-to-r from-red-500 to-red-600 text-white px-4 py-2 rounded-lg hover:from-red-600 hover:to-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 transition-all duration-150 ease-in-out flex items-center justify-center space-x-2 shadow-md hover:shadow-lg";
+            btn.onclick = () => {
+              summaryDiv.classList.add('hidden');
+              btn.innerHTML = `
+                <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M10 12a2 2 0 100-4 2 2 0 000 4z"/>
+                  <path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd"/>
+                </svg>
+                <span>Get Full AI Summary</span>
+              `;
+              btn.className = "mt-4 w-full bg-gradient-to-r from-blue-500 to-blue-600 text-white px-4 py-2 rounded-lg hover:from-blue-600 hover:to-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-150 ease-in-out flex items-center justify-center space-x-2 shadow-md hover:shadow-lg";
+              btn.onclick = () => getAnalystAISummary(pdfUrl, brokerage, index);
+            };
+
+          } catch (error) {
+            summaryDiv.innerHTML = `
+              <div class="bg-red-50 border border-red-200 text-red-700 p-3 rounded-lg">
+                <strong>Error:</strong> ${error.message}
+              </div>
+            `;
+            summaryDiv.classList.remove('hidden');
+
+            btn.innerHTML = `
+              <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M10 12a2 2 0 100-4 2 2 0 000 4z"/>
+                <path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd"/>
+              </svg>
+              <span>Try Again</span>
+            `;
+            btn.disabled = false;
+          }
+        };
+
         // =====================================================================
         // START: MODIFIED SECTION FOR SCORES INTEGRATION
         // =====================================================================
@@ -1785,7 +2246,13 @@
           peerComparisonHTML = renderPeerComparisonTable(payload.peer_comparison);
         }
 
-        resultsContainer.innerHTML = keyMetricsHTML + summarySectionHTML + peerComparisonHTML + aiScoreHTML + technicalSummaryHTML;
+        // NEW: Analyst Reports Section
+        let analystReportsHTML = '';
+        if (payload.analyst_reports && payload.analyst_reports.length > 0) {
+          analystReportsHTML = renderAnalystReports(payload.analyst_reports);
+        }
+
+        resultsContainer.innerHTML = keyMetricsHTML + summarySectionHTML + analystReportsHTML + peerComparisonHTML + aiScoreHTML + technicalSummaryHTML;
 
         // Attach click handlers for AI Score charts
         // We check our payload.ai_scores variable for the test
