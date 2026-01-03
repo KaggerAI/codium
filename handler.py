@@ -294,6 +294,36 @@ def debug_env():
     # returns True/False (no secrets leaked)
     return jsonify({k: bool(os.getenv(k)) for k in keys})
 
+@app.route('/debug/cookies-source')
+def debug_cookies_source():
+    """Debug endpoint to check which source Trendlyne cookies are loaded from"""
+    import json as json_lib
+    
+    result = {
+        'env_var_exists': bool(os.getenv('TRENDLYNE_COOKIES')),
+        'env_var_length': len(os.getenv('TRENDLYNE_COOKIES', '')),
+        'file_exists': os.path.exists('analyst_reports/trendlyne_cookies.json'),
+        'loaded_cookies_count': 0,
+        'cookie_keys': []
+    }
+    
+    # Try to parse env var
+    if result['env_var_exists']:
+        try:
+            cookies = json_lib.loads(os.getenv('TRENDLYNE_COOKIES'))
+            result['env_var_valid'] = True
+            result['env_var_cookie_count'] = len(cookies)
+            result['env_var_keys'] = list(cookies.keys())
+        except:
+            result['env_var_valid'] = False
+    
+    # Check what the module actually loaded
+    from analyst_reports.pdf_summarizer_cookies import TRENDLYNE_COOKIES
+    result['loaded_cookies_count'] = len(TRENDLYNE_COOKIES)
+    result['cookie_keys'] = list(TRENDLYNE_COOKIES.keys())
+    
+    return jsonify(result)
+
 # Serve front-end HTML
 @app.route('/')
 def index():
