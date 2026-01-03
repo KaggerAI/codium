@@ -277,7 +277,8 @@
     #ai-summary-4 table,
     #ai-summary-5 table,
     #ai-summary-6 table,
-    #ai-summary-7 table {
+    #ai-summary-7 table,
+    #ai-summary-modal-body table {
       width: 100%;
       border-collapse: collapse;
       margin: 1rem 0;
@@ -294,7 +295,8 @@
     #ai-summary-4 table thead,
     #ai-summary-5 table thead,
     #ai-summary-6 table thead,
-    #ai-summary-7 table thead {
+    #ai-summary-7 table thead,
+    #ai-summary-modal-body table thead {
       background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
       color: white;
     }
@@ -306,7 +308,8 @@
     #ai-summary-4 table th,
     #ai-summary-5 table th,
     #ai-summary-6 table th,
-    #ai-summary-7 table th {
+    #ai-summary-7 table th,
+    #ai-summary-modal-body table th {
       padding: 0.75rem 1rem;
       text-align: left;
       font-weight: 600;
@@ -321,7 +324,8 @@
     #ai-summary-4 table td,
     #ai-summary-5 table td,
     #ai-summary-6 table td,
-    #ai-summary-7 table td {
+    #ai-summary-7 table td,
+    #ai-summary-modal-body table td {
       padding: 0.75rem 1rem;
       border-bottom: 1px solid #e5e7eb;
       font-size: 0.875rem;
@@ -334,7 +338,8 @@
     #ai-summary-4 table tbody tr:nth-child(even),
     #ai-summary-5 table tbody tr:nth-child(even),
     #ai-summary-6 table tbody tr:nth-child(even),
-    #ai-summary-7 table tbody tr:nth-child(even) {
+    #ai-summary-7 table tbody tr:nth-child(even),
+    #ai-summary-modal-body table tbody tr:nth-child(even) {
       background: #f9fafb;
     }
 
@@ -345,7 +350,8 @@
     #ai-summary-4 table tbody tr:hover,
     #ai-summary-5 table tbody tr:hover,
     #ai-summary-6 table tbody tr:hover,
-    #ai-summary-7 table tbody tr:hover {
+    #ai-summary-7 table tbody tr:hover,
+    #ai-summary-modal-body table tbody tr:hover {
       background: #eff6ff;
     }
 
@@ -357,7 +363,8 @@
     #ai-summary-4 h2,
     #ai-summary-5 h2,
     #ai-summary-6 h2,
-    #ai-summary-7 h2 {
+    #ai-summary-7 h2,
+    #ai-summary-modal-body h2 {
       font-size: 1.5rem;
       font-weight: 700;
       color: #1e40af;
@@ -373,7 +380,8 @@
     #ai-summary-4 h3,
     #ai-summary-5 h3,
     #ai-summary-6 h3,
-    #ai-summary-7 h3 {
+    #ai-summary-7 h3,
+    #ai-summary-modal-body h3 {
       font-size: 1.25rem;
       font-weight: 600;
       color: #1e3a8a;
@@ -388,7 +396,8 @@
     #ai-summary-4 blockquote,
     #ai-summary-5 blockquote,
     #ai-summary-6 blockquote,
-    #ai-summary-7 blockquote {
+    #ai-summary-7 blockquote,
+    #ai-summary-modal-body blockquote {
       border-left: 4px solid #3b82f6;
       background: #eff6ff;
       padding: 1rem 1.5rem;
@@ -406,7 +415,8 @@
     #ai-summary-4 ul,
     #ai-summary-5 ul,
     #ai-summary-6 ul,
-    #ai-summary-7 ul {
+    #ai-summary-7 ul,
+    #ai-summary-modal-body ul {
       list-style-type: disc;
       padding-left: 1.5rem;
       margin: 0.5rem 0;
@@ -419,7 +429,8 @@
     #ai-summary-4 ol,
     #ai-summary-5 ol,
     #ai-summary-6 ol,
-    #ai-summary-7 ol {
+    #ai-summary-7 ol,
+    #ai-summary-modal-body ol {
       list-style-type: decimal;
       padding-left: 1.5rem;
       margin: 0.5rem 0;
@@ -432,7 +443,8 @@
     #ai-summary-4 li,
     #ai-summary-5 li,
     #ai-summary-6 li,
-    #ai-summary-7 li {
+    #ai-summary-7 li,
+    #ai-summary-modal-body li {
       margin: 0.25rem 0;
       line-height: 1.6;
     }
@@ -445,7 +457,8 @@
     #ai-summary-4 hr,
     #ai-summary-5 hr,
     #ai-summary-6 hr,
-    #ai-summary-7 hr {
+    #ai-summary-7 hr,
+    #ai-summary-modal-body hr {
       border: none;
       border-top: 2px solid #e5e7eb;
       margin: 2rem 0;
@@ -459,7 +472,8 @@
     #ai-summary-4 strong,
     #ai-summary-5 strong,
     #ai-summary-6 strong,
-    #ai-summary-7 strong {
+    #ai-summary-7 strong,
+    #ai-summary-modal-body strong {
       color: #1e40af;
       font-weight: 700;
     }
@@ -472,10 +486,119 @@
     #ai-summary-4 p,
     #ai-summary-5 p,
     #ai-summary-6 p,
-    #ai-summary-7 p {
+    #ai-summary-7 p,
+    #ai-summary-modal-body p {
       margin: 0.75rem 0;
       line-height: 1.7;
       color: #374151;
+    }
+
+    /* === AI SUMMARY MODAL === */
+    .ai-summary-modal {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 9999;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+      animation: fadeIn 0.2s ease-in-out;
+    }
+
+    .ai-summary-modal.active {
+      display: flex;
+    }
+
+    .ai-summary-backdrop {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.6);
+      backdrop-filter: blur(4px);
+    }
+
+    .ai-summary-content {
+      position: relative;
+      background: white;
+      border-radius: 16px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      max-width: 900px;
+      max-height: 85vh;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      animation: slideUp 0.3s ease-out;
+    }
+
+    .ai-summary-header {
+      padding: 1.5rem;
+      border-bottom: 2px solid #e5e7eb;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+      border-radius: 16px 16px 0 0;
+      color: white;
+    }
+
+    .ai-summary-title {
+      font-size: 1.5rem;
+      font-weight: 700;
+      margin: 0;
+    }
+
+    .ai-summary-close {
+      background: rgba(255, 255, 255, 0.2);
+      border: none;
+      color: white;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+      font-size: 1.5rem;
+      line-height: 1;
+    }
+
+    .ai-summary-close:hover {
+      background: rgba(255, 255, 255, 0.3);
+      transform: rotate(90deg);
+    }
+
+    .ai-summary-body {
+      padding: 1.5rem;
+      overflow-y: auto;
+      flex: 1;
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+      }
+
+      to {
+        opacity: 1;
+      }
+    }
+
+    @keyframes slideUp {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
     }
 
     /* === TABS === */
@@ -847,6 +970,20 @@
     </div>
   </nav>
 
+  <!-- AI Summary Modal -->
+  <div id="ai-summary-modal" class="ai-summary-modal">
+    <div class="ai-summary-backdrop" onclick="closeAISummaryModal()"></div>
+    <div class="ai-summary-content">
+      <div class="ai-summary-header">
+        <h2 class="ai-summary-title" id="ai-summary-modal-title">AI Summary</h2>
+        <button class="ai-summary-close" onclick="closeAISummaryModal()" aria-label="Close">×</button>
+      </div>
+      <div class="ai-summary-body" id="ai-summary-modal-body">
+        <!-- Summary content will be inserted here -->
+      </div>
+    </div>
+  </div>
+
   <!-- MAIN -->
   <main class="container mx-auto mt-8 mb-12 px-4">
     <div id="searchCard" class="bg-white p-8 rounded-xl shadow-lg w-full max-w-3xl mx-auto mb-12 theme-transition">
@@ -1062,16 +1199,6 @@
         });
       }
       html += `</tbody></table></div>`;
-      return html;
-    }
-
-    function render_scanx_grid(data) {
-      let html = '<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">';
-      for (const [key, value] of Object.entries(data)) {
-        const formattedKey = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-        html += `<div class="bg-slate-50 p-3 rounded-lg border border-slate-200"><p class="text-xs text-slate-500 font-medium">${formattedKey}</p><p class="text-base font-semibold text-slate-800">${value || 'N/A'}</p></div>`;
-      }
-      html += '</div>';
       return html;
     }
 
@@ -2072,27 +2199,10 @@
           if (summaryCache.has(pdfUrl)) {
             console.log('Using cached summary for', pdfUrl);
 
-            // Toggle visibility if already generated
-            if (summaryDiv.classList.contains('hidden')) {
-              summaryDiv.classList.remove('hidden');
-              btn.innerHTML = `
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/>
-                </svg>
-                <span>Hide AI Summary</span>
-              `;
-              btn.className = "mt-4 w-full bg-gradient-to-r from-red-500 to-red-600 text-white px-4 py-2 rounded-lg hover:from-red-600 hover:to-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 transition-all duration-150 ease-in-out flex items-center justify-center space-x-2 shadow-md hover:shadow-lg";
-            } else {
-              summaryDiv.classList.add('hidden');
-              btn.innerHTML = `
-                <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M10 12a2 2 0 100-4 2 2 0 000 4z"/>
-                  <path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd"/>
-                </svg>
-                <span>Get Full AI Summary</span>
-              `;
-              btn.className = "mt-4 w-full bg-gradient-to-r from-blue-500 to-blue-600 text-white px-4 py-2 rounded-lg hover:from-blue-600 hover:to-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-150 ease-in-out flex items-center justify-center space-x-2 shadow-md hover:shadow-lg";
-            }
+
+            // Get cached data and show in modal
+            const cached = summaryCache.get(pdfUrl);
+            openAISummaryModal(cached.brokerage, cached.html);
             return; // Don't fetch again
           }
 
@@ -2117,61 +2227,62 @@
 
             if (!response.ok) throw new Error(data.error || 'Failed to summarize PDF');
 
-            // Show summary with markdown rendering
+            // Show summary in modal
             const { html } = renderMarkdownToHtml(data.summary, false);
-            summaryDiv.innerHTML = `
-              <div class="prose prose-sm max-w-none">
-                <h4 class="font-bold text-blue-800 mb-2">Full AI Summary - ${brokerage}</h4>
-                ${html}
-              </div>
-            `;
-            summaryDiv.classList.remove('hidden');
+            openAISummaryModal(brokerage, html);
 
             // Cache the summary for instant re-display
             summaryCache.set(pdfUrl, { html, brokerage });
             console.log('Cached summary for', pdfUrl);
 
-            // Change button to "Hide Summary" with better styling
-            btn.innerHTML = `
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/>
-              </svg>
-              <span>Hide AI Summary</span>
-            `;
-            btn.disabled = false;
-            btn.className = "mt-4 w-full bg-gradient-to-r from-red-500 to-red-600 text-white px-4 py-2 rounded-lg hover:from-red-600 hover:to-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 transition-all duration-150 ease-in-out flex items-center justify-center space-x-2 shadow-md hover:shadow-lg";
-            btn.onclick = () => {
-              summaryDiv.classList.add('hidden');
-              btn.innerHTML = `
-                <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M10 12a2 2 0 100-4 2 2 0 000 4z"/>
-                  <path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd"/>
-                </svg>
-                <span>Get Full AI Summary</span>
-              `;
-              btn.className = "mt-4 w-full bg-gradient-to-r from-blue-500 to-blue-600 text-white px-4 py-2 rounded-lg hover:from-blue-600 hover:to-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-150 ease-in-out flex items-center justify-center space-x-2 shadow-md hover:shadow-lg";
-              btn.onclick = () => getAnalystAISummary(pdfUrl, brokerage, index);
-            };
-
-          } catch (error) {
-            summaryDiv.innerHTML = `
-              <div class="bg-red-50 border border-red-200 text-red-700 p-3 rounded-lg">
-                <strong>Error:</strong> ${error.message}
-              </div>
-            `;
-            summaryDiv.classList.remove('hidden');
-
+            // Reset button
             btn.innerHTML = `
               <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
                 <path d="M10 12a2 2 0 100-4 2 2 0 000 4z"/>
                 <path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd"/>
               </svg>
+              <span>Get Full AI Summary</span>
+            `;
+            btn.disabled = false;
+
+          } catch (error) {
+            btn.innerHTML = `
+              <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
+              </svg>
               <span>Try Again</span>
             `;
             btn.disabled = false;
+
+            alert(`Error: ${error.message}`);
           }
         };
 
+        // Modal functions
+        window.openAISummaryModal = function (brokerage, htmlContent) {
+          const modal = document.getElementById('ai-summary-modal');
+          const title = document.getElementById('ai-summary-modal-title');
+          const body = document.getElementById('ai-summary-modal-body');
+
+          title.textContent = `Full AI Summary - ${brokerage}`;
+          body.innerHTML = `<div class="prose prose-sm max-w-none">${htmlContent}</div>`;
+
+          modal.classList.add('active');
+          document.body.style.overflow = 'hidden'; // Prevent background scrolling
+        }
+
+        window.closeAISummaryModal = function () {
+          const modal = document.getElementById('ai-summary-modal');
+          modal.classList.remove('active');
+          document.body.style.overflow = ''; // Restore scrolling
+        }
+
+        // Close modal on Escape key
+        document.addEventListener('keydown', (e) => {
+          if (e.key === 'Escape') {
+            closeAISummaryModal();
+          }
+        });
         // =====================================================================
         // START: MODIFIED SECTION FOR SCORES INTEGRATION
         // =====================================================================
@@ -2367,65 +2478,14 @@
           });
         }
 
-        let scanxHTML = '';
-        if (payload.scanx_data && !payload.scanx_data.error) {
-          const sections = [
-            { key: 'basic_metrics', title: 'Key Metrics', type: 'grid' },
-            { key: 'price_performance', title: 'Price Performance', type: 'grid' },
-            { key: 'analyst_rating', title: 'Analyst Rating', type: 'analyst' },
-            { key: 'company_filings', title: 'Company Filings', type: 'filings_list' },
-            { key: 'peer_comparison', title: 'Peer Comparison', type: 'table' },
-            { key: 'quarterly_financials', title: 'Quarterly Financials', type: 'table' },
-            { key: 'balance_sheet', title: 'Balance Sheet', type: 'table' },
-            { key: 'cash_flow', title: 'Cash Flow', type: 'table' },
-            { key: 'shareholding_pattern', title: 'Shareholding Pattern', type: 'shareholding_table' }
-          ];
-          sections.forEach(section => {
-            const data = payload.scanx_data[section.key];
-            if (data && Object.keys(data).length > 0) {
-              scanxHTML += `<h3 class="text-xl font-semibold mb-4 mt-8 text-slate-600">${section.title}</h3>`;
-              switch (section.type) {
-                case 'grid': scanxHTML += render_scanx_grid(data); break;
-                case 'analyst': scanxHTML += render_analyst_rating(data); break;
-                case 'table': scanxHTML += render_generic_scanx_table(data); break;
-                case 'shareholding_table': scanxHTML += render_shareholding_table(data); break;
-                case 'filings_list': scanxHTML += render_filings_list(data); break;
-              }
-            }
-          });
-        }
-
-        if (screenerHTML || scanxHTML) {
-          const tabsContainer = document.createElement('div');
-          tabsContainer.className = 'bg-white p-6 rounded-xl shadow-lg mt-10';
-          tabsContainer.innerHTML = `
-                <h2 class="text-2xl font-bold mb-4 text-slate-700">AI Fundamental Analysis</h2>
-                <div class="border-b border-slate-200">
-                    <nav class="-mb-px flex space-x-6" aria-label="Tabs">
-                        <button class="tab-button active whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm" data-target="#screener-panel">Screener.in</button>
-                        <button class="tab-button whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300" data-target="#scanx-panel">ScanX.trade</button>
-                    </nav>
-                </div>
-                <div id="screener-panel" class="tab-panel">
-                    ${screenerHTML || '<p class="text-slate-500">No data available from Screener.in.</p>'}
-                </div>
-                <div id="scanx-panel" class="tab-panel hidden">
-                    ${scanxHTML || '<p class="text-slate-500">No data available from ScanX.trade.</p>'}
-                </div>
-            `;
-          resultsContainer.appendChild(tabsContainer);
-
-          tabsContainer.querySelectorAll('.tab-button').forEach(button => {
-            button.addEventListener('click', () => {
-              const targetPanelId = button.dataset.target;
-              tabsContainer.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
-              button.classList.add('active');
-              tabsContainer.querySelectorAll('.tab-panel').forEach(panel => {
-                panel.classList.add('hidden');
-              });
-              tabsContainer.querySelector(targetPanelId).classList.remove('hidden');
-            });
-          });
+        if (screenerHTML) {
+          const screenerContainer = document.createElement('div');
+          screenerContainer.className = 'bg-white p-6 rounded-xl shadow-lg mt-10';
+          screenerContainer.innerHTML = `
+            <h2 class="text-2xl font-bold mb-4 text-slate-700">AI Fundamental Analysis</h2>
+            ${screenerHTML}
+          `;
+          resultsContainer.appendChild(screenerContainer);
         }
 
         document.querySelectorAll('.toggleMetric').forEach(btn => {
