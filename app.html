@@ -986,6 +986,310 @@
       overflow-x: auto;
       max-width: 100%;
     }
+
+    /* =====================================================================
+       MOBILE RESPONSIVE STYLES
+       ===================================================================== */
+
+    /* Tablet and below (768px) */
+    @media (max-width: 768px) {
+
+      /* === HEADER & NAV === */
+      nav .container {
+        flex-direction: column;
+        gap: 0.75rem;
+        padding: 0.75rem 1rem;
+      }
+
+      nav ul {
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 0.5rem;
+      }
+
+      nav ul li button,
+      nav ul li a {
+        font-size: 0.75rem;
+        padding: 0.5rem 0.75rem;
+      }
+
+      /* Hide the Tools dropdown on mobile for now */
+      nav ul li.relative.group {
+        display: none;
+      }
+
+      /* === MODE TOGGLE === */
+      .mode-toggle-container {
+        flex-direction: column;
+        gap: 0.75rem;
+      }
+
+      .toggle-switch {
+        width: 60px;
+        height: 30px;
+      }
+
+      .toggle-switch::before {
+        width: 24px;
+        height: 24px;
+      }
+
+      .toggle-switch.industry::before {
+        transform: translateX(30px);
+      }
+
+      /* === MAIN SEARCH CARD === */
+      #searchCard {
+        padding: 1.25rem;
+        margin-left: 0.5rem;
+        margin-right: 0.5rem;
+      }
+
+      #mainTitle {
+        font-size: 1.5rem !important;
+      }
+
+      #mainSubtitle {
+        font-size: 0.875rem;
+      }
+
+      /* === SEARCH FORMS === */
+      #companyForm .flex,
+      #industryForm .flex {
+        flex-direction: column;
+      }
+
+      #companyForm input,
+      #industryForm input {
+        border-radius: 0.375rem !important;
+        font-size: 1rem;
+      }
+
+      #companyForm button,
+      #industryForm button {
+        border-radius: 0.375rem !important;
+        margin-top: 0.5rem;
+        width: 100%;
+      }
+
+      /* Industry options - single column */
+      .industry-fields {
+        grid-template-columns: 1fr !important;
+      }
+
+      /* === TABLES === */
+      .overflow-x-auto {
+        -webkit-overflow-scrolling: touch;
+      }
+
+      table {
+        font-size: 0.75rem;
+      }
+
+      table th,
+      table td {
+        padding: 0.5rem 0.375rem !important;
+        white-space: nowrap;
+      }
+
+      /* Peer comparison */
+      .peer-comparison-table {
+        min-width: 700px;
+      }
+
+      /* === GRIDS === */
+      .grid-cols-2.md\\:grid-cols-3.lg\\:grid-cols-4,
+      .grid.grid-cols-2.md\\:grid-cols-4 {
+        grid-template-columns: repeat(2, 1fr) !important;
+      }
+
+      /* === KEY METRICS CARDS === */
+      .grid.grid-cols-2 {
+        gap: 0.5rem;
+      }
+
+      .grid.grid-cols-2>div {
+        padding: 0.75rem;
+      }
+
+      /* === ANALYST TABS === */
+      .analyst-tabs {
+        flex-wrap: wrap;
+        gap: 0.25rem;
+      }
+
+      .analyst-tab {
+        font-size: 0.7rem;
+        padding: 0.4rem 0.6rem;
+      }
+
+      /* === AI SCORES === */
+      .ai-score-tabs {
+        flex-wrap: wrap;
+      }
+
+      .ai-score-tabs button {
+        font-size: 0.75rem;
+        padding: 0.5rem 0.75rem;
+      }
+
+      /* === CHAT MODAL - FULLSCREEN === */
+      #chatModal>div {
+        max-width: 100% !important;
+        width: 100% !important;
+        height: 100vh !important;
+        max-height: 100vh !important;
+        border-radius: 0 !important;
+      }
+
+      #chatModal .p-4 {
+        padding: 0.75rem !important;
+      }
+
+      /* Chat input */
+      #chatForm input {
+        font-size: 1rem;
+      }
+
+      /* Analyst toggle in chat */
+      #analystToggleRow {
+        flex-direction: column;
+        gap: 0.5rem;
+        align-items: flex-start;
+      }
+
+      /* === AI SUMMARY MODAL === */
+      .ai-summary-content {
+        width: 95% !important;
+        max-width: 95% !important;
+        max-height: 90vh !important;
+      }
+
+      .ai-summary-header {
+        padding: 1rem;
+      }
+
+      .ai-summary-title {
+        font-size: 1.125rem;
+      }
+
+      /* === FLOATING BUTTONS === */
+      #chatBtn {
+        bottom: 1rem;
+        right: 1rem;
+        padding: 0.75rem;
+      }
+
+      #chatBtn svg {
+        width: 1.5rem;
+        height: 1.5rem;
+      }
+
+      #backToTopBtn {
+        bottom: 1rem;
+        right: 4.5rem;
+        padding: 0.5rem;
+      }
+
+      #backToTopBtn svg {
+        width: 1.25rem;
+        height: 1.25rem;
+      }
+
+      /* === MAIN CONTENT === */
+      main {
+        padding-left: 0.75rem !important;
+        padding-right: 0.75rem !important;
+      }
+
+      /* Reduce padding universally */
+      .p-6 {
+        padding: 1rem !important;
+      }
+
+      .p-4 {
+        padding: 0.75rem !important;
+      }
+
+      .mb-8 {
+        margin-bottom: 1.5rem !important;
+      }
+
+      /* === TYPOGRAPHY === */
+      .text-4xl {
+        font-size: 1.5rem !important;
+      }
+
+      .text-3xl {
+        font-size: 1.25rem !important;
+      }
+
+      .text-2xl {
+        font-size: 1.125rem !important;
+      }
+
+      .text-xl {
+        font-size: 1rem !important;
+      }
+
+      /* === INDUSTRY REPORT === */
+      .industry-report h1 {
+        font-size: 1.25rem;
+      }
+
+      .industry-report h2 {
+        font-size: 1.1rem;
+        margin-left: 0;
+      }
+
+      .industry-report h3 {
+        font-size: 1rem;
+        margin-left: 0;
+      }
+
+      /* === NEWS SECTION === */
+      #news-section .grid {
+        grid-template-columns: 1fr !important;
+      }
+    }
+
+    /* Small phones (480px) */
+    @media (max-width: 480px) {
+      #mainTitle {
+        font-size: 1.25rem !important;
+      }
+
+      /* Single column for key metrics */
+      .grid.grid-cols-2 {
+        grid-template-columns: 1fr !important;
+      }
+
+      table {
+        font-size: 0.65rem;
+      }
+
+      table th,
+      table td {
+        padding: 0.375rem 0.25rem !important;
+      }
+
+      /* Analyst tabs - even smaller */
+      .analyst-tab {
+        font-size: 0.625rem;
+        padding: 0.35rem 0.5rem;
+      }
+
+      nav ul li button,
+      nav ul li a {
+        font-size: 0.65rem;
+        padding: 0.375rem 0.5rem;
+      }
+
+      /* Mode labels */
+      .mode-label {
+        font-size: 0.8rem;
+      }
+    }
   </style>
 
 </head>
