@@ -35,7 +35,7 @@ def load_url_mapping():
             }
         print(f"INFO: Loaded {len(TRENDLYNE_DATA)} tickers from trendlyne_all_stocks_master.csv")
     except Exception as e:
-        print(f"WARNING: Failed to load Trendlyne URL mapping: {e}")
+        print(f"WARNING: Failed to load URL mapping: {e}")
 
 
 # Load on module import
@@ -72,11 +72,11 @@ async def fetch_analyst_reports_async(ticker: str) -> list[dict]:
     """
     url = get_post_url(ticker)
     if not url:
-        log_progress(f"No Trendlyne URL found for {ticker}")
+        log_progress(f"No analyst report URL found for {ticker}")
         return []
     
     try:
-        log_progress(f"Fetching analyst reports for {ticker} from Trendlyne...")
+        log_progress(f"Fetching analyst reports for {ticker}...")
         
         headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
         

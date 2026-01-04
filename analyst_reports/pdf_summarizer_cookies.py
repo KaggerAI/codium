@@ -42,7 +42,7 @@ def load_cookies_from_file():
             TRENDLYNE_COOKIES = json.load(f)
         print(f"INFO: Loaded {len(TRENDLYNE_COOKIES)} cookies from trendlyne_cookies.json file")
     else:
-        print("WARNING: No cookies found. Set TRENDLYNE_COOKIES env var or create trendlyne_cookies.json file.")
+        print("WARNING: No cookies found.")
 
 
 async def download_analyst_pdf_with_cookies(pdf_url: str) -> bytes:
@@ -50,7 +50,7 @@ async def download_analyst_pdf_with_cookies(pdf_url: str) -> bytes:
     load_cookies_from_file()
     
     if not TRENDLYNE_COOKIES:
-        raise Exception("No Trendlyne cookies configured. Please export cookies from your browser.")
+        raise Exception("No cookies configured. Please export cookies from your browser.")
     
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -96,6 +96,7 @@ async def summarize_analyst_pdf_async(pdf_url: str) -> str:
 - Use bullet points for lists
 - Use **bold** for important numbers and metrics
 - Use > blockquotes for key analyst opinions
+- For revenue, EBITDA, and PAT fugures, use crores for INR and millions for USD. Make conversions where required.
 
 **Your output MUST include:**
 

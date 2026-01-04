@@ -40,6 +40,62 @@
       transition: background-color 0.4s ease, border-color 0.4s ease, color 0.4s ease, box-shadow 0.4s ease;
     }
 
+    /* === STOCK AUTOCOMPLETE DROPDOWN === */
+    #stockDropdown {
+      border-top: none;
+      border-top-left-radius: 0;
+      border-top-right-radius: 0;
+    }
+
+    #stockDropdown::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    #stockDropdown::-webkit-scrollbar-track {
+      background: #f1f1f1;
+    }
+
+    #stockDropdown::-webkit-scrollbar-thumb {
+      background: #c1c1c1;
+      border-radius: 4px;
+    }
+
+    .stock-item {
+      padding: 10px 16px;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid #f0f0f0;
+    }
+
+    .stock-item:hover,
+    .stock-item.selected {
+      background-color: #f0fdf4;
+    }
+
+    .stock-item:last-child {
+      border-bottom: none;
+    }
+
+    .stock-name {
+      font-weight: 500;
+      color: #1f2937;
+    }
+
+    .stock-ticker {
+      font-size: 0.85rem;
+      color: #059669;
+      font-weight: 600;
+      background: #ecfdf5;
+      padding: 2px 8px;
+      border-radius: 4px;
+    }
+
+    .stock-item-highlight {
+      background-color: #fef3c7;
+    }
+
     /* === TOGGLE SWITCH === */
     .mode-toggle-container {
       display: flex;
@@ -958,13 +1014,14 @@
         </li>
         <!-- AI News Button -->
         <li>
-          <a href="/news"
-            class="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg font-medium hover:opacity-90 transition-all shadow-md">
+          <button onclick="showSection('news')"
+            class="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg font-medium hover:opacity-90 transition-all shadow-md"
+            id="news-tab-btn">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
             📰 AI-Enhanced News
-          </a>
+          </button>
         </li>
         <li>
           <a href="/admin" id="admin-link"
@@ -1032,9 +1089,17 @@
 
       <!-- Company Search Form -->
       <div id="companyForm">
-        <div class="flex">
-          <input id="tickerInput" type="text" placeholder="Enter a stock ticker (e.g. TCS.NS or RELIANCE)"
-            class="flex-grow border border-slate-300 rounded-l-md px-4 py-3 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-lg theme-transition" />
+        <div class="flex relative">
+          <div class="flex-grow relative">
+            <input id="tickerInput" type="text"
+              placeholder="Search stock name or ticker (e.g. TCS, Reliance, HDFC Bank)"
+              class="w-full border border-slate-300 rounded-l-md px-4 py-3 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-lg theme-transition"
+              autocomplete="off" />
+            <div id="stockDropdown"
+              class="absolute left-0 right-0 top-full bg-white border border-slate-300 rounded-b-md shadow-lg z-50 max-h-64 overflow-y-auto hidden">
+              <!-- Autocomplete results will appear here -->
+            </div>
+          </div>
           <button id="goBtn"
             class="bg-gradient-to-r from-green-500 to-green-600 text-white px-8 py-3 rounded-r-md hover:from-green-600 hover:to-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-all duration-150 ease-in-out font-semibold text-lg theme-transition">
             Analyze
@@ -1961,6 +2026,120 @@
     // ===================================================================================
 
     // ===================================================================================
+    // START: STOCK AUTOCOMPLETE FUNCTIONALITY
+    // ===================================================================================
+    let allStocks = [];
+    let selectedIndex = -1;
+
+    // Load stocks on page load
+    fetch('/api/stocks')
+      .then(r => r.json())
+      .then(data => { allStocks = data; console.log(`Loaded ${allStocks.length} stocks for autocomplete`); })
+      .catch(e => console.error('Failed to load stocks:', e));
+
+    const tickerInput = document.getElementById('tickerInput');
+    const stockDropdown = document.getElementById('stockDropdown');
+
+    function filterStocks(query) {
+      if (!query || query.length < 1) return [];
+      const q = query.toLowerCase();
+      return allStocks.filter(s =>
+        s.ticker.toLowerCase().startsWith(q) ||
+        s.name.toLowerCase().includes(q) ||
+        s.ticker.toLowerCase().includes(q)
+      ).slice(0, 15); // Limit to 15 results
+    }
+
+    function renderDropdown(stocks, query) {
+      if (stocks.length === 0) {
+        stockDropdown.classList.add('hidden');
+        return;
+      }
+      stockDropdown.innerHTML = stocks.map((s, i) => `
+        <div class="stock-item ${i === selectedIndex ? 'selected' : ''}" data-ticker="${s.ticker}" data-name="${s.name}">
+          <span class="stock-name">${highlightMatch(s.name, query)}</span>
+          <span class="stock-ticker">${s.ticker}</span>
+        </div>
+      `).join('');
+      stockDropdown.classList.remove('hidden');
+
+      // Add click handlers
+      stockDropdown.querySelectorAll('.stock-item').forEach(item => {
+        item.addEventListener('click', () => selectStock(item.dataset.ticker));
+      });
+    }
+
+    function highlightMatch(text, query) {
+      if (!query) return text;
+      const regex = new RegExp(`(${query})`, 'gi');
+      return text.replace(regex, '<strong style="color:#059669">$1</strong>');
+    }
+
+    function selectStock(ticker) {
+      tickerInput.value = ticker;
+      stockDropdown.classList.add('hidden');
+      selectedIndex = -1;
+    }
+
+    // Debounced input handler
+    let debounceTimer;
+    tickerInput.addEventListener('input', (e) => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        const query = e.target.value.trim();
+        const filtered = filterStocks(query);
+        selectedIndex = -1;
+        renderDropdown(filtered, query);
+      }, 100); // 100ms debounce
+    });
+
+    // Keyboard navigation
+    tickerInput.addEventListener('keydown', (e) => {
+      const items = stockDropdown.querySelectorAll('.stock-item');
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        selectedIndex = Math.min(selectedIndex + 1, items.length - 1);
+        updateSelection(items);
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        selectedIndex = Math.max(selectedIndex - 1, 0);
+        updateSelection(items);
+      } else if (e.key === 'Enter' && selectedIndex >= 0 && items[selectedIndex]) {
+        e.preventDefault();
+        selectStock(items[selectedIndex].dataset.ticker);
+      } else if (e.key === 'Escape') {
+        stockDropdown.classList.add('hidden');
+        selectedIndex = -1;
+      }
+    });
+
+    function updateSelection(items) {
+      items.forEach((item, i) => {
+        item.classList.toggle('selected', i === selectedIndex);
+        if (i === selectedIndex) item.scrollIntoView({ block: 'nearest' });
+      });
+    }
+
+    // Close dropdown when clicking outside
+    document.addEventListener('click', (e) => {
+      if (!tickerInput.contains(e.target) && !stockDropdown.contains(e.target)) {
+        stockDropdown.classList.add('hidden');
+        selectedIndex = -1;
+      }
+    });
+
+    // Show dropdown on focus if input has value
+    tickerInput.addEventListener('focus', () => {
+      const query = tickerInput.value.trim();
+      if (query.length >= 1) {
+        const filtered = filterStocks(query);
+        renderDropdown(filtered, query);
+      }
+    });
+    // END: STOCK AUTOCOMPLETE FUNCTIONALITY
+    // ===================================================================================
+
+    // ===================================================================================
     // START: COMPANY ANALYSIS FUNCTIONALITY
     // ===================================================================================
     document.getElementById('goBtn').addEventListener('click', async () => {
@@ -1981,6 +2160,10 @@
         if (!res.ok) throw new Error(payload.error || 'Unknown error');
 
         currentAnalysisKey = payload.analysis_key; // <<<--- ADD THIS LINE to save the key
+
+        // Store company context for chatbot
+        window.currentCompanyName = payload.company_name || '';
+        window.currentTicker = ticker;
 
         const debugContainer = document.getElementById('debug-link-container');
         debugContainer.innerHTML = ''; // Clear previous link
@@ -2231,7 +2414,7 @@
 
             // Get cached data and show in modal
             const cached = summaryCache.get(pdfUrl);
-            openAISummaryModal(cached.brokerage, cached.html);
+            openAISummaryModal(cached.brokerage, cached.html, pdfUrl);
             return; // Don't fetch again
           }
 
@@ -2258,7 +2441,7 @@
 
             // Show summary in modal
             const { html } = renderMarkdownToHtml(data.summary, false);
-            openAISummaryModal(brokerage, html);
+            openAISummaryModal(brokerage, html, pdfUrl);
 
             // Cache the summary for instant re-display
             summaryCache.set(pdfUrl, { html, brokerage });
@@ -2288,13 +2471,27 @@
         };
 
         // Modal functions
-        window.openAISummaryModal = function (brokerage, htmlContent) {
+        window.openAISummaryModal = function (brokerage, htmlContent, pdfUrl = null) {
           const modal = document.getElementById('ai-summary-modal');
           const title = document.getElementById('ai-summary-modal-title');
           const body = document.getElementById('ai-summary-modal-body');
 
           title.textContent = `Full AI Summary - ${brokerage}`;
-          body.innerHTML = `<div class="prose prose-sm max-w-none">${htmlContent}</div>`;
+
+          // Add "View Full Report" button if PDF URL is available
+          const viewReportBtn = pdfUrl ? `
+            <div class="mt-6 pt-4 border-t border-slate-200">
+              <a href="${pdfUrl}" target="_blank" rel="noopener noreferrer" 
+                 class="inline-flex items-center justify-center w-full px-6 py-3 text-base font-semibold text-white bg-gradient-to-r from-emerald-500 to-green-600 rounded-lg hover:from-emerald-600 hover:to-green-700 shadow-lg hover:shadow-xl transition-all duration-200 gap-2">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                </svg>
+                View Full Analyst Report (PDF)
+              </a>
+            </div>
+          ` : '';
+
+          body.innerHTML = `<div class="prose prose-sm max-w-none">${htmlContent}</div>${viewReportBtn}`;
 
           modal.classList.add('active');
           document.body.style.overflow = 'hidden'; // Prevent background scrolling
@@ -2590,7 +2787,17 @@
       appendMessage('...', 'bot', true);
       try {
         const selectedModel = modelSelector.value;
-        const res = await fetch('/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question: q, model: selectedModel, analysis_key: currentAnalysisKey }) });
+        const res = await fetch('/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            question: q,
+            model: selectedModel,
+            analysis_key: currentAnalysisKey,
+            company_name: window.currentCompanyName || '',
+            ticker: window.currentTicker || ''
+          })
+        });
         const { answer, error, raw_news_summary } = await res.json();
         removeTypingIndicator();
         if (error) { appendMessage(`Error: ${error}`, 'error'); }
@@ -2648,6 +2855,324 @@
       if (typingIndicator) typingIndicator.remove();
     }
     let currentAnalysisKey = null; 
+  </script>
+
+  <!-- NEWS SECTION -->
+  <div id="news-section"
+    style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:linear-gradient(135deg,#0f172a 0%,#1e293b 50%,#0f172a 100%);z-index:100;overflow-y:auto;">
+    <style>
+      #news-section .glass-card {
+        background: rgba(255, 255, 255, 0.03);
+        backdrop-filter: blur(20px);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+      }
+
+      #news-section .news-chat-container {
+        height: calc(100vh - 180px);
+        overflow-y: auto;
+      }
+
+      #news-section .user-message {
+        background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+      }
+
+      #news-section .ai-message {
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+      }
+
+      #news-section .ai-message table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 12px 0
+      }
+
+      #news-section .ai-message th,
+      #news-section .ai-message td {
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        padding: 8px 12px
+      }
+
+      #news-section .ai-message th {
+        background: rgba(255, 255, 255, 0.08);
+        font-weight: 600
+      }
+
+      #news-section .ai-message strong {
+        color: #60a5fa
+      }
+
+      #news-section .ai-message h1,
+      #news-section .ai-message h2,
+      #news-section .ai-message h3 {
+        color: #93c5fd;
+        margin: 16px 0 8px;
+      }
+
+      #news-section .gradient-text {
+        background: linear-gradient(135deg, #60a5fa 0%, #a78bfa 50%, #f472b6 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+      }
+
+      #news-section .typing-indicator span {
+        animation: newsBlink 1.4s infinite both;
+      }
+
+      #news-section .typing-indicator span:nth-child(2) {
+        animation-delay: 0.2s;
+      }
+
+      #news-section .typing-indicator span:nth-child(3) {
+        animation-delay: 0.4s;
+      }
+
+      @keyframes newsBlink {
+
+        0%,
+        100% {
+          opacity: 0.2;
+        }
+
+        50% {
+          opacity: 1;
+        }
+      }
+    </style>
+    <header class="fixed top-0 left-0 right-0 z-50 glass-card">
+      <div class="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div
+            class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
+            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+          </div>
+          <div>
+            <h1 class="text-xl font-bold gradient-text text-white">Kagger's AI-Enhanced News</h1>
+            <p class="text-xs text-slate-400">India's Most Advanced Financial Research Engine</p>
+          </div>
+        </div><button onclick="showSection('analyze')"
+          class="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 transition-all text-sm font-medium text-white flex items-center gap-2"><svg
+            class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+          </svg>Back to Analyze</button>
+      </div>
+    </header>
+    <main class="pt-24 pb-6 px-4">
+      <div class="max-w-4xl mx-auto">
+        <div id="newsChatContainer" class="news-chat-container rounded-2xl glass-card p-6 mb-4">
+          <div id="newsWelcomeMessage" class="text-center py-16 text-white">
+            <div
+              class="w-20 h-20 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-blue-500/20 to-purple-600/20 flex items-center justify-center">
+              <svg class="w-10 h-10 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                  d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+              </svg>
+            </div>
+            <h2 class="text-2xl font-bold mb-3">Ask Anything About Markets</h2>
+            <p class="text-slate-400 max-w-md mx-auto mb-8">Ask about stocks, sectors, market news, or any financial
+              topic.</p>
+            <div class="flex flex-wrap justify-center gap-3"><button
+                onclick="askNewsSuggestion('What happened in the market today?')"
+                class="px-4 py-2 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-sm transition-all">Market
+                today</button><button onclick="askNewsSuggestion('RELIANCE news')"
+                class="px-4 py-2 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-sm transition-all">RELIANCE
+                news</button><button onclick="askNewsSuggestion('IT sector outlook')"
+                class="px-4 py-2 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-sm transition-all">IT
+                sector</button></div>
+          </div>
+          <div id="newsChatMessages" class="space-y-4 hidden"></div>
+        </div>
+        <div class="glass-card rounded-2xl p-4 relative">
+          <div id="newsMentionDropdown"
+            class="absolute bottom-full left-0 right-0 mb-2 bg-slate-800 border border-slate-600 rounded-xl shadow-lg max-h-48 overflow-y-auto hidden z-50">
+            <!-- @mention results appear here -->
+          </div>
+          <div id="newsSelectedCompanies" class="flex flex-wrap gap-2 mb-2 hidden">
+            <!-- Selected company tags appear here -->
+          </div>
+          <form id="newsChatForm" class="flex gap-3">
+            <input type="text" id="newsQuestionInput" placeholder="Ask about stocks, sectors... (use @company to tag)"
+              class="flex-1 bg-white/5 border border-white/10 rounded-xl px-5 py-4 text-white placeholder-slate-500 focus:outline-none transition-all"
+              autocomplete="off">
+            <button type="submit" id="newsSendButton"
+              class="px-6 py-4 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl font-semibold text-white hover:opacity-90 transition-all flex items-center gap-2 disabled:opacity-50">
+              <span>Send</span>
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+              </svg>
+            </button>
+          </form>
+        </div>
+      </div>
+    </main>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script>
+    function showSection(s) { const n = document.getElementById('news-section'); if (s === 'news') { n.style.display = 'block'; document.body.style.overflow = 'hidden'; setTimeout(() => document.getElementById('newsQuestionInput')?.focus(), 100); } else { n.style.display = 'none'; document.body.style.overflow = ''; } }
+    let newsConversationHistory = [], newsIsLoading = false;
+    if (typeof marked !== 'undefined') { marked.setOptions({ breaks: true, gfm: true }); }
+
+    // @Mention functionality
+    let newsSelectedCompanies = [];
+    let newsMentionIndex = -1;
+    const newsInput = document.getElementById('newsQuestionInput');
+    const newsMentionDropdown = document.getElementById('newsMentionDropdown');
+    const newsSelectedContainer = document.getElementById('newsSelectedCompanies');
+
+    function filterNewsStocks(query) {
+      if (!query || !allStocks.length) return [];
+      const q = query.toLowerCase();
+      return allStocks.filter(s =>
+        s.ticker.toLowerCase().startsWith(q) ||
+        s.name.toLowerCase().includes(q)
+      ).slice(0, 8);
+    }
+
+    function renderNewsMentionDropdown(stocks, query) {
+      if (!stocks.length) { newsMentionDropdown.classList.add('hidden'); return; }
+      newsMentionDropdown.innerHTML = stocks.map((s, i) => `
+        <div class="mention-item px-4 py-3 cursor-pointer hover:bg-slate-700 flex justify-between items-center ${i === newsMentionIndex ? 'bg-slate-700' : ''}" data-ticker="${s.ticker}" data-name="${s.name}">
+          <span class="text-white">${s.name}</span>
+          <span class="text-xs text-blue-400 font-semibold">${s.ticker}</span>
+        </div>
+      `).join('');
+      newsMentionDropdown.classList.remove('hidden');
+      newsMentionDropdown.querySelectorAll('.mention-item').forEach(item => {
+        item.onclick = () => selectNewsMention(item.dataset.ticker, item.dataset.name);
+      });
+    }
+
+    function selectNewsMention(ticker, name) {
+      // Replace @query with just @TICKER inline (but track name+ticker for backend)
+      const val = newsInput.value;
+      const atMatch = val.match(/@(\w*)$/);
+      if (atMatch) {
+        const beforeAt = val.substring(0, val.lastIndexOf('@'));
+        newsInput.value = beforeAt + `@${ticker} `;
+      }
+      // Track both name and ticker for context passing to backend
+      if (!newsSelectedCompanies.find(c => c.ticker === ticker)) {
+        newsSelectedCompanies.push({ ticker, name });
+      }
+      newsMentionDropdown.classList.add('hidden');
+      newsMentionIndex = -1;
+      newsInput.focus();
+    }
+
+    function renderNewsSelectedCompanies() {
+      if (!newsSelectedCompanies.length) {
+        newsSelectedContainer.classList.add('hidden');
+        return;
+      }
+      newsSelectedContainer.classList.remove('hidden');
+      newsSelectedContainer.innerHTML = newsSelectedCompanies.map(c => `
+        <span class="inline-flex items-center gap-1 px-3 py-1 bg-blue-600 text-white text-sm rounded-full">
+          <span>${c.name}</span>
+          <span class="text-blue-200">(${c.ticker})</span>
+          <button onclick="removeNewsCompany('${c.ticker}')" class="ml-1 hover:text-red-300">×</button>
+        </span>
+      `).join('');
+    }
+
+    window.removeNewsCompany = function (ticker) {
+      newsSelectedCompanies = newsSelectedCompanies.filter(c => c.ticker !== ticker);
+      renderNewsSelectedCompanies();
+    };
+
+    newsInput?.addEventListener('input', (e) => {
+      const val = e.target.value;
+      const atMatch = val.match(/@(\w*)$/);
+      if (atMatch) {
+        const query = atMatch[1];
+        const filtered = filterNewsStocks(query);
+        newsMentionIndex = -1;
+        renderNewsMentionDropdown(filtered, query);
+      } else {
+        newsMentionDropdown.classList.add('hidden');
+      }
+    });
+
+    newsInput?.addEventListener('keydown', (e) => {
+      const items = newsMentionDropdown.querySelectorAll('.mention-item');
+      if (!items.length || newsMentionDropdown.classList.contains('hidden')) return;
+      if (e.key === 'ArrowDown') { e.preventDefault(); newsMentionIndex = Math.min(newsMentionIndex + 1, items.length - 1); updateNewsMentionSelection(items); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); newsMentionIndex = Math.max(newsMentionIndex - 1, 0); updateNewsMentionSelection(items); }
+      else if (e.key === 'Enter' && newsMentionIndex >= 0) { e.preventDefault(); e.stopPropagation(); selectNewsMention(items[newsMentionIndex].dataset.ticker, items[newsMentionIndex].dataset.name); }
+      else if (e.key === 'Escape') { newsMentionDropdown.classList.add('hidden'); newsMentionIndex = -1; }
+    });
+
+    function updateNewsMentionSelection(items) {
+      items.forEach((item, i) => { item.classList.toggle('bg-slate-700', i === newsMentionIndex); });
+    }
+
+    function askNewsSuggestion(q) { document.getElementById('newsQuestionInput').value = q; document.getElementById('newsChatForm').dispatchEvent(new Event('submit')); }
+    function addNewsMessage(role, content, allowHtml = false) { document.getElementById('newsWelcomeMessage').classList.add('hidden'); document.getElementById('newsChatMessages').classList.remove('hidden'); const d = document.createElement('div'); d.className = `flex ${role === 'user' ? 'justify-end' : 'justify-start'}`; const bc = role === 'user' ? 'user-message' : 'ai-message', mw = role === 'user' ? 'max-w-md' : 'max-w-3xl', rc = role === 'assistant' && typeof marked !== 'undefined' ? marked.parse(content) : (allowHtml ? content : content); d.innerHTML = `<div class="${bc} ${mw} rounded-2xl px-5 py-4 text-sm leading-relaxed text-white">${rc}</div>`; document.getElementById('newsChatMessages').appendChild(d); document.getElementById('newsChatContainer').scrollTop = document.getElementById('newsChatContainer').scrollHeight; }
+    function addNewsLoadingIndicator() { const d = document.createElement('div'); d.id = 'newsLoadingIndicator'; d.className = 'flex justify-start'; d.innerHTML = `<div class="ai-message rounded-2xl px-5 py-4 text-white"><div class="flex items-center gap-3"><div class="typing-indicator flex gap-1"><span class="w-2 h-2 bg-blue-400 rounded-full"></span><span class="w-2 h-2 bg-blue-400 rounded-full"></span><span class="w-2 h-2 bg-blue-400 rounded-full"></span></div><span class="text-slate-400 text-sm">Researching...</span></div></div>`; document.getElementById('newsChatMessages').appendChild(d); document.getElementById('newsChatContainer').scrollTop = document.getElementById('newsChatContainer').scrollHeight; }
+    function removeNewsLoadingIndicator() { const l = document.getElementById('newsLoadingIndicator'); if (l) l.remove(); }
+
+    async function sendNewsMessage(q) {
+      if (newsIsLoading || !q.trim()) return;
+      newsIsLoading = true;
+      document.getElementById('newsSendButton').disabled = true;
+      document.getElementById('newsQuestionInput').value = '';
+
+      // Extract @TICKER mentions from text and lookup full names from tracked companies
+      const tickerRegex = /@([A-Z0-9-]+)/gi;
+      let match;
+      const extractedCompanies = [];
+      while ((match = tickerRegex.exec(q)) !== null) {
+        const ticker = match[1].toUpperCase();
+        const tracked = newsSelectedCompanies.find(c => c.ticker === ticker);
+        if (tracked) {
+          extractedCompanies.push({ name: tracked.name, ticker: tracked.ticker });
+        } else {
+          // If not in tracked, just use ticker as name too
+          extractedCompanies.push({ name: ticker, ticker: ticker });
+        }
+      }
+
+      // Use extracted companies for backend context
+      const companiesToSend = extractedCompanies.length ? extractedCompanies : newsSelectedCompanies;
+
+      // Style @mentions with white background for display
+      const styledMsg = q.replace(/@([A-Z0-9-]+)/gi, '<span style="background:#fff;color:#1e40af;padding:2px 6px;border-radius:4px;font-weight:600;">@$1</span>');
+
+      addNewsMessage('user', styledMsg, true); // true = allow HTML
+      newsConversationHistory.push({ role: 'user', content: q });
+      addNewsLoadingIndicator();
+
+      try {
+        const r = await fetch('/ai-news', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            question: q,
+            companies: companiesToSend,
+            conversation_history: newsConversationHistory
+          })
+        });
+        const d = await r.json();
+        removeNewsLoadingIndicator();
+        if (d.status === 'success' && d.answer) {
+          addNewsMessage('assistant', d.answer);
+          newsConversationHistory.push({ role: 'assistant', content: d.answer });
+        } else {
+          addNewsMessage('assistant', 'Error. Please try again.');
+        }
+      } catch (e) {
+        removeNewsLoadingIndicator();
+        addNewsMessage('assistant', 'Something went wrong.');
+      } finally {
+        newsIsLoading = false;
+        document.getElementById('newsSendButton').disabled = false;
+        document.getElementById('newsQuestionInput').focus();
+      }
+    }
+
+    document.getElementById('newsChatForm')?.addEventListener('submit', (e) => { e.preventDefault(); sendNewsMessage(document.getElementById('newsQuestionInput').value); });
   </script>
 </body>
 

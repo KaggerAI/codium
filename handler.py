@@ -107,9 +107,39 @@ app.config["COMPRESS_LEVEL"] = 6  # Balance between speed and CPU usage
 app.config["COMPRESS_MIN_SIZE"] = 500 # Don't bother compressing tiny responses
 Compress(app)
 
-# Storage for background industry research jobs (in-memory for single instance)
-# For multi-instance deployment, use Redis or DB
-industry_research_jobs = {}
+# =====================================================================
+# INDUSTRY RESEARCH JOB STORAGE (Redis-backed for multi-instance support)
+# =====================================================================
+
+INDUSTRY_JOB_PREFIX = "industry_job:"
+INDUSTRY_JOB_TTL = 3600  # 1 hour TTL for job status
+
+def get_industry_job(job_id):
+    """Get industry research job status from Redis."""
+    try:
+        cached = cache.get(f"{INDUSTRY_JOB_PREFIX}{job_id}")
+        if cached:
+            if isinstance(cached, bytes):
+                return pickle.loads(zlib.decompress(cached))
+            return cached
+    except Exception as e:
+        print(f"WARN: Failed to get industry job {job_id}: {e}", file=sys.stderr)
+    return None
+
+def set_industry_job(job_id, job_data):
+    """Save industry research job status to Redis."""
+    try:
+        compressed = zlib.compress(pickle.dumps(job_data))
+        cache.set(f"{INDUSTRY_JOB_PREFIX}{job_id}", compressed, timeout=INDUSTRY_JOB_TTL)
+    except Exception as e:
+        print(f"WARN: Failed to save industry job {job_id}: {e}", file=sys.stderr)
+
+def update_industry_job(job_id, updates):
+    """Update specific fields of an industry research job in Redis."""
+    job = get_industry_job(job_id)
+    if job:
+        job.update(updates)
+        set_industry_job(job_id, job)
 
 from urllib.parse import urlparse
 
@@ -213,52 +243,6 @@ if azure_redis_conn_string:
         config = {"CACHE_TYPE": "SimpleCache"}
 
 
-    # try:
-    #     # Split the string by commas
-    #     parts = azure_redis_conn_string.split(',')
-        
-    #     # The host and port are always the first part
-    #     host_part = parts[0]
-        
-    #     # Robustly find password and ssl
-    #     password = None
-    #     ssl_enabled = False
-        
-    #     for part in parts[1:]:
-    #         # Use split('=', 1) to ensure we only split on the FIRST equals sign
-    #         # This protects passwords that contain '=' characters (like base64)
-    #         if '=' in part:
-    #             key, value = part.split('=', 1)
-    #             if key.lower() == 'password':
-    #                 password = value
-    #             elif key.lower() == 'ssl':
-    #                 ssl_enabled = value.lower() == 'true'
-
-    #     if not password:
-    #         raise ValueError("Password not found in Redis connection string")
-
-    #     # Use 'rediss://' for SSL connections, which Azure requires
-    #     scheme = "rediss://" if ssl_enabled else "redis://"
-        
-    #     # Construct the final, standard Redis URL
-    #     # host_part looks like "name.redis.cache.windows.net:6380"
-    #     formatted_redis_url = f"{scheme}:{safe_password}@{host_part}?socket_timeout=30&socket_connect_timeout=30&health_check_interval=10&retry_on_timeout=true"
-    #     # formatted_redis_url = f"{scheme}:{password}@{host_part}?socket_timeout=30&socket_connect_timeout=30"
-    #     # formatted_redis_url = f"{scheme}:{password}@{host_part}"
-
-    #     config = {
-    #         "CACHE_TYPE": "RedisCache",
-    #         "CACHE_DEFAULT_TIMEOUT": 21600, # 6 hours
-    #         "CACHE_REDIS_URL": formatted_redis_url
-    #     }
-    #     print("INFO: Configuring cache for PRODUCTION (Redis)")
-
-    # except Exception as e:
-    #     print(f"CRITICAL ERROR: Failed to parse Redis connection string. Error: {e}")
-    #     # Fallback to SimpleCache if parsing fails
-    #     config = {"CACHE_TYPE": "SimpleCache"}
-
-
 else:
     # Fallback for local development
     print("INFO: CACHE_REDIS_URL not found. Configuring cache for DEVELOPMENT (SimpleCache)")
@@ -270,15 +254,6 @@ else:
 app.config.from_mapping(config)
 cache = Cache(app)
 log_redis_target(app, cache, context="startup_after_cache_init")
-
-# Configure a simple in-memory cache.
-# Data will be cached for 6 hours (21600 seconds).
-# config = {
-#     "CACHE_TYPE": "SimpleCache",
-#     "CACHE_DEFAULT_TIMEOUT": 21600
-# }
-# app.config.from_mapping(config)
-# cache = Cache(app)
 
 from flask import jsonify
 
@@ -297,6 +272,30 @@ def debug_env():
     ]
     # returns True/False (no secrets leaked)
     return jsonify({k: bool(os.getenv(k)) for k in keys})
+
+# =====================================================================
+# STOCK AUTOCOMPLETE API
+# =====================================================================
+import csv
+
+# Load stocks from CSV on startup
+STOCKS_LIST = []
+try:
+    with open('trendlyne_all_stocks_master.csv', 'r', encoding='utf-8') as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            STOCKS_LIST.append({
+                'name': row.get('Stock Name', ''),
+                'ticker': row.get('Ticker', ''),
+            })
+    print(f"INFO: Loaded {len(STOCKS_LIST)} stocks for autocomplete")
+except Exception as e:
+    print(f"WARNING: Could not load stocks CSV: {e}")
+
+@app.route('/api/stocks')
+def api_stocks():
+    """Return all stocks for client-side autocomplete filtering"""
+    return jsonify(STOCKS_LIST)
 
 @app.route('/debug/cookies-source')
 def debug_cookies_source():
@@ -388,7 +387,7 @@ def summarize_analyst_pdf():
         
         # Validate that this is a Trendlyne URL
         if 'trendlyne.com' not in pdf_url:
-            return jsonify({'error': 'Invalid PDF URL. Must be from Trendlyne.'}), 400
+            return jsonify({'error': 'Invalid PDF URL.'}), 400
         
         log_progress(f"Summarizing analyst PDF: {pdf_url}")
         
@@ -904,7 +903,7 @@ def perform_planned_calculations(plan_calculations_section, retrieved_data, full
 # AI-ENHANCED NEWS ENDPOINT
 # =====================================================================
 
-AI_NEWS_INTENT_PROMPT = """Your role is to convert the user’s message into an Enhanced Research Query that will be answered by Perplexity Sonar-Pro with Pro Search.
+AI_NEWS_INTENT_PROMPT = """Your role is to convert the user's message into an Enhanced Research Query that will be answered by Perplexity Sonar-Pro with Pro Search.
 
 Users often ask incomplete questions due to:
 - Lack of clarity on what they want
@@ -947,7 +946,7 @@ Examples:
 
 AI_NEWS_RESEARCH_PROMPT = """You are the world's most advanced financial research assistant.
 
-Your goal is to provide comprehensive, accurate, and easy-to-understand answers about financial markets, stocks, industries, and the economy.
+Your goal is to provide comprehensive, accurate, and easy-to-understand answers about financial markets, stocks, industries, and the economy of the Indian market.
 
 DATA SOURCE RULES:
 - For Indian company financial data (revenue, profit, ratios, quarterly results, market cap, stock price), ALWAYS use screener.in as the primary source
@@ -987,11 +986,21 @@ def ai_news_chat():
         data = request.get_json(force=True)
         user_question = data.get('question', '').strip()
         conversation_history = data.get('conversation_history', [])
+        companies = data.get('companies', [])  # List of {ticker, name} from @mentions
         
         if not user_question:
             return jsonify({'error': 'No question provided'}), 400
         
+        # Build company context string from @mentions
+        company_context = ""
+        if companies:
+            company_context = "Companies mentioned: " + ", ".join([
+                f"{c.get('name', '')} ({c.get('ticker', '')})" for c in companies
+            ]) + "\n\n"
+        
         print(f"INFO: AI-News received question: {user_question[:100]}...")
+        if company_context:
+            print(f"INFO: Company context: {company_context}")
         
         # --- STAGE 1: Intent Enhancement ---
         # Build context from conversation history
@@ -1005,7 +1014,7 @@ def ai_news_chat():
         
         enhancement_messages = [
             {"role": "system", "content": AI_NEWS_INTENT_PROMPT},
-            {"role": "user", "content": f"Conversation History:\n{history_context}\n\nCurrent User Question: {user_question}"}
+            {"role": "user", "content": f"{company_context}Conversation History:\n{history_context}\n\nCurrent User Question: {user_question}"}
         ]
         
         print("INFO: Stage 1 - Enhancing user intent...")
@@ -1062,6 +1071,7 @@ INDUSTRY_RESEARCH_PROMPT = '''You are a buy-side equity research analyst writing
 Fixed assumptions (do not ask the user):
 - Geography: India (include exports from India and imports into India where relevant)
 - Primary currency: INR; Secondary currency: USD (use USD mainly for global comps, commodities, trade, and FDI context)
+- Primary demonination: crores (for INR); Secondary demonination: millions (for USD)
 - Listed market focus: NSE & BSE
 - Company universe: ALL publicly listed entities (including conglomerates/proxies; clearly label exposure)
 - Risk tolerance: Medium to High (seek growth + rerating potential; accept some cyclicality but quantify it)
@@ -1089,11 +1099,11 @@ OUTPUT FORMAT: Markdown with clear headings and tables. Start with a decisive ex
 - 5 bullet "So what?" takeaways linking: growth drivers → pricing power → margins/ROIC → winners → risks.
 - Profit pools: where value is created/captured in the value chain (highest ROIC pockets).
 - Best ways to invest (NSE/BSE):
-  - Top 3–5 listed picks (Growth-style) with 1–2 line rationale each.
-  - 2–3 "optionalities" (smaller caps / emerging winners) if risk appetite allows.
+  - Top 3-5 listed picks (Growth-style) with 1-2 line rationale each.
+  - 2-3 "optionalities" (smaller caps / emerging winners) if risk appetite allows.
 - "Pickaxes vs Gold" upfront call: Is the best wealth-creation likely in the core industry or adjacent layers (upstream/downstream/enablers)? State which layer and why.
 - Thesis breakers (Top 5) + early warning indicators.
-- 6–18 month catalysts (policy, capacity, price cycle, demand inflection, export tailwinds, tech shifts).
+- 6-18 month catalysts (policy, capacity, price cycle, demand inflection, export tailwinds, tech shifts).
 
 ========================================
 2) Industry Definition & Segmentation (India-first)
@@ -1106,7 +1116,7 @@ OUTPUT FORMAT: Markdown with clear headings and tables. Start with a decisive ex
 3) Market Size, Penetration, and Growth (History + Forecast)
 ========================================
 - Current market size in INR and volume units (and USD where relevant).
-- Historical growth: 5–10 year CAGR + key inflection points (policy, commodity cycle, tech, demand shocks).
+- Historical growth: 5-10 year CAGR + key inflection points (policy, commodity cycle, tech, demand shocks).
 - Forecast next {HORIZON_YEARS} years with Base/Bull/Bear:
   - Market size, CAGR, and key assumptions.
   - Penetration runway (if applicable): current penetration vs peers/China/US.
@@ -1173,14 +1183,14 @@ C) India Listed "Alternative Bets" (Investable)
   - Downstream beneficiaries ("distribution/consumption toll booths")
   - Enablers (logistics, testing/certification, software, capital goods, staffing, financing, infrastructure)
 - For each alternative bet, specify:
-  - Exposure type (Pure/Mixed/Proxy) + estimated % linkage to the focal industry
+  - Exposure type (Pure/Mixed/Proxy) + estimated percentage linkage to the focal industry
   - Why it benefits (mechanism)
   - Key KPI to track
   - Biggest risk to the alternative thesis
 
 D) Recommendation: Best Risk-Adjusted Exposure
 - Recommend the best layer to invest in (Upstream vs Core vs Downstream vs Enablers) for a Growth investor with medium–high risk tolerance.
-- Provide 1–2 portfolio constructions:
+- Provide 1-2 portfolio constructions:
   - "Conservative Growth": higher quality/less cyclical layer mix
   - "Aggressive Growth": higher beta/optionalities
 - State what would change this recommendation (trigger points).
@@ -1192,7 +1202,7 @@ Layer | Why it wins | Typical winners | Typical losers | Best listed routes (exa
 9) Input Cost & Margin Sensitivity (Critical for investors)
 ========================================
 - Break down typical cost structure: raw materials, energy, labor, logistics, S&M, depreciation.
-- Top 5–10 inputs: domestic vs imported; INR/USD sensitivity; hedging practices.
+- Top 5-10 inputs: domestic vs imported; INR/USD sensitivity; hedging practices.
 - Pass-through ability: contract vs spot; reset frequency.
 - Sensitivity table (ranges ok):
 Input +10% | EBITDA margin impact (bps) | Who is most/least protected (companies)
@@ -1208,7 +1218,7 @@ Input +10% | EBITDA margin impact (bps) | Who is most/least protected (companies
 11) Regulation, Policy, and Compliance (India)
 ========================================
 - Current framework: key regulators, licenses, tariffs/duties, price controls, standards, environmental norms.
-- Recent changes (3–5 years) and real impact on industry structure and profitability.
+- Recent changes (3-5 years) and real impact on industry structure and profitability.
 - Potential upcoming changes: policy drafts, litigation/court risk, political direction.
 - Investor impact: winners/losers + probability x impact assessment.
 Add "Policy Watchlist" and "Compliance Cost" discussion.
@@ -1259,8 +1269,8 @@ Then provide:
   B) Watchlist (needs trigger/price)
   C) Avoid/Underweight (structural issues)
 For each Top Pick include:
-- Why it wins (2–3 bullets)
-- Key catalysts (6–18 months)
+- Why it wins (2-3 bullets)
+- Key catalysts (6-18 months)
 - Key risks + what would change your mind
 - Valuation anchors: what multiple is justified and why (relative + historical bands if available)
 - Preferred entry conditions (what you'd wait for / what confirms breakout)
@@ -1275,7 +1285,7 @@ For each Top Pick include:
 ========================================
 19) Due Diligence Checklist (Actionable)
 ========================================
-- 10–15 questions for management/channel checks specific to this industry.
+- 10-15 questions for management/channel checks specific to this industry.
 - Data sources to verify (government, regulator, trade data, tenders, industry bodies, company filings).
 - Common accounting red flags and how to detect them.
 
@@ -1312,7 +1322,7 @@ def industry_research():
         job_id = str(uuid.uuid4())
         
         # Initialize job status
-        industry_research_jobs[job_id] = {
+        set_industry_job(job_id, {
             'status': 'processing',
             'progress': 'Starting deep research...',
             'result': None,
@@ -1321,7 +1331,7 @@ def industry_research():
             'horizon_years': horizon_years,
             'depth': depth,
             'started_at': time.time()
-        }
+        })
         
         # Start background thread for the long-running API call
         def run_research():
@@ -1336,7 +1346,7 @@ def industry_research():
                     DEPTH=depth
                 )
                 
-                industry_research_jobs[job_id]['progress'] = f"Generating comprehensive {depth} report for {industry}..."
+                update_industry_job(job_id, {'progress': f"Generating comprehensive {depth} report for {industry}..."})
                 print(f"INFO: Calling sonar-deep-research for industry: {industry}, horizon: {horizon_years}y, depth: {depth}", file=sys.stderr)
                 
                 # Call Perplexity's sonar-deep-research with extended timeout
@@ -1344,20 +1354,24 @@ def industry_research():
                 report = call_perplexity_api(messages, model="sonar-deep-research", timeout=900)
                 
                 # Store the result
-                industry_research_jobs[job_id]['status'] = 'complete'
-                industry_research_jobs[job_id]['progress'] = 'Industry report generation complete!'
-                industry_research_jobs[job_id]['result'] = {
-                    'report': report,
-                    'industry': industry,
-                    'horizon_years': horizon_years,
-                    'depth': depth
-                }
+                update_industry_job(job_id, {
+                    'status': 'complete',
+                    'progress': 'Industry report generation complete!',
+                    'result': {
+                        'report': report,
+                        'industry': industry,
+                        'horizon_years': horizon_years,
+                        'depth': depth
+                    }
+                })
                 print(f"INFO: Industry research complete for job_id: {job_id}", file=sys.stderr)
                 
             except Exception as api_error:
                 print(f"ERROR: sonar-deep-research API call failed: {api_error}", file=sys.stderr)
-                industry_research_jobs[job_id]['status'] = 'error'
-                industry_research_jobs[job_id]['error'] = str(api_error)
+                update_industry_job(job_id, {
+                    'status': 'error',
+                    'error': str(api_error)
+                })
         
         # Start the background thread
         thread = threading.Thread(target=run_research)
@@ -1383,10 +1397,9 @@ def industry_research_status(job_id):
     Poll endpoint to check status of a background industry research job.
     Returns the result when complete.
     """
-    if job_id not in industry_research_jobs:
-        return jsonify({'error': 'Job not found'}), 404
-    
-    job = industry_research_jobs[job_id]
+    job = get_industry_job(job_id)
+    if not job:
+        return jsonify({'error': 'Job not found or expired'}), 404
     
     if job['status'] == 'processing':
         return jsonify({
@@ -1427,6 +1440,10 @@ def chat():
         selected_model = data.get('model', 'o4-mini')
         # analysis_key = data.get('analysis_key')
         analysis_key = str(data.get('analysis_key')) if data.get('analysis_key') is not None else None
+        
+        # Get company context for better responses
+        company_name = data.get('company_name', '').strip()
+        ticker = data.get('ticker', '').strip()
 
 
         if not analysis_key:
@@ -1449,38 +1466,6 @@ def chat():
         
         while retry_count < max_retries:
             try:
-                # redis_url = app.config.get("CACHE_REDIS_URL")
-                # cached_blob = None
-
-                # # OPTION A: Direct Redis (Production)
-                # if redis_url:
-                #     # Create a fresh client for this request to avoid stale connections
-                #     # Clean URL: Remove any query parameters to avoid conflicts with kwargs
-
-                #     if '?' in redis_url:
-                #         redis_url = redis_url.split('?')[0]
-                #         print("DEBUG: Port 6380 detected. Forcing rediss:// scheme.", file=sys.stderr)
-                #     # Log the URL (masking password) to confirm we are using rediss:// if expected
-                #     safe_url_log = redis_url.split('@')[-1] if '@' in redis_url else "REDACTED"
-                #     print(f"DEBUG: Connecting to Redis at ...@{safe_url_log}", file=sys.stderr)
-
-                #     r_client = redis.from_url(
-                #         redis_url,
-                #         socket_timeout=30.0,        # Increased from 10s to 30s
-                #         socket_connect_timeout=30.0, # Increased from 5s to 30s
-                #         retry_on_timeout=True,       # Ensure retries happen
-                #         ssl_cert_reqs=None,          # Disable strict SSL validation for Azure
-                #         decode_responses=False 
-                #     )
-                #     print(f"DEBUG: Fetching key from Redis (Attempt {retry_count+1}): {analysis_key}", file=sys.stderr)
-                #     cached_blob = r_client.get(analysis_key)
-                #     r_client.close()
-                
-                # # OPTION B: SimpleCache (Localhost / Fallback)
-                # else:
-                #     print(f"DEBUG: No Redis URL found. Using SimpleCache (Attempt {retry_count+1}).", file=sys.stderr)
-                #     cached_blob = cache.get(analysis_key)
-                
                 print(f"DEBUG: Fetching cached analysis via Flask-Caching (Attempt {retry_count+1}).", file=sys.stderr)
                 cached_blob = cache.get(analysis_key)
 
@@ -1538,7 +1523,7 @@ def chat():
             central_brain_prompt = get_central_brain_prompt()
             brain_messages = [
                 {"role": "system", "content": central_brain_prompt},
-                {"role": "user", "content": f"User Question: \"{user_question}\""}
+                {"role": "user", "content": (f"Company: {company_name} ({ticker})\n\n" if company_name and ticker else "") + f"User Question: \"{user_question}\""}
             ]
             
             central_brain_response_str = call_generative_ai_model("gpt-4.1-mini", brain_messages, temperature=1)
@@ -2047,8 +2032,7 @@ def generate_ai_company_summary(ticker, description, fundamentals, documents):
         return "<p>A detailed summary could not be generated due to insufficient data.</p>"
 
     # --- MODIFIED: New, more detailed System Prompt ---
-    # system_prompt = """You are an expert financial analyst AI. Generate a concise, data-driven summary of the company for a retail investor using simple HTML (<h4>, <p>, <ul>, <li>) emphasizing with <b>, <i> wherever relevant, without <html>/<body> tags. Start with a section called "What the company does", followed by "How it generates revenue", followed by "Business segments" that details of the company's split by business segments, geography, product line, and/or customer/channel, followed finally by "Latest Developments" that highlight any new projects/initiatives company has taken, for e.g. capital expansion, acquisition, new market entry, product launch, latest order book, forward looking guidance, regulatory changes, potential threats to business, or major weakness/loss to business. Keep the content crisp and easy to read such that even a new investor can understand. It should read like a dialog between two people."""
-    system_prompt = """You are an expert financial analyst. Your task is to explain complex company information in simple, direct language for a retail investor. You will generate a concise, data-driven summary by interpreting the provided documents.
+    system_prompt = """You are an expert financial analyst, specializing in analysis of Indian listed companies only. Your task is to explain complex company information in simple, direct language for a retail investor. You will generate a concise, data-driven summary by interpreting the provided documents.
 
 You must follow two sets of instructions exactly: the **Analysis Instructions** for content and structure, and the **Writing Guidelines** for style and tone.
 
@@ -2131,7 +2115,7 @@ You must follow these writing rules exactly. Any failure to follow a negative di
         ]
         
         # Use OpenAI for summary generation
-        summary_html = call_openai_api(messages, model="gpt-4.1-mini", temperature=1)
+        summary_html = call_openai_api(messages, model="gpt-4.1-mini", temperature=0.5)
         return summary_html
 
     except Exception as e:
