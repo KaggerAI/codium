@@ -495,7 +495,7 @@ async def summarize_presentation_with_gemini_async(pdf_url: str) -> str:
             Do not summarize aggressively. The goal is a comprehensive, data-rich extraction of all relevant information from the document."""
 
             log_progress("Calling Gemini 2.5 Flash to extract insights from Investor Presentation...")
-            model = genai.GenerativeModel('gemini-2.5-flash-lite') # Using the latest model
+            model = genai.GenerativeModel('gemini-2.5-flash') # Using the latest model
             
             # Use the SYNCHRONOUS version of the call inside this blocking function
             response = model.generate_content([prompt, pdf_file])
@@ -580,7 +580,7 @@ def summarize_presentation_with_gemini(pdf_url: str) -> str:
         """
 
         log_progress("Calling Gemini 2.5 Flash to extract insights from Investor Presentation...")
-        model = genai.GenerativeModel('gemini-2.5-flash-lite') # Using the latest model
+        model = genai.GenerativeModel('gemini-2.5-flash') # Using the latest model
         # model = genai.GenerativeModel('gemini-1.5-flash-latest')
         response = model.generate_content([prompt, pdf_file])
 

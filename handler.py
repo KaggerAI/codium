@@ -73,7 +73,7 @@ from progress_logger import progress_queue, log_progress, log_final_message
 from scores.AIScores import AIScores
 from analyst_reports.trendlyne_fetcher import fetch_analyst_reports_async
 # Use cookie-based authentication (easier than programmatic login)
-from analyst_reports.pdf_summarizer_cookies import summarize_analyst_pdf_async
+from analyst_reports.pdf_summarizer_cookies import summarize_analyst_pdf_async, download_analyst_pdf_with_cookies
 
 from tech_calculations import (
     evaluate_ticker_signal,
@@ -408,6 +408,44 @@ def summarize_analyst_pdf():
         traceback.print_exc()
         return jsonify({'error': error_msg}), 500
 
+
+# =====================================================================
+# ANALYST REPORTS PDF TEXT EXTRACTION (Background Task Support)
+# =====================================================================
+
+def extract_text_from_pdf(pdf_bytes):
+    """
+    Extract raw text from PDF bytes using pdfplumber.
+    This is used for background text extraction (no AI cost).
+    """
+    try:
+        with pdfplumber.open(BytesIO(pdf_bytes)) as pdf:
+            text_parts = [page.extract_text() or '' for page in pdf.pages]
+        return '\n'.join(text_parts)
+    except Exception as e:
+        print(f"WARN: PDF text extraction failed: {e}")
+        return f"[PDF extraction failed: {e}]"
+
+
+@app.route('/analyst-texts-status/<analysis_key>', methods=['GET'])
+def analyst_texts_status(analysis_key):
+    """
+    Check if analyst PDF texts have been extracted and cached.
+    Returns ready status and count of reports.
+    """
+    try:
+        cached = cache.get(f"{analysis_key}_analyst_texts")
+        if cached:
+            if isinstance(cached, bytes):
+                texts = pickle.loads(zlib.decompress(cached))
+            else:
+                texts = cached
+            return jsonify({'ready': True, 'count': len(texts)})
+    except Exception as e:
+        print(f"WARN: Failed to check analyst texts status: {e}")
+    return jsonify({'ready': False})
+
+
 # # at the top of handler.py
 # import openai
 
@@ -543,7 +581,7 @@ def call_perplexity_api(messages, model="sonar-pro", temperature=1, timeout=120,
 
 
 
-def call_gemini_api(messages, model="gemini-2.5-flash-preview-05-20", temperature=1, use_google_search=False):
+def call_gemini_api(messages, model="gemini-2.5-flash", temperature=1, use_google_search=False):
     if not GOOGLE_API_KEY:
         raise ValueError("Google Gemini API key is not configured.")
     try:
@@ -1621,6 +1659,90 @@ def chat():
                 print(f"ERROR: News fetching failed: {e}", file=sys.stderr)
                 news_summary = f"Error: Failed to fetch real-time news. {e}"
 
+        # --- ARA (Analyst Report Agent) Execution ---
+        ara_response = None
+        use_analyst_reports = data.get('use_analyst_reports', False)
+        
+        # Check if Central Brain activated ARA or user toggle is on
+        ara_directive = None
+        if central_brain_plan and 'agent_directives' in central_brain_plan:
+            for directive in central_brain_plan.get('agent_directives', []):
+                if directive.get('agent_name') == 'ARA':
+                    ara_directive = directive.get('directive', '')
+                    break
+        
+        if ara_directive or use_analyst_reports:
+            log_progress("Consulting Analyst Report Agent...")
+            print(f"INFO: ARA activated. Directive: {ara_directive[:100] if ara_directive else 'User toggle enabled'}...", file=sys.stderr)
+            
+            try:
+                # Get cached analyst PDF texts
+                analyst_texts = None
+                cached_texts = cache.get(f"{analysis_key}_analyst_texts")
+                if cached_texts:
+                    if isinstance(cached_texts, bytes):
+                        analyst_texts = pickle.loads(zlib.decompress(cached_texts))
+                    else:
+                        analyst_texts = cached_texts
+                
+                if analyst_texts and len(analyst_texts) > 0:
+                    # Build context from analyst report texts
+                    ara_context = f"**User Question:** {user_question}\n\n"
+                    ara_context += f"**Company:** {company_name} ({ticker})\n\n"
+                    ara_context += "**Available Analyst Research Reports:**\n\n"
+                    
+                    for i, report in enumerate(analyst_texts, 1):
+                        ara_context += f"--- REPORT {i}: {report.get('brokerage', 'Unknown')} ---\n"
+                        ara_context += f"Date: {report.get('date', 'N/A')}\n"
+                        ara_context += f"Recommendation: {report.get('recommendation', 'N/A')}\n"
+                        ara_context += f"Target Price: {report.get('target_price', 'N/A')}\n"
+                        ara_context += f"Upside: {report.get('upside', 'N/A')}\n\n"
+                        # Include PDF text (truncated if very long)
+                        pdf_text = report.get('pdf_text', '')[:15000]  # Max 15k chars per report
+                        ara_context += f"**Report Content:**\n{pdf_text}\n\n"
+                    
+                    # Create ARA prompt - use Central Brain's directive if available
+                    if ara_directive:
+                        ara_prompt = f"""You are the Analyst Report Agent (ARA). Your task is to study the brokerage research reports provided below and answer the user's question based on analyst insights.
+
+**Your Directive from Central Brain:**
+{ara_directive}
+
+{ara_context}
+
+**Instructions:**
+- Focus ONLY on answering based on what the analysts have written
+- Cite which brokerage said what, along with the report publish date (attribution is important)
+- If two or more analyst/brokerage reports have wildly differing views, state all views and reason a likely best answer using reasoning
+- Provide your answer in plain text paragraphs (not structured HTML)
+- Be concise but comprehensive
+- If the reports don't contain information to answer the question, say so clearly
+"""
+                    else:
+                        # If user toggle is on but no specific directive, create a general one
+                        ara_prompt = f"""You are the Analyst Report Agent (ARA). Study the brokerage research reports below and provide relevant insights for the user's question.
+
+{ara_context}
+
+**Instructions:**
+- Summarize what analysts think about this stock relevant to the user's question
+- Include target prices and recommendations from different brokerages
+- Cite which brokerage said what, along with the report publish date (attribution is important)
+- If two or more analyst/brokerage reports have wildly differing views, state all views and reason a likely best answer using reasoning
+- Provide answer in plain text paragraphs
+"""
+                    
+                    # Call Gemini for ARA (using flash for speed)
+                    ara_messages = [{"role": "user", "content": ara_prompt}]
+                    ara_response = call_gemini_api(ara_messages, model="gemini-3-flash-preview", temperature=1)
+                    print(f"INFO: ARA response received ({len(ara_response)} chars)", file=sys.stderr)
+                else:
+                    ara_response = "Analyst report texts are not yet available. They may still be loading in the background."
+                    print("WARN: ARA activated but no analyst texts found in cache", file=sys.stderr)
+            except Exception as e:
+                print(f"ERROR: ARA execution failed: {e}", file=sys.stderr)
+                ara_response = f"Error consulting analyst reports: {e}"
+
         retrieve_data_spec = parsed_plan.get("retrieve_data", {})
         retrieved_fundamental_data = retrieve_data_based_on_plan(retrieve_data_spec, last_analysis)
 
@@ -1638,7 +1760,8 @@ def chat():
             "retrieved_data": retrieved_fundamental_data,
             "calculated_metrics": calculation_results_obj.get("results", {}),
             "documents": last_analysis.get('documents', []),
-            "news_summary": news_summary
+            "news_summary": news_summary,
+            "analyst_report_insights": ara_response  # ARA's analysis of brokerage research
         }
 
         answering_system_prompt = get_answering_system_prompt()
@@ -2691,6 +2814,58 @@ def analyze():
         except Exception as e:
             print(f"WARNING: Cache write failed. Error: {e}")
 
+        # =====================================================================
+        # START: Background PDF Text Extraction for Analyst Reports
+        # =====================================================================
+        # Extract raw text from analyst report PDFs in background (no AI cost)
+        # This enables the Analyst Report Agent (ARA) to access PDF content
+        def extract_analyst_pdf_text_background(key, reports):
+            """Background task to download and extract text from analyst PDFs."""
+            try:
+                pdf_texts = []
+                for report in reports:
+                    pdf_url = report.get('pdf_url')
+                    if not pdf_url:
+                        continue
+                    try:
+                        # Download PDF using authenticated session
+                        pdf_bytes = asyncio.run(download_analyst_pdf_with_cookies(pdf_url))
+                        # Extract text (no AI, just pdfplumber)
+                        text = extract_text_from_pdf(pdf_bytes)
+                        pdf_texts.append({
+                            'brokerage': report.get('brokerage'),
+                            'date': report.get('date'),
+                            'recommendation': report.get('recommendation'),
+                            'target_price': report.get('target_price'),
+                            'upside': report.get('upside'),
+                            'pdf_text': text,
+                            'pdf_url': pdf_url
+                        })
+                        print(f"INFO: Extracted text from {report.get('brokerage')} report ({len(text)} chars)")
+                    except Exception as e:
+                        print(f"WARN: Failed to extract text from {pdf_url}: {e}")
+                
+                if pdf_texts:
+                    # Cache the extracted texts
+                    compressed = zlib.compress(pickle.dumps(pdf_texts))
+                    cache.set(f"{key}_analyst_texts", compressed, timeout=21600)
+                    print(f"INFO: Cached {len(pdf_texts)} analyst report texts for key: {key}")
+            except Exception as e:
+                print(f"WARN: Background PDF text extraction failed: {e}")
+        
+        # Start background thread if analyst reports exist
+        analyst_reports = result_for_frontend.get('analyst_reports', [])
+        if analyst_reports:
+            bg_thread = threading.Thread(
+                target=extract_analyst_pdf_text_background,
+                args=(analysis_key, analyst_reports)
+            )
+            bg_thread.daemon = True
+            bg_thread.start()
+            print(f"INFO: Started background PDF text extraction for {len(analyst_reports)} reports")
+        # =====================================================================
+        # END: Background PDF Text Extraction
+        # =====================================================================
 
         
         # Add the key to the frontend data
