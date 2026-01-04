@@ -19,6 +19,93 @@ SESSION_COOKIE_NAME = 'kagger_session'
 SESSION_EXPIRY_DAYS = 7
 
 
+# ============== First-Time Setup (Easy Admin Password) ==============
+
+@auth_bp.route('/setup-admin', methods=['GET', 'POST'])
+def setup_admin():
+    """
+    One-time admin setup page. Only works if admin has no password set.
+    Access this from browser: https://your-site.com/setup-admin
+    """
+    admin_email = os.getenv('ADMIN_EMAIL', 'nikhil.banthiya@gmail.com')
+    user = User.get_by_email(admin_email)
+    
+    # Check if admin already has password
+    if user and user.password_hash:
+        return """
+        <html><body style="font-family: Arial; padding: 40px; text-align: center;">
+            <h1>⚠️ Admin Already Configured</h1>
+            <p>The admin account already has a password set.</p>
+            <p><a href="/login">Go to Login</a></p>
+        </body></html>
+        """, 403
+    
+    if request.method == 'POST':
+        password = request.form.get('password', '')
+        confirm = request.form.get('confirm', '')
+        
+        if len(password) < 8:
+            return """
+            <html><body style="font-family: Arial; padding: 40px; text-align: center;">
+                <h1>❌ Error</h1>
+                <p>Password must be at least 8 characters.</p>
+                <p><a href="/setup-admin">Try Again</a></p>
+            </body></html>
+            """, 400
+        
+        if password != confirm:
+            return """
+            <html><body style="font-family: Arial; padding: 40px; text-align: center;">
+                <h1>❌ Error</h1>
+                <p>Passwords do not match.</p>
+                <p><a href="/setup-admin">Try Again</a></p>
+            </body></html>
+            """, 400
+        
+        # Set password
+        if not user:
+            User.create(admin_email, role='admin', is_active=True)
+            user = User.get_by_email(admin_email)
+        
+        user.set_password(hash_password(password))
+        
+        return """
+        <html><body style="font-family: Arial; padding: 40px; text-align: center;">
+            <h1>✅ Admin Setup Complete!</h1>
+            <p>Your admin password has been set successfully.</p>
+            <p><a href="/login" style="background: #2563eb; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Go to Login</a></p>
+        </body></html>
+        """
+    
+    # Show setup form
+    return f"""
+    <html>
+    <head><title>Admin Setup - Kagger AI</title></head>
+    <body style="font-family: Arial; padding: 40px; max-width: 400px; margin: 0 auto;">
+        <h1>🔐 Admin Setup</h1>
+        <p>Set password for: <strong>{admin_email}</strong></p>
+        <form method="POST">
+            <div style="margin-bottom: 15px;">
+                <label>Password (min 8 chars):</label><br>
+                <input type="password" name="password" required minlength="8" style="width: 100%; padding: 10px; margin-top: 5px;">
+            </div>
+            <div style="margin-bottom: 15px;">
+                <label>Confirm Password:</label><br>
+                <input type="password" name="confirm" required minlength="8" style="width: 100%; padding: 10px; margin-top: 5px;">
+            </div>
+            <button type="submit" style="background: #2563eb; color: white; padding: 12px 24px; border: none; border-radius: 5px; cursor: pointer; width: 100%;">
+                Set Admin Password
+            </button>
+        </form>
+    </body>
+    </html>
+    """
+
+# Session configuration
+SESSION_COOKIE_NAME = 'kagger_session'
+SESSION_EXPIRY_DAYS = 7
+
+
 def login_required(f):
     """Decorator to protect routes that require authentication."""
     @wraps(f)
