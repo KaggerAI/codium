@@ -43,3 +43,7 @@ feedparser
 scikit-learn
 vaderSentiment==3.3.2
 
+# --- Authentication ---
+resend
+bcrypt
+python-dotenv

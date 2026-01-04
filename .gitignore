@@ -124,3 +124,7 @@ cython_debug/
 
 # VS Code
 .vscode/
+
+# SQLite database (generated on each environment)
+kagger.db
+*.db

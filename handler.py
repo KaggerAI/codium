@@ -92,6 +92,10 @@ from tech_calculations import (
 # Initialize Flask app and enable CORS
 app = Flask(__name__, static_folder='.', static_url_path='')
 CORS(app)
+
+# Initialize authentication module
+from auth.routes import init_auth
+init_auth(app)
 app.config["COMPRESS_MIMETYPES"] = [
     'text/html', 
     'text/css', 
@@ -324,14 +328,48 @@ def debug_cookies_source():
     
     return jsonify(result)
 
-# Serve front-end HTML
+# Serve front-end HTML - Landing page (public)
 @app.route('/')
 def index():
+    return send_from_directory('.', 'landing.html')
+
+# Login page (public)
+@app.route('/login')
+def login_page():
+    return send_from_directory('.', 'login.html')
+
+# Set password page (public)
+@app.route('/set-password/<token>')
+def set_password_page(token):
+    return send_from_directory('.', 'set_password.html')
+
+# Main app (protected - will be handled by session check in frontend)
+@app.route('/app')
+def app_page():
+    from flask import session, redirect
+    if 'user_id' not in session:
+        return redirect('/login')
     return send_from_directory('.', 'app.html')
 
-# Serve AI-Enhanced News page
+# Admin panel (protected)
+@app.route('/admin')
+def admin_page():
+    from flask import session, redirect
+    if 'user_id' not in session:
+        return redirect('/login')
+    # Check if admin
+    from auth.database import User
+    user = User.get_by_id(session['user_id'])
+    if not user or not user.is_admin:
+        return redirect('/app')
+    return send_from_directory('.', 'admin.html')
+
+# Serve AI-Enhanced News page (protected)
 @app.route('/news')
 def news_page():
+    from flask import session, redirect
+    if 'user_id' not in session:
+        return redirect('/login')
     return send_from_directory('.', 'news.html')
 
 # AI Summarize Analyst PDF
