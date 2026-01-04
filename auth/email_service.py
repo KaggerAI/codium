@@ -12,7 +12,7 @@ if RESEND_API_KEY:
     resend.api_key = RESEND_API_KEY
 
 # Email sender - use Resend's default domain for testing
-FROM_EMAIL = "Kagger AI <onboarding@resend.dev>"
+FROM_EMAIL = "Kagger AI <hello@kagger.in>"
 
 
 def send_invite_email(to_email: str, invite_url: str) -> bool:
