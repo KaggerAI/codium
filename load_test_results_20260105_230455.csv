@@ -1,0 +1,39 @@
+request_id,ticker,success,response_time,status_code,error
+0,RELIANCE,False,131.90,200,"400, message:
+  Can not decode content-encoding: br"
+1,TCS,False,39.06,200,"400, message:
+  Can not decode content-encoding: br"
+2,HDFCBANK,False,131.48,200,"400, message:
+  Can not decode content-encoding: br"
+3,INFY,False,32.44,200,"400, message:
+  Can not decode content-encoding: br"
+4,ICICIBANK,False,141.83,200,"400, message:
+  Can not decode content-encoding: br"
+5,SBIN,False,157.19,200,"400, message:
+  Can not decode content-encoding: br"
+6,BHARTIARTL,False,157.26,200,"400, message:
+  Can not decode content-encoding: br"
+7,ITC,False,120.60,200,"400, message:
+  Can not decode content-encoding: br"
+8,KOTAKBANK,False,123.76,200,"400, message:
+  Can not decode content-encoding: br"
+9,LT,False,135.10,200,"400, message:
+  Can not decode content-encoding: br"
+10,AXISBANK,False,138.51,200,"400, message:
+  Can not decode content-encoding: br"
+11,ASIANPAINT,False,90.11,200,"400, message:
+  Can not decode content-encoding: br"
+12,MARUTI,False,67.01,200,"400, message:
+  Can not decode content-encoding: br"
+13,TITAN,False,169.69,200,"400, message:
+  Can not decode content-encoding: br"
+14,WIPRO,False,79.17,200,"400, message:
+  Can not decode content-encoding: br"
+15,RELIANCE,False,117.27,200,"400, message:
+  Can not decode content-encoding: br"
+16,TCS,False,85.89,200,"400, message:
+  Can not decode content-encoding: br"
+17,HDFCBANK,False,110.65,200,"400, message:
+  Can not decode content-encoding: br"
+18,INFY,False,8.31,500,HTTP 500
+19,ICICIBANK,False,7.47,500,HTTP 500

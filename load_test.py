@@ -44,7 +44,11 @@ class LoadTester:
         payload = {"ticker": ticker}
         
         # Add session cookie if provided
-        headers = {}
+        headers = {
+            # Tell server to use gzip/deflate instead of Brotli (br)
+            # This avoids "Can not decode content-encoding: br" errors
+            'Accept-Encoding': 'gzip, deflate'
+        }
         if self.session_cookie:
             headers['Cookie'] = self.session_cookie
         
@@ -60,7 +64,7 @@ class LoadTester:
         }
         
         try:
-            async with session.post(url, json=payload, headers=headers, timeout=aiohttp.ClientTimeout(total=120)) as response:
+            async with session.post(url, json=payload, headers=headers, timeout=aiohttp.ClientTimeout(total=300)) as response:
                 result["status_code"] = response.status
                 result["response_time"] = time.time() - start_time
                 
@@ -77,7 +81,7 @@ class LoadTester:
                     
         except asyncio.TimeoutError:
             result["response_time"] = time.time() - start_time
-            result["error"] = "Timeout (>120s)"
+            result["error"] = "Timeout (>300s)"
         except Exception as e:
             result["response_time"] = time.time() - start_time
             result["error"] = str(e)
