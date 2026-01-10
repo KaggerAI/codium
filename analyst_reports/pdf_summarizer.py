@@ -34,7 +34,7 @@ async def login_to_trendlyne() -> httpx.AsyncClient:
     global _trendlyne_session
     
     if not TRENDLYNE_USERNAME or not TRENDLYNE_PASSWORD:
-        raise ValueError("Trendlyne credentials not configured. Set TRENDLYNE_USERNAME and TRENDLYNE_PASSWORD environment variables.")
+        raise ValueError("Credentials not configured. Set USERNAME and PASSWORD environment variables.")
     
     # Browser-like headers to avoid 403
     HEADERS = {
@@ -128,7 +128,7 @@ async def login_to_trendlyne() -> httpx.AsyncClient:
                     continue
             
             if not login_success:
-                raise Exception("Trendlyne login failed - could not authenticate with any login endpoint")
+                raise Exception("Login failed - could not authenticate with any login endpoint")
             
             return client
             

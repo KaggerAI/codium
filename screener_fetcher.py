@@ -364,7 +364,7 @@ def parse_chart_json(chart_json: dict) -> pd.DataFrame:
 
     return interpolated_df
 
-async def get_text_from_pdf_url_async(pdf_url: str, max_pages_to_process=50, max_chars_to_return=10000) -> str:
+async def get_text_from_pdf_url_async(pdf_url: str, max_pages_to_process=75, max_chars_to_return=20000) -> str:
     try:
         async with httpx.AsyncClient(follow_redirects=True) as client:
             response = await client.get(pdf_url, headers=HEADERS, timeout=45.0)
@@ -395,7 +395,7 @@ async def get_text_from_pdf_url_async(pdf_url: str, max_pages_to_process=50, max
         print(f"ERROR (async): Failed to get text from PDF URL {pdf_url}. Reason: {e}")
         return None
 
-def get_text_from_pdf_url(pdf_url: str, max_pages_to_process=50, max_chars_to_return=10000) -> str:
+def get_text_from_pdf_url(pdf_url: str, max_pages_to_process=75, max_chars_to_return=20000) -> str:
     """
     Downloads a PDF, finds the start of the 'Question and Answer' session,
     and extracts text from that point onwards for a few pages.

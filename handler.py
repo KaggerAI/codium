@@ -11,7 +11,7 @@ Before running, ensure you have installed system TA-Lib and Python packages:
 2. Python packages:
    pip install flask flask-cors tradingview-datafeed yfinance pandas numpy matplotlib openai yfinance pdfplumber plotly matplotlib scikit-learn feedparser openai google-generativeai python-dotenv
 """
-import sys, os, socket
+import sys, os, socket, re
 
 # Load environment variables from .env file for local development
 try:
@@ -485,7 +485,11 @@ def convert_to_gemini_format(messages):
             gemini_messages.append({'role': role, 'parts': [msg["content"]]})
     return gemini_messages
 
-def call_openai_api(messages, model="gpt-4.1-mini", expect_json_format_flag=False, temperature=1):
+def call_openai_api(messages, model="gpt-4.1-mini", expect_json_format_flag=False, temperature=1, timeout=180):
+    """
+    Call OpenAI API with configurable timeout.
+    Default timeout is 180 seconds (3 minutes) for slower models like gpt-5-mini.
+    """
     if not openai.api_key:
         raise ValueError("OpenAI API key is not configured.")
     try:
@@ -493,6 +497,7 @@ def call_openai_api(messages, model="gpt-4.1-mini", expect_json_format_flag=Fals
             "model": model,
             "messages": messages,
             "temperature": temperature,
+            "timeout": timeout,  # Explicit timeout in seconds
         }
         # Use OpenAI's JSON mode for reliable structured output
         if expect_json_format_flag and ("-turbo" in model or "-o" in model):
@@ -609,22 +614,23 @@ def call_gemini_api(messages, model="gemini-2.5-flash", temperature=1, use_googl
         print(f"ERROR in call_gemini_api: {e}")
         raise
 
-def call_generative_ai_model(model, messages, temperature=1):
+def call_generative_ai_model(model, messages, temperature=1, timeout=180):
     """
     Dispatcher function to call the appropriate AI model API.
+    Default timeout is 180 seconds for Azure compatibility.
     """
     log_progress(f"Dispatching request to model: {model}")
     try:
         if model.startswith('gpt-') or model.startswith('o4-'):
-            return call_openai_api(messages, model=model, temperature=temperature)
+            return call_openai_api(messages, model=model, temperature=temperature, timeout=timeout)
         elif model.startswith('pplx-') or model.startswith('llama-') or model.startswith('r1-') or model.startswith('pplx-') or model.startswith('sonar'):
-            return call_perplexity_api(messages, model=model, temperature=temperature)
+            return call_perplexity_api(messages, model=model, temperature=temperature, timeout=timeout)
         elif model.startswith('gemini-'):
             return call_gemini_api(messages, model=model, temperature=temperature)
         else:
             # Default to a reliable, cheap model if the selection is unknown
             print(f"WARN: Unknown model '{model}', defaulting to 'gpt-4o-mini'.")
-            return call_openai_api(messages, model='gpt-4o-mini', temperature=temperature)
+            return call_openai_api(messages, model='gpt-4o-mini', temperature=temperature, timeout=timeout)
     except Exception as e:
         # Catch errors from any of the specific API call functions
         error_message = f"An error occurred while calling the AI model '{model}': {str(e)}"
@@ -943,33 +949,27 @@ def perform_planned_calculations(plan_calculations_section, retrieved_data, full
 
 AI_NEWS_INTENT_PROMPT = """Your role is to convert the user's message into an Enhanced Research Query that will be answered by Perplexity Sonar-Pro with Pro Search.
 
-Users often ask incomplete questions due to:
-- Lack of clarity on what they want
-- Inability to articulate their thoughts properly
-- Being too brief or lazy in typing
-
 Your job: Analyze the user's question and conversation history, and convert user's question regarding any stock/company/industry/economy/policy/theme into a clear, complete, investing-grade research prompt that:
 1. Captures the explicit ask
-2. Infer what the user likely meant, fill in missing details using reasonable assumptions, and include those assumptions briefly
+2. Captures the timeline and when it is not mentioned or vague assume to be last 2 days
 3. Adds relevant financial context the user likely wants but didn't explicitly ask for
 4. Maintain conversation continuity: use the provided conversation context to resolve references like “this company”, “that sector”, “the last one”, etc.
 5. Do not store or request access to older queries beyond the provided conversation context. Treat each run as self-contained.
 
 IMPORTANT RULES:
 - Output ONLY the enhanced question(s), nothing else
-- Include relevant aspects like: price movements, news, earnings, analyst views, sector trends, risks, opportunities
-- If timeline required, always assume latest calendar year and/or latest quarter 
+- Include relevant aspects like: Trump's statements/actions related to India, tariff hikes/threats, price movements, latest news, earnings, analyst views, sector trends, risks, opportunities
 - For generic queries, expand to cover the most useful financial insights
-- If ambiguity materially changes the answer (e.g., two companies with same name), ask at most 1 clarifying question, otherwise proceed with assumptions.
 - Assume geography as India, unless explicitly specified; currency as INR unless explicitly specified, and investing style as growth unless explicitly specified.
 
 HOW TO WRITE THE ENHANCED QUERY
 The enhanced_query must:
-1. Be a single, detailed research request suitable for Sonar-Pro Pro Search.
-2. Include: (a) entity + context, (b) timeframe, (c) what happened, (d) why it matters for investors, (e) bull/base/bear, (f) catalysts & risks, (g) what to watch next.
-3. If it's a company/stock query, request: “latest material developments”, “earnings/guidance”, “segment drivers”, “regulatory issues”, “competitive landscape”, “valuation context (directional, not exact unless sourced)”, and “near-term catalysts”.
-4. If it's an industry/macro query, request: “drivers”, “data points”, “policy/regulation”, “winners/losers”, “second-order effects”, “leading indicators”, and “implications for listed Indian companies”.
-5. If user asks for “quick” or “summary”, still generate a thorough query but request a concise output.
+1. Be a single, detailed research request suitable for Sonar-Pro with Pro Search. The request should not be more than 100 words long. 
+2. Request must include Trump's statements/actions related to India over last 2-3 days, tariff hikes/threats to India, Trump's global actions and implications for Indian industries/companies.
+3. If it's a company/stock query, request: "latest material developments", "earnings/guidance", "segment drivers", "regulatory issues", "competitive landscape", "valuation context (directional, not exact unless sourced)", and "near-term catalysts".
+4. If it's an industry/market/macro/Nifty/Sensex query, request: "recent tariff hikes/threats", "drivers", "recent news", "global cues", "Trump's statements/actions", "data points", "policy/regulation", "winners/losers", "second-order effects", "leading indicators", and "implications for listed Indian companies".
+5. If user asks for "quick" or "summary", still generate a thorough query but request a concise output.
+6. Ensure the Sonar-Pro query mentions that answer should be maximum 500 words
 
 CONVERSATION CONTEXT USAGE
 - Use prior assistant/user messages in the current thread to resolve pronouns and continuity.
@@ -980,36 +980,63 @@ Examples:
 - "IT sector" → "What is the current state of the Indian IT sector including major companies' performance, hiring trends, deal wins, revenue growth outlook, and key risks?"
 - "market today" → "What happened in the Indian stock market today including Nifty and Sensex movements, sector performers, FII/DII activity, and key news driving the market?"
 - "Tata Motors EV" → "What is Tata Motors' electric vehicle strategy, current EV sales performance, upcoming EV launches, market share, and how it compares to competitors?"
+- "Nifty/Sensex/Market volatility" → "What are the recent tariff hikes/threats, drivers, recent news, global cues, Trump's statements/actions, data points, policy/regulation, winners/losers, second-order effects, leading indicators, and implications for listed Indian companies?"
 """
 
 AI_NEWS_RESEARCH_PROMPT = """You are the world's most advanced financial research assistant.
 
-Your goal is to provide comprehensive, accurate, and easy-to-understand answers about financial markets, stocks, industries, and the economy of the Indian market.
+⚠️ MANDATORY OUTPUT FORMAT - READ THIS FIRST ⚠️
+You MUST structure your response using markdown lists. Do NOT write in paragraph format.
+
+Required format for EVERY response:
+1. Start with a brief 1-2 sentence summary paragraph
+2. Then use ## headings for each major section
+3. Under each heading, use markdown lists (- or 1.) for ALL points
+4. Use tables only for comparisons
+
+Example of CORRECT formatting:
+---
+The Nifty fell 2.5% due to FII selling and global risk-off. Here are the key drivers:
+
+## Immediate Drivers
+- Nifty 50 fell 2.45% to 25,683 with heavy profit-booking
+- India VIX jumped from 9.95 to 10.96, a 10% spike in 2 days
+- FII sold ₹3,800 crore while DII bought ₹5,600 crore
+
+## Global Factors
+- Trump threatened new tariffs on Indian goods
+- US yields rose, pressing emerging markets
+- Gold outperformed equities as safe-haven demand increased
+---
+
+Example of WRONG formatting (paragraphs - DO NOT DO THIS):
+---
+The market fell due to various factors. Nifty 50 dropped 2.45% with VIX spiking.
+Global cues turned negative with Trump's tariff threats adding pressure.
+---
+
+Your goal is to provide concise, accurate, and easy-to-understand answers about financial markets, stocks, industries, and the economy of the Indian market, while ensuring that the information covers any recent news of last 48 hours.
 
 DATA SOURCE RULES:
 - For Indian company financial data (revenue, profit, ratios, quarterly results, market cap, stock price), ALWAYS use screener.in as the primary source
 - When researching Indian stocks, search: "site:screener.in [company name]" for fundamental data
 - For company news: prioritize filings/press releases/transcripts, then tier-1 financial media/wires; corroborate major breaking claims with 2 credible sources when possible.
-- For macro/industry numbers: prefer RBI, MOSPI/NSO, SEBI, DPIIT, government releases, IBEF, then IMF/World Bank and reputed research reports; avoid low-quality blogs/forums.
-- Always anchor statements with dates (“as of <date>”) and avoid “current” claims unless the source is real-time.
+- For macro/industry numbers: prefer RBI, MOSPI/NSO, SEBI, DPIIT, government releases, IBEF, then IMF/World Bank and reputed research reports.
+- For general Nifty/Sensex-related questions, prefer general internet search to get the latest updates.
+- Always anchor statements with dates ("as of <date>") and avoid "current" claims unless the source is real-time.
 
-FORMATTING RULES:
+FORMATTING RULES (CRITICAL):
 - Use simple, clear English accessible to retail investors
-- Use bullet points for lists and key points
-- Use tables for comparisons (use markdown table format)
-- Keep paragraphs short (2-3 sentences max)
-- Use **bold** ONLY for headings and section titles (e.g., ## Latest Developments, ### Key Metrics)
+- **STRUCTURE EVERY RESPONSE WITH MARKDOWN LISTS** - use "- " for bullets or "1. " for numbers
+- Break content into sections with ## headings
+- Under each heading, list points with "- " (dash + space) at the start
+- Use tables for comparisons (markdown format: | Column | Column |)
+- Keep each bullet point to 1-2 sentences max
+- Use **bold** ONLY for headings and section titles
 - Do NOT bold random words, numbers, or percentages in the middle of sentences
-- Do NOT include citations, source links, or references
-- Do NOT mention where the information came from
+- Do NOT include citations, source links, references, superscript, footnotes, and exponents
 
-CONTENT RULES:
-- Be comprehensive but concise
-- Focus on actionable insights
-- Include relevant numbers and data points
-- Mention both positives and negatives/risks when applicable
-- For stocks: include price, key metrics, recent performance
-- For sectors: include major players, trends, outlook
+
 """
 
 @app.route('/ai-news', methods=['POST'])
@@ -1056,9 +1083,9 @@ def ai_news_chat():
         ]
         
         print("INFO: Stage 1 - Enhancing user intent...")
-        enhanced_question = call_generative_ai_model("gpt-4.1-mini", enhancement_messages, temperature=1)
+        enhanced_question = call_generative_ai_model("gpt-5-mini", enhancement_messages, temperature=1)
         enhanced_question = enhanced_question.strip().strip('"')  # Clean up quotes if any
-        print(f"INFO: Enhanced question: {enhanced_question[:800]}...")
+        print(f"INFO: Enhanced question: {enhanced_question[:2000]}")
         
         # --- STAGE 2: Research via Perplexity ---
         # NOTE: Perplexity API doesn't support system messages well - combine into user message
@@ -1086,6 +1113,52 @@ def ai_news_chat():
             use_streaming=False,
             enable_pro_search=True
         )
+        
+        # Remove citation brackets like [1], [2], [123] from response
+        response = re.sub(r'\[\d+\]', '', response)
+        
+        # Debug: Log first 500 chars of response before processing
+        print(f"DEBUG: Response BEFORE bullet processing (first 500 chars):")
+        print(repr(response[:500]))
+        
+        # Post-process: Convert paragraph-style response to bullet format
+        # Sonar Pro ignores formatting instructions, so we force bullets here
+        def convert_to_bullets(text):
+            lines = text.split('\n')
+            print(f"DEBUG: Split into {len(lines)} lines")
+            result = []
+            first_content_seen = False  # Track if we've seen the first content (summary)
+            for i, line in enumerate(lines):
+                stripped = line.strip()
+                if i < 5:  # Debug first 5 lines
+                    print(f"DEBUG: Line {i}: len={len(stripped)}, starts_with={'#' if stripped.startswith('#') else 'other'}")
+                if not stripped:
+                    result.append('')  # Keep empty lines
+                elif stripped.startswith('#') or stripped.startswith('-') or stripped.startswith('*') or stripped.startswith('|'):
+                    # Already a heading, bullet, or table - keep as-is
+                    result.append(line)
+                elif re.match(r'^\d+\.', stripped):
+                    # Already a numbered list - keep as-is
+                    result.append(line)
+                elif len(stripped) > 30:
+                    # Content line - check if it's the first one (summary)
+                    if not first_content_seen:
+                        # First content paragraph is the summary - keep as plain text
+                        result.append(stripped)
+                        first_content_seen = True
+                    else:
+                        # Subsequent content lines - convert to bullet
+                        result.append('- ' + stripped)
+                else:
+                    # Short line (likely a heading without #) - make it a heading
+                    result.append('## ' + stripped)
+            return '\n'.join(result)
+        
+        response = convert_to_bullets(response)
+        
+        # Debug: Log first 500 chars after processing
+        print(f"DEBUG: Response AFTER bullet processing (first 500 chars):")
+        print(repr(response[:500]))
         
         print(f"INFO: AI-News response generated ({len(response)} chars)")
         
@@ -1496,11 +1569,11 @@ def chat():
             except Exception as ping_err:
                 print(f"WARN: Redis cache ping failed: {ping_err}", file=sys.stderr)
 
-        # --- ROBUST RETRIEVAL LOGIC WITH RETRIES ---
+        # --- ROBUST RETRIEVAL LOGIC WITH RETRIES AND FALLBACK ---
         # Use Flask-Caching for both read and write paths so key prefixes/serialization stay aligned
         last_analysis = None
         retry_count = 0
-        max_retries = 3
+        max_retries = 5  # Increased from 3 to give more time for race condition
         
         while retry_count < max_retries:
             try:
@@ -1521,13 +1594,33 @@ def chat():
                         last_analysis = cached_blob
                         break
                 else:
-                    print("DEBUG: Cache returned None (Key not found).", file=sys.stderr)
+                    print(f"DEBUG: Cache returned None (Key not found). Waiting before retry...", file=sys.stderr)
+                    # FIX: Add delay on cache miss to handle race condition after /analyze
+                    time.sleep(0.5)  # 500ms delay between retries
             
             except Exception as e:
                 print(f"WARN: Cache fetch failed (Attempt {retry_count+1}). Error: {e}", file=sys.stderr)
                 time.sleep(1)
             
             retry_count += 1
+        
+        # =====================================================
+        # FALLBACK: Try stock cache if analysis_key cache expired
+        # =====================================================
+        # This handles the case where analysis_key TTL (6h) expired but stock cache (1 week) still has data
+        if not last_analysis and ticker:
+            print(f"DEBUG: Primary cache miss. Trying fallback to stock cache for {ticker}...", file=sys.stderr)
+            try:
+                stock_cache_key = f"stock_analysis_{ticker.upper()}"
+                stock_blob = cache.get(stock_cache_key)
+                if stock_blob:
+                    if isinstance(stock_blob, bytes):
+                        last_analysis = pickle.loads(zlib.decompress(stock_blob))
+                    else:
+                        last_analysis = stock_blob
+                    print(f"DEBUG: Fallback to stock cache SUCCEEDED for {ticker}.", file=sys.stderr)
+            except Exception as fallback_err:
+                print(f"WARN: Stock cache fallback failed: {fallback_err}", file=sys.stderr)
             
         # =====================================================
         # PART 2: VALIDATION
@@ -1564,7 +1657,7 @@ def chat():
                 {"role": "user", "content": (f"Company: {company_name} ({ticker})\n\n" if company_name and ticker else "") + f"User Question: \"{user_question}\""}
             ]
             
-            central_brain_response_str = call_generative_ai_model("gpt-4.1-mini", brain_messages, temperature=1)
+            central_brain_response_str = call_generative_ai_model("gpt-5-mini", brain_messages, temperature=1)
 
             try:
                 json_match = re.search(r"```json\s*([\s\S]*?)\s*```", central_brain_response_str, re.MULTILINE)
@@ -1771,11 +1864,11 @@ def chat():
             {"role": "user", "content": f"Please synthesize an answer based on: {json.dumps(final_context_for_answer, indent=2, default=str)[:100000]}"}
         ]
         
-        answerer_model = 'gpt-4.1-mini' if is_best_mode else selected_model
+        answerer_model = 'gpt-5-mini' if is_best_mode else selected_model
         final_answer = call_generative_ai_model(
             model=answerer_model,
             messages=answering_messages,
-            temperature=0.7
+            temperature=1
         )
 
         return jsonify({
@@ -2159,6 +2252,7 @@ def generate_ai_company_summary(ticker, description, fundamentals, documents):
 
 You must follow two sets of instructions exactly: the **Analysis Instructions** for content and structure, and the **Writing Guidelines** for style and tone.
 
+Be concise: limit the overall response to maximum 800 words.
 ---
 
 ### **Analysis Instructions**
@@ -2185,7 +2279,16 @@ You must follow two sets of instructions exactly: the **Analysis Instructions** 
     <p>Combine the main points from both the 'Results Presentation' and the 'Concall Transcript'. Create a single bulleted list of the most important developments. Group related points under headers like Capacity Expansion, New Product Launches, Financial Highlights, Future Outlook, or Order Book.</p>
 
     <h4>Management Biases and Caveats</h4>
-    <p>In a bulleted list, point out the management biases you found. Note where their commentary seems too positive, is vague, or conflicts with financial data or industry facts. Highlight the management's tone, intent and conviction in the concall as well. </p>
+    <p>**IMPORTANT: For this section, use ONLY the '### Key Points from Latest Concall Transcript' data.** The Concall Q&A session reveals management biases better than polished presentations.</p>
+    <p>In a bulleted list, analyze management's responses in the concall. Point out:</p>
+    <ul>
+        <li>Where their answers seem evasive, overly optimistic, or vague</li>
+        <li>Any conflicts between what they claim and the financial data</li>
+        <li>Their tone and conviction when answering tough questions</li>
+        <li>Topics they avoided or deflected</li>
+    </ul>
+    <p>If no Concall Transcript was provided, state: "Management bias analysis requires concall transcript data which was not available."</p>
+
 
 ---
 
@@ -2238,7 +2341,7 @@ You must follow these writing rules exactly. Any failure to follow a negative di
         ]
         
         # Use OpenAI for summary generation
-        summary_html = call_openai_api(messages, model="gpt-4.1-mini", temperature=0.5)
+        summary_html = call_openai_api(messages, model="gpt-5-mini", temperature=1)
         return summary_html
 
     except Exception as e:
@@ -2756,15 +2859,317 @@ def get_analysis_for_ticker(tick):
 @app.route('/analyze', methods=['POST'])
 def analyze():
     """
-    Lightweight Flask route that calls the cached, synchronous wrapper.
-    It remains unchanged from the previous caching step.
+    Stock analysis endpoint with smart caching.
+    - Returns cached data instantly if available (< 1 second)
+    - Use force_refresh=true to bypass cache and get fresh data
+    - Cache expires after 1 week (604800 seconds)
     """
+    # 6 hours in seconds
+    STOCK_CACHE_TTL = 21600
+    
     try:
         data = request.get_json(force=True)
         tick = data.get('ticker','').strip().upper()
+        force_refresh = data.get('force_refresh', False)
+        
         if not tick:
             return jsonify({'error': 'No ticker provided'}), 400
-    
+        
+        # --- STOCK-BASED CACHE CHECK ---
+        stock_cache_key = f"stock_analysis_{tick}"
+        
+        if not force_refresh:
+            try:
+                cached_blob = cache.get(stock_cache_key)
+                if cached_blob:
+                    # Decompress and return cached result
+                    if isinstance(cached_blob, bytes):
+                        cached_result = pickle.loads(zlib.decompress(cached_blob))
+                    else:
+                        cached_result = cached_blob
+                    
+                    # Check if this is a LIGHT CACHE (only Screener.in + AI Summary)
+                    is_light_cache = cached_result.get('light_cache', False)
+                    
+                    if is_light_cache:
+                        # ============================================================
+                        # LIGHT CACHE HIT: Use cached Screener + AI Summary, fetch only missing data
+                        # ============================================================
+                        print(f"LIGHT CACHE HIT: Using cached Screener.in data for {tick}")
+                        log_progress(f"Light cache hit for {tick} - loading cached fundamentals...")
+                        
+                        # Keep the cached fundamentals + AI summary (the slow parts)
+                        cached_company_summary = cached_result.get('company_summary_html', '')
+                        cached_fundamentals = cached_result.get('fundamentals', {})
+                        cached_key_metrics = cached_result.get('key_metrics', {})
+                        cached_documents = cached_result.get('documents', [])
+                        
+                        # VALIDATION: Check if AI summary failed during light cache
+                        # If it contains error message, we'll regenerate it later
+                        summary_needs_regeneration = False
+                        if not cached_company_summary or 'could not be generated' in cached_company_summary.lower() or 'error' in cached_company_summary.lower()[:100]:
+                            print(f"INFO: Light cache AI summary invalid for {tick} - will regenerate")
+                            summary_needs_regeneration = True
+                        
+                        log_progress(f"Fetching charts and remaining data for {tick}...")
+                        
+                        # ============================================================
+                        # FETCH ONLY MISSING DATA (TradingView, yfinance, Trendlyne)
+                        # ============================================================
+                        try:
+                            # Get TradingView data (charts)
+                            log_progress("Fetching TradingView price data...")
+                            from tvDatafeed import TvDatafeed, Interval
+                            tv = TvDatafeed()
+                            
+                            # Main price data
+                            res = tv.get_hist(symbol=tick, exchange='NSE', interval=Interval.in_daily, n_bars=1000)
+                            if res is None or res.empty:
+                                res = tv.get_hist(symbol=tick, exchange='BSE', interval=Interval.in_daily, n_bars=1000)
+                            
+                            if res is None or res.empty:
+                                raise Exception(f"No price data for {tick}")
+                            
+                            # Use evaluate_ticker_signal to process data with all derived indicators
+                            # This adds EMA, RSI, ADL, etc. required for chart functions
+                            # Returns: {"Ticker": ..., "Signal": ..., "Data": df}
+                            from tech_calculations import evaluate_ticker_signal
+                            tech_result = evaluate_ticker_signal(tick)
+                            
+                            if not tech_result or tech_result.get("Signal") in ["NO DATA", "INSUFFICIENT DATA"]:
+                                raise Exception(f"Failed to process price data for {tick}")
+                            
+                            df = tech_result["Data"]  # Extract the DataFrame from result
+                            
+                            # Get yfinance data - both name and key metrics (PE, PB, Dividend, ROE)
+                            yf_info = {}
+                            try:
+                                import yfinance as yf
+                                yf_ticker = yf.Ticker(f"{tick}.NS")
+                                yf_info = yf_ticker.info or {}
+                                company_name = yf_info.get("longName") or yf_info.get("shortName") or tick
+                            except:
+                                company_name = tick
+                            
+                            # Generate technical summary using tech_result (has 'Data' key)
+                            technical_summary = generate_summary(tech_result)
+                            
+                            # Build charts using processed df with all indicators
+                            log_progress("Building charts...")
+                            close_j = build_close_figure(df, company_name).to_json()
+                            hl_j = build_hl_figure(df, company_name).to_json()
+                            ema_j = build_ema_figure(df, company_name).to_json()
+                            rsi_j = build_rsi_figure(df, company_name).to_json()
+                            adl_j = build_adl_figure(df, company_name).to_json()
+                            rs_j = build_rs_figure(df, company_name).to_json()
+                            
+                            # Get Trendlyne analyst reports
+                            log_progress("Fetching Trendlyne analyst reports...")
+                            try:
+                                from analyst_reports.trendlyne_fetcher import get_analyst_reports_for_ticker
+                                analyst_reports = get_analyst_reports_for_ticker(tick)
+                            except:
+                                analyst_reports = []
+                            
+                            # Get yfinance key metrics (CMP, Market Cap, PE, PB, Dividend Yield)
+                            log_progress("Processing yfinance metrics...")
+                            yf_metrics = get_yfinance_metrics(tick)
+                            
+                            # Add PE, PB, Dividend Yield, ROE from yfinance info
+                            if yf_info:
+                                # PE Ratio
+                                pe = yf_info.get('trailingPE') or yf_info.get('forwardPE')
+                                if pe:
+                                    yf_metrics['pe_ratio'] = f"{pe:.2f}"
+                                
+                                # PB Ratio
+                                pb = yf_info.get('priceToBook')
+                                if pb:
+                                    yf_metrics['pb_ratio'] = f"{pb:.2f}"
+                                
+                                # Dividend Yield
+                                div_yield = yf_info.get('dividendYield')
+                                if div_yield:
+                                    yf_metrics['dividend_yield'] = f"{div_yield * 100:.2f}%"
+                                
+                                # ROE
+                                roe = yf_info.get('returnOnEquity')
+                                if roe:
+                                    yf_metrics['roe'] = f"{roe * 100:.2f}%"
+                            
+                            # Merge: start with cached, then yfinance for live data
+                            # yfinance values override cached for PE/PB/Dividend/ROE since cached doesn't have them
+                            merged_key_metrics = {**cached_key_metrics, **yf_metrics}
+                            
+                            # Get Valuation & Margin charts from Screener.in
+                            log_progress("Fetching valuation charts from Screener.in...")
+                            metric_charts = {}
+                            parsed_valuation_data = {}
+                            try:
+                                from screener_fetcher import get_company_id, fetch_chart_data, parse_chart_json
+                                import plotly.graph_objects as go
+                                
+                                comp_id = get_company_id(tick)
+                                if comp_id:
+                                    metric_queries = {
+                                        "PE Ratio": "Price to Earning-Median PE-EPS",
+                                        "PB Ratio": "Price to book value-Median PBV-Book value",
+                                        "EV / EBITDA": "EV Multiple-Median EV Multiple-EBITDA",
+                                        "Market Cap / Sales": "Market Cap to Sales-Median Market Cap to Sales-Sales",
+                                        "Margins": "GPM-OPM-NPM-Quarter Sales"
+                                    }
+                                    
+                                    for label, query in metric_queries.items():
+                                        try:
+                                            chart_json = fetch_chart_data(comp_id, query)
+                                            if chart_json:
+                                                df_from_parser = parse_chart_json(chart_json)
+                                                if not df_from_parser.empty:
+                                                    df_filtered = pd.DataFrame()
+                                                    
+                                                    if label == "PE Ratio" and "PE" in df_from_parser.columns:
+                                                        df_filtered = df_from_parser[["PE"]]
+                                                    elif label == "PB Ratio" and "Price to BV" in df_from_parser.columns:
+                                                        df_filtered = df_from_parser[["Price to BV"]]
+                                                    elif label == "EV / EBITDA" and "EV / EBITDA" in df_from_parser.columns:
+                                                        df_filtered = df_from_parser[["EV / EBITDA"]]
+                                                    elif label == "Market Cap / Sales" and "Market Cap / Sales" in df_from_parser.columns:
+                                                        df_filtered = df_from_parser[["Market Cap / Sales"]]
+                                                    elif label == "Margins":
+                                                        df_filtered = df_from_parser[[c for c in ("GPM %","OPM %","NPM %") if c in df_from_parser.columns]]
+                                                    
+                                                    if not df_filtered.empty:
+                                                        # Build chart
+                                                        fig = go.Figure()
+                                                        for col in df_filtered.columns:
+                                                            fig.add_trace(go.Scatter(x=df_filtered.index, y=[float(v) for v in df_filtered[col]], mode='lines', name=col))
+                                                        fig.update_layout(title=label, hovermode='x unified', legend=dict(orientation='h', x=0.5, xanchor='center', y=-0.2), xaxis=dict(type='date', title='Date'), yaxis=dict(title=label))
+                                                        metric_charts[label] = fig.to_json()
+                                                        
+                                                        # Store parsed data for AI
+                                                        df_for_ai = df_filtered.copy().reset_index()
+                                                        for col in df_for_ai.columns:
+                                                            if pd.api.types.is_datetime64_any_dtype(df_for_ai[col]):
+                                                                df_for_ai[col] = df_for_ai[col].dt.strftime('%Y-%m-%d')
+                                                        parsed_valuation_data[label] = df_for_ai.to_dict(orient='records')
+                                        except Exception as e:
+                                            print(f"WARN: Failed to fetch {label}: {e}")
+                            except Exception as e:
+                                print(f"WARN: Valuation charts fetch failed: {e}")
+                            
+                            # REGENERATE AI SUMMARY if it failed during light cache
+                            if summary_needs_regeneration:
+                                log_progress("Regenerating AI summary...")
+                                try:
+                                    # Convert cached fundamentals to AI context format
+                                    tables_for_ai = {}
+                                    for k, v in cached_fundamentals.items():
+                                        try:
+                                            tables_for_ai[k] = json.loads(v) if isinstance(v, str) else v
+                                        except:
+                                            tables_for_ai[k] = v
+                                    
+                                    # Get company description from cached data or use empty
+                                    company_desc = cached_result.get('company_description', '')
+                                    
+                                    regenerated_summary = generate_ai_company_summary(
+                                        tick, 
+                                        company_desc, 
+                                        tables_for_ai, 
+                                        cached_documents
+                                    )
+                                    if regenerated_summary and 'could not be generated' not in regenerated_summary.lower():
+                                        cached_company_summary = regenerated_summary
+                                        print(f"INFO: Successfully regenerated AI summary for {tick}")
+                                except Exception as e:
+                                    print(f"WARN: AI summary regeneration failed: {e}")
+                            
+                            # Build complete result using cached + fetched data
+                            result_for_frontend = {
+                                'ticker': tick,
+                                'company_name': company_name,
+                                'company_summary_html': cached_company_summary,  # FROM CACHE or REGENERATED
+                                'summary': technical_summary,
+                                'chart_close_json': close_j,
+                                'chart_hl_json': hl_j,
+                                'chart_ema_json': ema_j,
+                                'chart_rsi_json': rsi_j,
+                                'chart_adl_json': adl_j,
+                                'chart_rs_json': rs_j,
+                                'fundamentals': cached_fundamentals,  # FROM CACHE
+                                'metric_charts': metric_charts,  # Valuation charts from Screener.in
+                                'documents': cached_documents,  # FROM CACHE
+                                'scanx_data': parsed_valuation_data,  # Valuation data for AI
+                                'key_metrics': merged_key_metrics,  # MERGED: yfinance + cached
+                                'peer_comparison': cached_result.get('peer_comparison', {'company': {}, 'peers': []}),
+                                'analyst_reports': analyst_reports
+                            }
+                            
+                            # Generate AI Scores (need analysis_for_cache)
+                            log_progress("Generating AI scores...")
+                            # Convert cached fundamentals back for AI context
+                            fund_data_for_ai_context = {}
+                            for k, v in cached_fundamentals.items():
+                                try:
+                                    fund_data_for_ai_context[k] = json.loads(v) if isinstance(v, str) else v
+                                except:
+                                    fund_data_for_ai_context[k] = v
+                            
+                            analysis_for_cache = {
+                                "ticker": tick,
+                                "company_name": company_name,
+                                "summary": technical_summary,
+                                "fundamentals": fund_data_for_ai_context,
+                                "valuation_and_margin_data": parsed_valuation_data,  # Valuation data from Screener.in
+                                "documents": cached_documents,
+                                "technical_data_df": df
+                            }
+                            
+                            ai_scores_data, debug_filename = generate_ai_scores(tick, analysis_for_cache)
+                            result_for_frontend['ai_scores'] = ai_scores_data
+                            
+                            if debug_filename:
+                                result_for_frontend['debug_file_url'] = f"/download_debug_file/{debug_filename}"
+                            
+                            # Update cache with complete data
+                            result_for_frontend['from_cache'] = False
+                            result_for_frontend['light_cache'] = False  # Upgraded to full cache
+                            result_for_frontend['cached_at'] = datetime.now().isoformat()
+                            
+                            try:
+                                frontend_compressed = zlib.compress(pickle.dumps(result_for_frontend))
+                                cache.set(stock_cache_key, frontend_compressed, timeout=STOCK_CACHE_TTL)
+                                print(f"INFO: Upgraded light cache to full cache for {tick}")
+                            except Exception as e:
+                                print(f"WARN: Failed to upgrade cache for {tick}: {e}")
+                            
+                            log_progress(f"Analysis complete for {tick}!")
+                            return jsonify(result_for_frontend)
+                            
+                        except Exception as e:
+                            print(f"ERROR: Light cache completion failed for {tick}: {e}")
+                            traceback.print_exc()
+                            # Fall through to full analysis below
+                    
+                    else:
+                        # FULL CACHE HIT: Return immediately
+                        print(f"FULL CACHE HIT: Returning cached analysis for {tick}")
+                        log_progress(f"Cache hit for {tick} - returning instantly!")
+                        
+                        cached_result['from_cache'] = True
+                        cached_result['cache_key'] = stock_cache_key
+                        
+                        return jsonify(cached_result)
+                        
+            except Exception as cache_err:
+                print(f"WARN: Cache read failed for {tick}: {cache_err}")
+                traceback.print_exc()
+                # Continue with fresh analysis on cache error
+        
+        # --- CACHE MISS OR FORCE REFRESH: Do full analysis ---
+        print(f"CACHE {'REFRESH' if force_refresh else 'MISS'}: Full analysis for {tick}")
+        log_progress(f"{'Refreshing' if force_refresh else 'Analyzing'} {tick}...")
+        
         # Unpack the two dictionaries returned by the function
         result_for_frontend, analysis_for_cache = get_analysis_for_ticker(tick)
 
@@ -2795,12 +3200,9 @@ def analyze():
             "technical_data_df": analysis_for_cache.get("technical_data_df")
         }
 
-        # Generate a unique key for this analysis session
-        # analysis_key = str(uuid.uuid4())
-
         # --- ROBUST CACHING BLOCK ---
         try:
-            # 2. Compress the data using zlib
+            # Compress the data using zlib
             pickled_data = pickle.dumps(light_analysis_data)
             compressed_data = zlib.compress(pickled_data)
             
@@ -2808,7 +3210,7 @@ def analyze():
             size_mb = sys.getsizeof(compressed_data) / (1024 * 1024)
             print(f"INFO: Caching COMPRESSED data (Key: {analysis_key}). Size: {size_mb:.2f} MB")
             
-            # 3. Save to Redis
+            # Save chatbot context to Redis (6 hours for chatbot)
             cache.set(analysis_key, compressed_data, timeout=21600)
             
         except Exception as e:
@@ -2870,6 +3272,19 @@ def analyze():
         
         # Add the key to the frontend data
         result_for_frontend['analysis_key'] = analysis_key
+        result_for_frontend['from_cache'] = False
+        
+        # --- STOCK-BASED CACHE: Store for future instant access ---
+        try:
+            # Add timestamp for "Last updated" display
+            result_for_frontend['cached_at'] = datetime.now().isoformat()
+            
+            # Compress and store with 1-week expiry
+            frontend_compressed = zlib.compress(pickle.dumps(result_for_frontend))
+            cache.set(stock_cache_key, frontend_compressed, timeout=STOCK_CACHE_TTL)
+            print(f"INFO: Stored stock analysis in cache (Key: {stock_cache_key}, TTL: 1 week)")
+        except Exception as e:
+            print(f"WARNING: Stock cache write failed: {e}")
         
         return jsonify(result_for_frontend)
 
@@ -2901,6 +3316,286 @@ def download_debug_file(filename):
 # END: New ASYNC and Caching Implementation for Analysis
 # =====================================================================
 
+
+# =====================================================================
+# START: Admin Batch Pre-Caching System (Overnight Pre-Caching)
+# =====================================================================
+
+# Import admin_required decorator from auth routes
+from auth.routes import admin_required
+
+# Global dict to track running precache jobs (in-memory for simplicity)
+precache_jobs = {}
+
+def run_batch_precache(job_id, tickers):
+    """
+    LIGHT Pre-Cache: Only fetches Screener.in data + AI Summary.
+    Skips: TradingView, yfinance, Trendlyne, AI Scores
+    Much faster: ~30-45 seconds per stock instead of ~2 minutes.
+    """
+    global precache_jobs
+    
+    results = []
+    total = len(tickers)
+    
+    # Update job status
+    precache_jobs[job_id] = {
+        'status': 'running',
+        'total': total,
+        'completed': 0,
+        'current': None,
+        'results': []
+    }
+    
+    for i, ticker in enumerate(tickers):
+        try:
+            # Update current ticker
+            precache_jobs[job_id]['current'] = ticker
+            precache_jobs[job_id]['completed'] = i
+            
+            print(f"LIGHT PRE-CACHE: [{i+1}/{total}] Starting {ticker}...")
+            
+            # ============================================================
+            # STEP 1: Fetch ONLY Screener.in data (fundamentals + documents)
+            # ============================================================
+            try:
+                from screener_fetcher import fetch_consolidated, fetch_latest_documents
+                
+                # Fetch tables (returns dict of DataFrames) and company description
+                tables_from_screener, company_description = fetch_consolidated(ticker)
+                
+                # Parse the fundamentals - convert DataFrames to JSON for frontend
+                fund_data_for_frontend = {}
+                fund_data_for_ai_context = {}
+                if tables_from_screener:
+                    for table_name, df_original_table in tables_from_screener.items():
+                        # For frontend: JSON string format
+                        fund_data_for_frontend[table_name] = df_original_table.reset_index().T.to_json(orient='split')
+                        # For AI context: Clean dict format
+                        temp_rows = df_original_table.reset_index().to_dict(orient='records')
+                        cleaned_rows = []
+                        for row_dict in temp_rows:
+                            cleaned_row = {
+                                (str(k).strip() if isinstance(k, str) else k): 
+                                (str(v).strip() if isinstance(v, str) else v) 
+                                for k, v in row_dict.items()
+                            }
+                            cleaned_rows.append(cleaned_row)
+                        fund_data_for_ai_context[table_name] = cleaned_rows
+                
+                # Fetch latest documents (sync version)
+                latest_documents = fetch_latest_documents(ticker)
+                if not latest_documents:
+                    latest_documents = []
+                
+                # Get key metrics from fundamentals
+                key_metrics = extract_key_metrics_from_fundamentals(fund_data_for_ai_context)
+                
+                print(f"LIGHT PRE-CACHE: [{i+1}/{total}] {ticker} - Screener.in data fetched ✓")
+                
+            except Exception as e:
+                print(f"LIGHT PRE-CACHE: [{i+1}/{total}] {ticker} - Screener.in failed: {e}")
+                traceback.print_exc()
+                fund_data_for_frontend = {}
+                fund_data_for_ai_context = {}
+                latest_documents = []
+                key_metrics = {}
+                company_description = ""
+            
+            # ============================================================
+            # STEP 2: Generate AI Summary from fundamentals
+            # ============================================================
+            ai_summary_html = ""
+            try:
+                if fund_data_for_ai_context or company_description:
+                    # Use existing AI summary function with company description
+                    ai_summary_html = generate_ai_company_summary(ticker, company_description, tables_from_screener, latest_documents)
+                    print(f"LIGHT PRE-CACHE: [{i+1}/{total}] {ticker} - AI Summary generated ✓")
+            except Exception as e:
+                print(f"LIGHT PRE-CACHE: [{i+1}/{total}] {ticker} - AI Summary failed: {e}")
+                traceback.print_exc()
+                ai_summary_html = f"<p>Analysis data for {ticker} has been cached. Full summary available on next search.</p>"
+            
+            # ============================================================
+            # STEP 3: Build light cache object and store
+            # ============================================================
+            light_cache_data = {
+                'ticker': ticker,
+                'company_name': ticker,  # Will be updated on full analysis
+                'company_summary_html': ai_summary_html,
+                'fundamentals': fund_data_for_frontend,
+                'documents': latest_documents,
+                'key_metrics': key_metrics,
+                'cached_at': datetime.now().isoformat(),
+                'from_cache': False,
+                'light_cache': True,  # Flag to indicate this is a light cache
+                # Empty placeholders for full analysis data
+                'summary': [],
+                'chart_close_json': None,
+                'chart_hl_json': None,
+                'chart_ema_json': None,
+                'chart_rsi_json': None,
+                'chart_adl_json': None,
+                'chart_rs_json': None,
+                'ai_scores': [],
+                'metric_charts': {},
+                'scanx_data': None,
+                'peer_comparison': {'company': {}, 'peers': []},
+                'analyst_reports': []
+            }
+            
+            # Cache for stock-based instant access (1 week = 604800 seconds)
+            stock_cache_key = f"stock_analysis_{ticker}"
+            try:
+                frontend_compressed = zlib.compress(pickle.dumps(light_cache_data))
+                cache.set(stock_cache_key, frontend_compressed, timeout=604800)
+                print(f"LIGHT PRE-CACHE: [{i+1}/{total}] {ticker} ✓ Cached successfully")
+                results.append({'ticker': ticker, 'status': 'success'})
+            except Exception as e:
+                print(f"LIGHT PRE-CACHE: [{i+1}/{total}] {ticker} ✗ Cache write failed: {e}")
+                results.append({'ticker': ticker, 'status': 'error', 'error': f'Cache write failed: {e}'})
+            
+        except Exception as e:
+            print(f"LIGHT PRE-CACHE: [{i+1}/{total}] {ticker} ✗ Failed: {e}")
+            traceback.print_exc()
+            results.append({'ticker': ticker, 'status': 'error', 'error': str(e)})
+        
+        # Rate limiting: 15 second delay between stocks (shorter since lighter workload)
+        if i < total - 1:
+            print(f"LIGHT PRE-CACHE: Waiting 15 seconds before next ticker...")
+            time.sleep(15)
+    
+    # Mark job as complete
+    precache_jobs[job_id] = {
+        'status': 'complete',
+        'total': total,
+        'completed': total,
+        'current': None,
+        'results': results
+    }
+    
+    # Also store in Redis cache for persistence (24 hours)
+    try:
+        cache.set(f"precache_job_{job_id}", results, timeout=86400)
+    except:
+        pass
+    
+    success_count = len([r for r in results if r['status'] == 'success'])
+    print(f"PRE-CACHE JOB COMPLETE: {job_id} - {success_count}/{total} successful")
+
+
+@app.route('/admin/batch-precache', methods=['POST'])
+@admin_required
+def batch_precache():
+    """
+    Admin endpoint to trigger sequential pre-caching for a list of stock tickers.
+    Rate-limited to avoid overwhelming external APIs.
+    
+    Request body:
+    {
+        "tickers": "RELIANCE, TCS, HDFCBANK, INFY, ICICIBANK"
+    }
+    """
+    try:
+        data = request.get_json(force=True)
+        tickers_str = data.get('tickers', '')
+        
+        # Parse comma-separated tickers
+        tickers = [t.strip().upper() for t in tickers_str.split(',') if t.strip()]
+        
+        if not tickers:
+            return jsonify({'error': 'No tickers provided'}), 400
+        
+        # Limit to 50 stocks per job to prevent resource exhaustion
+        MAX_TICKERS = 50
+        if len(tickers) > MAX_TICKERS:
+            return jsonify({'error': f'Maximum {MAX_TICKERS} tickers per job. You provided {len(tickers)}.'}), 400
+        
+        # Generate job ID
+        job_id = str(uuid.uuid4())[:8]  # Short ID for easier reference
+        
+        # Start background thread
+        job_thread = threading.Thread(
+            target=run_batch_precache,
+            args=(job_id, tickers),
+            daemon=True
+        )
+        job_thread.start()
+        
+        # Calculate estimated time (~2 min per stock including delays)
+        estimated_minutes = len(tickers) * 2
+        
+        return jsonify({
+            'success': True,
+            'job_id': job_id,
+            'tickers': tickers,
+            'count': len(tickers),
+            'status': 'started',
+            'estimated_minutes': estimated_minutes
+        })
+        
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/admin/batch-precache/status/<job_id>', methods=['GET'])
+@admin_required
+def get_precache_status(job_id):
+    """
+    Check status of a pre-cache job.
+    """
+    # Check in-memory first
+    if job_id in precache_jobs:
+        job = precache_jobs[job_id]
+        return jsonify({
+            'job_id': job_id,
+            'status': job['status'],
+            'total': job['total'],
+            'completed': job['completed'],
+            'current': job['current'],
+            'results': job['results'] if job['status'] == 'complete' else []
+        })
+    
+    # Check Redis cache
+    try:
+        results = cache.get(f"precache_job_{job_id}")
+        if results:
+            return jsonify({
+                'job_id': job_id,
+                'status': 'complete',
+                'total': len(results),
+                'completed': len(results),
+                'current': None,
+                'results': results
+            })
+    except:
+        pass
+    
+    return jsonify({'error': 'Job not found'}), 404
+
+
+@app.route('/admin/batch-precache/jobs', methods=['GET'])
+@admin_required
+def list_precache_jobs():
+    """
+    List all known pre-cache jobs.
+    """
+    jobs = []
+    for job_id, job in precache_jobs.items():
+        jobs.append({
+            'job_id': job_id,
+            'status': job['status'],
+            'total': job['total'],
+            'completed': job['completed'],
+            'current': job['current']
+        })
+    return jsonify({'jobs': jobs})
+
+
+# =====================================================================
+# END: Admin Batch Pre-Caching System
+# =====================================================================
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8000, debug=True)

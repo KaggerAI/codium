@@ -54,44 +54,144 @@
         .ai-message table {
             width: 100%;
             border-collapse: collapse;
-            margin: 12px 0;
+            margin: 16px 0;
+            background: rgba(255, 255, 255, 0.03);
         }
 
         .ai-message th,
         .ai-message td {
-            border: 1px solid rgba(255, 255, 255, 0.15);
-            padding: 8px 12px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            padding: 10px 14px;
             text-align: left;
+            color: rgba(255, 255, 255, 0.9);
         }
 
         .ai-message th {
-            background: rgba(255, 255, 255, 0.08);
+            background: rgba(59, 130, 246, 0.15);
             font-weight: 600;
+            color: #60a5fa;
+        }
+
+        .ai-message tbody tr:hover {
+            background: rgba(255, 255, 255, 0.05);
         }
 
         .ai-message ul,
         .ai-message ol {
-            margin: 8px 0;
-            padding-left: 20px;
+            margin: 12px 0;
+            padding-left: 28px;
+            line-height: 1.8;
+        }
+
+        .ai-message ul {
+            list-style-type: disc;
+        }
+
+        .ai-message ol {
+            list-style-type: decimal;
         }
 
         .ai-message li {
-            margin: 6px 0;
+            margin: 8px 0;
+            color: rgba(255, 255, 255, 0.9);
+        }
+
+        .ai-message li::marker {
+            color: #60a5fa;
+            font-weight: 600;
+        }
+
+        .ai-message ul ul,
+        .ai-message ol ul,
+        .ai-message ul ol,
+        .ai-message ol ol {
+            margin: 4px 0;
+            padding-left: 24px;
         }
 
         .ai-message strong {
             color: #60a5fa;
+            font-weight: 600;
+        }
+
+        .ai-message em {
+            color: #a78bfa;
+            font-style: italic;
         }
 
         .ai-message p {
-            margin: 8px 0;
+            margin: 10px 0;
+            line-height: 1.7;
+            color: rgba(255, 255, 255, 0.9);
         }
 
         .ai-message h1,
         .ai-message h2,
         .ai-message h3 {
             color: #93c5fd;
-            margin: 16px 0 8px 0;
+            margin: 20px 0 10px 0;
+            font-weight: 600;
+        }
+
+        .ai-message h1 {
+            font-size: 1.5em;
+            border-bottom: 2px solid rgba(59, 130, 246, 0.3);
+            padding-bottom: 8px;
+        }
+
+        .ai-message h2 {
+            font-size: 1.3em;
+        }
+
+        .ai-message h3 {
+            font-size: 1.1em;
+        }
+
+        .ai-message code {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            color: #f472b6;
+            font-size: 0.9em;
+        }
+
+        .ai-message pre {
+            background: rgba(0, 0, 0, 0.4);
+            padding: 12px;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin: 12px 0;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .ai-message pre code {
+            background: none;
+            padding: 0;
+            color: #e5e7eb;
+        }
+
+        .ai-message blockquote {
+            border-left: 3px solid #60a5fa;
+            padding-left: 16px;
+            margin: 12px 0;
+            color: rgba(255, 255, 255, 0.8);
+            font-style: italic;
+        }
+
+        .ai-message hr {
+            border: none;
+            border-top: 1px solid rgba(255, 255, 255, 0.2);
+            margin: 20px 0;
+        }
+
+        .ai-message a {
+            color: #60a5fa;
+            text-decoration: underline;
+        }
+
+        .ai-message a:hover {
+            color: #93c5fd;
         }
 
         .input-glow:focus {
@@ -270,8 +370,14 @@
 
             let renderedContent = content;
             if (role === 'assistant') {
+                // Debug: log raw content before parsing
+                console.log('DEBUG: Raw markdown content:', content.substring(0, 500));
+
                 // Render markdown for AI responses
                 renderedContent = marked.parse(content);
+
+                // Debug: log rendered HTML
+                console.log('DEBUG: Rendered HTML:', renderedContent.substring(0, 500));
             }
 
             messageDiv.innerHTML = `
