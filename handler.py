@@ -114,6 +114,44 @@ Compress(app)
 INDUSTRY_JOB_PREFIX = "industry_job:"
 INDUSTRY_JOB_TTL = 3600  # 1 hour TTL for job status
 
+# =====================================================================
+# LOCAL IN-MEMORY CACHE (Fallback when Redis is unavailable)
+# =====================================================================
+# This stores analysis data in Python memory as ultimate fallback
+# Structure: { ticker: { "data": {...}, "timestamp": time.time() } }
+LOCAL_ANALYSIS_CACHE = {}
+LOCAL_CACHE_TTL = 21600  # 6 hours in seconds
+
+def get_local_cache(ticker):
+    """Get analysis data from local memory cache."""
+    ticker_upper = ticker.upper() if ticker else None
+    if not ticker_upper or ticker_upper not in LOCAL_ANALYSIS_CACHE:
+        return None
+    
+    entry = LOCAL_ANALYSIS_CACHE[ticker_upper]
+    age = time.time() - entry.get("timestamp", 0)
+    
+    if age > LOCAL_CACHE_TTL:
+        # Expired, remove it
+        del LOCAL_ANALYSIS_CACHE[ticker_upper]
+        print(f"DEBUG: Local cache expired for {ticker_upper} (age: {age:.0f}s)", file=sys.stderr)
+        return None
+    
+    print(f"DEBUG: Local cache HIT for {ticker_upper} (age: {age:.0f}s)", file=sys.stderr)
+    return entry.get("data")
+
+def set_local_cache(ticker, data):
+    """Save analysis data to local memory cache."""
+    if not ticker or not data:
+        return
+    ticker_upper = ticker.upper()
+    LOCAL_ANALYSIS_CACHE[ticker_upper] = {
+        "data": data,
+        "timestamp": time.time()
+    }
+    print(f"DEBUG: Saved to local cache: {ticker_upper}", file=sys.stderr)
+
+
 def get_industry_job(job_id):
     """Get industry research job status from Redis."""
     try:
@@ -1605,11 +1643,11 @@ def chat():
             retry_count += 1
         
         # =====================================================
-        # FALLBACK: Try stock cache if analysis_key cache expired
+        # FALLBACK 1: Try Redis stock cache if analysis_key cache expired
         # =====================================================
-        # This handles the case where analysis_key TTL (6h) expired but stock cache (1 week) still has data
+        # This handles the case where analysis_key TTL (6h) expired but stock cache still has data
         if not last_analysis and ticker:
-            print(f"DEBUG: Primary cache miss. Trying fallback to stock cache for {ticker}...", file=sys.stderr)
+            print(f"DEBUG: Primary cache miss. Trying FALLBACK 1: Redis stock cache for {ticker}...", file=sys.stderr)
             try:
                 stock_cache_key = f"stock_analysis_{ticker.upper()}"
                 stock_blob = cache.get(stock_cache_key)
@@ -1618,9 +1656,22 @@ def chat():
                         last_analysis = pickle.loads(zlib.decompress(stock_blob))
                     else:
                         last_analysis = stock_blob
-                    print(f"DEBUG: Fallback to stock cache SUCCEEDED for {ticker}.", file=sys.stderr)
+                    print(f"DEBUG: FALLBACK 1 SUCCEEDED - Redis stock cache for {ticker}.", file=sys.stderr)
             except Exception as fallback_err:
-                print(f"WARN: Stock cache fallback failed: {fallback_err}", file=sys.stderr)
+                print(f"WARN: FALLBACK 1 FAILED - Redis stock cache: {fallback_err}", file=sys.stderr)
+        
+        # =====================================================
+        # FALLBACK 2: Try LOCAL MEMORY cache (Redis-free fallback)
+        # =====================================================
+        # This works even when Redis is completely unavailable
+        if not last_analysis and ticker:
+            print(f"DEBUG: Redis unavailable. Trying FALLBACK 2: Local memory cache for {ticker}...", file=sys.stderr)
+            local_data = get_local_cache(ticker)
+            if local_data:
+                last_analysis = local_data
+                print(f"DEBUG: FALLBACK 2 SUCCEEDED - Local memory cache for {ticker}.", file=sys.stderr)
+            else:
+                print(f"DEBUG: FALLBACK 2 FAILED - No local cache for {ticker}.", file=sys.stderr)
             
         # =====================================================
         # PART 2: VALIDATION
@@ -3143,6 +3194,9 @@ def analyze():
                             except Exception as e:
                                 print(f"WARN: Failed to upgrade cache for {tick}: {e}")
                             
+                            # Save to local memory cache (Redis-free fallback)
+                            set_local_cache(tick, analysis_for_cache)
+                            
                             log_progress(f"Analysis complete for {tick}!")
                             return jsonify(result_for_frontend)
                             
@@ -3159,6 +3213,10 @@ def analyze():
                         cached_result['from_cache'] = True
                         cached_result['cache_key'] = stock_cache_key
                         
+                        # Save to local memory cache (Redis-free fallback)
+                        # Use cached_result which has all the needed fields
+                        set_local_cache(tick, cached_result)
+                        
                         return jsonify(cached_result)
                         
             except Exception as cache_err:
@@ -3172,6 +3230,16 @@ def analyze():
         
         # Unpack the two dictionaries returned by the function
         result_for_frontend, analysis_for_cache = get_analysis_for_ticker(tick)
+        
+        # =====================================================
+        # ERROR HANDLING: Check if analysis failed
+        # =====================================================
+        # When critical data fetch fails, get_analysis_for_ticker returns ({'error': ...}, 500)
+        if isinstance(analysis_for_cache, int):
+            # This means an error occurred - analysis_for_cache is actually an HTTP status code
+            error_msg = result_for_frontend.get('error', 'Analysis failed due to data fetch error')
+            print(f"ERROR: Analysis failed for {tick}: {error_msg}", file=sys.stderr)
+            return jsonify({'error': error_msg}), analysis_for_cache
 
         # --- START MODIFICATION ---
         # Generate the AI scores and get the debug filename
@@ -3214,7 +3282,13 @@ def analyze():
             cache.set(analysis_key, compressed_data, timeout=21600)
             
         except Exception as e:
-            print(f"WARNING: Cache write failed. Error: {e}")
+            print(f"WARNING: Redis cache write failed. Error: {e}")
+        
+        # =====================================================
+        # SAVE TO LOCAL MEMORY CACHE (Redis-free fallback)
+        # =====================================================
+        # This ensures chatbot works even when Redis is unavailable
+        set_local_cache(tick, light_analysis_data)
 
         # =====================================================================
         # START: Background PDF Text Extraction for Analyst Reports
