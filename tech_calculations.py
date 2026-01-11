@@ -223,6 +223,239 @@ def detect_ema_crosses(df):
 
 
 # -------------------------------------------------------------------
+# RSI Divergence Detection Functions
+# -------------------------------------------------------------------
+
+def detect_rsi_divergence(df, L=6, R=4, lookback_pivots=5):
+    """
+    Detect bullish and bearish RSI divergences based on swing pivots.
+    
+    Bullish Divergence: Price makes Lower Low, RSI makes Higher Low
+    Bearish Divergence: Price makes Higher High, RSI makes Lower High
+    
+    Returns: dict with:
+        - divergence_type: 'Bullish Divergence', 'Bearish Divergence', or 'No Divergence'
+        - last_date: date of the most recent divergence (or None)
+        - divergences: list of divergence points for charting
+          Each point: {'type': 'bullish'/'bearish', 'start_idx': int, 'end_idx': int,
+                       'start_price': float, 'end_price': float, 'start_rsi': float, 'end_rsi': float}
+    """
+    result = {
+        'divergence_type': 'No Divergence',
+        'last_date': None,
+        'divergences': []
+    }
+    
+    if 'RSI14' not in df.columns or len(df) < L + R + 10:
+        return result
+    
+    data = df.reset_index(drop=True)
+    
+    # Identify swing lows in price (for bullish divergence)
+    swing_lows = []
+    for i in range(L, len(data) - R):
+        val = data['Close'].iat[i]
+        if val <= data['Close'].iloc[i-L:i+1].min() and val <= data['Close'].iloc[i:i+R+1].min():
+            rsi_val = data['RSI14'].iat[i]
+            if not np.isnan(rsi_val):
+                swing_lows.append({'idx': i, 'price': val, 'rsi': rsi_val})
+    
+    # Identify swing highs in price (for bearish divergence)
+    swing_highs = []
+    for i in range(L, len(data) - R):
+        val = data['Close'].iat[i]
+        if val >= data['Close'].iloc[i-L:i+1].max() and val >= data['Close'].iloc[i:i+R+1].max():
+            rsi_val = data['RSI14'].iat[i]
+            if not np.isnan(rsi_val):
+                swing_highs.append({'idx': i, 'price': val, 'rsi': rsi_val})
+    
+    divergences = []
+    
+    # Check for bullish divergences (last N pairs of swing lows)
+    recent_lows = swing_lows[-lookback_pivots:] if len(swing_lows) >= 2 else swing_lows
+    for i in range(1, len(recent_lows)):
+        prev = recent_lows[i-1]
+        curr = recent_lows[i]
+        # Bullish: Price Lower Low, RSI Higher Low
+        if curr['price'] < prev['price'] and curr['rsi'] > prev['rsi']:
+            divergences.append({
+                'type': 'bullish',
+                'start_idx': prev['idx'],
+                'end_idx': curr['idx'],
+                'start_price': prev['price'],
+                'end_price': curr['price'],
+                'start_rsi': prev['rsi'],
+                'end_rsi': curr['rsi']
+            })
+    
+    # Check for bearish divergences (last N pairs of swing highs)
+    recent_highs = swing_highs[-lookback_pivots:] if len(swing_highs) >= 2 else swing_highs
+    for i in range(1, len(recent_highs)):
+        prev = recent_highs[i-1]
+        curr = recent_highs[i]
+        # Bearish: Price Higher High, RSI Lower High
+        if curr['price'] > prev['price'] and curr['rsi'] < prev['rsi']:
+            divergences.append({
+                'type': 'bearish',
+                'start_idx': prev['idx'],
+                'end_idx': curr['idx'],
+                'start_price': prev['price'],
+                'end_price': curr['price'],
+                'start_rsi': prev['rsi'],
+                'end_rsi': curr['rsi']
+            })
+    
+    result['divergences'] = divergences
+    
+    # Determine most recent divergence
+    if divergences:
+        # Sort by end_idx descending to get most recent
+        sorted_divs = sorted(divergences, key=lambda x: x['end_idx'], reverse=True)
+        most_recent = sorted_divs[0]
+        result['divergence_type'] = 'Bullish Divergence' if most_recent['type'] == 'bullish' else 'Bearish Divergence'
+        result['last_date'] = df.index[most_recent['end_idx']].strftime('%d %b %Y')
+    
+    return result
+
+
+def build_rsi_divergence_figure(df, ticker):
+    """
+    Build a dual-pane Plotly figure:
+    - Top: Price with swing pivots
+    - Bottom: RSI with divergence lines and labels
+    
+    Both panes share the x-axis for synchronized interaction.
+    """
+    from plotly.subplots import make_subplots
+    
+    # Filter to last 1 year of data
+    d = df[df.index >= df.index.max() - pd.DateOffset(years=1)].copy()
+    d_reset = d.reset_index(drop=True)
+    
+    # Detect divergences
+    div_result = detect_rsi_divergence(d, L=6, R=4, lookback_pivots=5)
+    divergences = div_result['divergences']
+    
+    # Identify swing points for display
+    sp = identify_swing_points(d, 6, 4, 'Close')
+    
+    # Create subplots with 2 rows, shared x-axis
+    fig = make_subplots(
+        rows=2, cols=1,
+        shared_xaxes=True,
+        vertical_spacing=0.08,
+        row_heights=[0.6, 0.4],
+        subplot_titles=(f'{ticker} Price Pivots', 'RSI with Divergences')
+    )
+    
+    # === Top Pane: Price with Pivots ===
+    fig.add_trace(
+        go.Scatter(x=list(d.index), y=[float(v) for v in d['Close']], 
+                   mode='lines', name='Close', line=dict(color='black')),
+        row=1, col=1
+    )
+    
+    # Add swing high markers
+    highs = sp[sp['Type'] == 'High']
+    if not highs.empty:
+        fig.add_trace(
+            go.Scatter(x=d.index[highs['Index']], y=[float(v) for v in highs['Value']], 
+                       mode='markers', name='Swing High', 
+                       marker=dict(symbol='triangle-up', size=10, color='red')),
+            row=1, col=1
+        )
+    
+    # Add swing low markers
+    lows = sp[sp['Type'] == 'Low']
+    if not lows.empty:
+        fig.add_trace(
+            go.Scatter(x=d.index[lows['Index']], y=[float(v) for v in lows['Value']], 
+                       mode='markers', name='Swing Low', 
+                       marker=dict(symbol='triangle-down', size=10, color='green')),
+            row=1, col=1
+        )
+    
+    # === Bottom Pane: RSI with Divergence Lines ===
+    fig.add_trace(
+        go.Scatter(x=list(d.index), y=[float(v) for v in d['RSI14']], 
+                   mode='lines', name='RSI', line=dict(color='purple', width=1.5)),
+        row=2, col=1
+    )
+    
+    # Add RSI EMA
+    if 'RSI_EMA13' in d.columns:
+        fig.add_trace(
+            go.Scatter(x=list(d.index), y=[float(v) for v in d['RSI_EMA13']], 
+                       mode='lines', name='RSI EMA-13', line=dict(color='orange', width=1, dash='dot')),
+            row=2, col=1
+        )
+    
+    # Add overbought/oversold reference lines
+    fig.add_hline(y=70, line_dash="dash", line_color="red", opacity=0.5, row=2, col=1)
+    fig.add_hline(y=30, line_dash="dash", line_color="green", opacity=0.5, row=2, col=1)
+    
+    # Draw divergence lines on RSI chart
+    for div in divergences:
+        start_idx = div['start_idx']
+        end_idx = div['end_idx']
+        
+        # Make sure indices are within our filtered data range
+        if start_idx >= len(d) or end_idx >= len(d):
+            continue
+            
+        color = 'green' if div['type'] == 'bullish' else 'red'
+        label = 'Bull' if div['type'] == 'bullish' else 'Bear'
+        
+        # Draw line connecting RSI points
+        fig.add_trace(
+            go.Scatter(
+                x=[d.index[start_idx], d.index[end_idx]],
+                y=[div['start_rsi'], div['end_rsi']],
+                mode='lines+text',
+                line=dict(color=color, width=2),
+                text=['', label],
+                textposition='top right',
+                textfont=dict(color='white', size=10),
+                showlegend=False
+            ),
+            row=2, col=1
+        )
+        
+        # Add background box for text label
+        fig.add_annotation(
+            x=d.index[end_idx],
+            y=div['end_rsi'],
+            text=label,
+            showarrow=False,
+            font=dict(color='white', size=10, family='Arial Black'),
+            bgcolor=color,
+            borderpad=3,
+            row=2, col=1
+        )
+    
+    # Update layout
+    fig.update_layout(
+        height=720,  # Increased by 20% from 600
+        margin=dict(b=80),  # Add bottom margin to prevent legend bleeding into content below
+        hovermode='x unified',
+        legend=dict(orientation='h', x=0.5, xanchor='center', y=-0.08),  # Moved legend up slightly
+        xaxis2=dict(
+            type='date',
+            showspikes=True,
+            spikemode='across',
+            spikesnap='cursor',
+            spikethickness=1,
+            spikedash='dot',
+            spikecolor='lightgrey'
+        ),
+        yaxis=dict(title='Price'),
+        yaxis2=dict(title='RSI', range=[0, 100])
+    )
+    
+    return fig
+
+
+# -------------------------------------------------------------------
 # 2) Chart Generation Functions
 # -------------------------------------------------------------------
 
@@ -404,6 +637,12 @@ def generate_summary(result):
     rs_positive = df['RS'].iat[-1] > 0 if not np.isnan(df['RS'].iat[-1]) else False
     sup, res = find_support_resistance(sw_close, df)
     
+    # Detect RSI divergences
+    div_result = detect_rsi_divergence(df, L=6, R=4, lookback_pivots=5)
+    div_type = div_result['divergence_type']
+    div_date = div_result['last_date']
+    div_display = f"{div_type}" if div_date is None else f"{div_type} (Last: {div_date})"
+    
     rows = [
         ("Current Price", f"{current_close:.2f}"),
         ("Price-Action Trend (based on Close prices)", f"{pt_close} ({', '.join(tk_close)})"),
@@ -411,6 +650,7 @@ def generate_summary(result):
         ("Trend Strength (based on Fibonacci retracement)", fs),
         ("Market Structure (based on EMA Stack)", f"{mstr} ({estack})"),
         ("Market Sentiment (based on RSI)", f"{sentiment} (RSI: {rsi:.2f})"),
+        ("Hidden Trend Divergence (based on RSI)", div_display),
         ("Relative Strength vs Nifty", f"{'Positive' if rs_positive else 'Negative'}"),
         ("Accumulating or Distributing (based on Volume)", f"{'Accumulating' if adl_condition else 'Distributing'}")
     ]

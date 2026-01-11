@@ -3152,7 +3152,13 @@
 
         // Attach charts to technical analysis table
         const techCharts = [
-          { key: 'Price-Action Trend (based on Close prices)', json: payload.chart_close_json, id: 'chart-close' }, { key: 'Price-Action Trend (based on High/Low prices)', json: payload.chart_hl_json, id: 'chart-hl' }, { key: 'Market Structure (based on EMA Stack)', json: payload.chart_ema_json, id: 'chart-ema' }, { key: 'Market Sentiment (based on RSI)', json: payload.chart_rsi_json, id: 'chart-rsi' }, { key: 'Accumulating or Distributing (based on Volume)', json: payload.chart_adl_json, id: 'chart-adl' }, { key: 'Relative Strength vs Nifty', json: payload.chart_rs_json, id: 'chart-rs' },
+          { key: 'Price-Action Trend (based on Close prices)', json: payload.chart_close_json, id: 'chart-close' },
+          { key: 'Price-Action Trend (based on High/Low prices)', json: payload.chart_hl_json, id: 'chart-hl' },
+          { key: 'Market Structure (based on EMA Stack)', json: payload.chart_ema_json, id: 'chart-ema' },
+          { key: 'Market Sentiment (based on RSI)', json: payload.chart_rsi_json, id: 'chart-rsi' },
+          { key: 'Hidden Trend Divergence (based on RSI)', json: payload.chart_rsi_divergence_json, id: 'chart-rsi-divergence' },
+          { key: 'Accumulating or Distributing (based on Volume)', json: payload.chart_adl_json, id: 'chart-adl' },
+          { key: 'Relative Strength vs Nifty', json: payload.chart_rs_json, id: 'chart-rs' },
         ];
         const summaryTable = document.querySelector('#technicalSummaryTable tbody');
         if (summaryTable) {
@@ -3164,7 +3170,9 @@
             cell.innerHTML = `<span>${valueContent}</span><button class="ml-3 px-2 py-1 text-xs font-medium text-white bg-green-500 rounded-md hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-green-400 transition-colors">Expand Chart <span class="ml-1 text-xs">▼</span></button>`;
             const chartRow = document.createElement('tr');
             chartRow.className = 'hidden';
-            chartRow.innerHTML = `<td colspan="2" class="p-0 border-b border-slate-200"><div id="${id}" style="width:100%;height:450px;"></div></td>`;
+            // RSI divergence chart is taller (720px), so give it more container height
+            const containerHeight = id === 'chart-rsi-divergence' ? '750px' : '450px';
+            chartRow.innerHTML = `<td colspan="2" class="p-0 border-b border-slate-200"><div id="${id}" style="width:100%;height:${containerHeight};"></div></td>`;
             row.parentNode.insertBefore(chartRow, row.nextSibling);
             cell.querySelector('button').onclick = (e) => {
               const btn = e.currentTarget;

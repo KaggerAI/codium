@@ -83,7 +83,8 @@ from tech_calculations import (
     build_ema_figure,
     build_rsi_figure,
     build_adl_figure,
-    build_rs_figure
+    build_rs_figure,
+    build_rsi_divergence_figure
 )
 
 # right below your Flask-app initialization:
@@ -2797,16 +2798,17 @@ async def get_analysis_for_ticker_async(tick):
     task_rsi   = loop.run_in_executor(None, make_chart_json, build_rsi_figure, df, company_name)
     task_adl   = loop.run_in_executor(None, make_chart_json, build_adl_figure, df, company_name)
     task_rs    = loop.run_in_executor(None, make_chart_json, build_rs_figure, df, company_name)
+    task_rsi_div = loop.run_in_executor(None, make_chart_json, build_rsi_divergence_figure, df, company_name)
     
     # Run AI Summary (OpenAI) and Metrics Extraction (Perplexity sonar) in parallel
     task_ai_sum = loop.run_in_executor(None, generate_ai_company_summary, tick, company_description, tables_from_screener, latest_documents)
     task_ai_metrics = loop.run_in_executor(None, extract_metrics_via_ai, tick)
 
     # EXECUTE ALL AT ONCE
-    parallel_results = await asyncio.gather(task_close, task_hl, task_ema, task_rsi, task_adl, task_rs, task_ai_sum, task_ai_metrics)
+    parallel_results = await asyncio.gather(task_close, task_hl, task_ema, task_rsi, task_adl, task_rs, task_rsi_div, task_ai_sum, task_ai_metrics)
 
     # Unpack the results
-    close_j, hl_j, ema_j, rsi_j, adl_j, rs_j, ai_company_summary_html, ai_extracted_metrics = parallel_results
+    close_j, hl_j, ema_j, rsi_j, adl_j, rs_j, rsi_div_j, ai_company_summary_html, ai_extracted_metrics = parallel_results
     
     log_progress("Charts and AI Summary generated successfully.")
 # --- END: OPTIMIZED PARALLEL PROCESSING ---
@@ -2871,6 +2873,7 @@ async def get_analysis_for_ticker_async(tick):
         'summary': cleaned_technical_summary, 'ai_scores': ai_scores_data,
         'chart_close_json': close_j, 'chart_hl_json': hl_j, 'chart_ema_json': ema_j,
         'chart_rsi_json': rsi_j, 'chart_adl_json': adl_j, 'chart_rs_json': rs_j,
+        'chart_rsi_divergence_json': rsi_div_j,
         'fundamentals': fund_data_for_frontend, # <-- The frontend-friendly version
         'metric_charts': metric_charts_for_frontend,
         'documents': latest_documents, 'scanx_data': scanx_data,
@@ -3013,6 +3016,7 @@ def analyze():
                             rsi_j = build_rsi_figure(df, company_name).to_json()
                             adl_j = build_adl_figure(df, company_name).to_json()
                             rs_j = build_rs_figure(df, company_name).to_json()
+                            rsi_div_j = build_rsi_divergence_figure(df, company_name).to_json()
                             
                             # Get Trendlyne analyst reports
                             log_progress("Fetching Trendlyne analyst reports...")
