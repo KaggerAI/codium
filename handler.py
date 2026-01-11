@@ -1888,6 +1888,64 @@ def chat():
                 print(f"ERROR: ARA execution failed: {e}", file=sys.stderr)
                 ara_response = f"Error consulting analyst reports: {e}"
 
+        # --- EIA (Earnings Intelligence Agent) Execution ---
+        eia_response = None
+        eia_directive = None
+        
+        # Check if Central Brain activated EIA
+        if central_brain_plan and 'agent_directives' in central_brain_plan:
+            for directive in central_brain_plan.get('agent_directives', []):
+                if directive.get('agent_name') == 'EIA':
+                    eia_directive = directive.get('directive', '')
+                    break
+        
+        if eia_directive:
+            log_progress("Consulting Earnings Intelligence Agent...")
+            print(f"INFO: EIA activated. Directive: {eia_directive[:100]}...", file=sys.stderr)
+            
+            try:
+                # Get documents and filter for Concall transcripts only
+                documents = last_analysis.get('documents', [])
+                concall_docs = [d for d in documents if d.get('type') == 'Concall']
+                
+                if concall_docs:
+                    # Build context from concall transcripts
+                    eia_context = f"**User Question:** {user_question}\n\n"
+                    eia_context += f"**Company:** {company_name} ({ticker})\n\n"
+                    eia_context += "**Concall Transcript(s):**\n\n"
+                    
+                    for doc in concall_docs:
+                        eia_context += f"--- {doc.get('text', 'Concall Transcript')} ---\n"
+                        # Get full content summary (limit to 30k chars per doc)
+                        content = doc.get('content_summary', '')
+                        if content:
+                            eia_context += content[:30000] + "\n\n"
+                    
+                    # Create EIA prompt using Central Brain's directive
+                    eia_prompt = f"""
+{eia_context}
+
+**Central Brain Directive:** {eia_directive}
+
+**Instructions:**
+- Analyze the concall transcript to answer the directive above
+- Focus on management's tone, specific statements, and forward-looking guidance
+- Identify any concerning language, evasive answers, or overpromising
+- Note any discrepancies between what management says vs the numbers
+- Provide your answer in plain text paragraphs, citing specific quotes where relevant
+"""
+                    
+                    # Call GPT-4.1-mini for EIA analysis
+                    eia_messages = [{"role": "user", "content": eia_prompt}]
+                    eia_response = call_openai_api(eia_messages, model='gpt-4.1-mini', temperature=1)
+                    print(f"INFO: EIA response received ({len(eia_response)} chars)", file=sys.stderr)
+                else:
+                    eia_response = "No concall transcript available for analysis."
+                    print("WARN: EIA activated but no concall documents found", file=sys.stderr)
+            except Exception as e:
+                print(f"ERROR: EIA execution failed: {e}", file=sys.stderr)
+                eia_response = f"Error analyzing concall transcript: {e}"
+
         retrieve_data_spec = parsed_plan.get("retrieve_data", {})
         retrieved_fundamental_data = retrieve_data_based_on_plan(retrieve_data_spec, last_analysis)
 
@@ -1904,7 +1962,8 @@ def chat():
             "central_brain_plan": central_brain_plan,
             "retrieved_data": retrieved_fundamental_data,
             "calculated_metrics": calculation_results_obj.get("results", {}),
-            "documents": last_analysis.get('documents', []),
+            "ai_company_summary": last_analysis.get('company_summary_html', ''),  # Pre-generated company summary
+            "eia_insights": eia_response,  # EIA's analysis of concall transcripts
             "news_summary": news_summary,
             "analyst_report_insights": ara_response  # ARA's analysis of brokerage research
         }

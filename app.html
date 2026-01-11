@@ -222,6 +222,49 @@
       font-weight: 600;
     }
 
+    /* === BOT MESSAGE COMPACT STYLING (Standard AI Look) === */
+    .bot-message .message-content h4 {
+      font-size: 1rem;
+      font-weight: 700;
+      margin: 0.8rem 0 0.3rem 0;
+      color: #0f172a;
+      /* Slate 900 */
+    }
+
+    .bot-message .message-content p {
+      margin: 0.4rem 0;
+      line-height: 1.6;
+      font-size: 0.95rem;
+      color: #1e293b;
+      /* Slate 800 - Contrast */
+    }
+
+    .bot-message .message-content ul,
+    .bot-message .message-content ol {
+      margin: 0.4rem 0;
+      padding-left: 1.25rem;
+      list-style-type: disc;
+    }
+
+    .bot-message .message-content li {
+      margin: 0.2rem 0;
+      line-height: 1.5;
+      font-size: 0.95rem;
+      color: #1e293b;
+      /* Slate 800 */
+    }
+
+    .bot-message .message-content li::marker {
+      color: #94a3b8;
+      /* Neutral Grey */
+    }
+
+    .bot-message .message-content strong {
+      color: #0f172a;
+      /* Slate 900 */
+      font-weight: 600;
+    }
+
     /* === AI SUMMARY CONTENT === */
     .summary-content h4 {
       font-size: 1.125rem;
@@ -570,8 +613,8 @@
     #ai-summary-7 hr,
     #ai-summary-modal-body hr {
       border: none;
-      border-top: 2px solid #e5e7eb;
-      margin: 2rem 0;
+      border-top: 1px solid #e5e7eb;
+      margin: 1rem 0;
     }
 
     /* Strong/Bold text */
@@ -598,8 +641,8 @@
     #ai-summary-6 p,
     #ai-summary-7 p,
     #ai-summary-modal-body p {
-      margin: 0.75rem 0;
-      line-height: 1.7;
+      margin: 0.4rem 0;
+      line-height: 1.6;
       color: #374151;
     }
 
@@ -3385,10 +3428,10 @@
         messageDiv.classList.add('max-w-[80%]', 'bg-slate-200', 'text-slate-700', 'self-start', 'rounded-bl-none');
         messageDiv.innerHTML = `<div class="flex items-center space-x-1"><div class="w-2 h-2 bg-slate-400 rounded-full animate-pulse delay-75"></div><div class="w-2 h-2 bg-slate-400 rounded-full animate-pulse delay-150"></div><div class="w-2 h-2 bg-slate-400 rounded-full animate-pulse delay-300"></div></div>`;
       } else if (sender === 'user') {
-        messageDiv.classList.add('max-w-[80%]', 'bg-green-500', 'text-white', 'self-end', 'rounded-br-none');
+        messageDiv.classList.add('max-w-[80%]', 'bg-slate-800', 'text-white', 'self-end', 'rounded-br-none');
         messageDiv.textContent = text;
       } else if (sender === 'bot') {
-        messageDiv.classList.add('max-w-full', 'bg-slate-200', 'text-slate-700', 'self-start', 'rounded-bl-none', 'industry-report', 'bot-message', 'relative', 'pr-12');
+        messageDiv.classList.add('max-w-full', 'text-slate-900', 'self-start', 'rounded-bl-none', 'bot-message', 'relative', 'pr-12');
         // Use the enhanced markdown renderer (without TOC)
         const { html } = renderMarkdownToHtml(text, false);
         messageDiv.innerHTML = `
@@ -3400,15 +3443,26 @@
           </button>
         `;
       } else if (sender === 'info') {
-        messageDiv.classList.add('w-full', 'max-w-full', 'bg-yellow-50', 'text-yellow-900', 'border', 'border-yellow-200', 'my-2');
-        const title = document.createElement('h4');
-        title.className = 'font-semibold mb-2 text-yellow-800';
-        title.textContent = text.title;
-        const content = document.createElement('pre');
-        content.className = 'text-xs whitespace-pre-wrap break-words font-mono bg-yellow-100/50 p-2 rounded';
-        content.textContent = text.content;
-        messageDiv.appendChild(title);
-        messageDiv.appendChild(content);
+        messageDiv.classList.remove('p-3', 'rounded-lg', 'text-sm', 'leading-relaxed', 'break-words');
+        messageDiv.className = 'w-full max-w-full my-2 text-sm';
+
+        const details = document.createElement('details');
+        details.className = 'bg-yellow-50 border border-yellow-200 rounded-lg group';
+
+        const summary = document.createElement('summary');
+        summary.className = 'font-semibold text-yellow-800 cursor-pointer p-3 list-none flex items-center justify-between select-none';
+        summary.innerHTML = `
+          <span>${text.title}</span>
+          <span class="transform transition-transform group-open:rotate-180">▼</span>
+        `;
+
+        const contentDiv = document.createElement('div');
+        contentDiv.className = 'p-3 pt-0 border-t border-yellow-100 text-xs whitespace-pre-wrap break-words font-mono text-yellow-900 bg-yellow-50/50 rounded-b-lg';
+        contentDiv.textContent = text.content;
+
+        details.appendChild(summary);
+        details.appendChild(contentDiv);
+        messageDiv.appendChild(details);
       } else if (sender === 'error') {
         messageDiv.classList.add('max-w-full', 'bg-red-100', 'text-red-700', 'self-center', 'w-full', 'text-center');
         messageDiv.textContent = text;
