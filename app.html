@@ -1637,41 +1637,110 @@
       return new Date(0);
     }
 
-    function renderFundTable(fundData) {
+    function renderFundTable(fundData, tableName) {
+      // The data structure is: fundData.data = [[row0_data...], [row1_data...], ...]
+      // After transposing in backend:
+      // - Row 0: Serial numbers (0, 1, 2, ...) - SKIP THIS
+      // - R1: Metric names (Sales, Expenses, ...) - USE AS ROW HEADERS  
+      // - Row 2+: Quarterly data (Sep 2022, Dec 2022, ...)
+
+      if (!fundData || !fundData.data || !fundData.index || fundData.data.length < 2) {
+        return '<p class="text-slate-500">No data available</p>';
+      }
+
+      // Extract data rows
+      const serialNumbers = fundData.data[0]; // Skip this row  
+      const metricNames = fundData.data[1];   // Use as row headers
+      const dataRows = fundData.data.slice(2);  // Actual quarterly data
+
+      // YoY highlighting logic for Quarterly Results
+      const isQuarterlyResults = tableName === "Quarterly Results";
+      let yoyHighlightIndices = new Set();
+
+      if (isQuarterlyResults && fundData.index && fundData.index.length > 2) {
+        const dateHeaders = fundData.index.slice(2);
+        // Extract just the month part (Sep, Dec, Mar, Jun) from each header
+        const quarters = dateHeaders.map(header => {
+          const match = header.match(/^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)/);
+          return match ? match[1] : null;
+        });
+
+        // Find the latest quarter (rightmost/last column)
+        const latestQuarter = quarters[quarters.length - 1];
+
+        // Find all columns with the same quarter for YoY comparison
+        if (latestQuarter) {
+          quarters.forEach((quarter, index) => {
+            if (quarter === latestQuarter) {
+              yoyHighlightIndices.add(index);
+            }
+          });
+        }
+      }
+
+      // Build table HTML
       let html = `<div class="overflow-x-auto"><table class="w-full bg-white rounded-lg shadow-md mx-auto mb-8 border border-slate-200"><thead class="bg-slate-200 text-slate-700"><tr><th class="px-4 py-3 border-b border-slate-300 text-left text-sm font-semibold">Particulars</th>`;
-      if (fundData.index && Array.isArray(fundData.index)) {
-        fundData.index.forEach(periodLabel => {
-          const isIndexColumn = periodLabel && periodLabel.toString().toLowerCase() === 'index';
-          const visibilityClass = isIndexColumn ? 'opacity-0 pointer-events-none' : '';
-          const alignmentClass = isIndexColumn ? 'text-left' : 'text-right';
-          html += `<th class="px-4 py-3 border-b border-slate-300 text-sm font-semibold ${alignmentClass} ${visibilityClass}">${periodLabel}</th>`;
+
+      // Add column headers (date periods) - skip first two headers which correspond to serial # and metric name columns
+      if (fundData.index && fundData.index.length > 2) {
+        const dateHeaders = fundData.index.slice(2);
+        dateHeaders.forEach((periodLabel, index) => {
+          const highlightClass = yoyHighlightIndices.has(index) ? 'bg-blue-50' : '';
+          html += `<th class="px-4 py-3 border-b border-slate-300 text-sm font-semibold text-right ${highlightClass}">${periodLabel}</th>`;
         });
       }
+
       html += `</tr></thead><tbody>`;
-      if (fundData.columns && Array.isArray(fundData.columns)) {
-        fundData.columns.forEach((metricName, metric_idx) => {
+
+      // If we have metric names and data rows, render them
+      if (metricNames && metricNames.length > 0 && dataRows && dataRows.length > 0) {
+        // Each data row corresponds to one time period
+        // We need to transpose the view: each metricNames[i] becomes a row header
+        // and we collect dataRows[period][i] for each period
+
+        // Actually, after looking at the structure more carefully:
+        // metricNames array has the list of metric names
+        // dataRows[period_idx] gives us all values for that period
+        // So we need to iterate through metric indices and build rows
+
+        for (let metricIdx = 0; metricIdx < metricNames.length; metricIdx++) {
+          const metricName = metricNames[metricIdx];
+
           html += `<tr class="even:bg-slate-50 hover:bg-slate-100 transition-colors duration-150"><td class="px-4 py-3 border-b border-slate-200 font-medium text-sm text-slate-700 text-left">${metricName}</td>`;
-          if (fundData.index && Array.isArray(fundData.index)) {
-            fundData.index.forEach((periodLabel, period_idx) => {
-              const isIndexColumnValue = periodLabel && periodLabel.toString().toLowerCase() === 'index';
-              const visibilityClass = isIndexColumnValue ? 'opacity-0 pointer-events-none' : '';
-              let v = (fundData.data && fundData.data[period_idx] && fundData.data[period_idx][metric_idx] !== undefined) ? fundData.data[period_idx][metric_idx] : null;
-              let displayValue = 'N/A', cellClass = 'text-right';
-              if (v != null && v.toString().trim() !== '') {
-                const s = v.toString().replace(/,/g, ''), isPercent = s.endsWith('%'), numPart = isPercent ? s.substring(0, s.length - 1) : s;
-                if (!isNaN(parseFloat(numPart)) && isFinite(numPart)) {
-                  let numVal = parseFloat(numPart);
-                  displayValue = numVal.toLocaleString('en-IN', { minimumFractionDigits: (numVal % 1 !== 0 || numPart.includes('.')) ? Math.min(2, (numPart.split('.')[1] || '').length || 2) : 0, maximumFractionDigits: 2 });
-                  if (isPercent) displayValue += '%';
-                } else { displayValue = v; cellClass = 'text-left'; }
-              } else { cellClass = 'text-center'; }
-              if (isIndexColumnValue) cellClass = 'text-left';
-              html += `<td class="px-4 py-3 border-b border-slate-200 text-sm ${cellClass} ${visibilityClass}">${displayValue}</td>`;
-            });
-          }
+
+          // Add data cells for each period
+          dataRows.forEach((periodData, periodIndex) => {
+            let v = periodData[metricIdx];
+            let displayValue = 'N/A', cellClass = 'text-right';
+
+            if (v != null && v.toString().trim() !== '') {
+              const s = v.toString().replace(/,/g, '');
+              const isPercent = s.endsWith('%');
+              const numPart = isPercent ? s.substring(0, s.length - 1) : s;
+
+              if (!isNaN(parseFloat(numPart)) && isFinite(numPart)) {
+                let numVal = parseFloat(numPart);
+                displayValue = numVal.toLocaleString('en-IN', {
+                  minimumFractionDigits: (numVal % 1 !== 0 || numPart.includes('.')) ? Math.min(2, (numPart.split('.')[1] || '').length || 2) : 0,
+                  maximumFractionDigits: 2
+                });
+                if (isPercent) displayValue += '%';
+              } else {
+                displayValue = v;
+                cellClass = 'text-left';
+              }
+            } else {
+              cellClass = 'text-center';
+            }
+
+            const highlightClass = yoyHighlightIndices.has(periodIndex) ? 'bg-blue-50' : '';
+            html += `<td class="px-4 py-3 border-b border-slate-200 text-sm ${cellClass} ${highlightClass}">${displayValue}</td>`;
+          });
+
           html += `</tr>`;
-        });
+        }
       }
+
       html += `</tbody></table></div>`;
       return html;
     }
@@ -3120,7 +3189,7 @@
             try {
               const data = JSON.parse(payload.fundamentals[name]);
               if (data && data.index && data.columns && data.data) {
-                screenerHTML += `<h3 class="text-xl font-semibold mb-3 mt-6 text-slate-600">${name}</h3>${renderFundTable(data)}`;
+                screenerHTML += `<h3 class="text-xl font-semibold mb-3 mt-6 text-slate-600">${name}</h3>${renderFundTable(data, name)}`;
               }
             } catch (e) { console.error(`Error parsing fundamental table "${name}":`, e); }
           });
