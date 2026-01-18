@@ -3254,11 +3254,12 @@
         // =====================================================================
 
         // --- CACHE STATUS: Store for refresh button ---
-        if (payload.from_cache && payload.cached_at) {
+        // Show refresh button for both full cache AND light cache (pre-cached data)
+        if ((payload.from_cache || payload.light_cache) && payload.cached_at) {
           const cachedAt = new Date(payload.cached_at).toLocaleString('en-IN', {
             day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'
           });
-          window.cacheInfo = { cachedAt, fromCache: true };
+          window.cacheInfo = { cachedAt, fromCache: payload.from_cache || false };
         } else {
           window.cacheInfo = null;
         }

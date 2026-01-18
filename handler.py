@@ -3507,7 +3507,7 @@ def analyze():
                                 result_for_frontend['debug_file_url'] = f"/download_debug_file/{debug_filename}"
                             
                             # Update cache with complete data
-                            result_for_frontend['from_cache'] = False
+                            result_for_frontend['from_cache'] = True  # Mark as cached so refresh button appears
                             result_for_frontend['light_cache'] = False  # Upgraded to full cache
                             result_for_frontend['cached_at'] = datetime.now().isoformat()
                             
