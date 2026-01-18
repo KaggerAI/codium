@@ -3904,8 +3904,8 @@ def batch_precache():
         if not tickers:
             return jsonify({'error': 'No tickers provided'}), 400
         
-        # Limit to 50 stocks per job to prevent resource exhaustion
-        MAX_TICKERS = 50
+        # Limit to 500 stocks per job (uses only ~15MB Redis, improves performance)
+        MAX_TICKERS = 500
         if len(tickers) > MAX_TICKERS:
             return jsonify({'error': f'Maximum {MAX_TICKERS} tickers per job. You provided {len(tickers)}.'}), 400
         
