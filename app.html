@@ -232,7 +232,8 @@
     }
 
     .bot-message .message-content p {
-      margin: 0.4rem 0;
+      margin: 0.9rem 0;
+      /* 1 line spacing */
       line-height: 1.6;
       font-size: 0.95rem;
       color: #1e293b;
@@ -241,13 +242,15 @@
 
     .bot-message .message-content ul,
     .bot-message .message-content ol {
-      margin: 0.4rem 0;
+      margin: 0.9rem 0;
+      /* 1 line spacing for list block */
       padding-left: 1.25rem;
       list-style-type: disc;
     }
 
     .bot-message .message-content li {
-      margin: 0.2rem 0;
+      margin: 0.45rem 0;
+      /* 0.5 line spacing between bullets */
       line-height: 1.5;
       font-size: 0.95rem;
       color: #1e293b;
@@ -2395,6 +2398,77 @@
       return { html: content, toc: tocHtml };
     }
 
+    // ===================================================================================
+    // INDUSTRY RESEARCH: Job persistence for background processing
+    // Allows user to navigate away and return to see results
+    // ===================================================================================
+
+    const INDUSTRY_JOB_KEY = 'kagger_industry_research_job';
+
+    // Check for pending job on page load
+    function checkPendingIndustryJob() {
+      const savedJob = localStorage.getItem(INDUSTRY_JOB_KEY);
+      if (savedJob) {
+        try {
+          const job = JSON.parse(savedJob);
+          const ageMinutes = (Date.now() - job.startedAt) / 60000;
+
+          // Only resume if job is less than 15 minutes old
+          if (ageMinutes < 15) {
+            console.log('[INDUSTRY_RESEARCH] Found pending job:', job.jobId);
+
+            // Show resume option
+            industryResultsContainer.innerHTML = `
+              <div class="bg-blue-50 border border-blue-300 text-blue-800 px-6 py-4 rounded-lg shadow-md">
+                <p class="font-semibold mb-2">📊 Industry Research in Progress</p>
+                <p class="text-sm mb-3">You have a pending research for "<strong>${job.industry}</strong>" that started ${Math.round(ageMinutes)} minutes ago.</p>
+                <div class="flex space-x-3">
+                  <button id="resumeJobBtn" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 font-medium">Resume Monitoring</button>
+                  <button id="cancelJobBtn" class="bg-slate-300 text-slate-700 px-4 py-2 rounded-lg hover:bg-slate-400 font-medium">Start New Research</button>
+                </div>
+              </div>
+            `;
+
+            document.getElementById('resumeJobBtn').addEventListener('click', () => {
+              resumeIndustryJob(job);
+            });
+            document.getElementById('cancelJobBtn').addEventListener('click', () => {
+              localStorage.removeItem(INDUSTRY_JOB_KEY);
+              industryResultsContainer.innerHTML = '';
+            });
+          } else {
+            // Job too old, clear it
+            localStorage.removeItem(INDUSTRY_JOB_KEY);
+          }
+        } catch (e) {
+          localStorage.removeItem(INDUSTRY_JOB_KEY);
+        }
+      }
+    }
+
+    // Resume polling for an existing job
+    async function resumeIndustryJob(job) {
+      industryResultsContainer.innerHTML = `
+        <div class="bg-white p-8 rounded-xl shadow-lg">
+          <div class="flex items-center justify-center space-x-4">
+            <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500"></div>
+            <div>
+              <p class="text-lg font-semibold text-slate-700">Resuming "${job.industry}" Research...</p>
+              <p class="text-sm text-slate-500" id="researchProgress">Checking status...</p>
+              <p class="text-xs text-slate-400 mt-1" id="researchTimer">Started ${Math.round((Date.now() - job.startedAt) / 60000)} minutes ago</p>
+            </div>
+          </div>
+        </div>
+      `;
+
+      await pollForIndustryResult(job.jobId, job.industry, job.horizon, job.depth);
+    }
+
+    // Check for pending job when switching to industry mode
+    document.getElementById('industryLabel').addEventListener('click', () => {
+      setTimeout(checkPendingIndustryJob, 100);
+    });
+
     document.getElementById('industryGoBtn').addEventListener('click', async () => {
       const industry = document.getElementById('industryInput').value.trim();
       if (!industry) return alert('Please enter an industry to research.');
@@ -2415,6 +2489,7 @@
               <p class="text-lg font-semibold text-slate-700">Generating Industry Report...</p>
               <p class="text-sm text-slate-500" id="researchProgress">Starting deep research... (this may take 5-10 minutes)</p>
               <p class="text-xs text-slate-400 mt-1" id="researchTimer">Elapsed: 0 seconds</p>
+              <p class="text-xs text-green-600 mt-2">✓ You can navigate away - research will continue in background</p>
             </div>
           </div>
         </div>
@@ -2434,20 +2509,137 @@
         });
 
         const startPayload = await startRes.json();
+
+        // Handle capacity limit (429 Too Many Requests)
+        if (startRes.status === 429 || startPayload.error === 'capacity_limit') {
+          if (sseConnection) sseConnection.close();
+          document.getElementById('progress-container')?.classList.remove('visible');
+
+          industryResultsContainer.innerHTML = `
+            <div class="bg-amber-50 border border-amber-400 text-amber-800 px-6 py-4 rounded-lg shadow-md" role="alert">
+              <div class="flex items-start">
+                <svg class="w-6 h-6 mr-3 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+                </svg>
+                <div class="flex-1">
+                  <strong class="font-bold block mb-1">⏳ Server at Capacity</strong>
+                  <p class="text-sm mb-2">${startPayload.message || 'Too many concurrent requests. Please try again later.'}</p>
+                  <div class="text-xs bg-amber-100 p-2 rounded mt-2">
+                    <p><strong>Active research jobs:</strong> ${startPayload.active_jobs || 'Unknown'} / ${startPayload.max_concurrent || 5}</p>
+                    <p class="mt-1"><strong>Suggested wait time:</strong> ${Math.round((startPayload.retry_after_seconds || 300) / 60)} minutes</p>
+                  </div>
+                  <p class="text-xs mt-3 text-amber-600">💡 Tip: Each research takes 5-6 minutes. Please try again shortly.</p>
+                </div>
+              </div>
+            </div>
+          `;
+          return;
+        }
+
         if (!startRes.ok) throw new Error(startPayload.error || 'Failed to start research');
 
         const jobId = startPayload.job_id;
         console.log('Research job started:', jobId);
 
-        // Step 2: Poll for results
-        const pollInterval = 5000; // 5 seconds
-        let isComplete = false;
+        // Save job to localStorage for recovery if user navigates away
+        localStorage.setItem(INDUSTRY_JOB_KEY, JSON.stringify({
+          jobId: jobId,
+          industry: industry,
+          horizon: horizon,
+          depth: depth,
+          startedAt: Date.now()
+        }));
 
+        // Use the shared polling function
+        await pollForIndustryResult(jobId, industry, horizon, depth);
+
+      } catch (err) {
+        console.error('[INDUSTRY_RESEARCH_DEBUG] Top-level error:', err);
+        if (sseConnection) sseConnection.close();
+        document.getElementById('progress-container')?.classList.remove('visible');
+
+        // Enhanced error message with debugging info
+        let errorMessage = err.message || 'An unknown error occurred';
+        const isJsonError = errorMessage.includes('JSON') || errorMessage.includes('Unexpected end');
+
+        industryResultsContainer.innerHTML = `
+          <div class="bg-red-100 border border-red-400 text-red-700 px-6 py-4 rounded-lg shadow-md" role="alert">
+            <strong class="font-bold">Error:</strong>
+            <span class="block sm:inline">${errorMessage}</span>
+            ${isJsonError ? `
+              <div class="mt-3 p-3 bg-red-50 rounded text-sm">
+                <p class="font-semibold">Possible causes:</p>
+                <ul class="list-disc list-inside mt-1">
+                  <li>Request timeout (Azure limits to 230 seconds for HTTP, but background processing should continue)</li>
+                  <li>Network connection interrupted during streaming</li>
+                  <li>Server memory limit exceeded</li>
+                </ul>
+                <p class="mt-2 font-semibold">Check browser console (F12) for detailed debug logs.</p>
+              </div>
+            ` : ''}
+          </div>
+        `;
+        console.error('Industry research error:', err);
+        localStorage.removeItem(INDUSTRY_JOB_KEY);
+      }
+    });
+
+    // Shared polling function - can be called from new research or resume
+    async function pollForIndustryResult(jobId, industry, horizon, depth) {
+      const pollInterval = 5000; // 5 seconds
+      let isComplete = false;
+      let pollCount = 0;
+
+      try {
         while (!isComplete) {
           await new Promise(resolve => setTimeout(resolve, pollInterval));
+          pollCount++;
 
-          const statusRes = await fetch(`/industry-research/${jobId}/status`);
-          const statusPayload = await statusRes.json();
+          console.log(`[INDUSTRY_RESEARCH_DEBUG] Poll #${pollCount}: Fetching status for job ${jobId}`);
+
+          let statusRes;
+          let statusPayload;
+
+          try {
+            statusRes = await fetch(`/industry-research/${jobId}/status`);
+
+            // Debug: Log response metadata before parsing
+            console.log('[INDUSTRY_RESEARCH_DEBUG] Response status:', statusRes.status);
+            console.log('[INDUSTRY_RESEARCH_DEBUG] Response headers:', {
+              contentType: statusRes.headers.get('content-type'),
+              contentLength: statusRes.headers.get('content-length')
+            });
+
+            // Check if response is OK
+            if (!statusRes.ok) {
+              const errorText = await statusRes.text();
+              console.error('[INDUSTRY_RESEARCH_DEBUG] Non-OK response:', statusRes.status, errorText);
+              throw new Error(`Server returned ${statusRes.status}: ${errorText.substring(0, 200)}`);
+            }
+
+            // Get response text first for debugging
+            const responseText = await statusRes.text();
+            console.log('[INDUSTRY_RESEARCH_DEBUG] Response text length:', responseText.length);
+            console.log('[INDUSTRY_RESEARCH_DEBUG] Response text preview:', responseText.substring(0, 500));
+
+            // Attempt to parse JSON
+            try {
+              statusPayload = JSON.parse(responseText);
+              console.log('[INDUSTRY_RESEARCH_DEBUG] JSON parsed successfully. Status:', statusPayload.status);
+            } catch (jsonError) {
+              console.error('[INDUSTRY_RESEARCH_DEBUG] JSON parse error:', jsonError);
+              console.error('[INDUSTRY_RESEARCH_DEBUG] Failed to parse text:', responseText);
+              throw new Error(`JSON parsing failed: ${jsonError.message}. Response preview: ${responseText.substring(0, 200)}`);
+            }
+          } catch (fetchError) {
+            console.error('[INDUSTRY_RESEARCH_DEBUG] Fetch or parse error:', fetchError);
+            // On error, wait and retry (don't throw immediately)
+            if (pollCount < 3) {
+              console.warn('[INDUSTRY_RESEARCH_DEBUG] Retrying after error...');
+              continue;
+            }
+            throw fetchError;
+          }
 
           if (statusPayload.status === 'processing') {
             // Update progress display
@@ -2455,14 +2647,17 @@
             const timerEl = document.getElementById('researchTimer');
             if (progressEl) progressEl.textContent = statusPayload.progress || 'Processing...';
             if (timerEl) timerEl.textContent = `Elapsed: ${statusPayload.elapsed_seconds || 0} seconds`;
+            console.log('[INDUSTRY_RESEARCH_DEBUG] Status: processing, elapsed:', statusPayload.elapsed_seconds);
             continue;
           }
 
           if (statusPayload.status === 'error') {
+            console.error('[INDUSTRY_RESEARCH_DEBUG] Job failed with error:', statusPayload.error);
             throw new Error(statusPayload.error || 'Research failed');
           }
 
           if (statusPayload.status === 'complete') {
+            console.log('[INDUSTRY_RESEARCH_DEBUG] Job complete! Report length:', statusPayload.report?.length || 0);
             isComplete = true;
 
             if (sseConnection) sseConnection.close();
@@ -2508,21 +2703,41 @@
                 }
               });
             });
+
+            // Clear localStorage job since we're done
+            localStorage.removeItem(INDUSTRY_JOB_KEY);
           }
         }
-
       } catch (err) {
+        console.error('[INDUSTRY_RESEARCH_DEBUG] Polling error:', err);
         if (sseConnection) sseConnection.close();
-        document.getElementById('progress-container').classList.remove('visible');
+        document.getElementById('progress-container')?.classList.remove('visible');
+
+        // Enhanced error message with debugging info
+        let errorMessage = err.message || 'An unknown error occurred';
+        const isJsonError = errorMessage.includes('JSON') || errorMessage.includes('Unexpected end');
+
         industryResultsContainer.innerHTML = `
           <div class="bg-red-100 border border-red-400 text-red-700 px-6 py-4 rounded-lg shadow-md" role="alert">
             <strong class="font-bold">Error:</strong>
-            <span class="block sm:inline">${err.message}</span>
+            <span class="block sm:inline">${errorMessage}</span>
+            ${isJsonError ? `
+              <div class="mt-3 p-3 bg-red-50 rounded text-sm">
+                <p class="font-semibold">Possible causes:</p>
+                <ul class="list-disc list-inside mt-1">
+                  <li>Request timeout (Azure limits to 230 seconds for HTTP, but background processing should continue)</li>
+                  <li>Network connection interrupted during streaming</li>
+                  <li>Server memory limit exceeded</li>
+                </ul>
+                <p class="mt-2 font-semibold">Check browser console (F12) for detailed debug logs.</p>
+              </div>
+            ` : ''}
           </div>
         `;
         console.error('Industry research error:', err);
+        localStorage.removeItem(INDUSTRY_JOB_KEY);
       }
-    });
+    }
 
     // ===================================================================================
     // END: INDUSTRY RESEARCH FUNCTIONALITY
@@ -3428,7 +3643,7 @@
         messageDiv.classList.add('max-w-[80%]', 'bg-slate-200', 'text-slate-700', 'self-start', 'rounded-bl-none');
         messageDiv.innerHTML = `<div class="flex items-center space-x-1"><div class="w-2 h-2 bg-slate-400 rounded-full animate-pulse delay-75"></div><div class="w-2 h-2 bg-slate-400 rounded-full animate-pulse delay-150"></div><div class="w-2 h-2 bg-slate-400 rounded-full animate-pulse delay-300"></div></div>`;
       } else if (sender === 'user') {
-        messageDiv.classList.add('max-w-[80%]', 'bg-slate-800', 'text-white', 'self-end', 'rounded-br-none');
+        messageDiv.classList.add('max-w-[80%]', 'bg-green-600', 'text-white', 'self-end', 'rounded-br-none');
         messageDiv.textContent = text;
       } else if (sender === 'bot') {
         messageDiv.classList.add('max-w-full', 'text-slate-900', 'self-start', 'rounded-bl-none', 'bot-message', 'relative', 'pr-12');

@@ -20,6 +20,7 @@ yfinance
 TA-Lib
 tradingview-datafeed==2.1.1   # installs as tvDatafeed
 pandas-market-calendars
+tabulate  # For DataFrame.to_markdown() in AI News financial data
 
 # --- Plotting & Visualization ---
 matplotlib==3.7.2

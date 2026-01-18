@@ -553,9 +553,13 @@ def call_perplexity_api(messages, model="sonar-pro", temperature=1, timeout=120,
     Call Perplexity API with optional streaming support and Pro Search.
     Streaming keeps the connection alive for long-running requests (Azure compatibility).
     Pro Search enables multi-step reasoning and deeper web research.
+    
+    Enhanced with robust error handling and debug logging for Industry Research.
     """
     if not PERPLEXITY_API_KEY:
         raise ValueError("Perplexity API key is not configured.")
+    
+    response = None  # Initialize for error handling
     try:
         url = "https://api.perplexity.ai/chat/completions"
         
@@ -582,45 +586,108 @@ def call_perplexity_api(messages, model="sonar-pro", temperature=1, timeout=120,
         
         if payload.get("stream"):
             # Streaming mode - read chunks as they come
-            full_content = ""
-            with requests.post(url, headers=headers, json=payload, timeout=timeout, stream=True) as response:
-                response.raise_for_status()
-                
-                for line in response.iter_lines():
-                    if line:
-                        line_str = line.decode('utf-8')
-                        if line_str.startswith('data: '):
-                            data_str = line_str[6:]  # Remove 'data: ' prefix
-                            if data_str.strip() == '[DONE]':
-                                break
-                            try:
-                                chunk_data = json.loads(data_str)
-                                if 'choices' in chunk_data and len(chunk_data['choices']) > 0:
-                                    delta = chunk_data['choices'][0].get('delta', {})
-                                    content = delta.get('content', '')
-                                    if content:
-                                        full_content += content
-                            except json.JSONDecodeError:
-                                continue
+            # MEMORY OPTIMIZATION: Use list accumulation instead of string concatenation
+            # String concatenation creates new objects each time (O(n²) memory)
+            # List append + join is O(n) memory efficient
+            print(f"STREAM_DEBUG: Starting stream for model={model}, timeout={timeout}s", file=sys.stderr)
+            start_time = time.time()
+            content_chunks = []  # Memory-efficient: list accumulation
+            chunk_count = 0
+            total_bytes = 0
+            last_log_time = start_time
+            
+            try:
+                with requests.post(url, headers=headers, json=payload, timeout=timeout, stream=True) as response:
+                    response.raise_for_status()
+                    print(f"STREAM_DEBUG: HTTP {response.status_code}, headers received", file=sys.stderr)
+                    
+                    for line in response.iter_lines():
+                        if line:
+                            chunk_count += 1
+                            total_bytes += len(line)
+                            
+                            # OPTIMIZATION: Log every 100 chunks (not 10) to reduce I/O overhead
+                            current_time = time.time()
+                            if chunk_count % 100 == 0 or (current_time - last_log_time) > 60:
+                                elapsed = int(current_time - start_time)
+                                content_len = sum(len(c) for c in content_chunks)
+                                print(f"STREAM_DEBUG: Chunk #{chunk_count}, Bytes: {total_bytes}, Elapsed: {elapsed}s, Content: {content_len} chars", file=sys.stderr)
+                                last_log_time = current_time
+                            
+                            line_str = line.decode('utf-8')
+                            if line_str.startswith('data: '):
+                                data_str = line_str[6:]  # Remove 'data: ' prefix
+                                if data_str.strip() == '[DONE]':
+                                    print(f"STREAM_DEBUG: Received [DONE] signal", file=sys.stderr)
+                                    break
+                                try:
+                                    chunk_data = json.loads(data_str)
+                                    if 'choices' in chunk_data and len(chunk_data['choices']) > 0:
+                                        delta = chunk_data['choices'][0].get('delta', {})
+                                        content = delta.get('content', '')
+                                        if content:
+                                            content_chunks.append(content)  # O(1) append
+                                except json.JSONDecodeError as jde:
+                                    # Only log first few JSON errors to reduce noise
+                                    if chunk_count < 10:
+                                        print(f"STREAM_DEBUG: JSON decode error in chunk {chunk_count}: {jde}", file=sys.stderr)
+                                    continue
+                    
+                    # Single join operation at the end - O(n) instead of O(n²)
+                    full_content = ''.join(content_chunks)
+                    
+                    elapsed_total = int(time.time() - start_time)
+                    print(f"STREAM_DEBUG: Stream complete. Chunks: {chunk_count}, Raw bytes: {total_bytes}, Time: {elapsed_total}s, Content: {len(full_content)} chars", file=sys.stderr)
+                    
+                    # Memory cleanup - important for Azure's limited memory
+                    del content_chunks
+                    import gc
+                    gc.collect()
+            
+            except requests.exceptions.Timeout as te:
+                elapsed = int(time.time() - start_time)
+                full_content = ''.join(content_chunks) if content_chunks else ""
+                print(f"STREAM_ERROR: Timeout after {elapsed}s. Chunks: {chunk_count}, Partial content: {len(full_content)} chars", file=sys.stderr)
+                if full_content:
+                    print(f"STREAM_RECOVERY: Returning partial content ({len(full_content)} chars) after timeout", file=sys.stderr)
+                    return full_content
+                raise ValueError(f"Stream timeout after {elapsed}s with no recoverable content")
+            
+            except requests.exceptions.RequestException as re:
+                elapsed = int(time.time() - start_time)
+                full_content = ''.join(content_chunks) if content_chunks else ""
+                print(f"STREAM_ERROR: Connection error after {elapsed}s: {re}. Partial content: {len(full_content)} chars", file=sys.stderr)
+                if full_content:
+                    print(f"STREAM_RECOVERY: Returning partial content ({len(full_content)} chars) after connection error", file=sys.stderr)
+                    return full_content
+                raise
             
             if not full_content:
+                print(f"STREAM_ERROR: Empty response after {chunk_count} chunks", file=sys.stderr)
                 raise ValueError("Empty streaming response from Perplexity API")
+            
             return full_content
         else:
             # Non-streaming mode (original behavior)
+            print(f"API_DEBUG: Calling {model} in non-streaming mode, timeout={timeout}s", file=sys.stderr)
             response = requests.post(url, headers=headers, json=payload, timeout=timeout)
             response.raise_for_status()
             
             if response.content.strip():
-                return response.json()['choices'][0]['message']['content']
+                content = response.json()['choices'][0]['message']['content']
+                print(f"API_DEBUG: Non-streaming response received, length: {len(content)}", file=sys.stderr)
+                return content
             else:
                 raise ValueError("Empty response from Perplexity API")
             
-    except requests.exceptions.JSONDecodeError:
-        print(f"Non-JSON response: {response.text}")
-        raise ValueError(f"Invalid JSON response from Perplexity API: {response.text}")
+    except requests.exceptions.JSONDecodeError as jde:
+        response_text = response.text if response else "No response"
+        print(f"API_ERROR: Non-JSON response: {response_text[:500]}", file=sys.stderr)
+        raise ValueError(f"Invalid JSON response from Perplexity API: {response_text[:200]}")
     except Exception as e:
-        print(f"ERROR in call_perplexity_api: {e}")
+        print(f"API_ERROR in call_perplexity_api (model={model}): {type(e).__name__}: {e}", file=sys.stderr)
+        import traceback
+        traceback.print_exc(file=sys.stderr)
         raise
 
 
@@ -990,7 +1057,7 @@ AI_NEWS_INTENT_PROMPT = """Your role is to convert the user's message into an En
 
 Your job: Analyze the user's question and conversation history, and convert user's question regarding any stock/company/industry/economy/policy/theme into a clear, complete, investing-grade research prompt that:
 1. Captures the explicit ask
-2. Captures the timeline and when it is not mentioned or vague assume to be last 2 days
+2. Captures the timeline and when it is not mentioned or vague assume to be last 3 days
 3. Adds relevant financial context the user likely wants but didn't explicitly ask for
 4. Maintain conversation continuity: use the provided conversation context to resolve references like “this company”, “that sector”, “the last one”, etc.
 5. Do not store or request access to older queries beyond the provided conversation context. Treat each run as self-contained.
@@ -1005,7 +1072,7 @@ HOW TO WRITE THE ENHANCED QUERY
 The enhanced_query must:
 1. Be a single, detailed research request suitable for Sonar-Pro with Pro Search. The request should not be more than 100 words long. 
 2. Request must include Trump's statements/actions related to India over last 2-3 days, tariff hikes/threats to India, Trump's global actions and implications for Indian industries/companies.
-3. If it's a company/stock query, request: "latest material developments", "earnings/guidance", "segment drivers", "regulatory issues", "competitive landscape", "valuation context (directional, not exact unless sourced)", and "near-term catalysts".
+3. If it's a company/stock query, request: "latest material developments", "earnings/guidance", "segment drivers", "regulatory issues", "competitive landscape", "valuation context (directional, not exact unless sourced)", and "near-term catalysts/tailwind/headwind".
 4. If it's an industry/market/macro/Nifty/Sensex query, request: "recent tariff hikes/threats", "drivers", "recent news", "global cues", "Trump's statements/actions", "data points", "policy/regulation", "winners/losers", "second-order effects", "leading indicators", and "implications for listed Indian companies".
 5. If user asks for "quick" or "summary", still generate a thorough query but request a concise output.
 6. Ensure the Sonar-Pro query mentions that answer should be maximum 500 words
@@ -1022,41 +1089,46 @@ Examples:
 - "Nifty/Sensex/Market volatility" → "What are the recent tariff hikes/threats, drivers, recent news, global cues, Trump's statements/actions, data points, policy/regulation, winners/losers, second-order effects, leading indicators, and implications for listed Indian companies?"
 """
 
-AI_NEWS_RESEARCH_PROMPT = """You are the world's most advanced financial research assistant.
+AI_NEWS_RESEARCH_PROMPT = """You are the world's most advanced financial news provider, who can answer any question about a company/stock/industry/sector/economy with latest developments, news, and analysis.
 
 ⚠️ MANDATORY OUTPUT FORMAT - READ THIS FIRST ⚠️
-You MUST structure your response using markdown lists. Do NOT write in paragraph format.
+Provide comprehensive, detailed analysis in a readable format. Aim for clarity and depth.
 
 Required format for EVERY response:
-1. Start with a brief 1-2 sentence summary paragraph
-2. Then use ## headings for each major section
-3. Under each heading, use markdown lists (- or 1.) for ALL points
-4. Use tables only for comparisons
+1. Start with a 2-3 sentence executive summary
+2. Use ## headings to organize major sections
+3. Under each heading, write detailed explanations using:
+   - **Paragraphs** for narrative flow and explanations (2-3 sentences per point)
+   - **Bullet points** (- or 1.) for breaking down complex information into key takeaways
+   - **Tables** for comparisons and data-heavy sections
+4. Target response length: 700-1000 words (adjust based on query complexity)
 
-Example of CORRECT formatting:
+Example of CORRECT formatting (only formatting, not content):
 ---
-The Nifty fell 2.5% due to FII selling and global risk-off. Here are the key drivers:
+Reliance Industries reported strong Q3FY24 results with consolidated revenue of ₹2,35,000 crore, marking a 12% YoY growth driven by retail and digital services expansion.
 
-## Immediate Drivers
-- Nifty 50 fell 2.45% to 25,683 with heavy profit-booking
-- India VIX jumped from 9.95 to 10.96, a 10% spike in 2 days
-- FII sold ₹3,800 crore while DII bought ₹5,600 crore
+## Financial Performance
 
-## Global Factors
-- Trump threatened new tariffs on Indian goods
-- US yields rose, pressing emerging markets
-- Gold outperformed equities as safe-haven demand increased
+Reliance's consolidated revenue for Q3FY24 stood at ₹2,35,000 crore, up 12% YoY from ₹2,10,000 crore in Q3FY23. The growth was primarily driven by the retail segment which grew 18% YoY to ₹75,000 crore, while the O2C (Oil-to-Chemicals) segment saw a modest 5% growth to ₹1,20,000 crore due to margin pressures in petrochemicals.
+
+Net profit increased 8% YoY to ₹18,500 crore, though margins compressed slightly from 8.2% to 7.9% due to higher operating costs and increased investments in digital infrastructure. EBITDA stood at ₹40,000 crore with a margin of 17%.
+
+Key highlights:
+- Retail segment added 800 new stores, bringing total count to 18,500 stores
+- Jio subscriber base grew to 48 crore with ARPU improving to ₹182 per month
+- Digital services revenue crossed ₹25,000 crore for the first time
+
+## Outlook and Catalysts
+
+Management guided for continued momentum in retail with plans to add 2,000 stores in FY25. The recently announced partnerships in renewable energy could create new revenue streams starting FY26...
 ---
 
-Example of WRONG formatting (paragraphs - DO NOT DO THIS):
----
-The market fell due to various factors. Nifty 50 dropped 2.45% with VIX spiking.
-Global cues turned negative with Trump's tariff threats adding pressure.
----
-
-Your goal is to provide concise, accurate, and easy-to-understand answers about financial markets, stocks, industries, and the economy of the Indian market, while ensuring that the information covers any recent news of last 48 hours.
+Your goal is to provide detailed, accurate, and easy-to-understand answers about financial markets, stocks, industries, and the economy of the Indian market, while ensuring comprehensive coverage of recent developments.
 
 DATA SOURCE RULES:
+- **CRITICAL: If "Financial Data from Screener.in" is provided below in the context, you MUST use those exact numbers for any financial metrics about the mentioned companies. Do NOT approximate, estimate, or use outdated figures for companies with provided data.**
+- **When quoting a number for a mentioned company, verify: "Is this from the provided screener table?" If yes, use the exact value from the table.**
+- **If screener data conflicts with news sources, PRIORITIZE the screener table data as it is the verified source of truth for financial metrics.**
 - For Indian company financial data (revenue, profit, ratios, quarterly results, market cap, stock price), ALWAYS use screener.in as the primary source
 - When researching Indian stocks, search: "site:screener.in [company name]" for fundamental data
 - For company news: prioritize filings/press releases/transcripts, then tier-1 financial media/wires; corroborate major breaking claims with 2 credible sources when possible.
@@ -1066,14 +1138,17 @@ DATA SOURCE RULES:
 
 FORMATTING RULES (CRITICAL):
 - Use simple, clear English accessible to retail investors
-- **STRUCTURE EVERY RESPONSE WITH MARKDOWN LISTS** - use "- " for bullets or "1. " for numbers
-- Break content into sections with ## headings
-- Under each heading, list points with "- " (dash + space) at the start
+- **Mix paragraphs and bullets** - use paragraphs for explanations and context, bullets for key takeaways
+- Break content into logical sections with ## headings
+- Provide sufficient detail - each point should be well-explained (2-4 sentences when needed)
 - Use tables for comparisons (markdown format: | Column | Column |)
-- Keep each bullet point to 1-2 sentences max
-- Use **bold** ONLY for headings and section titles
-- Do NOT bold random words, numbers, or percentages in the middle of sentences
+- **Target 500-1000 words** - adjust based on question complexity, but prioritize clarity over brevity
+- Use **bold** for emphasis on key metrics, findings, or section titles (but don't overuse)
+- **Avoid acronyms** - spell out terms on first use, then use acronym in parentheses (e.g., "Foreign Institutional Investors (FII)"). After first definition, you may use the acronym.
+- **Do NOT show the word count** at the end of the response.
 - Do NOT include citations, source links, references, superscript, footnotes, and exponents
+
+
 
 
 """
@@ -1106,6 +1181,115 @@ def ai_news_chat():
         if company_context:
             print(f"INFO: Company context: {company_context}")
         
+        # =====================================================================
+        # NEW: Fetch financial tables from screener.in for @mentioned companies
+        # =====================================================================
+        
+        async def fetch_financial_tables_for_companies(companies_list):
+            """
+            Fetches financial tables from screener.in for @mentioned companies.
+            Returns formatted markdown string with tables.
+            """
+            if not companies_list:
+                return ""
+            
+            financial_data_sections = []
+            
+            for company in companies_list:
+                ticker = company.get('ticker', '').strip()
+                name = company.get('name', '').strip()
+                
+                if not ticker:
+                    continue
+                    
+                try:
+                    print(f"INFO: Fetching financial data for {ticker} from screener.in...")
+                    # Fetch only tables, no documents
+                    tables, description = await fetch_consolidated_async(ticker)
+                    
+                    # Format into markdown
+                    markdown = format_tables_to_markdown(ticker, name, tables)
+                    financial_data_sections.append(markdown)
+                    print(f"INFO: Successfully fetched data for {ticker}")
+                    
+                except Exception as e:
+                    print(f"WARN: Could not fetch financial data for {ticker}: {e}")
+                    continue
+            
+            if not financial_data_sections:
+                return ""
+            
+            header = "### Financial Data from Screener.in\n"
+            header += "**IMPORTANT: Use the following verified financial data when quoting numbers for the mentioned companies.**\n\n"
+            
+            return header + "\n\n---\n\n".join(financial_data_sections)
+        
+        def format_tables_to_markdown(ticker, name, tables):
+            """
+            Converts financial tables dict to clean markdown.
+            Limits to most recent periods to keep prompt concise.
+            """
+            sections = [f"## {name} ({ticker})"]
+            
+            # Priority tables to include
+            priority_tables = [
+                "Quarterly Results",
+                "Annual Results", 
+                "Balance Sheet",
+                "Financial Ratios",
+                "Quarterly Shareholding Pattern"
+            ]
+            
+            for table_name in priority_tables:
+                if table_name not in tables:
+                    continue
+                    
+                df = tables[table_name].copy()
+                
+                # Limit columns to recent periods to reduce token usage
+                if table_name == "Quarterly Results":
+                    # Keep first column (metric names) + latest 4 quarters
+                    if len(df.columns) > 5:
+                        df = df.iloc[:, :5]
+                elif table_name == "Annual Results":
+                    # Keep first column + latest 3 years
+                    if len(df.columns) > 4:
+                        df = df.iloc[:, :4]
+                elif table_name == "Quarterly Shareholding Pattern":
+                    # Keep first column + latest 4 quarters
+                    if len(df.columns) > 5:
+                        df = df.iloc[:, :5]
+                else:
+                    # For Balance Sheet and Ratios, keep first column + latest 2 periods
+                    if len(df.columns) > 3:
+                        df = df.iloc[:, :3]
+                
+                # Convert to markdown
+                try:
+                    markdown_table = df.to_markdown(index=False)
+                    sections.append(f"### {table_name}\n{markdown_table}")
+                except Exception as e:
+                    print(f"WARN: Could not convert {table_name} to markdown: {e}")
+                    continue
+            
+            return "\n\n".join(sections)
+        
+        # Fetch financial data if companies are mentioned
+        financial_data_context = ""
+        if companies:
+            try:
+                financial_data_context = asyncio.run(fetch_financial_tables_for_companies(companies))
+                if financial_data_context:
+                    print(f"INFO: Fetched financial data for {len(companies)} companies")
+            except Exception as e:
+                print(f"WARN: Failed to fetch financial data: {e}")
+                financial_data_context = ""
+        
+        # =====================================================================
+        # END: Financial data fetching
+        # =====================================================================
+
+        
         # --- STAGE 1: Intent Enhancement ---
         # Build context from conversation history
         history_context = ""
@@ -1137,6 +1321,11 @@ def ai_news_chat():
                 role_label = "User" if msg["role"] == "user" else "Assistant"
                 research_prompt += f"{role_label}: {msg['content'][:300]}\n"
             research_prompt += "\n"
+        
+        # Inject financial data from screener.in
+        if financial_data_context:
+            research_prompt += financial_data_context + "\n\n"
+            print(f"INFO: Added financial data to research prompt ({len(financial_data_context)} chars)")
         
         # Add the enhanced question
         research_prompt += f"Current Question: {enhanced_question}"
@@ -1253,7 +1442,7 @@ OUTPUT FORMAT: Markdown with clear headings and tables. Start with a decisive ex
   - 2-3 "optionalities" (smaller caps / emerging winners) if risk appetite allows.
 - "Pickaxes vs Gold" upfront call: Is the best wealth-creation likely in the core industry or adjacent layers (upstream/downstream/enablers)? State which layer and why.
 - Thesis breakers (Top 5) + early warning indicators.
-- 6-18 month catalysts (policy, capacity, price cycle, demand inflection, export tailwinds, tech shifts).
+- 6-18 month catalysts/headwinds (policy, capacity, price cycle, demand inflection, export tailwinds, tech shifts).
 
 ========================================
 2) Industry Definition & Segmentation (India-first)
@@ -1420,7 +1609,7 @@ Then provide:
   C) Avoid/Underweight (structural issues)
 For each Top Pick include:
 - Why it wins (2-3 bullets)
-- Key catalysts (6-18 months)
+- Key catalysts/tailwind/headwind (6-18 months)
 - Key risks + what would change your mind
 - Valuation anchors: what multiple is justified and why (relative + historical bands if available)
 - Preferred entry conditions (what you'd wait for / what confirms breakout)
@@ -1450,11 +1639,38 @@ End with:
 "If I could only track 3 things to validate this industry thesis over the next 12 months, they are: …"
 '''
 
+# Industry Research: Concurrent request limit
+MAX_CONCURRENT_INDUSTRY_RESEARCH = 5
+
+def get_active_industry_jobs_count():
+    """Count how many industry research jobs are currently processing"""
+    try:
+        # Scan Redis for all industry research jobs
+        pattern = "industry_research:*"
+        active_count = 0
+        
+        for key in redis_client.scan_iter(match=pattern):
+            job_data = redis_client.get(key)
+            if job_data:
+                try:
+                    job = json.loads(job_data)
+                    # Count only processing jobs (not complete or error)
+                    if job.get('status') == 'processing':
+                        active_count += 1
+                except:
+                    continue
+        
+        return active_count
+    except Exception as e:
+        print(f"ERROR counting active jobs: {e}", file=sys.stderr)
+        return 0  # Fail open - allow request if we can't count
+
 @app.route('/industry-research', methods=['POST'])
 def industry_research():
     """
     Endpoint for generating comprehensive industry research reports using sonar-deep-research.
     Uses background processing to handle long-running API calls (Azure has 230s timeout).
+    Limits concurrent requests to protect Azure P1V3 resources.
     """
     print("DEBUG: Entering /industry-research endpoint...", file=sys.stderr)
     
@@ -1467,6 +1683,20 @@ def industry_research():
         
         if not industry:
             return jsonify({'error': 'Industry is required'}), 400
+        
+        # Check concurrent request limit
+        active_count = get_active_industry_jobs_count()
+        print(f"INDUSTRY_RESEARCH_DEBUG: Active jobs: {active_count}/{MAX_CONCURRENT_INDUSTRY_RESEARCH}", file=sys.stderr)
+        
+        if active_count >= MAX_CONCURRENT_INDUSTRY_RESEARCH:
+            print(f"INDUSTRY_RESEARCH_LIMIT: Request rejected - limit reached ({active_count} active)", file=sys.stderr)
+            return jsonify({
+                'error': 'capacity_limit',
+                'message': f'Maximum {MAX_CONCURRENT_INDUSTRY_RESEARCH} concurrent research requests reached. Please try again in a few minutes.',
+                'active_jobs': active_count,
+                'max_concurrent': MAX_CONCURRENT_INDUSTRY_RESEARCH,
+                'retry_after_seconds': 300  # Suggest retry after 5 minutes
+            }), 429  # 429 Too Many Requests
         
         # Generate a unique job ID
         job_id = str(uuid.uuid4())
@@ -1486,6 +1716,8 @@ def industry_research():
         # Start background thread for the long-running API call
         def run_research():
             try:
+                job_start_time = time.time()
+                print(f"INDUSTRY_RESEARCH_DEBUG: Job {job_id} started for industry '{industry}'", file=sys.stderr)
                 log_progress(f"Starting deep research for {industry} industry...")
                 
                 # Build the prompt with user inputs
@@ -1497,11 +1729,32 @@ def industry_research():
                 )
                 
                 update_industry_job(job_id, {'progress': f"Generating comprehensive {depth} report for {industry}..."})
-                print(f"INFO: Calling sonar-deep-research for industry: {industry}, horizon: {horizon_years}y, depth: {depth}", file=sys.stderr)
+                print(f"INDUSTRY_RESEARCH_DEBUG: Calling sonar-deep-research for industry: {industry}, horizon: {horizon_years}y, depth: {depth}", file=sys.stderr)
+                print(f"INDUSTRY_RESEARCH_DEBUG: Prompt length: {len(prompt)} chars", file=sys.stderr)
                 
                 # Call Perplexity's sonar-deep-research with extended timeout
                 messages = [{"role": "user", "content": prompt}]
+                
+                # Heartbeat updater - updates Redis every 30s to show the request is alive
+                last_heartbeat = time.time()
+                
+                def update_heartbeat():
+                    nonlocal last_heartbeat
+                    current = time.time()
+                    if current - last_heartbeat > 30:
+                        elapsed = int(current - job_start_time)
+                        update_industry_job(job_id, {
+                            'progress': f"Deep research in progress... ({elapsed}s elapsed)",
+                            'heartbeat': current
+                        })
+                        print(f"INDUSTRY_RESEARCH_DEBUG: Heartbeat update - Job {job_id} still running ({elapsed}s)", file=sys.stderr)
+                        last_heartbeat = current
+                
+                # Note: The streaming API internally calls update_heartbeat-like logic via chunk logging
                 report = call_perplexity_api(messages, model="sonar-deep-research", timeout=900)
+                
+                elapsed_total = int(time.time() - job_start_time)
+                print(f"INDUSTRY_RESEARCH_DEBUG: API call complete. Total time: {elapsed_total}s, Report length: {len(report)} chars", file=sys.stderr)
                 
                 # Store the result
                 update_industry_job(job_id, {
@@ -1512,15 +1765,23 @@ def industry_research():
                         'industry': industry,
                         'horizon_years': horizon_years,
                         'depth': depth
-                    }
+                    },
+                    'completed_at': time.time(),
+                    'total_time': elapsed_total
                 })
-                print(f"INFO: Industry research complete for job_id: {job_id}", file=sys.stderr)
+                print(f"INDUSTRY_RESEARCH_DEBUG: Job {job_id} completed successfully in {elapsed_total}s", file=sys.stderr)
                 
             except Exception as api_error:
-                print(f"ERROR: sonar-deep-research API call failed: {api_error}", file=sys.stderr)
+                elapsed = int(time.time() - job_start_time)
+                print(f"INDUSTRY_RESEARCH_ERROR: Job {job_id} failed after {elapsed}s: {type(api_error).__name__}: {api_error}", file=sys.stderr)
+                import traceback
+                traceback.print_exc(file=sys.stderr)
                 update_industry_job(job_id, {
                     'status': 'error',
-                    'error': str(api_error)
+                    'error': str(api_error),
+                    'error_type': type(api_error).__name__,
+                    'failed_at': time.time(),
+                    'elapsed': elapsed
                 })
         
         # Start the background thread
