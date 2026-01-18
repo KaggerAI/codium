@@ -361,10 +361,13 @@
                     if (!progressDiv) return;
 
                     if (data.status === 'running') {
+                        const elapsedText = data.elapsed_seconds !== null && data.elapsed_seconds !== undefined
+                            ? ` - ${data.elapsed_seconds}s elapsed`
+                            : '';
                         progressDiv.innerHTML = `
                             <div class="flex items-center gap-2">
                                 <div class="animate-spin w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full"></div>
-                                <span>Processing: <strong>${data.current}</strong> (${data.completed}/${data.total})</span>
+                                <span>Processing: <strong>${data.current}</strong> (${data.completed}/${data.total})${elapsedText}</span>
                             </div>
                         `;
                     } else if (data.status === 'complete') {
@@ -374,11 +377,14 @@
                             <div class="text-green-300">
                                 <p class="font-medium">✅ Complete! ${successCount}/${data.total} stocks cached successfully.</p>
                                 <div class="text-sm mt-2 max-h-32 overflow-y-auto">
-                                    ${data.results.map(r => `
-                                        <div class="${r.status === 'success' ? 'text-green-400' : 'text-red-400'}">
-                                            ${r.ticker}: ${r.status === 'success' ? '✓' : '✗ ' + (r.error || 'Failed')}
-                                        </div>
-                                    `).join('')}
+                                    ${data.results.map(r => {
+                            const duration = r.duration_seconds ? ` (${r.duration_seconds}s)` : '';
+                            return `
+                                            <div class="${r.status === 'success' ? 'text-green-400' : 'text-red-400'}">
+                                                ${r.ticker}: ${r.status === 'success' ? '✓' : '✗ ' + (r.error || 'Failed')}${duration}
+                                            </div>
+                                        `;
+                        }).join('')}
                                 </div>
                             </div>
                         `;

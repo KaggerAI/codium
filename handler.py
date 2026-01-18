@@ -3471,6 +3471,7 @@ def analyze():
                                 'chart_rsi_json': rsi_j,
                                 'chart_adl_json': adl_j,
                                 'chart_rs_json': rs_j,
+                                'chart_rsi_divergence_json': rsi_div_j,
                                 'fundamentals': cached_fundamentals,  # FROM CACHE
                                 'metric_charts': metric_charts,  # Valuation charts from Screener.in
                                 'documents': cached_documents,  # FROM CACHE
@@ -3747,9 +3748,13 @@ def run_batch_precache(job_id, tickers):
     
     for i, ticker in enumerate(tickers):
         try:
+            # Track timing for this stock
+            stock_start_time = time.time()
+            
             # Update current ticker
             precache_jobs[job_id]['current'] = ticker
             precache_jobs[job_id]['completed'] = i
+            precache_jobs[job_id]['current_start_time'] = stock_start_time
             
             print(f"LIGHT PRE-CACHE: [{i+1}/{total}] Starting {ticker}...")
             
@@ -3844,19 +3849,23 @@ def run_batch_precache(job_id, tickers):
             
             # Cache for stock-based instant access (1 week = 604800 seconds)
             stock_cache_key = f"stock_analysis_{ticker}"
+            # Calculate total duration for this stock
+            duration_seconds = int(time.time() - stock_start_time)
+            
             try:
                 frontend_compressed = zlib.compress(pickle.dumps(light_cache_data))
                 cache.set(stock_cache_key, frontend_compressed, timeout=604800)
-                print(f"LIGHT PRE-CACHE: [{i+1}/{total}] {ticker} ✓ Cached successfully")
-                results.append({'ticker': ticker, 'status': 'success'})
+                print(f"LIGHT PRE-CACHE: [{i+1}/{total}] {ticker} ✓ Cached successfully ({duration_seconds}s)")
+                results.append({'ticker': ticker, 'status': 'success', 'duration_seconds': duration_seconds})
             except Exception as e:
                 print(f"LIGHT PRE-CACHE: [{i+1}/{total}] {ticker} ✗ Cache write failed: {e}")
-                results.append({'ticker': ticker, 'status': 'error', 'error': f'Cache write failed: {e}'})
+                results.append({'ticker': ticker, 'status': 'error', 'error': f'Cache write failed: {e}', 'duration_seconds': duration_seconds})
             
         except Exception as e:
-            print(f"LIGHT PRE-CACHE: [{i+1}/{total}] {ticker} ✗ Failed: {e}")
+            duration_seconds = int(time.time() - stock_start_time)
+            print(f"LIGHT PRE-CACHE: [{i+1}/{total}] {ticker} ✗ Failed: {e} ({duration_seconds}s)")
             traceback.print_exc()
-            results.append({'ticker': ticker, 'status': 'error', 'error': str(e)})
+            results.append({'ticker': ticker, 'status': 'error', 'error': str(e), 'duration_seconds': duration_seconds})
         
         # Rate limiting: 15 second delay between stocks (shorter since lighter workload)
         if i < total - 1:
@@ -3946,12 +3955,19 @@ def get_precache_status(job_id):
     # Check in-memory first
     if job_id in precache_jobs:
         job = precache_jobs[job_id]
+        
+        # Calculate elapsed time for current stock
+        elapsed_seconds = None
+        if job.get('current_start_time') and job['status'] == 'running':
+            elapsed_seconds = int(time.time() - job['current_start_time'])
+        
         return jsonify({
             'job_id': job_id,
             'status': job['status'],
             'total': job['total'],
             'completed': job['completed'],
             'current': job['current'],
+            'elapsed_seconds': elapsed_seconds,
             'results': job['results'] if job['status'] == 'complete' else []
         })
     
