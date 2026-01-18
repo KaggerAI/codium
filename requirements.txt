@@ -29,6 +29,8 @@ plotly
 # --- AI & API Interaction ---
 openai>=1.0.0
 google-generativeai
+httplib2>=0.20.0  # Fix for pyparsing 3.x compatibility
+pyparsing>=3.0.0,<4.0.0  # Explicitly allow pyparsing 3.x
 
 # --- Web Scraping & Document Parsing ---
 requests
