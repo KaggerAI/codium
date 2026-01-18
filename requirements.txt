@@ -30,7 +30,7 @@ plotly
 openai>=1.0.0
 google-generativeai
 httplib2==0.22.0  # Pinned version with pyparsing 3.x support
-pyparsing==3.1.1  # Pinned exact version to prevent conflicts
+pyparsing==3.0.9  # 3.0.x works with both matplotlib<3.1 AND httplib2's DelimitedList
 
 # --- Web Scraping & Document Parsing ---
 requests
