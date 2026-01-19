@@ -170,8 +170,10 @@ def set_industry_job(job_id, job_data):
     try:
         compressed = zlib.compress(pickle.dumps(job_data))
         cache.set(f"{INDUSTRY_JOB_PREFIX}{job_id}", compressed, timeout=INDUSTRY_JOB_TTL)
+        status = job_data.get('status', 'unknown')
+        print(f"DEBUG: Industry job {job_id} saved to cache (status={status})", file=sys.stderr)
     except Exception as e:
-        print(f"WARN: Failed to save industry job {job_id}: {e}", file=sys.stderr)
+        print(f"ERROR: Failed to save industry job {job_id}: {e}", file=sys.stderr)
 
 def update_industry_job(job_id, updates):
     """Update specific fields of an industry research job in Redis."""
@@ -179,6 +181,11 @@ def update_industry_job(job_id, updates):
     if job:
         job.update(updates)
         set_industry_job(job_id, job)
+    else:
+        # If we can't get the existing job, create a new one with just the updates
+        # This ensures completed results don't get lost
+        print(f"WARN: Could not get existing job {job_id} for update, creating with updates only", file=sys.stderr)
+        set_industry_job(job_id, updates)
 
 from urllib.parse import urlparse
 
