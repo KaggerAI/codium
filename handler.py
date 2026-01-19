@@ -276,6 +276,11 @@ def log_redis_target(app, cache=None, context=""):
 # Get the raw connection string from the environment variable set in Azure
 azure_redis_conn_string = os.getenv("CACHE_REDIS_URL")
 
+# Debug: Log first/last chars of connection string to verify it's read correctly
+if azure_redis_conn_string:
+    safe_preview = azure_redis_conn_string[:10] + "..." + azure_redis_conn_string[-10:] if len(azure_redis_conn_string) > 30 else "[too short]"
+    print(f"REDIS_ENV_DEBUG: CACHE_REDIS_URL length={len(azure_redis_conn_string)}, preview={safe_preview}", file=sys.stderr)
+
 if azure_redis_conn_string:
     print("INFO: Found Azure Redis connection string. Parsing for Python redis library.", file=sys.stderr)
     
@@ -360,6 +365,7 @@ import redis as redis_lib
 
 DIRECT_REDIS_CLIENT = None
 if azure_redis_conn_string:
+    print(f"DIRECT_REDIS_INIT: Starting with conn_string type={type(azure_redis_conn_string).__name__}, starts_with_redis={azure_redis_conn_string.startswith('redis')}", file=sys.stderr)
     try:
         redis_host = None
         redis_port = 6380
@@ -367,6 +373,7 @@ if azure_redis_conn_string:
         redis_ssl_enabled = False
 
         if azure_redis_conn_string.startswith("redis://") or azure_redis_conn_string.startswith("rediss://"):
+            print("DIRECT_REDIS_INIT: Detected URL format, using from_url()", file=sys.stderr)
             # Use strict from_url parsing for standard URIs (safest approach)
             # This handles percent-decoded passwords correctly automatically
             try:
