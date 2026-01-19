@@ -2633,9 +2633,12 @@
             }
           } catch (fetchError) {
             console.error('[INDUSTRY_RESEARCH_DEBUG] Fetch or parse error:', fetchError);
-            // On error, wait and retry (don't throw immediately)
-            if (pollCount < 3) {
-              console.warn('[INDUSTRY_RESEARCH_DEBUG] Retrying after error...');
+            // On error, wait and retry with exponential backoff (don't throw immediately)
+            // Increase retry count to 10 to handle Azure multi-instance latency
+            if (pollCount < 10) {
+              const waitTime = Math.min(pollCount * 2, 10) * 1000;  // 2s, 4s, 6s... up to 10s
+              console.warn(`[INDUSTRY_RESEARCH_DEBUG] Retrying after ${waitTime / 1000}s (attempt ${pollCount}/10)...`);
+              await new Promise(resolve => setTimeout(resolve, waitTime));
               continue;
             }
             throw fetchError;

@@ -156,16 +156,31 @@ def set_local_cache(ticker, data):
 
 
 def get_industry_job(job_id):
-    """Get industry research job status from Redis with local fallback."""
-    # Try Redis first
-    try:
-        cached = cache.get(f"{INDUSTRY_JOB_PREFIX}{job_id}")
-        if cached:
-            if isinstance(cached, bytes):
-                return pickle.loads(zlib.decompress(cached))
-            return cached
-    except Exception as e:
-        print(f"WARN: Redis get failed for job {job_id}: {e}", file=sys.stderr)
+    """Get industry research job status from Redis with retries and local fallback."""
+    # Try Redis with retries (Azure multi-worker can have intermittent Redis issues)
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            cached = cache.get(f"{INDUSTRY_JOB_PREFIX}{job_id}")
+            if cached:
+                if isinstance(cached, bytes):
+                    result = pickle.loads(zlib.decompress(cached))
+                else:
+                    result = cached
+                print(f"DEBUG: Redis HIT for job {job_id} (attempt {attempt+1})", file=sys.stderr)
+                return result
+            elif attempt == 0:
+                # First attempt returned None - might be timing issue, retry
+                print(f"DEBUG: Redis returned None for job {job_id}, retrying...", file=sys.stderr)
+                time.sleep(0.2)  # Small delay before retry
+                continue
+            else:
+                # Multiple attempts returned None - job truly not in Redis
+                break
+        except Exception as e:
+            print(f"WARN: Redis get failed for job {job_id} (attempt {attempt+1}/{max_retries}): {e}", file=sys.stderr)
+            if attempt < max_retries - 1:
+                time.sleep(0.3)  # Wait before retry
     
     # Fallback to local memory
     if job_id in LOCAL_INDUSTRY_JOBS:
@@ -1865,9 +1880,28 @@ def industry_research_status(job_id):
     Poll endpoint to check status of a background industry research job.
     Returns the result when complete.
     """
+    # Enhanced debugging for multi-instance Azure issues
+    instance_id = socket.gethostname()
+    pid = os.getpid()
+    
+    print(f"STATUS_DEBUG: Instance={instance_id}, PID={pid}, JobID={job_id}", file=sys.stderr)
+    print(f"STATUS_DEBUG: LOCAL_INDUSTRY_JOBS has {len(LOCAL_INDUSTRY_JOBS)} jobs: {list(LOCAL_INDUSTRY_JOBS.keys())[:5]}", file=sys.stderr)
+    
     job = get_industry_job(job_id)
+    
     if not job:
+        # Additional debugging when job not found
+        print(f"STATUS_ERROR: Job {job_id} NOT FOUND on instance {instance_id}", file=sys.stderr)
+        print(f"STATUS_ERROR: Redis check - attempting direct cache.get...", file=sys.stderr)
+        try:
+            direct_check = cache.get(f"{INDUSTRY_JOB_PREFIX}{job_id}")
+            print(f"STATUS_ERROR: Direct Redis check result: {type(direct_check)}, is None: {direct_check is None}", file=sys.stderr)
+        except Exception as redis_err:
+            print(f"STATUS_ERROR: Direct Redis check FAILED: {redis_err}", file=sys.stderr)
+        
         return jsonify({'error': 'Job not found or expired'}), 404
+    
+    print(f"STATUS_DEBUG: Job {job_id} FOUND with status={job.get('status')}", file=sys.stderr)
     
     if job['status'] == 'processing':
         return jsonify({
