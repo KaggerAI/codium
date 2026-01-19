@@ -367,15 +367,25 @@ if azure_redis_conn_string:
         redis_ssl_enabled = False
 
         if azure_redis_conn_string.startswith("redis://") or azure_redis_conn_string.startswith("rediss://"):
-            # Parse URL format
-            from urllib.parse import urlparse
-            parsed = urlparse(azure_redis_conn_string)
-            redis_host = parsed.hostname
-            redis_port = parsed.port or 6379
-            redis_password = parsed.password
-            redis_ssl_enabled = parsed.scheme == "rediss"
+            # Use strict from_url parsing for standard URIs (safest approach)
+            # This handles percent-decoded passwords correctly automatically
+            try:
+                DIRECT_REDIS_CLIENT = redis_lib.Redis.from_url(
+                    azure_redis_conn_string,
+                    decode_responses=False,
+                    socket_connect_timeout=30,
+                    socket_timeout=30,
+                    retry_on_timeout=True,
+                    health_check_interval=10
+                )
+                DIRECT_REDIS_CLIENT.ping()
+                print(f"INFO: Direct Redis client created from URL for industry research", file=sys.stderr)
+            except Exception as e:
+                print(f"WARN: Failed to create Direct Redis client from URL: {e}", file=sys.stderr)
+                DIRECT_REDIS_CLIENT = None
+                
         else:
-            # Parse Azure comma-separated format
+            # Parse Azure comma-separated format manually (legacy)
             parts = azure_redis_conn_string.split(',')
             host_part = parts[0]
             
@@ -392,23 +402,22 @@ if azure_redis_conn_string:
                 redis_host = host_port_parts[0]
                 redis_port = int(host_port_parts[1]) if len(host_port_parts) > 1 else 6380
         
-        if redis_host and redis_password:
-            # Create direct Redis connection pool (shared across all workers)
-            DIRECT_REDIS_CLIENT = redis_lib.Redis(
-                host=redis_host,
-                port=redis_port,
-                password=redis_password,
-                ssl=redis_ssl_enabled,
-                decode_responses=False,  # Keep as bytes for pickle
-                socket_connect_timeout=30,
-                socket_timeout=30,
-                retry_on_timeout=True
-            )
-            # Test connection
-            DIRECT_REDIS_CLIENT.ping()
-            print(f"INFO: Direct Redis client created for industry research (host={redis_host})", file=sys.stderr)
-        else:
-            print("WARN: Could not extract Redis credentials (host/password), direct client not created", file=sys.stderr)
+                # Create direct Redis connection pool (shared across all workers)
+                DIRECT_REDIS_CLIENT = redis_lib.Redis(
+                    host=redis_host,
+                    port=redis_port,
+                    password=redis_password,
+                    ssl=redis_ssl_enabled,
+                    decode_responses=False,  # Keep as bytes for pickle
+                    socket_connect_timeout=30,
+                    socket_timeout=30,
+                    retry_on_timeout=True
+                )
+                # Test connection
+                DIRECT_REDIS_CLIENT.ping()
+                print(f"INFO: Direct Redis client created for industry research (host={redis_host})", file=sys.stderr)
+            else:
+                print("WARN: Could not extract Redis credentials (host/password), direct client not created", file=sys.stderr)
             
     except Exception as e:
         print(f"WARN: Failed to create direct Redis client: {e}", file=sys.stderr)
