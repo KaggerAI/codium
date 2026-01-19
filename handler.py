@@ -125,6 +125,9 @@ LOCAL_INDUSTRY_JOBS = {}  # For industry research jobs: { job_id: { "data": {...
 LOCAL_CACHE_TTL = 21600  # 6 hours in seconds
 LOCAL_INDUSTRY_JOB_TTL = 7200  # 2 hours in seconds for industry research jobs
 
+# Forward declaration - actual client initialized after Flask app setup
+DIRECT_REDIS_CLIENT = None
+
 def get_local_cache(ticker):
     """Get analysis data from local memory cache."""
     ticker_upper = ticker.upper() if ticker else None
@@ -156,31 +159,21 @@ def set_local_cache(ticker, data):
 
 
 def get_industry_job(job_id):
-    """Get industry research job status from Redis with retries and local fallback."""
-    # Try Redis with retries (Azure multi-worker can have intermittent Redis issues)
-    max_retries = 3
-    for attempt in range(max_retries):
+    """Get industry research job status using Direct Redis with local fallback."""
+    # Try Direct Redis first (bypasses Flask-Caching worker isolation issues)
+    if DIRECT_REDIS_CLIENT:
         try:
-            cached = cache.get(f"{INDUSTRY_JOB_PREFIX}{job_id}")
+            cached = DIRECT_REDIS_CLIENT.get(f"{INDUSTRY_JOB_PREFIX}{job_id}")
             if cached:
-                if isinstance(cached, bytes):
-                    result = pickle.loads(zlib.decompress(cached))
-                else:
-                    result = cached
-                print(f"DEBUG: Redis HIT for job {job_id} (attempt {attempt+1})", file=sys.stderr)
+                result = pickle.loads(zlib.decompress(cached))
+                print(f"DEBUG: Direct Redis HIT for job {job_id}", file=sys.stderr)
                 return result
-            elif attempt == 0:
-                # First attempt returned None - might be timing issue, retry
-                print(f"DEBUG: Redis returned None for job {job_id}, retrying...", file=sys.stderr)
-                time.sleep(0.2)  # Small delay before retry
-                continue
             else:
-                # Multiple attempts returned None - job truly not in Redis
-                break
+                print(f"DEBUG: Direct Redis returned None for job {job_id}", file=sys.stderr)
         except Exception as e:
-            print(f"WARN: Redis get failed for job {job_id} (attempt {attempt+1}/{max_retries}): {e}", file=sys.stderr)
-            if attempt < max_retries - 1:
-                time.sleep(0.3)  # Wait before retry
+            print(f"WARN: Direct Redis get failed for job {job_id}: {e}", file=sys.stderr)
+    else:
+        print(f"DEBUG: No Direct Redis client, checking local cache for job {job_id}", file=sys.stderr)
     
     # Fallback to local memory
     if job_id in LOCAL_INDUSTRY_JOBS:
@@ -198,21 +191,28 @@ def get_industry_job(job_id):
     return None
 
 def set_industry_job(job_id, job_data):
-    """Save industry research job status to Redis AND local memory."""
+    """Save industry research job status using Direct Redis AND local memory."""
     # Save to local memory first (always succeeds)
     LOCAL_INDUSTRY_JOBS[job_id] = {
         "data": job_data,
         "timestamp": time.time()
     }
     
-    # Then try Redis
-    try:
-        compressed = zlib.compress(pickle.dumps(job_data))
-        cache.set(f"{INDUSTRY_JOB_PREFIX}{job_id}", compressed, timeout=INDUSTRY_JOB_TTL)
-        status = job_data.get('status', 'unknown')
-        print(f"DEBUG: Industry job {job_id} saved to Redis+Local (status={status})", file=sys.stderr)
-    except Exception as e:
-        print(f"WARN: Redis save failed for job {job_id}, using local fallback only: {e}", file=sys.stderr)
+    # Then try Direct Redis (bypasses Flask-Caching)
+    if DIRECT_REDIS_CLIENT:
+        try:
+            compressed = zlib.compress(pickle.dumps(job_data))
+            DIRECT_REDIS_CLIENT.setex(
+                f"{INDUSTRY_JOB_PREFIX}{job_id}",
+                INDUSTRY_JOB_TTL,
+                compressed
+            )
+            status = job_data.get('status', 'unknown')
+            print(f"DEBUG: Industry job {job_id} saved to DirectRedis+Local (status={status})", file=sys.stderr)
+        except Exception as e:
+            print(f"WARN: Direct Redis save failed for job {job_id}: {e}", file=sys.stderr)
+    else:
+        print(f"DEBUG: No Direct Redis client, job {job_id} saved to local only", file=sys.stderr)
 
 def update_industry_job(job_id, updates):
     """Update specific fields of an industry research job."""
@@ -340,6 +340,57 @@ else:
 app.config.from_mapping(config)
 cache = Cache(app)
 log_redis_target(app, cache, context="startup_after_cache_init")
+
+# =====================================================================
+# DIRECT REDIS CLIENT FOR INDUSTRY RESEARCH (bypasses Flask-Caching)
+# This ensures cross-worker consistency for background job status
+# =====================================================================
+import redis as redis_lib
+
+DIRECT_REDIS_CLIENT = None
+if azure_redis_conn_string:
+    try:
+        # Parse connection string (reuse parsing from above)
+        parts = azure_redis_conn_string.split(',')
+        host_part = parts[0]
+        redis_password = None
+        redis_ssl_enabled = False
+        
+        for part in parts[1:]:
+            if '=' in part:
+                key, value = part.split('=', 1)
+                if key.lower() == 'password':
+                    redis_password = value
+                elif key.lower() == 'ssl':
+                    redis_ssl_enabled = value.lower() == 'true'
+        
+        if redis_password:
+            # Extract host and port
+            host_port_parts = host_part.split(':')
+            redis_host = host_port_parts[0]
+            redis_port = int(host_port_parts[1]) if len(host_port_parts) > 1 else 6380
+            
+            # Create direct Redis connection pool (shared across all workers)
+            DIRECT_REDIS_CLIENT = redis_lib.Redis(
+                host=redis_host,
+                port=redis_port,
+                password=redis_password,
+                ssl=redis_ssl_enabled,
+                decode_responses=False,  # Keep as bytes for pickle
+                socket_connect_timeout=30,
+                socket_timeout=30,
+                retry_on_timeout=True
+            )
+            # Test connection
+            DIRECT_REDIS_CLIENT.ping()
+            print(f"INFO: Direct Redis client created for industry research (host={redis_host})", file=sys.stderr)
+        else:
+            print("WARN: No Redis password found, direct Redis client not created", file=sys.stderr)
+    except Exception as e:
+        print(f"WARN: Failed to create direct Redis client: {e}", file=sys.stderr)
+        DIRECT_REDIS_CLIENT = None
+else:
+    print("INFO: No Azure Redis configured, using local-only storage for industry jobs")
 
 from flask import jsonify
 
