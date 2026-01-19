@@ -113,7 +113,7 @@ Compress(app)
 # =====================================================================
 
 INDUSTRY_JOB_PREFIX = "industry_job:"
-INDUSTRY_JOB_TTL = 3600  # 1 hour TTL for job status
+INDUSTRY_JOB_TTL = 7200  # 2 hours TTL for job status (increased for long-running jobs)
 
 # =====================================================================
 # LOCAL IN-MEMORY CACHE (Fallback when Redis is unavailable)
@@ -121,7 +121,9 @@ INDUSTRY_JOB_TTL = 3600  # 1 hour TTL for job status
 # This stores analysis data in Python memory as ultimate fallback
 # Structure: { ticker: { "data": {...}, "timestamp": time.time() } }
 LOCAL_ANALYSIS_CACHE = {}
+LOCAL_INDUSTRY_JOBS = {}  # For industry research jobs: { job_id: { "data": {...}, "timestamp": time.time() } }
 LOCAL_CACHE_TTL = 21600  # 6 hours in seconds
+LOCAL_INDUSTRY_JOB_TTL = 7200  # 2 hours in seconds for industry research jobs
 
 def get_local_cache(ticker):
     """Get analysis data from local memory cache."""
@@ -154,7 +156,8 @@ def set_local_cache(ticker, data):
 
 
 def get_industry_job(job_id):
-    """Get industry research job status from Redis."""
+    """Get industry research job status from Redis with local fallback."""
+    # Try Redis first
     try:
         cached = cache.get(f"{INDUSTRY_JOB_PREFIX}{job_id}")
         if cached:
@@ -162,35 +165,52 @@ def get_industry_job(job_id):
                 return pickle.loads(zlib.decompress(cached))
             return cached
     except Exception as e:
-        print(f"WARN: Failed to get industry job {job_id}: {e}", file=sys.stderr)
+        print(f"WARN: Redis get failed for job {job_id}: {e}", file=sys.stderr)
+    
+    # Fallback to local memory
+    if job_id in LOCAL_INDUSTRY_JOBS:
+        entry = LOCAL_INDUSTRY_JOBS[job_id]
+        age = time.time() - entry.get("timestamp", 0)
+        
+        if age > LOCAL_INDUSTRY_JOB_TTL:
+            del LOCAL_INDUSTRY_JOBS[job_id]
+            print(f"DEBUG: Local job {job_id} expired (age: {age:.0f}s)", file=sys.stderr)
+            return None
+        
+        print(f"DEBUG: Local job cache HIT for {job_id} (age: {age:.0f}s)", file=sys.stderr)
+        return entry.get("data")
+    
     return None
 
 def set_industry_job(job_id, job_data):
-    """Save industry research job status to Redis."""
+    """Save industry research job status to Redis AND local memory."""
+    # Save to local memory first (always succeeds)
+    LOCAL_INDUSTRY_JOBS[job_id] = {
+        "data": job_data,
+        "timestamp": time.time()
+    }
+    
+    # Then try Redis
     try:
         compressed = zlib.compress(pickle.dumps(job_data))
         cache.set(f"{INDUSTRY_JOB_PREFIX}{job_id}", compressed, timeout=INDUSTRY_JOB_TTL)
         status = job_data.get('status', 'unknown')
-        print(f"DEBUG: Industry job {job_id} saved to cache (status={status})", file=sys.stderr)
+        print(f"DEBUG: Industry job {job_id} saved to Redis+Local (status={status})", file=sys.stderr)
     except Exception as e:
-        print(f"ERROR: Failed to save industry job {job_id}: {e}", file=sys.stderr)
+        print(f"WARN: Redis save failed for job {job_id}, using local fallback only: {e}", file=sys.stderr)
 
 def update_industry_job(job_id, updates):
-    """Update specific fields of an industry research job in Redis."""
+    """Update specific fields of an industry research job."""
     job = get_industry_job(job_id)
     if job:
         job.update(updates)
         set_industry_job(job_id, job)
+        print(f"DEBUG: Updated job {job_id} fields: {list(updates.keys())}", file=sys.stderr)
     else:
-        # If we can't get the existing job, create a new one with just the updates
-        # This ensures completed results don't get lost
-        print(f"WARN: Could not get existing job {job_id} for update, creating with updates only", file=sys.stderr)
-        
-        # Safety: Ensure status exists (default to processing if this is just a heartbeat/progress update)
-        if 'status' not in updates:
-            updates['status'] = 'processing'
-            
-        set_industry_job(job_id, updates)
+        # CRITICAL FIX: If job not found during update, this is an error condition
+        # The job should already exist from the initial creation
+        print(f"ERROR: Cannot update non-existent job {job_id}. Updates lost: {list(updates.keys())}", file=sys.stderr)
+        # Don't create a new job with incomplete data - this masks the real issue
 
 from urllib.parse import urlparse
 
@@ -560,11 +580,14 @@ def call_openai_api(messages, model="gpt-4.1-mini", expect_json_format_flag=Fals
         print(f"ERROR in call_openai_api: {e}")
         raise
 
-def call_perplexity_api(messages, model="sonar-pro", temperature=1, timeout=120, use_streaming=False, enable_pro_search=False):
+def call_perplexity_api(messages, model="sonar-pro", temperature=1, timeout=120, use_streaming=False, enable_pro_search=False, progress_callback=None):
     """
     Call Perplexity API with optional streaming support and Pro Search.
     Streaming keeps the connection alive for long-running requests (Azure compatibility).
     Pro Search enables multi-step reasoning and deeper web research.
+    
+    Args:
+        progress_callback: Optional function(elapsed_seconds, bytes_received) called every 20s during streaming
     
     Enhanced with robust error handling and debug logging for Industry Research.
     """
@@ -620,11 +643,18 @@ def call_perplexity_api(messages, model="sonar-pro", temperature=1, timeout=120,
                             
                             # OPTIMIZATION: Log every 100 chunks (not 10) to reduce I/O overhead
                             current_time = time.time()
-                            if chunk_count % 100 == 0 or (current_time - last_log_time) > 60:
+                            if chunk_count % 100 == 0 or (current_time - last_log_time) > 20:  # Changed from 60 to 20
                                 elapsed = int(current_time - start_time)
                                 content_len = sum(len(c) for c in content_chunks)
                                 print(f"STREAM_DEBUG: Chunk #{chunk_count}, Bytes: {total_bytes}, Elapsed: {elapsed}s, Content: {content_len} chars", file=sys.stderr)
                                 last_log_time = current_time
+                                
+                                # NEW: Call progress callback if provided
+                                if progress_callback:
+                                    try:
+                                        progress_callback(elapsed, total_bytes)
+                                    except Exception as cb_error:
+                                        print(f"STREAM_WARN: Progress callback failed: {cb_error}", file=sys.stderr)
                             
                             line_str = line.decode('utf-8')
                             if line_str.startswith('data: '):
@@ -1761,23 +1791,18 @@ def industry_research():
                 # Call Perplexity's sonar-deep-research with extended timeout
                 messages = [{"role": "user", "content": prompt}]
                 
-                # Heartbeat updater - updates Redis every 30s to show the request is alive
-                last_heartbeat = time.time()
+                # Progress callback - updates job status every 20s during streaming
+                def streaming_progress(elapsed_seconds, bytes_received):
+                    """Called automatically by call_perplexity_api during streaming"""
+                    update_industry_job(job_id, {
+                        'progress': f"Receiving research data... ({elapsed_seconds}s, {bytes_received//1024}KB received)",
+                        'heartbeat': time.time(),
+                        'status': 'processing'  # Ensure status is preserved
+                    })
+                    print(f"INDUSTRY_RESEARCH_HEARTBEAT: Job {job_id} alive - {elapsed_seconds}s, {bytes_received//1024}KB", file=sys.stderr)
                 
-                def update_heartbeat():
-                    nonlocal last_heartbeat
-                    current = time.time()
-                    if current - last_heartbeat > 30:
-                        elapsed = int(current - job_start_time)
-                        update_industry_job(job_id, {
-                            'progress': f"Deep research in progress... ({elapsed}s elapsed)",
-                            'heartbeat': current
-                        })
-                        print(f"INDUSTRY_RESEARCH_DEBUG: Heartbeat update - Job {job_id} still running ({elapsed}s)", file=sys.stderr)
-                        last_heartbeat = current
-                
-                # Note: The streaming API internally calls update_heartbeat-like logic via chunk logging
-                report = call_perplexity_api(messages, model="sonar-deep-research", timeout=900)
+                # Call with progress callback to keep job alive during long streaming
+                report = call_perplexity_api(messages, model="sonar-deep-research", timeout=900, progress_callback=streaming_progress)
                 
                 elapsed_total = int(time.time() - job_start_time)
                 print(f"INDUSTRY_RESEARCH_DEBUG: API call complete. Total time: {elapsed_total}s, Report length: {len(report)} chars", file=sys.stderr)
