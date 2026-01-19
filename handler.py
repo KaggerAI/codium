@@ -277,45 +277,56 @@ def log_redis_target(app, cache=None, context=""):
 azure_redis_conn_string = os.getenv("CACHE_REDIS_URL")
 
 if azure_redis_conn_string:
-    print("INFO: Found Azure Redis connection string. Parsing for Python redis library.")
+    print("INFO: Found Azure Redis connection string. Parsing for Python redis library.", file=sys.stderr)
+    
+    # DEBUG: Log the connection string format (mask password for security)
+    parts_debug = azure_redis_conn_string.split(',')
+    masked_parts = []
+    for p in parts_debug:
+        if 'password' in p.lower() and '=' in p:
+            key, val = p.split('=', 1)
+            masked_parts.append(f"{key}=***MASKED***")
+        else:
+            masked_parts.append(p)
+    print(f"REDIS_DEBUG: Connection string parts: {masked_parts}", file=sys.stderr)
     
     # This new parser is much safer and handles different connection string formats.
 
     try:
-        # Split the string by commas
-        parts = azure_redis_conn_string.split(',')
-        
-        # The host and port are always the first part
-        host_part = parts[0]
-        
-        # Robustly find password and ssl
-        password = None
-        ssl_enabled = False
-        
-        for part in parts[1:]:
-            # Use split('=', 1) to ensure we only split on the FIRST equals sign
-            if '=' in part:
-                key, value = part.split('=', 1)
-                if key.lower() == 'password':
-                    password = value
-                elif key.lower() == 'ssl':
-                    ssl_enabled = value.lower() == 'true'
-
-        if not password:
-            raise ValueError("Password not found in Redis connection string")
-
-        # Use 'rediss://' for SSL connections
-        scheme = "rediss://" if ssl_enabled else "redis://"
-        
-        # --- FIX 1: URL ENCODE THE PASSWORD ---
-        # This handles special characters like /=+ in Azure passwords
-        safe_password = urllib.parse.quote(password)
-        
-        # --- FIX 2: ADD TIMEOUTS & HEALTH CHECKS ---
-        # socket_timeout=30: Wait up to 30s for data
-        # health_check_interval=10: Ping Azure every 10s to keep connection alive
-        # retry_on_timeout=true: Automatically retry if Azure kills the link
-        formatted_redis_url = f"{scheme}:{safe_password}@{host_part}?socket_timeout=30&socket_connect_timeout=30&health_check_interval=10&retry_on_timeout=true"
+        # Check if it's already a URL (redis:// or rediss://)
+        if azure_redis_conn_string.startswith("redis://") or azure_redis_conn_string.startswith("rediss://"):
+            print("INFO: Redis connection string is already a URL.", file=sys.stderr)
+            formatted_redis_url = azure_redis_conn_string
+            
+            # Ensure proper timeouts are appended logic
+            if "?" not in formatted_redis_url:
+                formatted_redis_url += "?socket_timeout=30&socket_connect_timeout=30&health_check_interval=10&retry_on_timeout=true"
+            else:
+                formatted_redis_url += "&socket_timeout=30&socket_connect_timeout=30&health_check_interval=10&retry_on_timeout=true"
+        else:
+            # Assume Azure Redis format (comma separated: hostname:port,password=...,ssl=...)
+            parts = azure_redis_conn_string.split(',')
+            host_part = parts[0]
+            password = None
+            ssl_enabled = False
+            
+            for part in parts[1:]:
+                if '=' in part:
+                    key, value = part.split('=', 1)
+                    if key.lower() == 'password':
+                        password = value
+                    elif key.lower() == 'ssl':
+                        ssl_enabled = value.lower() == 'true'
+    
+            if not password:
+                # If we still can't find a password, maybe it's the "access key" format or something else.
+                # But for now, let's log and try to proceed or fail.
+                raise ValueError("Password not found in Redis connection string (Azure format)")
+    
+            scheme = "rediss://" if ssl_enabled else "redis://"
+            from urllib.parse import quote
+            safe_password = quote(password)
+            formatted_redis_url = f"{scheme}:{safe_password}@{host_part}?socket_timeout=30&socket_connect_timeout=30&health_check_interval=10&retry_on_timeout=true"
 
         config = {
             "CACHE_TYPE": "RedisCache",
@@ -350,26 +361,38 @@ import redis as redis_lib
 DIRECT_REDIS_CLIENT = None
 if azure_redis_conn_string:
     try:
-        # Parse connection string (reuse parsing from above)
-        parts = azure_redis_conn_string.split(',')
-        host_part = parts[0]
+        redis_host = None
+        redis_port = 6380
         redis_password = None
         redis_ssl_enabled = False
-        
-        for part in parts[1:]:
-            if '=' in part:
-                key, value = part.split('=', 1)
-                if key.lower() == 'password':
-                    redis_password = value
-                elif key.lower() == 'ssl':
-                    redis_ssl_enabled = value.lower() == 'true'
-        
-        if redis_password:
-            # Extract host and port
-            host_port_parts = host_part.split(':')
-            redis_host = host_port_parts[0]
-            redis_port = int(host_port_parts[1]) if len(host_port_parts) > 1 else 6380
+
+        if azure_redis_conn_string.startswith("redis://") or azure_redis_conn_string.startswith("rediss://"):
+            # Parse URL format
+            from urllib.parse import urlparse
+            parsed = urlparse(azure_redis_conn_string)
+            redis_host = parsed.hostname
+            redis_port = parsed.port or 6379
+            redis_password = parsed.password
+            redis_ssl_enabled = parsed.scheme == "rediss"
+        else:
+            # Parse Azure comma-separated format
+            parts = azure_redis_conn_string.split(',')
+            host_part = parts[0]
             
+            for part in parts[1:]:
+                if '=' in part:
+                    key, value = part.split('=', 1)
+                    if key.lower() == 'password':
+                        redis_password = value
+                    elif key.lower() == 'ssl':
+                        redis_ssl_enabled = value.lower() == 'true'
+            
+            if redis_password:
+                host_port_parts = host_part.split(':')
+                redis_host = host_port_parts[0]
+                redis_port = int(host_port_parts[1]) if len(host_port_parts) > 1 else 6380
+        
+        if redis_host and redis_password:
             # Create direct Redis connection pool (shared across all workers)
             DIRECT_REDIS_CLIENT = redis_lib.Redis(
                 host=redis_host,
@@ -385,7 +408,8 @@ if azure_redis_conn_string:
             DIRECT_REDIS_CLIENT.ping()
             print(f"INFO: Direct Redis client created for industry research (host={redis_host})", file=sys.stderr)
         else:
-            print("WARN: No Redis password found, direct Redis client not created", file=sys.stderr)
+            print("WARN: Could not extract Redis credentials (host/password), direct client not created", file=sys.stderr)
+            
     except Exception as e:
         print(f"WARN: Failed to create direct Redis client: {e}", file=sys.stderr)
         DIRECT_REDIS_CLIENT = None
