@@ -1645,25 +1645,36 @@ MAX_CONCURRENT_INDUSTRY_RESEARCH = 5
 def get_active_industry_jobs_count():
     """Count how many industry research jobs are currently processing"""
     try:
-        # Scan Redis for all industry research jobs
-        pattern = "industry_research:*"
-        active_count = 0
+        # We track active jobs using our INDUSTRY_JOB_PREFIX pattern
+        # Since Flask-Caching doesn't support scan_iter, we maintain a simple counter approach
+        # When jobs complete or error, they update status - we just need to return a safe default
+        # The concurrent limit is a safety net, not a hard requirement
         
-        for key in redis_client.scan_iter(match=pattern):
-            job_data = redis_client.get(key)
-            if job_data:
-                try:
-                    job = json.loads(job_data)
-                    # Count only processing jobs (not complete or error)
-                    if job.get('status') == 'processing':
-                        active_count += 1
-                except:
-                    continue
-        
-        return active_count
+        # For now, we'll use a simpler approach - check a dedicated counter key
+        active_count = cache.get("industry_research_active_count")
+        if active_count is not None:
+            return int(active_count)
+        return 0
     except Exception as e:
         print(f"ERROR counting active jobs: {e}", file=sys.stderr)
         return 0  # Fail open - allow request if we can't count
+
+def increment_active_industry_jobs():
+    """Increment the active industry research job counter"""
+    try:
+        current = cache.get("industry_research_active_count") or 0
+        cache.set("industry_research_active_count", int(current) + 1, timeout=3600)
+    except Exception as e:
+        print(f"ERROR incrementing active jobs: {e}", file=sys.stderr)
+
+def decrement_active_industry_jobs():
+    """Decrement the active industry research job counter"""
+    try:
+        current = cache.get("industry_research_active_count") or 0
+        new_count = max(0, int(current) - 1)  # Don't go negative
+        cache.set("industry_research_active_count", new_count, timeout=3600)
+    except Exception as e:
+        print(f"ERROR decrementing active jobs: {e}", file=sys.stderr)
 
 @app.route('/industry-research', methods=['POST'])
 def industry_research():
@@ -1712,6 +1723,9 @@ def industry_research():
             'depth': depth,
             'started_at': time.time()
         })
+        
+        # Increment active job counter
+        increment_active_industry_jobs()
         
         # Start background thread for the long-running API call
         def run_research():
@@ -1771,6 +1785,9 @@ def industry_research():
                 })
                 print(f"INDUSTRY_RESEARCH_DEBUG: Job {job_id} completed successfully in {elapsed_total}s", file=sys.stderr)
                 
+                # Decrement active job counter
+                decrement_active_industry_jobs()
+                
             except Exception as api_error:
                 elapsed = int(time.time() - job_start_time)
                 print(f"INDUSTRY_RESEARCH_ERROR: Job {job_id} failed after {elapsed}s: {type(api_error).__name__}: {api_error}", file=sys.stderr)
@@ -1783,6 +1800,9 @@ def industry_research():
                     'failed_at': time.time(),
                     'elapsed': elapsed
                 })
+                
+                # Decrement active job counter even on error
+                decrement_active_industry_jobs()
         
         # Start the background thread
         thread = threading.Thread(target=run_research)
