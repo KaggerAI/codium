@@ -185,6 +185,11 @@ def update_industry_job(job_id, updates):
         # If we can't get the existing job, create a new one with just the updates
         # This ensures completed results don't get lost
         print(f"WARN: Could not get existing job {job_id} for update, creating with updates only", file=sys.stderr)
+        
+        # Safety: Ensure status exists (default to processing if this is just a heartbeat/progress update)
+        if 'status' not in updates:
+            updates['status'] = 'processing'
+            
         set_industry_job(job_id, updates)
 
 from urllib.parse import urlparse
