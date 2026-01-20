@@ -2664,7 +2664,7 @@
             isComplete = true;
 
             if (sseConnection) sseConnection.close();
-            document.getElementById('progress-container').classList.remove('visible');
+            document.getElementById('progress-container')?.classList.remove('visible');
 
             // Render the industry report with TOC
             const { html: reportHtml, toc: tocHtml } = renderMarkdownToHtml(statusPayload.report);
@@ -2906,7 +2906,7 @@
 
 
         if (sseConnection) sseConnection.close();
-        document.getElementById('progress-container').classList.remove('visible');
+        document.getElementById('progress-container')?.classList.remove('visible');
 
         const companyName = payload.company_name || payload.ticker;
         // --- START: TEMPORARY TEST DATA ---
@@ -3507,7 +3507,7 @@
         localStorage.setItem('KaggerAI_' + payload.ticker, JSON.stringify(payload.summary));
       } catch (err) {
         if (sseConnection) sseConnection.close();
-        document.getElementById('progress-container').classList.remove('visible');
+        document.getElementById('progress-container')?.classList.remove('visible');
         resultsContainer.innerHTML = `<div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg shadow-md" role="alert"><strong class="font-bold">Error:</strong><span class="block sm:inline">${err.message}</span></div>`;
         console.error('Analysis error:', err);
       }
