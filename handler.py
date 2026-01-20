@@ -315,6 +315,7 @@ if azure_redis_conn_string:
             redis_password = unquote(parsed.password) if parsed.password else None
             redis_ssl = (parsed.scheme == "rediss")
             # Extract database from path (e.g., /0)
+            # just for doing a push
             if parsed.path and parsed.path.startswith('/'):
                 try:
                     redis_db = int(parsed.path[1:])
