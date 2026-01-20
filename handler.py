@@ -298,50 +298,75 @@ if azure_redis_conn_string:
     # This new parser is much safer and handles different connection string formats.
 
     try:
+        redis_host = None
+        redis_port = 6380
+        redis_password = None
+        redis_ssl = False
+        redis_db = 0
+        
         # Check if it's already a URL (redis:// or rediss://)
         if azure_redis_conn_string.startswith("redis://") or azure_redis_conn_string.startswith("rediss://"):
-            print("INFO: Redis connection string is already a URL.", file=sys.stderr)
-            formatted_redis_url = azure_redis_conn_string
-            
-            # Ensure proper timeouts are appended logic
-            if "?" not in formatted_redis_url:
-                formatted_redis_url += "?socket_timeout=30&socket_connect_timeout=30&health_check_interval=10&retry_on_timeout=true"
-            else:
-                formatted_redis_url += "&socket_timeout=30&socket_connect_timeout=30&health_check_interval=10&retry_on_timeout=true"
+            print("INFO: Redis connection string is a URL. Parsing components.", file=sys.stderr)
+            from urllib.parse import urlparse, unquote
+            parsed = urlparse(azure_redis_conn_string)
+            redis_host = parsed.hostname
+            redis_port = parsed.port or 6380
+            # Password in URL is percent-encoded, urlparse does NOT decode it - must use unquote()
+            redis_password = unquote(parsed.password) if parsed.password else None
+            redis_ssl = (parsed.scheme == "rediss")
+            # Extract database from path (e.g., /0)
+            if parsed.path and parsed.path.startswith('/'):
+                try:
+                    redis_db = int(parsed.path[1:])
+                except ValueError:
+                    redis_db = 0
+            print(f"INFO: Parsed Redis URL - host={redis_host}, port={redis_port}, ssl={redis_ssl}, db={redis_db}", file=sys.stderr)
         else:
             # Assume Azure Redis format (comma separated: hostname:port,password=...,ssl=...)
+            print("INFO: Redis connection string is comma-separated format.", file=sys.stderr)
             parts = azure_redis_conn_string.split(',')
             host_part = parts[0]
-            password = None
-            ssl_enabled = False
             
             for part in parts[1:]:
                 if '=' in part:
                     key, value = part.split('=', 1)
                     if key.lower() == 'password':
-                        password = value
+                        redis_password = value
                     elif key.lower() == 'ssl':
-                        ssl_enabled = value.lower() == 'true'
+                        redis_ssl = value.lower() == 'true'
     
-            if not password:
-                # If we still can't find a password, maybe it's the "access key" format or something else.
-                # But for now, let's log and try to proceed or fail.
+            if not redis_password:
                 raise ValueError("Password not found in Redis connection string (Azure format)")
-    
-            scheme = "rediss://" if ssl_enabled else "redis://"
-            from urllib.parse import quote
-            safe_password = quote(password)
-            formatted_redis_url = f"{scheme}:{safe_password}@{host_part}?socket_timeout=30&socket_connect_timeout=30&health_check_interval=10&retry_on_timeout=true"
-
-        config = {
-            "CACHE_TYPE": "RedisCache",
-            "CACHE_DEFAULT_TIMEOUT": 21600, # 6 hours
-            "CACHE_REDIS_URL": formatted_redis_url
-        }
-        print("INFO: Configuring cache for PRODUCTION (Redis)", file=sys.stderr)
+            
+            # Parse host and port
+            host_port_parts = host_part.split(':')
+            redis_host = host_port_parts[0]
+            redis_port = int(host_port_parts[1]) if len(host_port_parts) > 1 else 6380
+        
+        if redis_host and redis_password:
+            # Use explicit parameters instead of URL to avoid parsing issues
+            config = {
+                "CACHE_TYPE": "RedisCache",
+                "CACHE_DEFAULT_TIMEOUT": 21600,  # 6 hours
+                "CACHE_REDIS_HOST": redis_host,
+                "CACHE_REDIS_PORT": redis_port,
+                "CACHE_REDIS_PASSWORD": redis_password,
+                "CACHE_REDIS_DB": redis_db,
+                "CACHE_OPTIONS": {
+                    "ssl": redis_ssl,
+                    "socket_timeout": 30,
+                    "socket_connect_timeout": 30,
+                    "retry_on_timeout": True,
+                    "health_check_interval": 10
+                }
+            }
+            print(f"INFO: Configuring cache for PRODUCTION (Redis) - host={redis_host}:{redis_port}, ssl={redis_ssl}", file=sys.stderr)
+        else:
+            raise ValueError("Could not extract Redis host or password")
 
     except Exception as e:
         print(f"CRITICAL ERROR: Failed to parse Redis connection string. Error: {e}", file=sys.stderr)
+        print("FALLBACK: Using SimpleCache (no persistence)", file=sys.stderr)
         config = {"CACHE_TYPE": "SimpleCache"}
 
 
@@ -373,12 +398,29 @@ if azure_redis_conn_string:
         redis_ssl_enabled = False
 
         if azure_redis_conn_string.startswith("redis://") or azure_redis_conn_string.startswith("rediss://"):
-            print("DIRECT_REDIS_INIT: Detected URL format, using from_url()", file=sys.stderr)
-            # Use strict from_url parsing for standard URIs (safest approach)
-            # This handles percent-decoded passwords correctly automatically
-            try:
-                DIRECT_REDIS_CLIENT = redis_lib.Redis.from_url(
-                    azure_redis_conn_string,
+            print("DIRECT_REDIS_INIT: Detected URL format, parsing components", file=sys.stderr)
+            from urllib.parse import urlparse, unquote
+            parsed = urlparse(azure_redis_conn_string)
+            redis_host = parsed.hostname
+            redis_port = parsed.port or 6380
+            # Password needs explicit unquote() - urlparse doesn't auto-decode
+            redis_password = unquote(parsed.password) if parsed.password else None
+            redis_ssl_enabled = (parsed.scheme == "rediss")
+            # Extract database from path (e.g., /0)
+            redis_db = 0
+            if parsed.path and parsed.path.startswith('/'):
+                try:
+                    redis_db = int(parsed.path[1:])
+                except ValueError:
+                    redis_db = 0
+            
+            if redis_host and redis_password:
+                DIRECT_REDIS_CLIENT = redis_lib.Redis(
+                    host=redis_host,
+                    port=redis_port,
+                    password=redis_password,
+                    db=redis_db,
+                    ssl=redis_ssl_enabled,
                     decode_responses=False,
                     socket_connect_timeout=30,
                     socket_timeout=30,
@@ -386,9 +428,9 @@ if azure_redis_conn_string:
                     health_check_interval=10
                 )
                 DIRECT_REDIS_CLIENT.ping()
-                print(f"INFO: Direct Redis client created from URL for industry research", file=sys.stderr)
-            except Exception as e:
-                print(f"WARN: Failed to create Direct Redis client from URL: {e}", file=sys.stderr)
+                print(f"INFO: Direct Redis client created - host={redis_host}:{redis_port}, ssl={redis_ssl_enabled}, db={redis_db}", file=sys.stderr)
+            else:
+                print(f"WARN: Could not parse Redis URL credentials", file=sys.stderr)
                 DIRECT_REDIS_CLIENT = None
                 
         else:
