@@ -3525,6 +3525,12 @@
       const statusEl = document.getElementById('analystStatus');
       const statusText = document.getElementById('analystStatusText');
 
+      // Defensive null check - elements may not exist on fast cache returns
+      if (!statusEl || !statusText) {
+        console.warn('Analyst status elements not found - skipping polling');
+        return;
+      }
+
       // Show loading status
       statusEl.classList.remove('hidden');
       statusText.textContent = 'Loading reports...';
@@ -3547,16 +3553,18 @@
           if (data.ready) {
             // Reports are ready
             clearInterval(analystPollingInterval);
-            statusEl.innerHTML = `
+            if (statusEl) {
+              statusEl.innerHTML = `
               <svg class="w-3 h-3 text-green-500" fill="currentColor" viewBox="0 0 20 20">
                 <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
               </svg>
               <span class="text-green-600">${data.count} reports ready</span>
             `;
+            }
           } else if (attempts >= maxAttempts) {
             // Timeout
             clearInterval(analystPollingInterval);
-            statusText.textContent = 'Timeout loading reports';
+            if (statusText) statusText.textContent = 'Timeout loading reports';
           }
         } catch (e) {
           console.warn('Analyst status poll error:', e);
