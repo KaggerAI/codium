@@ -333,13 +333,16 @@ def detect_rsi_divergence(df, L=6, R=4, lookback_pivots=5):
     return result
 
 
-def build_rsi_divergence_figure(df, ticker, years=1):
+def build_rsi_divergence_figure(df, ticker, years=1, line_color='#ffffff'):
     """
     Build a dual-pane Plotly figure:
     - Top: Price with swing pivots
     - Bottom: RSI with divergence lines and labels
     
     Both panes share the x-axis for synchronized interaction.
+    
+    Args:
+        line_color: Color for the price line (default: white for AI Chart Analysis)
     """
     from plotly.subplots import make_subplots
     
@@ -347,12 +350,16 @@ def build_rsi_divergence_figure(df, ticker, years=1):
     d = df[df.index >= df.index.max() - pd.DateOffset(years=years)].copy()
     d_reset = d.reset_index(drop=True)
     
+    # Pivot ranges: 5,2 for weekly (5Y), 6,4 for daily (1Y/3Y)
+    pivot_left = 5 if years == 5 else 6
+    pivot_right = 2 if years == 5 else 4
+    
     # Detect divergences
-    div_result = detect_rsi_divergence(d, L=6, R=4, lookback_pivots=5)
+    div_result = detect_rsi_divergence(d, L=pivot_left, R=pivot_right, lookback_pivots=5)
     divergences = div_result['divergences']
     
     # Identify swing points for display
-    sp = identify_swing_points(d, 6, 4, 'Close')
+    sp = identify_swing_points(d, pivot_left, pivot_right, 'Close')
     
     # Create subplots with 2 rows, shared x-axis
     fig = make_subplots(
@@ -366,7 +373,7 @@ def build_rsi_divergence_figure(df, ticker, years=1):
     # === Top Pane: Price with Pivots ===
     fig.add_trace(
         go.Scatter(x=list(d.index), y=[float(v) for v in d['Close']], 
-                   mode='lines', name='Close', line=dict(color='#ffffff')),
+                   mode='lines', name='Close', line=dict(color=line_color)),
         row=1, col=1
     )
     
@@ -592,7 +599,13 @@ def find_trendlines(df, swing_points, trendline_type='support', min_touches=3, t
     return final_lines
 
 
-def build_close_figure(df, ticker, years=1):
+def build_close_figure(df, ticker, years=1, line_color='#ffffff'):
+    """
+    Build Close price chart with swing points and trendlines.
+    
+    Args:
+        line_color: Color for the price line (default: white for AI Chart Analysis)
+    """
     d = df[df.index >= df.index.max() - pd.DateOffset(years=years)].reset_index()
     d_original_index = d.set_index(d.columns[0])  # Preserve datetime index for plotting
     d_reset = d.reset_index(drop=True)  # Numeric index for trendline calculation
@@ -600,11 +613,15 @@ def build_close_figure(df, ticker, years=1):
     # Tolerance: 1% for weekly (5Y), 0.5% for daily (1Y/3Y)
     trendline_tolerance = 0.01 if years == 5 else 0.005
     
-    sp = identify_swing_points(d_reset, 6, 4, 'Close')
+    # Pivot ranges: 5,2 for weekly (5Y), 6,4 for daily (1Y/3Y)
+    pivot_left = 5 if years == 5 else 6
+    pivot_right = 2 if years == 5 else 4
+    
+    sp = identify_swing_points(d_reset, pivot_left, pivot_right, 'Close')
     fig = go.Figure()
     
     # Price line
-    fig.add_trace(go.Scatter(x=list(d_original_index.index), y=[float(v) for v in d_original_index['Close']], mode='lines', name='Close', line=dict(color='#ffffff')))
+    fig.add_trace(go.Scatter(x=list(d_original_index.index), y=[float(v) for v in d_original_index['Close']], mode='lines', name='Close', line=dict(color=line_color)))
     
     # Swing highs
     highs = sp[sp['Type']=='High']
@@ -654,7 +671,13 @@ def build_close_figure(df, ticker, years=1):
     return fig
 
 
-def build_hl_figure(df, ticker, years=1):
+def build_hl_figure(df, ticker, years=1, line_color='#ffffff'):
+    """
+    Build High/Low pivot chart with swing points and trendlines.
+    
+    Args:
+        line_color: Color for the price line (default: white for AI Chart Analysis)
+    """
     d = df[df.index >= df.index.max() - pd.DateOffset(years=years)].reset_index()
     d_original_index = d.set_index(d.columns[0])  # Preserve datetime index for plotting
     d_reset = d.reset_index(drop=True)  # Numeric index for trendline calculation
@@ -662,8 +685,12 @@ def build_hl_figure(df, ticker, years=1):
     # Tolerance: 1% for weekly (5Y), 0.5% for daily (1Y/3Y)
     trendline_tolerance = 0.01 if years == 5 else 0.005
     
-    sh = identify_swing_points_high(d_reset, 6, 4)
-    sl = identify_swing_points_low(d_reset, 6, 4)
+    # Pivot ranges: 5,2 for weekly (5Y), 6,4 for daily (1Y/3Y)
+    pivot_left = 5 if years == 5 else 6
+    pivot_right = 2 if years == 5 else 4
+    
+    sh = identify_swing_points_high(d_reset, pivot_left, pivot_right)
+    sl = identify_swing_points_low(d_reset, pivot_left, pivot_right)
     
     # Combine swing points for trendline detection
     sp = pd.concat([sh, sl]).sort_values('Index').reset_index(drop=True)
@@ -671,7 +698,7 @@ def build_hl_figure(df, ticker, years=1):
     fig = go.Figure()
     
     # Price line
-    fig.add_trace(go.Scatter(x=d_original_index.index, y=[float(v) for v in d_original_index['Close']], mode='lines', name='Close', line=dict(color='#ffffff')))
+    fig.add_trace(go.Scatter(x=d_original_index.index, y=[float(v) for v in d_original_index['Close']], mode='lines', name='Close', line=dict(color=line_color)))
     
     # Swing highs
     if not sh.empty:

@@ -3333,17 +3333,17 @@ async def get_analysis_for_ticker_async(tick):
     loop = asyncio.get_running_loop()
 
     # Helper to build chart and convert to JSON in a thread (CPU Bound)
-    def make_chart_json(func, *args):
-        return func(*args).to_json()
+    def make_chart_json(func, *args, **kwargs):
+        return func(*args, **kwargs).to_json()
 
-    # Define all the tasks
-    task_close = loop.run_in_executor(None, make_chart_json, build_close_figure, df, company_name)
-    task_hl    = loop.run_in_executor(None, make_chart_json, build_hl_figure, df, company_name)
+    # Define all the tasks - Use blue (#3b82f6) for Company Search price lines
+    task_close = loop.run_in_executor(None, make_chart_json, build_close_figure, df, company_name, 1, '#3b82f6')
+    task_hl    = loop.run_in_executor(None, make_chart_json, build_hl_figure, df, company_name, 1, '#3b82f6')
     task_ema   = loop.run_in_executor(None, make_chart_json, build_ema_figure, df, company_name)
     task_rsi   = loop.run_in_executor(None, make_chart_json, build_rsi_figure, df, company_name)
     task_adl   = loop.run_in_executor(None, make_chart_json, build_adl_figure, df, company_name)
     task_rs    = loop.run_in_executor(None, make_chart_json, build_rs_figure, df, company_name)
-    task_rsi_div = loop.run_in_executor(None, make_chart_json, build_rsi_divergence_figure, df, company_name)
+    task_rsi_div = loop.run_in_executor(None, make_chart_json, build_rsi_divergence_figure, df, company_name, 1, '#3b82f6')
     
     # Run AI Summary (OpenAI) and Metrics Extraction (Perplexity sonar) in parallel
     task_ai_sum = loop.run_in_executor(None, generate_ai_company_summary, tick, company_description, tables_from_screener, latest_documents)
@@ -3555,13 +3555,13 @@ def analyze():
                             
                             # Build charts using processed df with all indicators
                             log_progress("Building charts...")
-                            close_j = build_close_figure(df, company_name).to_json()
-                            hl_j = build_hl_figure(df, company_name).to_json()
+                            close_j = build_close_figure(df, company_name, line_color='#3b82f6').to_json()
+                            hl_j = build_hl_figure(df, company_name, line_color='#3b82f6').to_json()
                             ema_j = build_ema_figure(df, company_name).to_json()
                             rsi_j = build_rsi_figure(df, company_name).to_json()
                             adl_j = build_adl_figure(df, company_name).to_json()
                             rs_j = build_rs_figure(df, company_name).to_json()
-                            rsi_div_j = build_rsi_divergence_figure(df, company_name).to_json()
+                            rsi_div_j = build_rsi_divergence_figure(df, company_name, line_color='#3b82f6').to_json()
                             
                             # Get Trendlyne analyst reports
                             log_progress("Fetching Trendlyne analyst reports...")
