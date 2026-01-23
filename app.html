@@ -1402,20 +1402,7 @@
         class="text-3xl font-extrabold text-green-600 hover:text-green-700 transition-colors">Kagger AI</a>
       <ul class="flex space-x-8 items-center">
         <li><a href="#" class="text-slate-600 hover:text-green-600 font-medium transition-colors">Home</a></li>
-        <li><a href="#" class="text-slate-600 hover:text-green-600 font-medium transition-colors">AI Screens</a></li>
-        <li class="relative group">
-          <button class="text-slate-600 hover:text-green-600 font-medium transition-colors flex items-center">
-            Tools <svg class="ml-1 w-4 h-4 fill-current" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
-              <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" />
-            </svg>
-          </button>
-          <div
-            class="absolute left-0 mt-2 w-56 bg-white border border-slate-200 rounded-md shadow-xl opacity-0 group-hover:opacity-100 transform scale-95 group-hover:scale-100 transition-all duration-200 ease-in-out origin-top-left z-20">
-            <a href="#"
-              class="block px-4 py-3 text-sm text-slate-700 hover:bg-slate-100 hover:text-green-600 transition-colors">Create
-              a technical screen</a>
-          </div>
-        </li>
+
         <!-- AI News Button -->
         <li>
           <button onclick="showSection('news')"
@@ -1425,6 +1412,18 @@
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
             📰 AI-Enhanced News
+          </button>
+        </li>
+        <!-- AI Chart Analysis Button -->
+        <li>
+          <button onclick="showSection('chart')"
+            class="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-600 text-white rounded-lg font-medium hover:opacity-90 transition-all shadow-md"
+            id="chart-tab-btn">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4v16" />
+            </svg>
+            📈 AI Chart Analysis
           </button>
         </li>
         <li>
@@ -2825,9 +2824,15 @@
         e.preventDefault();
         selectedIndex = Math.max(selectedIndex - 1, 0);
         updateSelection(items);
-      } else if (e.key === 'Enter' && selectedIndex >= 0 && items[selectedIndex]) {
+      } else if (e.key === 'Enter') {
         e.preventDefault();
-        selectStock(items[selectedIndex].dataset.ticker);
+        if (selectedIndex >= 0 && items[selectedIndex]) {
+          selectStock(items[selectedIndex].dataset.ticker);
+        } else {
+          // If no item selected or dropdown closed, run analysis
+          stockDropdown.classList.add('hidden');
+          runCompanyAnalysis();
+        }
       } else if (e.key === 'Escape') {
         stockDropdown.classList.add('hidden');
         selectedIndex = -1;
@@ -3285,7 +3290,7 @@
         if (payload.ai_scores && Array.isArray(payload.ai_scores) && payload.ai_scores.length) {
           aiScoreHTML = `
             <div class="bg-white p-6 rounded-xl shadow-lg">
-                <h2 class="text-2xl font-bold mb-4 text-slate-700">AI Score</h2>
+                <h2 class="text-2xl font-bold mb-4 text-slate-700">AI Quant Score</h2>
                 
                 <!-- Tab Headers - 4 horizontal tabs -->
                 <div class="flex border-b border-slate-200 mb-4">
@@ -3340,7 +3345,7 @@
 
         let technicalSummaryHTML = '';
         if (payload.summary) {
-          technicalSummaryHTML = `<div class="bg-white p-6 rounded-xl shadow-lg"><h2 class="text-2xl font-bold mb-6 text-slate-700">AI Technical Analysis</h2><div class="overflow-x-auto"><table id="technicalSummaryTable" class="w-full border border-slate-200"><tbody class="text-sm">${payload.summary.map(row => `<tr class="even:bg-slate-50 hover:bg-slate-100 transition-colors duration-150"><td class="px-4 py-3 border-b border-slate-200 font-medium text-slate-600">${row.key}</td><td class="px-4 py-3 border-b border-slate-200 text-slate-700 relative">${row.value}</td></tr>`).join('')}</tbody></table></div></div>`;
+          technicalSummaryHTML = `<div class="bg-white p-6 rounded-xl shadow-lg"><h2 class="text-2xl font-bold mb-6 text-slate-700">AI Chart Analysis</h2><div class="overflow-x-auto"><table id="technicalSummaryTable" class="w-full border border-slate-200"><tbody class="text-sm">${payload.summary.map(row => `<tr class="even:bg-slate-50 hover:bg-slate-100 transition-colors duration-150"><td class="px-4 py-3 border-b border-slate-200 font-medium text-slate-600">${row.key}</td><td class="px-4 py-3 border-b border-slate-200 text-slate-700 relative">${row.value}</td></tr>`).join('')}</tbody></table></div></div>`;
         }
 
         // NEW: Peer Comparison Table
@@ -3859,7 +3864,28 @@
   </div>
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script>
-    function showSection(s) { const n = document.getElementById('news-section'); if (s === 'news') { n.style.display = 'block'; document.body.style.overflow = 'hidden'; setTimeout(() => document.getElementById('newsQuestionInput')?.focus(), 100); } else { n.style.display = 'none'; document.body.style.overflow = ''; } }
+    function showSection(s) {
+      const newsSection = document.getElementById('news-section');
+      const chartSection = document.getElementById('chart-section');
+
+      // Hide all overlay sections first
+      newsSection.style.display = 'none';
+      if (chartSection) chartSection.style.display = 'none';
+      document.body.style.overflow = '';
+
+      if (s === 'news') {
+        newsSection.style.display = 'block';
+        document.body.style.overflow = 'hidden';
+        setTimeout(() => document.getElementById('newsQuestionInput')?.focus(), 100);
+      } else if (s === 'chart') {
+        if (chartSection) {
+          chartSection.style.display = 'block';
+          document.body.style.overflow = 'hidden';
+          setTimeout(() => document.getElementById('chartStockInput')?.focus(), 100);
+        }
+      }
+      // 'analyze' just closes overlays (default case - no special action needed)
+    }
     let newsConversationHistory = [], newsIsLoading = false;
     if (typeof marked !== 'undefined') { marked.setOptions({ breaks: true, gfm: true }); }
 
@@ -4021,6 +4047,520 @@
     }
 
     document.getElementById('newsChatForm')?.addEventListener('submit', (e) => { e.preventDefault(); sendNewsMessage(document.getElementById('newsQuestionInput').value); });
+  </script>
+
+  <!-- CHART ANALYSIS SECTION -->
+  <div id="chart-section"
+    style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:linear-gradient(135deg,#064e3b 0%,#0f172a 50%,#064e3b 100%);z-index:100;overflow-y:auto;">
+    <style>
+      #chart-section .glass-card {
+        background: rgba(255, 255, 255, 0.03);
+        backdrop-filter: blur(20px);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+      }
+
+      #chart-section .chart-results-container {
+        min-height: calc(100vh - 300px);
+      }
+
+      #chart-section .gradient-text {
+        background: linear-gradient(135deg, #10b981 0%, #06b6d4 50%, #34d399 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+      }
+
+      #chart-section .chart-summary-table {
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 12px;
+        overflow: hidden;
+      }
+
+      #chart-section .chart-summary-table tr:nth-child(even) {
+        background: rgba(255, 255, 255, 0.03);
+      }
+
+      #chart-section .chart-summary-table td {
+        padding: 12px 16px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      }
+
+      #chart-section .chart-summary-table td:first-child {
+        color: #a7f3d0;
+        font-weight: 600;
+        width: 40%;
+      }
+
+      #chart-section .chart-summary-table td:last-child {
+        color: #e2e8f0;
+      }
+    </style>
+
+    <main class="max-w-6xl mx-auto px-6 py-8">
+      <!-- Header -->
+      <div class="flex items-center justify-between mb-8">
+        <div>
+          <h1 class="text-3xl font-bold text-white flex items-center gap-3">
+            <span class="text-4xl">📈</span>
+            <span class="gradient-text">AI-Enhanced Chart Analysis</span>
+          </h1>
+          <p class="text-slate-400 mt-2">Lightning-fast technical analysis using TradingView data</p>
+        </div>
+        <button onclick="showSection('analyze')"
+          class="px-5 py-2.5 bg-white/10 rounded-xl text-white hover:bg-white/20 transition-all flex items-center gap-2 font-medium">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+          </svg>
+          Back to Analyze
+        </button>
+      </div>
+
+      <!-- Search Form -->
+      <div class="glass-card rounded-2xl p-6 mb-8">
+        <div class="relative">
+          <input type="text" id="chartStockInput" placeholder="Enter stock ticker (e.g., RELIANCE, TCS, INFY...)"
+            class="w-full bg-white/5 border border-white/10 rounded-xl px-5 py-4 text-white placeholder-slate-400 focus:outline-none focus:border-emerald-500 transition-all text-lg"
+            autocomplete="off">
+          <div id="chartStockDropdown"
+            class="absolute top-full left-0 right-0 bg-slate-800 border border-white/10 rounded-lg mt-1 max-h-60 overflow-y-auto hidden z-50">
+          </div>
+        </div>
+
+        <!-- Duration Selector -->
+        <div class="flex items-center gap-3 mt-4">
+          <span class="text-slate-400 text-sm">Duration:</span>
+          <div class="flex gap-2">
+            <button onclick="setChartDuration(1)" id="chartDur1Y"
+              class="chart-duration-btn active px-4 py-2 rounded-lg text-sm font-medium transition-all bg-emerald-500 text-white">
+              1Y (Daily)
+            </button>
+            <button onclick="setChartDuration(3)" id="chartDur3Y"
+              class="chart-duration-btn px-4 py-2 rounded-lg text-sm font-medium transition-all bg-white/10 text-slate-300 hover:bg-white/20">
+              3Y (Daily)
+            </button>
+            <button onclick="setChartDuration(5)" id="chartDur5Y"
+              class="chart-duration-btn px-4 py-2 rounded-lg text-sm font-medium transition-all bg-white/10 text-slate-300 hover:bg-white/20">
+              5Y (Weekly)
+            </button>
+          </div>
+        </div>
+
+        <div class="flex gap-4 mt-4">
+          <button onclick="runChartAnalysis()" id="chartAnalyzeBtn"
+            class="flex-1 px-6 py-4 bg-gradient-to-r from-emerald-500 to-teal-600 rounded-xl font-semibold text-white hover:opacity-90 transition-all disabled:opacity-50 flex items-center justify-center gap-2">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+            </svg>
+            Analyze Charts
+          </button>
+        </div>
+        <div id="chartProgressContainer" class="hidden mt-4">
+          <div class="text-emerald-400 text-sm" id="chartProgressText">Starting analysis...</div>
+          <div class="w-full bg-white/10 rounded-full h-1.5 mt-2">
+            <div class="bg-gradient-to-r from-emerald-500 to-teal-500 h-1.5 rounded-full animate-pulse" style="width:0%"
+              id="chartProgressBar"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Results Container (cached independently) -->
+      <div id="chartAnalysisResults" class="chart-results-container">
+        <!-- Chart analysis results rendered here -->
+      </div>
+    </main>
+  </div>
+
+  <script>
+    // =====================================================================
+    // CHART ANALYSIS SECTION JavaScript
+    // =====================================================================
+
+    // Independent cache for chart analysis results
+    let chartAnalysisCache = {}; // {ticker_years: {html: string, data: object}}
+    let chartCurrentTicker = null;
+    let chartSelectedYears = 1; // Default to 1 year
+
+    // Duration selector toggle
+    function setChartDuration(years) {
+      chartSelectedYears = years;
+      // Update button styles
+      document.querySelectorAll('.chart-duration-btn').forEach(btn => {
+        btn.classList.remove('active', 'bg-emerald-500', 'text-white');
+        btn.classList.add('bg-white/10', 'text-slate-300', 'hover:bg-white/20');
+      });
+      const activeBtn = document.getElementById(`chartDur${years}Y`);
+      if (activeBtn) {
+        activeBtn.classList.add('active', 'bg-emerald-500', 'text-white');
+        activeBtn.classList.remove('bg-white/10', 'text-slate-300', 'hover:bg-white/20');
+      }
+    }
+
+    // Autocomplete for chart stock input with keyboard navigation
+    const chartStockInput = document.getElementById('chartStockInput');
+    const chartStockDropdown = document.getElementById('chartStockDropdown');
+    let chartDropdownIndex = -1; // Current highlighted index in dropdown
+
+    function updateChartDropdownHighlight() {
+      const items = chartStockDropdown.querySelectorAll('.chart-stock-item');
+      items.forEach((item, i) => {
+        if (i === chartDropdownIndex) {
+          item.classList.add('bg-slate-700');
+        } else {
+          item.classList.remove('bg-slate-700');
+        }
+      });
+      // Scroll highlighted item into view
+      if (chartDropdownIndex >= 0 && items[chartDropdownIndex]) {
+        items[chartDropdownIndex].scrollIntoView({ block: 'nearest' });
+      }
+    }
+
+    function selectChartDropdownItem(ticker) {
+      chartStockInput.value = ticker;
+      chartStockDropdown.classList.add('hidden');
+      chartDropdownIndex = -1;
+      chartStockInput.focus();
+    }
+
+    if (chartStockInput) {
+      chartStockInput.addEventListener('input', function () {
+        const query = this.value.trim().toUpperCase();
+        chartDropdownIndex = -1; // Reset index on new input
+
+        if (query.length < 1) {
+          chartStockDropdown.classList.add('hidden');
+          return;
+        }
+        // Reuse allStocks from main app
+        if (typeof allStocks !== 'undefined' && allStocks.length) {
+          const matches = allStocks.filter(s =>
+            s.ticker.toUpperCase().startsWith(query) ||
+            s.name.toUpperCase().includes(query)
+          ).slice(0, 8);
+
+          if (matches.length) {
+            chartStockDropdown.innerHTML = matches.map((s, i) => `
+              <div class="chart-stock-item px-4 py-3 cursor-pointer hover:bg-slate-700 flex justify-between items-center" data-ticker="${s.ticker}" data-index="${i}">
+                <span class="text-white">${s.name}</span>
+                <span class="text-xs text-emerald-400 font-semibold">${s.ticker}</span>
+              </div>
+            `).join('');
+            chartStockDropdown.classList.remove('hidden');
+
+            chartStockDropdown.querySelectorAll('.chart-stock-item').forEach(item => {
+              item.onclick = () => selectChartDropdownItem(item.dataset.ticker);
+              item.onmouseenter = () => {
+                chartDropdownIndex = parseInt(item.dataset.index);
+                updateChartDropdownHighlight();
+              };
+            });
+          } else {
+            chartStockDropdown.classList.add('hidden');
+          }
+        }
+      });
+
+      chartStockInput.addEventListener('keydown', function (e) {
+        const items = chartStockDropdown.querySelectorAll('.chart-stock-item');
+        const isDropdownVisible = !chartStockDropdown.classList.contains('hidden') && items.length > 0;
+
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          if (isDropdownVisible) {
+            chartDropdownIndex = Math.min(chartDropdownIndex + 1, items.length - 1);
+            updateChartDropdownHighlight();
+          }
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          if (isDropdownVisible) {
+            chartDropdownIndex = Math.max(chartDropdownIndex - 1, 0);
+            updateChartDropdownHighlight();
+          }
+        } else if (e.key === 'Enter') {
+          e.preventDefault();
+          if (isDropdownVisible && chartDropdownIndex >= 0 && items[chartDropdownIndex]) {
+            // Select the highlighted item
+            selectChartDropdownItem(items[chartDropdownIndex].dataset.ticker);
+          } else {
+            // Dropdown closed or no selection - run analysis
+            chartStockDropdown.classList.add('hidden');
+            runChartAnalysis();
+          }
+        } else if (e.key === 'Escape') {
+          chartStockDropdown.classList.add('hidden');
+          chartDropdownIndex = -1;
+        }
+      });
+
+      // Hide dropdown on blur (with delay for click to register)
+      chartStockInput.addEventListener('blur', () => {
+        setTimeout(() => {
+          chartStockDropdown.classList.add('hidden');
+          chartDropdownIndex = -1;
+        }, 200);
+      });
+    }
+
+    async function runChartAnalysis() {
+      const ticker = document.getElementById('chartStockInput').value.trim().toUpperCase();
+      if (!ticker) return;
+
+      const cacheKey = `${ticker}_${chartSelectedYears}Y`;
+
+      const btn = document.getElementById('chartAnalyzeBtn');
+      const resultsContainer = document.getElementById('chartAnalysisResults');
+      const progressContainer = document.getElementById('chartProgressContainer');
+      const progressText = document.getElementById('chartProgressText');
+      const progressBar = document.getElementById('chartProgressBar');
+
+      // Check cache first (with duration)
+      if (chartAnalysisCache[cacheKey]) {
+        resultsContainer.innerHTML = chartAnalysisCache[cacheKey].html;
+        renderChartAnalysisPlots(chartAnalysisCache[cacheKey].data);
+        chartCurrentTicker = ticker;
+        return;
+      }
+
+      btn.disabled = true;
+      btn.innerHTML = '<svg class="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Analyzing...';
+      progressContainer.classList.remove('hidden');
+      progressText.textContent = `Fetching ${chartSelectedYears}Y price data from TradingView...`;
+      progressBar.style.width = '30%';
+
+      try {
+        const response = await fetch('/analyze-chart', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ticker, years: chartSelectedYears })
+        });
+
+        progressText.textContent = 'Building charts...';
+        progressBar.style.width = '70%';
+
+        const data = await response.json();
+
+        if (data.error) throw new Error(data.error);
+
+        progressText.textContent = 'Rendering results...';
+        progressBar.style.width = '90%';
+
+        // Render chart analysis results
+        const html = renderChartAnalysisHTML(data);
+        resultsContainer.innerHTML = html;
+
+        // Initialize Plotly charts
+        renderChartAnalysisPlots(data);
+
+        // Cache results (with duration key)
+        chartAnalysisCache[cacheKey] = { html, data };
+        chartCurrentTicker = ticker;
+
+        progressBar.style.width = '100%';
+        progressText.textContent = 'Complete!';
+
+      } catch (err) {
+        resultsContainer.innerHTML = `
+          <div class="glass-card rounded-xl p-8 text-center">
+            <div class="text-red-400 text-xl mb-2">❌ Analysis Failed</div>
+            <div class="text-slate-400">${err.message}</div>
+          </div>
+        `;
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg> Analyze Charts';
+        setTimeout(() => progressContainer.classList.add('hidden'), 1000);
+      }
+    }
+
+    function renderChartAnalysisHTML(data) {
+      // Build technical summary table
+      let summaryRows = '';
+      if (data.summary && Array.isArray(data.summary)) {
+        summaryRows = data.summary.map(row => `
+          <tr>
+            <td>${row.key || ''}</td>
+            <td>${row.value || ''}</td>
+          </tr>
+        `).join('');
+      }
+
+      return `
+        <div class="space-y-8">
+          <!-- Company Header -->
+          <div class="glass-card rounded-2xl p-6">
+            <h2 class="text-2xl font-bold text-white mb-2">${data.company_name || data.ticker}</h2>
+            <p class="text-emerald-400 text-lg">${data.ticker}</p>
+          </div>
+          
+          <!-- AI Chart Analysis Summary Table -->
+          <div class="glass-card rounded-2xl p-6">
+            <h3 class="text-xl font-bold text-white mb-4 flex items-center gap-2">
+              <span class="text-2xl">📊</span> AI Chart Analysis
+            </h3>
+            <table class="chart-summary-table w-full">
+              <tbody>
+                ${summaryRows}
+              </tbody>
+            </table>
+          </div>
+          
+          <!-- Charts Section -->
+          <div class="glass-card rounded-2xl p-6">
+            <h3 class="text-xl font-bold text-white mb-4 flex items-center gap-2">
+              <span class="text-2xl">📈</span> Technical Charts
+            </h3>
+            
+            <!-- Chart Tabs -->
+            <div class="flex flex-wrap gap-2 mb-6">
+              <button onclick="showChartTab('close')" class="chart-tab active px-4 py-2 rounded-lg text-sm font-medium transition-all" data-tab="close">Price & Volume</button>
+              <button onclick="showChartTab('hl')" class="chart-tab px-4 py-2 rounded-lg text-sm font-medium transition-all" data-tab="hl">High/Low Swings</button>
+              <button onclick="showChartTab('ema')" class="chart-tab px-4 py-2 rounded-lg text-sm font-medium transition-all" data-tab="ema">EMA</button>
+              <button onclick="showChartTab('rsi')" class="chart-tab px-4 py-2 rounded-lg text-sm font-medium transition-all" data-tab="rsi">RSI</button>
+              <button onclick="showChartTab('adl')" class="chart-tab px-4 py-2 rounded-lg text-sm font-medium transition-all" data-tab="adl">ADL</button>
+              <button onclick="showChartTab('rs')" class="chart-tab px-4 py-2 rounded-lg text-sm font-medium transition-all" data-tab="rs">Relative Strength</button>
+              <button onclick="showChartTab('rsi_div')" class="chart-tab px-4 py-2 rounded-lg text-sm font-medium transition-all" data-tab="rsi_div">RSI Divergence</button>
+            </div>
+            
+            <!-- Chart Containers -->
+            <div id="chartTabClose" class="chart-panel" style="height:500px;"></div>
+            <div id="chartTabHl" class="chart-panel hidden" style="height:500px;"></div>
+            <div id="chartTabEma" class="chart-panel hidden" style="height:500px;"></div>
+            <div id="chartTabRsi" class="chart-panel hidden" style="height:500px;"></div>
+            <div id="chartTabAdl" class="chart-panel hidden" style="height:500px;"></div>
+            <div id="chartTabRs" class="chart-panel hidden" style="height:500px;"></div>
+            <div id="chartTabRsiDiv" class="chart-panel hidden" style="height:800px;"></div>
+          </div>
+        </div>
+      `;
+    }
+
+    function showChartTab(tab) {
+      // Update tab buttons
+      document.querySelectorAll('.chart-tab').forEach(btn => {
+        btn.classList.remove('active', 'bg-emerald-500', 'text-white');
+        btn.classList.add('bg-white/10', 'text-slate-300', 'hover:bg-white/20');
+      });
+      const activeBtn = document.querySelector(`.chart-tab[data-tab="${tab}"]`);
+      if (activeBtn) {
+        activeBtn.classList.add('active', 'bg-emerald-500', 'text-white');
+        activeBtn.classList.remove('bg-white/10', 'text-slate-300', 'hover:bg-white/20');
+      }
+
+      // Show/hide panels
+      document.querySelectorAll('.chart-panel').forEach(panel => panel.classList.add('hidden'));
+      const tabMap = {
+        'close': 'chartTabClose',
+        'hl': 'chartTabHl',
+        'ema': 'chartTabEma',
+        'rsi': 'chartTabRsi',
+        'adl': 'chartTabAdl',
+        'rs': 'chartTabRs',
+        'rsi_div': 'chartTabRsiDiv'
+      };
+      const panelId = tabMap[tab];
+      if (panelId) {
+        document.getElementById(panelId).classList.remove('hidden');
+        // Trigger Plotly resize
+        window.dispatchEvent(new Event('resize'));
+      }
+    }
+
+    function renderChartAnalysisPlots(data) {
+      const darkTemplate = {
+        paper_bgcolor: 'rgba(0,0,0,0)',
+        plot_bgcolor: 'rgba(0,0,0,0)',
+        font: { color: '#e2e8f0' },
+        xaxis: { gridcolor: 'rgba(255,255,255,0.1)', linecolor: 'rgba(255,255,255,0.2)' },
+        yaxis: { gridcolor: 'rgba(255,255,255,0.1)', linecolor: 'rgba(255,255,255,0.2)' },
+        hoverlabel: {
+          bgcolor: '#1e293b',
+          bordercolor: '#475569',
+          font: { color: '#f1f5f9', size: 13 }
+        }
+      };
+
+      const plotConfig = { responsive: true, displayModeBar: false };
+
+      // Parse and render each chart
+      const charts = [
+        { json: data.chart_close_json, container: 'chartTabClose' },
+        { json: data.chart_hl_json, container: 'chartTabHl' },
+        { json: data.chart_ema_json, container: 'chartTabEma' },
+        { json: data.chart_rsi_json, container: 'chartTabRsi' },
+        { json: data.chart_adl_json, container: 'chartTabAdl' },
+        { json: data.chart_rs_json, container: 'chartTabRs' },
+        { json: data.chart_rsi_divergence_json, container: 'chartTabRsiDiv', isRsiDivergence: true }
+      ];
+
+      charts.forEach(({ json, container, isRsiDivergence }) => {
+        if (json) {
+          try {
+            const parsed = typeof json === 'string' ? JSON.parse(json) : json;
+
+            // For RSI Divergence chart, carefully merge to preserve subplot domains
+            if (isRsiDivergence) {
+              // Update trace colors for dark background visibility
+              parsed.data.forEach(trace => {
+                // Change black price line to white
+                if (trace.name === 'Close' && trace.line && trace.line.color === 'black') {
+                  trace.line.color = '#ffffff';
+                }
+                // Change purple RSI to bright cyan for visibility
+                if (trace.name === 'RSI' && trace.line && trace.line.color === 'purple') {
+                  trace.line.color = '#22d3ee'; // cyan-400
+                }
+                // Make RSI EMA brighter
+                if (trace.name === 'RSI EMA-13' && trace.line) {
+                  trace.line.color = '#fbbf24'; // amber-400
+                }
+              });
+
+              // Carefully merge layout preserving subplot domains
+              parsed.layout.paper_bgcolor = 'rgba(0,0,0,0)';
+              parsed.layout.plot_bgcolor = 'rgba(0,0,0,0)';
+              parsed.layout.font = { color: '#e2e8f0' };
+              parsed.layout.hoverlabel = {
+                bgcolor: '#1e293b',
+                bordercolor: '#475569',
+                font: { color: '#f1f5f9', size: 13 }
+              };
+
+              // Update axes colors without destroying domains
+              if (parsed.layout.xaxis) {
+                parsed.layout.xaxis.gridcolor = 'rgba(255,255,255,0.1)';
+                parsed.layout.xaxis.linecolor = 'rgba(255,255,255,0.2)';
+              }
+              if (parsed.layout.xaxis2) {
+                parsed.layout.xaxis2.gridcolor = 'rgba(255,255,255,0.1)';
+                parsed.layout.xaxis2.linecolor = 'rgba(255,255,255,0.2)';
+              }
+              if (parsed.layout.yaxis) {
+                parsed.layout.yaxis.gridcolor = 'rgba(255,255,255,0.1)';
+                parsed.layout.yaxis.linecolor = 'rgba(255,255,255,0.2)';
+                parsed.layout.yaxis.titlefont = { color: '#e2e8f0' };
+              }
+              if (parsed.layout.yaxis2) {
+                parsed.layout.yaxis2.gridcolor = 'rgba(255,255,255,0.1)';
+                parsed.layout.yaxis2.linecolor = 'rgba(255,255,255,0.2)';
+                parsed.layout.yaxis2.titlefont = { color: '#e2e8f0' };
+              }
+
+              Plotly.newPlot(container, parsed.data, parsed.layout, plotConfig);
+            } else {
+              // Standard charts - apply dark theme normally
+              parsed.layout = { ...parsed.layout, ...darkTemplate };
+              Plotly.newPlot(container, parsed.data, parsed.layout, plotConfig);
+            }
+          } catch (e) {
+            console.error(`Failed to render chart for ${container}:`, e);
+          }
+        }
+      });
+
+      // Initialize first tab as active
+      showChartTab('close');
+    }
   </script>
 </body>
 

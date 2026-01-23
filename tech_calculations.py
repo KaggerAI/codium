@@ -18,13 +18,28 @@ tv = TvDatafeed()
 # 1) Data Fetching and Technical Calculation Helpers
 # -------------------------------------------------------------------
 
-def fetch_histogram(symbol, exchange, start_date, end_date, max_retries=3):
-    n_bars = max(1100, (end_date - start_date).days + 5)
+def fetch_histogram(symbol, exchange, start_date, end_date, max_retries=3, interval='daily'):
+    """
+    Fetch historical price data from TradingView or yfinance.
+    
+    Args:
+        interval: 'daily' (default) or 'weekly'
+    """
+    # Determine TradingView interval
+    tv_interval = Interval.in_weekly if interval == 'weekly' else Interval.in_daily
+    yf_interval = '1wk' if interval == 'weekly' else '1d'
+    
+    # Adjust n_bars for weekly data
+    if interval == 'weekly':
+        n_bars = max(300, ((end_date - start_date).days // 7) + 5)
+    else:
+        n_bars = max(1100, (end_date - start_date).days + 5)
+    
     raw = None
     for _ in range(max_retries):
         try:
             raw = tv.get_hist(symbol=symbol, exchange=exchange,
-                              interval=Interval.in_daily, n_bars=n_bars)
+                              interval=tv_interval, n_bars=n_bars)
             if raw is not None and not raw.empty:
                 break
         except Exception:
@@ -35,7 +50,7 @@ def fetch_histogram(symbol, exchange, start_date, end_date, max_retries=3):
             raw = yf.download(yf_sym,
                               start=start_date.strftime('%Y-%m-%d'),
                               end=end_date.strftime('%Y-%m-%d'),
-                              interval='1d', auto_adjust=False)
+                              interval=yf_interval, auto_adjust=False)
         except Exception:
             return pd.DataFrame()
     df = raw.copy()
@@ -318,7 +333,7 @@ def detect_rsi_divergence(df, L=6, R=4, lookback_pivots=5):
     return result
 
 
-def build_rsi_divergence_figure(df, ticker):
+def build_rsi_divergence_figure(df, ticker, years=1):
     """
     Build a dual-pane Plotly figure:
     - Top: Price with swing pivots
@@ -328,8 +343,8 @@ def build_rsi_divergence_figure(df, ticker):
     """
     from plotly.subplots import make_subplots
     
-    # Filter to last 1 year of data
-    d = df[df.index >= df.index.max() - pd.DateOffset(years=1)].copy()
+    # Filter to specified years of data
+    d = df[df.index >= df.index.max() - pd.DateOffset(years=years)].copy()
     d_reset = d.reset_index(drop=True)
     
     # Detect divergences
@@ -351,7 +366,7 @@ def build_rsi_divergence_figure(df, ticker):
     # === Top Pane: Price with Pivots ===
     fig.add_trace(
         go.Scatter(x=list(d.index), y=[float(v) for v in d['Close']], 
-                   mode='lines', name='Close', line=dict(color='black')),
+                   mode='lines', name='Close', line=dict(color='#ffffff')),
         row=1, col=1
     )
     
@@ -378,7 +393,7 @@ def build_rsi_divergence_figure(df, ticker):
     # === Bottom Pane: RSI with Divergence Lines ===
     fig.add_trace(
         go.Scatter(x=list(d.index), y=[float(v) for v in d['RSI14']], 
-                   mode='lines', name='RSI', line=dict(color='purple', width=1.5)),
+                   mode='lines', name='RSI', line=dict(color='#22d3ee', width=1.5)),
         row=2, col=1
     )
     
@@ -386,7 +401,7 @@ def build_rsi_divergence_figure(df, ticker):
     if 'RSI_EMA13' in d.columns:
         fig.add_trace(
             go.Scatter(x=list(d.index), y=[float(v) for v in d['RSI_EMA13']], 
-                       mode='lines', name='RSI EMA-13', line=dict(color='orange', width=1, dash='dot')),
+                       mode='lines', name='RSI EMA-13', line=dict(color='#fbbf24', width=1, dash='dot')),
             row=2, col=1
         )
     
@@ -433,12 +448,12 @@ def build_rsi_divergence_figure(df, ticker):
             row=2, col=1
         )
     
-    # Update layout
+    # Update layout with explicit domain settings for proper subplot separation
     fig.update_layout(
-        height=720,  # Increased by 20% from 600
-        margin=dict(b=80),  # Add bottom margin to prevent legend bleeding into content below
+        height=800,  # Increased for dual-pane display
+        margin=dict(b=80, t=50),  # Add margins for title and legend
         hovermode='x unified',
-        legend=dict(orientation='h', x=0.5, xanchor='center', y=-0.08),  # Moved legend up slightly
+        legend=dict(orientation='h', x=0.5, xanchor='center', y=-0.08),
         xaxis2=dict(
             type='date',
             showspikes=True,
@@ -448,8 +463,8 @@ def build_rsi_divergence_figure(df, ticker):
             spikedash='dot',
             spikecolor='lightgrey'
         ),
-        yaxis=dict(title='Price'),
-        yaxis2=dict(title='RSI', range=[0, 100])
+        yaxis=dict(title='Price', domain=[0.45, 1.0]),  # Top chart takes upper 55%
+        yaxis2=dict(title='RSI', range=[0, 100], domain=[0.0, 0.38])  # Bottom chart takes lower 38%
     )
     
     return fig
@@ -459,35 +474,253 @@ def build_rsi_divergence_figure(df, ticker):
 # 2) Chart Generation Functions
 # -------------------------------------------------------------------
 
-def build_close_figure(df, ticker):
-    d = df[df.index >= df.index.max() - pd.DateOffset(years=1)]
-    sp = identify_swing_points(d, 6, 4, 'Close')
+def find_trendlines(df, swing_points, trendline_type='support', min_touches=3, tolerance=0.005):
+    """
+    Find valid trendlines that connect 3+ swing points without crossing price.
+    
+    Args:
+        df: DataFrame with price data (must have 'Close' column)
+        swing_points: DataFrame with 'Index', 'Value', 'Type' columns
+        trendline_type: 'support' (connects lows) or 'resistance' (connects highs)
+        min_touches: Minimum number of swing points the line must touch (default 3)
+        tolerance: Tolerance for "touching" the line (default 0.005 = 0.5%, use 0.01 = 1% for weekly)
+    
+    Returns:
+        List of trendlines, each as dict with 'start_idx', 'end_idx', 'start_val', 'end_val', 'touches'
+    """
+    close_prices = df['Close'].values
+    
+    # Filter swing points by type
+    if trendline_type == 'support':
+        points = swing_points[swing_points['Type'] == 'Low'].copy()
+    else:
+        points = swing_points[swing_points['Type'] == 'High'].copy()
+    
+    if len(points) < min_touches:
+        return []
+    
+    points = points.sort_values('Index').reset_index(drop=True)
+    trendlines = []
+    
+    # Try all pairs of points as potential trendline start/end
+    for i in range(len(points) - 1):
+        for j in range(i + 1, len(points)):
+            idx1, val1 = int(points.iloc[i]['Index']), float(points.iloc[i]['Value'])
+            idx2, val2 = int(points.iloc[j]['Index']), float(points.iloc[j]['Value'])
+            
+            if idx2 <= idx1:
+                continue
+            
+            # Calculate slope
+            slope = (val2 - val1) / (idx2 - idx1)
+            
+            # Check how many swing points lie on or near this line
+            touches = []
+            
+            for k in range(len(points)):
+                idx_k, val_k = int(points.iloc[k]['Index']), float(points.iloc[k]['Value'])
+                if idx_k < idx1 or idx_k > idx2:
+                    continue
+                
+                # Calculate expected value on the line at this index
+                line_val = val1 + slope * (idx_k - idx1)
+                
+                # Check if point is on the line (within tolerance)
+                if abs(val_k - line_val) / line_val < tolerance:
+                    touches.append((idx_k, val_k))
+            
+            if len(touches) < min_touches:
+                continue
+            
+            # Validate: trendline must not cross price between swing points
+            is_valid = True
+            for idx in range(idx1, idx2 + 1):
+                if idx >= len(close_prices):
+                    break
+                    
+                price = close_prices[idx]
+                line_val = val1 + slope * (idx - idx1)
+                
+                if trendline_type == 'support':
+                    # Support line should be below or at price (with small tolerance)
+                    if line_val > price * 1.001:  # Line crosses above price
+                        is_valid = False
+                        break
+                else:
+                    # Resistance line should be above or at price (with small tolerance)
+                    if line_val < price * 0.999:  # Line crosses below price
+                        is_valid = False
+                        break
+            
+            if is_valid:
+                trendlines.append({
+                    'start_idx': idx1,
+                    'end_idx': idx2,
+                    'start_val': val1,
+                    'end_val': val2,
+                    'touches': len(touches),
+                    'slope': slope
+                })
+    
+    # Remove duplicate/overlapping trendlines - keep the ones with most touches
+    if not trendlines:
+        return []
+    
+    # Sort by touches (descending) and take the best non-overlapping ones
+    trendlines.sort(key=lambda x: x['touches'], reverse=True)
+    
+    # Keep top trendlines that don't significantly overlap
+    final_lines = []
+    for line in trendlines:
+        is_overlapping = False
+        for existing in final_lines:
+            # Check if this line overlaps significantly with an existing one
+            overlap_start = max(line['start_idx'], existing['start_idx'])
+            overlap_end = min(line['end_idx'], existing['end_idx'])
+            if overlap_end > overlap_start:
+                overlap_ratio = (overlap_end - overlap_start) / (line['end_idx'] - line['start_idx'])
+                if overlap_ratio > 0.5:
+                    is_overlapping = True
+                    break
+        
+        if not is_overlapping:
+            final_lines.append(line)
+        
+        if len(final_lines) >= 2:  # Limit to 2 trendlines per type
+            break
+    
+    return final_lines
+
+
+def build_close_figure(df, ticker, years=1):
+    d = df[df.index >= df.index.max() - pd.DateOffset(years=years)].reset_index()
+    d_original_index = d.set_index(d.columns[0])  # Preserve datetime index for plotting
+    d_reset = d.reset_index(drop=True)  # Numeric index for trendline calculation
+    
+    # Tolerance: 1% for weekly (5Y), 0.5% for daily (1Y/3Y)
+    trendline_tolerance = 0.01 if years == 5 else 0.005
+    
+    sp = identify_swing_points(d_reset, 6, 4, 'Close')
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=list(d.index), y=[float(v) for v in d['Close']], mode='lines', name='Close', line=dict(color='black')))
+    
+    # Price line
+    fig.add_trace(go.Scatter(x=list(d_original_index.index), y=[float(v) for v in d_original_index['Close']], mode='lines', name='Close', line=dict(color='#ffffff')))
+    
+    # Swing highs
     highs = sp[sp['Type']=='High']
-    fig.add_trace(go.Scatter(x=d.index[highs['Index']], y=[float(v) for v in highs['Value']], mode='markers', name='Swing High', marker=dict(symbol='triangle-up', size=12, color='red')))
+    if not highs.empty:
+        fig.add_trace(go.Scatter(x=d_original_index.index[highs['Index']], y=[float(v) for v in highs['Value']], mode='markers', name='Swing High', marker=dict(symbol='triangle-up', size=12, color='red')))
+    
+    # Swing lows
     lows = sp[sp['Type']=='Low']
-    fig.add_trace(go.Scatter(x=d.index[lows['Index']], y=[float(v) for v in lows['Value']], mode='markers', name='Swing Low', marker=dict(symbol='triangle-down', size=12, color='green')))
+    if not lows.empty:
+        fig.add_trace(go.Scatter(x=d_original_index.index[lows['Index']], y=[float(v) for v in lows['Value']], mode='markers', name='Swing Low', marker=dict(symbol='triangle-down', size=12, color='green')))
+    
+    # Find and draw support trendlines (green, dashed)
+    support_lines = find_trendlines(d_reset, sp, trendline_type='support', min_touches=3, tolerance=trendline_tolerance)
+    for i, line in enumerate(support_lines):
+        # Extend line to current date
+        start_idx = line['start_idx']
+        end_idx = min(line['end_idx'] + 20, len(d_reset) - 1)  # Extend 20 bars or to end
+        extended_val = line['start_val'] + line['slope'] * (end_idx - start_idx)
+        
+        fig.add_trace(go.Scatter(
+            x=[d_original_index.index[start_idx], d_original_index.index[end_idx]],
+            y=[line['start_val'], extended_val],
+            mode='lines',
+            name=f'Support ({line["touches"]} touches)',
+            line=dict(color='#22c55e', width=1, dash='3,1.5'),
+            showlegend=(i == 0)  # Only show legend for first support line
+        ))
+    
+    # Find and draw resistance trendlines (red, dashed)
+    resistance_lines = find_trendlines(d_reset, sp, trendline_type='resistance', min_touches=3, tolerance=trendline_tolerance)
+    for i, line in enumerate(resistance_lines):
+        # Extend line to current date
+        start_idx = line['start_idx']
+        end_idx = min(line['end_idx'] + 20, len(d_reset) - 1)  # Extend 20 bars or to end
+        extended_val = line['start_val'] + line['slope'] * (end_idx - start_idx)
+        
+        fig.add_trace(go.Scatter(
+            x=[d_original_index.index[start_idx], d_original_index.index[end_idx]],
+            y=[line['start_val'], extended_val],
+            mode='lines',
+            name=f'Resistance ({line["touches"]} touches)',
+            line=dict(color='#ef4444', width=1, dash='3,1.5'),
+            showlegend=(i == 0)  # Only show legend for first resistance line
+        ))
+    
     fig.update_layout(title=f"{ticker} Price Pivots", height=450, legend=dict(orientation='h', x=0.5, xanchor='center', y=-0.2), hovermode='x unified', xaxis=dict(type='date', showspikes=True, spikemode='across', spikesnap='cursor', spikethickness=1, spikedash='dot', spikecolor='lightgrey'))
     return fig
 
 
-def build_hl_figure(df, ticker):
-    d = df[df.index >= df.index.max() - pd.DateOffset(years=1)]
-    sh = identify_swing_points_high(d, 6, 4)
-    sl = identify_swing_points_low(d, 6, 4)
+def build_hl_figure(df, ticker, years=1):
+    d = df[df.index >= df.index.max() - pd.DateOffset(years=years)].reset_index()
+    d_original_index = d.set_index(d.columns[0])  # Preserve datetime index for plotting
+    d_reset = d.reset_index(drop=True)  # Numeric index for trendline calculation
+    
+    # Tolerance: 1% for weekly (5Y), 0.5% for daily (1Y/3Y)
+    trendline_tolerance = 0.01 if years == 5 else 0.005
+    
+    sh = identify_swing_points_high(d_reset, 6, 4)
+    sl = identify_swing_points_low(d_reset, 6, 4)
+    
+    # Combine swing points for trendline detection
+    sp = pd.concat([sh, sl]).sort_values('Index').reset_index(drop=True)
+    
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=d.index, y=[float(v) for v in d['Close']], mode='lines', name='Close', line=dict(color='black')))
-    fig.add_trace(go.Scatter(x=d.index[sh['Index']], y=[float(v) for v in sh['Value']], mode='markers', name='Swing High', marker=dict(symbol='triangle-up', size=12, color='red')))
-    fig.add_trace(go.Scatter(x=d.index[sl['Index']], y=[float(v) for v in sl['Value']], mode='markers', name='Swing Low', marker=dict(symbol='triangle-down', size=12, color='green')))
+    
+    # Price line
+    fig.add_trace(go.Scatter(x=d_original_index.index, y=[float(v) for v in d_original_index['Close']], mode='lines', name='Close', line=dict(color='#ffffff')))
+    
+    # Swing highs
+    if not sh.empty:
+        fig.add_trace(go.Scatter(x=d_original_index.index[sh['Index']], y=[float(v) for v in sh['Value']], mode='markers', name='Swing High', marker=dict(symbol='triangle-up', size=12, color='red')))
+    
+    # Swing lows
+    if not sl.empty:
+        fig.add_trace(go.Scatter(x=d_original_index.index[sl['Index']], y=[float(v) for v in sl['Value']], mode='markers', name='Swing Low', marker=dict(symbol='triangle-down', size=12, color='green')))
+    
+    # Find and draw support trendlines (green, dashed)
+    support_lines = find_trendlines(d_reset, sp, trendline_type='support', min_touches=3, tolerance=trendline_tolerance)
+    for i, line in enumerate(support_lines):
+        start_idx = line['start_idx']
+        end_idx = min(line['end_idx'] + 20, len(d_reset) - 1)
+        extended_val = line['start_val'] + line['slope'] * (end_idx - start_idx)
+        
+        fig.add_trace(go.Scatter(
+            x=[d_original_index.index[start_idx], d_original_index.index[end_idx]],
+            y=[line['start_val'], extended_val],
+            mode='lines',
+            name=f'Support ({line["touches"]} touches)',
+            line=dict(color='#22c55e', width=1, dash='3,1.5'),
+            showlegend=(i == 0)
+        ))
+    
+    # Find and draw resistance trendlines (red, dashed)
+    resistance_lines = find_trendlines(d_reset, sp, trendline_type='resistance', min_touches=3, tolerance=trendline_tolerance)
+    for i, line in enumerate(resistance_lines):
+        start_idx = line['start_idx']
+        end_idx = min(line['end_idx'] + 20, len(d_reset) - 1)
+        extended_val = line['start_val'] + line['slope'] * (end_idx - start_idx)
+        
+        fig.add_trace(go.Scatter(
+            x=[d_original_index.index[start_idx], d_original_index.index[end_idx]],
+            y=[line['start_val'], extended_val],
+            mode='lines',
+            name=f'Resistance ({line["touches"]} touches)',
+            line=dict(color='#ef4444', width=1, dash='3,1.5'),
+            showlegend=(i == 0)
+        ))
+    
     fig.update_layout(title=f"{ticker} High/Low Pivots", height=450, legend=dict(orientation='h', x=0.5, xanchor='center', y=-0.2), hovermode='x unified', xaxis=dict(type='date', showspikes=True, spikemode='across', spikesnap='cursor', spikethickness=1, spikedash='dot', spikecolor='lightgrey'))
     return fig
 
 
-def build_ema_figure(df, ticker):
-    d = df[df.index >= df.index.max() - pd.DateOffset(years=1)]
+def build_ema_figure(df, ticker, years=1):
+    d = df[df.index >= df.index.max() - pd.DateOffset(years=years)]
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=d.index, y=[float(v) for v in d['Close']], mode='lines', name='Close', line=dict(color='black')))
+    fig.add_trace(go.Scatter(x=d.index, y=[float(v) for v in d['Close']], mode='lines', name='Close', line=dict(color='#ffffff')))
     fig.add_trace(go.Scatter(x=d.index, y=[float(v) for v in d['EMA13']], mode='lines', name='EMA13', line=dict(dash='dot', width=1.25, color='blue')))
     fig.add_trace(go.Scatter(x=d.index, y=[float(v) for v in d['EMA55']], mode='lines', name='EMA55', line=dict(dash='dot', width=1.25, color='red')))
     fig.add_trace(go.Scatter(x=d.index, y=[float(v) for v in d['EMA144']], mode='lines', name='EMA144', line=dict(dash='dot', width=1.25, color='green')))
@@ -495,8 +728,8 @@ def build_ema_figure(df, ticker):
     return fig
 
 
-def build_rsi_figure(df,ticker):
-    d=df[df.index>=df.index.max()-pd.DateOffset(years=1)]
+def build_rsi_figure(df, ticker, years=1):
+    d=df[df.index>=df.index.max()-pd.DateOffset(years=years)]
     fig=go.Figure()
     fig.add_trace(go.Scatter(x=d.index, y=[float(v) for v in d['RSI14']], mode='lines', name='RSI'))
     fig.add_trace(go.Scatter(x=d.index, y=[float(v) for v in d['RSI_EMA13']], mode='lines', name='RSI EMA-13', line=dict(dash='dot', width=1)))
@@ -504,8 +737,8 @@ def build_rsi_figure(df,ticker):
     return fig
 
 
-def build_adl_figure(df,ticker):
-    d=df[df.index>=df.index.max()-pd.DateOffset(years=1)]
+def build_adl_figure(df, ticker, years=1):
+    d=df[df.index>=df.index.max()-pd.DateOffset(years=years)]
     fig=go.Figure()
     fig.add_trace(go.Scatter(x=d.index, y=[float(v) for v in d['ADL']], mode='lines', name='ADL'))
     fig.add_trace(go.Scatter(x=d.index, y=[float(v) for v in d['ADL_EMA']], mode='lines', name='ADL EMA', line=dict(dash='dot', width=1.25, color='orange')))
@@ -513,8 +746,8 @@ def build_adl_figure(df,ticker):
     return fig
 
 
-def build_rs_figure(df, ticker):
-    d = df[df.index >= df.index.max() - pd.DateOffset(years=1)]
+def build_rs_figure(df, ticker, years=1):
+    d = df[df.index >= df.index.max() - pd.DateOffset(years=years)]
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=d.index, y=[float(v) for v in d['RS']], mode='lines', name='Relative Strength'))
     fig.update_layout(title=f"{ticker} Relative Strength vs Nifty", height=450, legend=dict(orientation='h', x=0.5, xanchor='center', y=-0.2), yaxis=dict(tickformat='.2%'), hovermode='x unified', xaxis=dict(type='date', showspikes=True, spikemode='across', spikesnap='cursor', spikethickness=1, spikedash='dot', spikecolor='lightgrey'))
@@ -524,14 +757,20 @@ def build_rs_figure(df, ticker):
 # 3) Main Orchestration and Summary Functions
 # -------------------------------------------------------------------
 
-def evaluate_ticker_signal(ticker, in_position=False, price_pattern="", left_price=6, right_price=4, recency_candles=3):
+def evaluate_ticker_signal(ticker, in_position=False, price_pattern="", left_price=6, right_price=4, recency_candles=3, interval='daily'):
+    """
+    Evaluate ticker signal with optional interval selection.
+    
+    Args:
+        interval: 'daily' (default) or 'weekly' for 5-year charts
+    """
     end = datetime.today()
     start = end - pd.DateOffset(years=5)
     sym = ticker.replace('.NS','')
-    df = fetch_histogram(sym, 'NSE', start, end)
+    df = fetch_histogram(sym, 'NSE', start, end, interval=interval)
     if df.empty:
         return {"Ticker": ticker, "Signal": "NO DATA", "Data": df}
-    idx_df = fetch_histogram('NIFTY', 'NSE', start, end)
+    idx_df = fetch_histogram('NIFTY', 'NSE', start, end, interval=interval)
     df, idx_df = align_data_indices(df, idx_df)
     if len(df) < left_price + right_price + 1:
         return {"Ticker": ticker, "Signal": "INSUFFICIENT DATA", "Data": df}

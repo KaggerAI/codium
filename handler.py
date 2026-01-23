@@ -3942,6 +3942,121 @@ def download_debug_file(filename):
 
 
 # =====================================================================
+# START: Lightweight Chart-Only Analysis Endpoint
+# =====================================================================
+
+@app.route('/analyze-chart', methods=['POST'])
+def analyze_chart():
+    """
+    Lightweight chart-only analysis endpoint.
+    Returns only technical analysis data (no fundamentals, no AI summary).
+    Significantly faster than /analyze (~5-10 seconds vs 30-60 seconds).
+    
+    Runs ONLY:
+    - evaluate_ticker_signal() - TradingView price data + technical indicators
+    - generate_summary() - AI Chart Analysis table
+    - Chart builders - Plotly charts (Close, HL, EMA, RSI, ADL, RS, RSI Divergence)
+    
+    Skips:
+    - Screener.in fundamentals crawl
+    - AI Company Summary generation
+    - Peer comparison extraction
+    - AI Scores generation
+    - Analyst reports fetch
+    """
+    try:
+        data = request.get_json(force=True)
+        tick = data.get('ticker', '').strip().upper()
+        years = data.get('years', 1)  # Default to 1 year, accepts 1, 3, or 5
+        
+        # Validate years parameter
+        if years not in [1, 3, 5]:
+            years = 1
+        
+        if not tick:
+            return jsonify({'error': 'No ticker provided'}), 400
+        
+        log_progress(f"Starting chart analysis for {tick} ({years}Y)...")
+        
+        # 1. Get company name from yfinance (fast)
+        company_name = tick
+        try:
+            yf_ticker = yf.Ticker(f"{tick}.NS")
+            info = yf_ticker.info or {}
+            company_name = info.get("longName") or info.get("shortName") or tick
+            log_progress(f"Identified company: {company_name}")
+        except Exception as e:
+            print(f"WARN: yfinance name fetch failed for {tick}: {e}")
+        
+        # 2. Fetch TradingView data + calculate technical indicators
+        # Use weekly data for 5Y, daily for 1Y/3Y
+        interval = 'weekly' if years == 5 else 'daily'
+        log_progress(f"Fetching {interval} price data from TradingView...")
+        res = evaluate_ticker_signal(tick, interval=interval)
+        
+        if not res or res.get("Signal") in ["NO DATA", "INSUFFICIENT DATA"]:
+            log_progress(f"No price data found for {tick}")
+            return jsonify({'error': f'No price data found for {tick}'}), 404
+        
+        df = res["Data"]
+        
+        if df.empty or len(df) < 2:
+            return jsonify({'error': f'Insufficient historical data for {tick}'}), 404
+        
+        # 3. Generate technical summary table
+        log_progress("Generating technical summary...")
+        technical_summary = generate_summary(res)
+        
+        # Clean the summary
+        cleaned_summary = []
+        if isinstance(technical_summary, list):
+            for item in technical_summary:
+                if isinstance(item, dict) and "key" in item and "value" in item:
+                    cleaned_key = str(item["key"]).strip()
+                    value = item["value"]
+                    cleaned_value = str(value).strip() if isinstance(value, str) else value
+                    cleaned_summary.append({"key": cleaned_key, "value": cleaned_value})
+                else:
+                    cleaned_summary.append(item)
+        else:
+            cleaned_summary = technical_summary
+        
+        # 4. Build all charts with selected duration
+        log_progress("Building charts...")
+        close_j = build_close_figure(df, company_name, years=years).to_json()
+        hl_j = build_hl_figure(df, company_name, years=years).to_json()
+        ema_j = build_ema_figure(df, company_name, years=years).to_json()
+        rsi_j = build_rsi_figure(df, company_name, years=years).to_json()
+        adl_j = build_adl_figure(df, company_name, years=years).to_json()
+        rs_j = build_rs_figure(df, company_name, years=years).to_json()
+        rsi_div_j = build_rsi_divergence_figure(df, company_name, years=years).to_json()
+        
+        log_progress(f"Chart analysis complete for {tick}!")
+        
+        return jsonify({
+            'ticker': tick,
+            'company_name': company_name,
+            'summary': cleaned_summary,  # AI Chart Analysis table
+            'chart_close_json': close_j,
+            'chart_hl_json': hl_j,
+            'chart_ema_json': ema_j,
+            'chart_rsi_json': rsi_j,
+            'chart_adl_json': adl_j,
+            'chart_rs_json': rs_j,
+            'chart_rsi_divergence_json': rsi_div_j
+        })
+        
+    except Exception as e:
+        print(f"ERROR in /analyze-chart: {e}")
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+# =====================================================================
+# END: Lightweight Chart-Only Analysis Endpoint
+# =====================================================================
+
+
+# =====================================================================
 # START: Admin Batch Pre-Caching System (Overnight Pre-Caching)
 # =====================================================================
 
