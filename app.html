@@ -1087,6 +1087,24 @@
       max-width: 100%;
     }
 
+    .peer-comparison-table tr.industry-average {
+      background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+      border-top: 2px solid #22c55e;
+      font-weight: 600;
+    }
+
+    .peer-comparison-table tr.industry-average:hover {
+      background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%);
+    }
+
+    .peer-comparison-table tr.industry-average td {
+      color: #166534;
+    }
+
+    .peer-comparison-table tr.industry-average .company-name {
+      color: #166534;
+    }
+
     /* =====================================================================
        MOBILE RESPONSIVE STYLES
        ===================================================================== */
@@ -2988,6 +3006,42 @@
           `;
         }
 
+        // Calculate industry average from peer data (excluding main company)
+        function calculateIndustryAverage(peers) {
+          if (!peers || peers.length === 0) {
+            return {
+              cmp: 'N/A', market_cap: 'N/A', pe_ratio: 'N/A', pb_ratio: 'N/A',
+              dividend_yield: 'N/A', roce: 'N/A', roe: 'N/A',
+              sales_growth_yoy: 'N/A', ebitda_growth_yoy: 'N/A', npm: 'N/A'
+            };
+          }
+
+          const parseNum = (val) => {
+            if (!val || val === 'N/A') return null;
+            const num = parseFloat(String(val).replace(/[%,₹\s]/g, ''));
+            return isNaN(num) ? null : num;
+          };
+
+          const avg = (arr) => {
+            const valid = arr.filter(v => v !== null);
+            if (valid.length === 0) return 'N/A';
+            return (valid.reduce((a, b) => a + b, 0) / valid.length).toFixed(2);
+          };
+
+          return {
+            cmp: avg(peers.map(p => parseNum(p.cmp))),
+            market_cap: avg(peers.map(p => parseNum(p.market_cap))),
+            pe_ratio: avg(peers.map(p => parseNum(p.pe_ratio))),
+            pb_ratio: avg(peers.map(p => parseNum(p.pb_ratio))),
+            dividend_yield: avg(peers.map(p => parseNum(p.dividend_yield))),
+            roce: avg(peers.map(p => parseNum(p.roce))),
+            roe: avg(peers.map(p => parseNum(p.roe))),
+            sales_growth_yoy: avg(peers.map(p => parseNum(p.sales_growth_yoy))),
+            ebitda_growth_yoy: avg(peers.map(p => parseNum(p.ebitda_growth_yoy))),
+            npm: avg(peers.map(p => parseNum(p.npm)))
+          };
+        }
+
         // Render Peer Comparison Table
         function renderPeerComparisonTable(peerData) {
           if (!peerData || (!peerData.company && !peerData.peers?.length)) return '';
@@ -3053,6 +3107,24 @@
             `;
           }).join('');
 
+          // Calculate and add Industry Average row
+          const industryAvg = calculateIndustryAverage(peers);
+          const avgRowHtml = peers.length > 0 ? `
+            <tr class="industry-average">
+              <td class="company-name">📊 Industry Average</td>
+              <td>${formatValue(industryAvg.cmp)}</td>
+              <td>${formatValue(industryAvg.market_cap)}</td>
+              <td>${formatValue(industryAvg.pe_ratio)}</td>
+              <td>${formatValue(industryAvg.pb_ratio)}</td>
+              <td>${formatPercent(industryAvg.dividend_yield)}</td>
+              <td>${formatPercent(industryAvg.roce)}</td>
+              <td>${formatPercent(industryAvg.roe)}</td>
+              <td>${formatValue(industryAvg.sales_growth_yoy, true)}</td>
+              <td>${formatValue(industryAvg.ebitda_growth_yoy, true)}</td>
+              <td>${formatPercent(industryAvg.npm)}</td>
+            </tr>
+          ` : '';
+
           return `
             <div class="bg-white p-6 rounded-xl shadow-lg mb-8">
               <h2 class="text-2xl font-bold mb-4 text-slate-700">📊 Peer Comparison</h2>
@@ -3076,12 +3148,14 @@
                   </thead>
                   <tbody>
                     ${rowsHtml}
+                    ${avgRowHtml}
                   </tbody>
                 </table>
               </div>
             </div>
           `;
         }
+
 
         // Render Analyst Reports Tabbed Interface
         function renderAnalystReports(reports) {

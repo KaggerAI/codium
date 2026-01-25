@@ -3563,12 +3563,17 @@ def analyze():
                             rs_j = build_rs_figure(df, company_name).to_json()
                             rsi_div_j = build_rsi_divergence_figure(df, company_name, line_color='#3b82f6').to_json()
                             
-                            # Get Trendlyne analyst reports
+                            # Get Trendlyne analyst reports (RUNTIME ONLY - not fetched during pre-caching)
                             log_progress("Fetching Trendlyne analyst reports...")
                             try:
-                                from analyst_reports.trendlyne_fetcher import get_analyst_reports_for_ticker
-                                analyst_reports = get_analyst_reports_for_ticker(tick)
-                            except:
+                                import asyncio
+                                from analyst_reports.trendlyne_fetcher import fetch_analyst_reports_async
+                                analyst_reports = asyncio.run(fetch_analyst_reports_async(tick))
+                                print(f"INFO: Fetched {len(analyst_reports)} analyst reports for {tick}")
+                            except Exception as e:
+                                print(f"WARN: Failed to fetch analyst reports for {tick}: {e}")
+                                import traceback
+                                traceback.print_exc()
                                 analyst_reports = []
                             
                             # Get yfinance key metrics (CMP, Market Cap, PE, PB, Dividend Yield)
@@ -3597,9 +3602,13 @@ def analyze():
                                 if roe:
                                     yf_metrics['roe'] = f"{roe * 100:.2f}%"
                             
-                            # Merge: start with cached, then yfinance for live data
-                            # yfinance values override cached for PE/PB/Dividend/ROE since cached doesn't have them
-                            merged_key_metrics = {**cached_key_metrics, **yf_metrics}
+                            # Merge: Screener cached values take priority for financial metrics
+                            # yfinance only provides market_cap, industry, sector, current_price
+                            merged_key_metrics = {**cached_key_metrics}  # Start with Screener data
+                            # Only override with yfinance for these specific fields
+                            for key in ['market_cap', 'industry', 'sector', 'current_price']:
+                                if yf_metrics.get(key) and yf_metrics[key] != 'N/A':
+                                    merged_key_metrics[key] = yf_metrics[key]
                             
                             # Get Valuation & Margin charts from Screener.in
                             log_progress("Fetching valuation charts from Screener.in...")
@@ -3657,6 +3666,40 @@ def analyze():
                             except Exception as e:
                                 print(f"WARN: Valuation charts fetch failed: {e}")
                             
+                            # ============================================================
+                            # FETCH PEER COMPARISON DATA VIA AI (runtime, not cached)
+                            # ============================================================
+                            log_progress("Extracting peer comparison data via AI...")
+                            try:
+                                ai_extracted_metrics = extract_metrics_via_ai(tick)
+                                peer_comparison_data = ai_extracted_metrics.get('peers', [])
+                                ai_company_metrics = ai_extracted_metrics.get('company', {})
+                                
+                                # Build peer_comparison structure for frontend
+                                peer_comparison = {
+                                    'company': {
+                                        'ticker': tick,
+                                        'name': company_name,
+                                        'cmp': merged_key_metrics.get('current_price', ai_company_metrics.get('cmp', 'N/A')),
+                                        'market_cap': merged_key_metrics.get('market_cap', ai_company_metrics.get('market_cap', 'N/A')),
+                                        'pe_ratio': merged_key_metrics.get('pe_ratio', ai_company_metrics.get('pe_ratio', 'N/A')),
+                                        'pb_ratio': merged_key_metrics.get('pb_ratio', ai_company_metrics.get('pb_ratio', 'N/A')),
+                                        'dividend_yield': merged_key_metrics.get('dividend_yield', ai_company_metrics.get('dividend_yield', 'N/A')),
+                                        'roce': merged_key_metrics.get('roce', ai_company_metrics.get('roce', 'N/A')),
+                                        'roe': merged_key_metrics.get('roe', ai_company_metrics.get('roe', 'N/A')),
+                                        'sales_growth_yoy': merged_key_metrics.get('sales_growth_yoy', ai_company_metrics.get('sales_growth_yoy', 'N/A')),
+                                        'ebitda_growth_yoy': merged_key_metrics.get('ebitda_growth_yoy', ai_company_metrics.get('ebitda_growth_yoy', 'N/A')),
+                                        'npm': merged_key_metrics.get('npm', ai_company_metrics.get('npm', 'N/A'))
+                                    },
+                                    'peers': peer_comparison_data
+                                }
+                                print(f"INFO: Extracted peer comparison with {len(peer_comparison_data)} peers for {tick}")
+                            except Exception as e:
+                                print(f"WARN: Failed to extract peer comparison via AI: {e}")
+                                import traceback
+                                traceback.print_exc()
+                                peer_comparison = {'company': {}, 'peers': []}
+                            
                             # REGENERATE AI SUMMARY if it failed during light cache
                             if summary_needs_regeneration:
                                 log_progress("Regenerating AI summary...")
@@ -3702,7 +3745,7 @@ def analyze():
                                 'documents': cached_documents,  # FROM CACHE
                                 'scanx_data': parsed_valuation_data,  # Valuation data for AI
                                 'key_metrics': merged_key_metrics,  # MERGED: yfinance + cached
-                                'peer_comparison': cached_result.get('peer_comparison', {'company': {}, 'peers': []}),
+                                'peer_comparison': peer_comparison,  # FETCHED AT RUNTIME via AI
                                 'analyst_reports': analyst_reports
                             }
                             
