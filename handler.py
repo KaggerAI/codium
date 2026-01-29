@@ -2481,6 +2481,70 @@ def chat():
         return jsonify({'error': f'An unexpected error occurred: {str(e)}', 'trace': traceback.format_exc()}), 500
 
 
+@app.route('/industry-chat', methods=['POST'])
+def industry_chat():
+    """
+    Industry Search AI Chatbot endpoint.
+    Uses Perplexity Sonar-Pro with Pro Search to answer investor questions
+    based on the full context of the generated Industry Research report.
+    """
+    log_redis_target(app, cache, context="industry_chat_entry")
+    print("DEBUG: Entering /industry-chat endpoint...", file=sys.stderr)
+
+    try:
+        data = request.get_json(force=True)
+        user_question = data.get('question', '').strip()
+        industry_name = data.get('industry', '').strip()
+        report_context = data.get('report_context', '').strip()
+        
+        if not user_question:
+            return jsonify({'error': 'No question provided'}), 400
+        
+        if not report_context:
+             return jsonify({'answer': 'Industry report context is missing. Please generate the report first.'}), 200
+
+        print(f"INFO: Industry Chat received question: {user_question[:100]}... for industry: {industry_name}", file=sys.stderr)
+        
+        # Construct the prompt
+        system_prompt = f"""You are an expert investment analyst assistant helping an investor research the {industry_name} industry in India.
+Your goal is to help the investor decide whether to invest in public companies within this sector.
+
+Rely heavily on the provided "Industry Research Report" context below to answer the user's question.
+If the report doesn't contain the answer, use your knowledge base (accessed via Pro Search) to supplement the information, but prioritize the report's insights.
+Focus on the Indian market context.
+
+**Industry Research Report Context:**
+{report_context}
+"""
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_question}
+        ]
+
+        print("INFO: Calling Perplexity Sonar-Pro for Industry Chat...", file=sys.stderr)
+        
+        # Call Perplexity API with sonar-pro and Pro Search enabled
+        answer = call_perplexity_api(
+            messages,
+            model="sonar-pro",
+            temperature=1, # Default
+            timeout=120,    # Allow enough time for Pro Search
+            use_streaming=False,
+            enable_pro_search=True
+        )
+        
+        return jsonify({
+            'answer': answer,
+            'status': 'success'
+        })
+
+    except Exception as e:
+        print(f"CRITICAL ERROR in /industry-chat: {e}", file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
+        return jsonify({'error': f'An unexpected error occurred: {str(e)}', 'trace': traceback.format_exc()}), 500
+
+
 
 
 #======================================================================#
@@ -3790,6 +3854,70 @@ def analyze():
                             # Save to local memory cache (Redis-free fallback)
                             set_local_cache(tick, analysis_for_cache)
                             
+                            # =====================================================================
+                            # START: Background PDF Text Extraction for Light Cache
+                            # =====================================================================
+                            # If analyst reports exist but texts not cached, start extraction
+                            light_cache_analysis_key = result_for_frontend.get('analysis_key') or cached_result.get('analysis_key')
+                            if not light_cache_analysis_key:
+                                light_cache_analysis_key = str(uuid.uuid4())
+                                result_for_frontend['analysis_key'] = light_cache_analysis_key
+                            
+                            if analyst_reports:
+                                cached_texts = cache.get(f"{light_cache_analysis_key}_analyst_texts")
+                                if not cached_texts:
+                                    def extract_analyst_pdf_text_light_cache(key, reports):
+                                        """Background task to download and extract text from analyst PDFs (LIGHT CACHE)."""
+                                        import asyncio as _asyncio
+                                        import zlib as _zlib
+                                        import pickle as _pickle
+                                        try:
+                                            pdf_texts = []
+                                            new_loop = _asyncio.new_event_loop()
+                                            _asyncio.set_event_loop(new_loop)
+                                            try:
+                                                for report in reports:
+                                                    pdf_url = report.get('pdf_url')
+                                                    if not pdf_url:
+                                                        continue
+                                                    try:
+                                                        pdf_bytes = new_loop.run_until_complete(download_analyst_pdf_with_cookies(pdf_url))
+                                                        text = extract_text_from_pdf(pdf_bytes)
+                                                        pdf_texts.append({
+                                                            'brokerage': report.get('brokerage'),
+                                                            'date': report.get('date'),
+                                                            'recommendation': report.get('recommendation'),
+                                                            'target_price': report.get('target_price'),
+                                                            'upside': report.get('upside'),
+                                                            'pdf_text': text,
+                                                            'pdf_url': pdf_url
+                                                        })
+                                                        print(f"INFO: Extracted text from {report.get('brokerage')} report ({len(text)} chars) [LIGHT CACHE]")
+                                                    except Exception as e:
+                                                        print(f"WARN: Failed to extract text from {pdf_url}: {e}")
+                                            finally:
+                                                new_loop.close()
+                                            compressed = _zlib.compress(_pickle.dumps(pdf_texts))
+                                            cache.set(f"{key}_analyst_texts", compressed, timeout=21600)
+                                            print(f"INFO: Cached {len(pdf_texts)} analyst texts for LIGHT CACHE key: {key}")
+                                        except Exception as e:
+                                            print(f"WARN: Background PDF extraction failed (LIGHT CACHE): {e}")
+                                            try:
+                                                compressed = _zlib.compress(_pickle.dumps([]))
+                                                cache.set(f"{key}_analyst_texts", compressed, timeout=21600)
+                                            except: pass
+                                    
+                                    bg_thread = threading.Thread(
+                                        target=extract_analyst_pdf_text_light_cache,
+                                        args=(light_cache_analysis_key, analyst_reports)
+                                    )
+                                    bg_thread.daemon = True
+                                    bg_thread.start()
+                                    print(f"INFO: Started background PDF extraction for LIGHT CACHE ({len(analyst_reports)} reports)")
+                            # =====================================================================
+                            # END: Background PDF Text Extraction for Light Cache
+                            # =====================================================================
+                            
                             log_progress(f"Analysis complete for {tick}!")
                             return jsonify(result_for_frontend)
                             
@@ -3809,6 +3937,71 @@ def analyze():
                         # Save to local memory cache (Redis-free fallback)
                         # Use cached_result which has all the needed fields
                         set_local_cache(tick, cached_result)
+                        
+                        # =====================================================================
+                        # START: Background PDF Text Extraction for Full Cache
+                        # =====================================================================
+                        # If analyst reports exist but texts not cached, start extraction
+                        full_cache_analyst_reports = cached_result.get('analyst_reports', [])
+                        full_cache_analysis_key = cached_result.get('analysis_key')
+                        if not full_cache_analysis_key:
+                            full_cache_analysis_key = str(uuid.uuid4())
+                            cached_result['analysis_key'] = full_cache_analysis_key
+                        
+                        if full_cache_analyst_reports:
+                            full_cache_texts = cache.get(f"{full_cache_analysis_key}_analyst_texts")
+                            if not full_cache_texts:
+                                def extract_analyst_pdf_text_full_cache(key, reports):
+                                    """Background task to download and extract text from analyst PDFs (FULL CACHE)."""
+                                    import asyncio as _asyncio
+                                    import zlib as _zlib
+                                    import pickle as _pickle
+                                    try:
+                                        pdf_texts = []
+                                        new_loop = _asyncio.new_event_loop()
+                                        _asyncio.set_event_loop(new_loop)
+                                        try:
+                                            for report in reports:
+                                                pdf_url = report.get('pdf_url')
+                                                if not pdf_url:
+                                                    continue
+                                                try:
+                                                    pdf_bytes = new_loop.run_until_complete(download_analyst_pdf_with_cookies(pdf_url))
+                                                    text = extract_text_from_pdf(pdf_bytes)
+                                                    pdf_texts.append({
+                                                        'brokerage': report.get('brokerage'),
+                                                        'date': report.get('date'),
+                                                        'recommendation': report.get('recommendation'),
+                                                        'target_price': report.get('target_price'),
+                                                        'upside': report.get('upside'),
+                                                        'pdf_text': text,
+                                                        'pdf_url': pdf_url
+                                                    })
+                                                    print(f"INFO: Extracted text from {report.get('brokerage')} report ({len(text)} chars) [FULL CACHE]")
+                                                except Exception as e:
+                                                    print(f"WARN: Failed to extract text from {pdf_url}: {e}")
+                                        finally:
+                                            new_loop.close()
+                                        compressed = _zlib.compress(_pickle.dumps(pdf_texts))
+                                        cache.set(f"{key}_analyst_texts", compressed, timeout=21600)
+                                        print(f"INFO: Cached {len(pdf_texts)} analyst texts for FULL CACHE key: {key}")
+                                    except Exception as e:
+                                        print(f"WARN: Background PDF extraction failed (FULL CACHE): {e}")
+                                        try:
+                                            compressed = _zlib.compress(_pickle.dumps([]))
+                                            cache.set(f"{key}_analyst_texts", compressed, timeout=21600)
+                                        except: pass
+                                
+                                bg_thread = threading.Thread(
+                                    target=extract_analyst_pdf_text_full_cache,
+                                    args=(full_cache_analysis_key, full_cache_analyst_reports)
+                                )
+                                bg_thread.daemon = True
+                                bg_thread.start()
+                                print(f"INFO: Started background PDF extraction for FULL CACHE ({len(full_cache_analyst_reports)} reports)")
+                        # =====================================================================
+                        # END: Background PDF Text Extraction for Full Cache
+                        # =====================================================================
                         
                         return jsonify(cached_result)
                         
@@ -3890,37 +4083,63 @@ def analyze():
         # This enables the Analyst Report Agent (ARA) to access PDF content
         def extract_analyst_pdf_text_background(key, reports):
             """Background task to download and extract text from analyst PDFs."""
+            import asyncio as _asyncio
+            import zlib as _zlib
+            import pickle as _pickle
+            import traceback as _traceback
             try:
                 pdf_texts = []
-                for report in reports:
-                    pdf_url = report.get('pdf_url')
-                    if not pdf_url:
-                        continue
-                    try:
-                        # Download PDF using authenticated session
-                        pdf_bytes = asyncio.run(download_analyst_pdf_with_cookies(pdf_url))
-                        # Extract text (no AI, just pdfplumber)
-                        text = extract_text_from_pdf(pdf_bytes)
-                        pdf_texts.append({
-                            'brokerage': report.get('brokerage'),
-                            'date': report.get('date'),
-                            'recommendation': report.get('recommendation'),
-                            'target_price': report.get('target_price'),
-                            'upside': report.get('upside'),
-                            'pdf_text': text,
-                            'pdf_url': pdf_url
-                        })
-                        print(f"INFO: Extracted text from {report.get('brokerage')} report ({len(text)} chars)")
-                    except Exception as e:
-                        print(f"WARN: Failed to extract text from {pdf_url}: {e}")
+                # Explicitly manage event loop for thread safety
+                new_loop = _asyncio.new_event_loop()
+                _asyncio.set_event_loop(new_loop)
                 
-                if pdf_texts:
-                    # Cache the extracted texts
-                    compressed = zlib.compress(pickle.dumps(pdf_texts))
-                    cache.set(f"{key}_analyst_texts", compressed, timeout=21600)
-                    print(f"INFO: Cached {len(pdf_texts)} analyst report texts for key: {key}")
+                try:
+                    for report in reports:
+                        pdf_url = report.get('pdf_url')
+                        if not pdf_url:
+                            continue
+                        try:
+                            # Download PDF using authenticated session
+                            # Use run_until_complete with explicit loop for reliability
+                            pdf_bytes = new_loop.run_until_complete(download_analyst_pdf_with_cookies(pdf_url))
+                            
+                            # Extract text (no AI, just pdfplumber)
+                            text = extract_text_from_pdf(pdf_bytes)
+                            pdf_texts.append({
+                                'brokerage': report.get('brokerage'),
+                                'date': report.get('date'),
+                                'recommendation': report.get('recommendation'),
+                                'target_price': report.get('target_price'),
+                                'upside': report.get('upside'),
+                                'pdf_text': text,
+                                'pdf_url': pdf_url
+                            })
+                            print(f"INFO: Extracted text from {report.get('brokerage')} report ({len(text)} chars)")
+                        except Exception as e:
+                            # Log error to file for debugging
+                            err_msg = f"Failed to extract text from {pdf_url}: {e}"
+                            print(f"WARN: {err_msg}")
+                            try:
+                                debug_path = os.path.join(os.path.dirname(__file__), "debug_output.txt")
+                                with open(debug_path, "a") as f:
+                                    f.write(f"{datetime.now()} - {err_msg}\n")
+                            except: pass
+                finally:
+                    new_loop.close()
+                
+                # ALWAYS cache the extracted texts (even if empty) to stop frontend polling
+                compressed = _zlib.compress(_pickle.dumps(pdf_texts))
+                cache.set(f"{key}_analyst_texts", compressed, timeout=21600)
+                print(f"INFO: Cached {len(pdf_texts)} analyst report texts for key: {key}")
+                
             except Exception as e:
                 print(f"WARN: Background PDF text extraction failed: {e}")
+                _traceback.print_exc()
+                # Determine fallback to stop frontend loading spinner
+                try:
+                    compressed = _zlib.compress(_pickle.dumps([]))
+                    cache.set(f"{key}_analyst_texts", compressed, timeout=21600)
+                except: pass
         
         # Start background thread if analyst reports exist
         analyst_reports = result_for_frontend.get('analyst_reports', [])

@@ -848,13 +848,17 @@
     .industry-report h1~ol:not(h2~ol):not(h3~ol):not(h4~ol),
     .industry-report h1~table:not(h2~table):not(h3~table):not(h4~table) {
       margin-left: 0;
+      margin-right: 0;
+      width: 100%;
     }
 
     .industry-report h2~p:not(h3~p):not(h4~p),
     .industry-report h2~ul:not(h3~ul):not(h4~ul),
-    .industry-report h2~ol:not(h3~ol):not(h4~ol),
+    .industry-report h2~ol:not(h3~ol):not(h4~ul),
     .industry-report h2~table:not(h3~table):not(h4~table) {
       margin-left: 1rem;
+      margin-right: 1rem;
+      width: calc(100% - 2rem);
     }
 
     .industry-report h3~p:not(h4~p),
@@ -862,6 +866,8 @@
     .industry-report h3~ol:not(h4~ol),
     .industry-report h3~table:not(h4~table) {
       margin-left: 2rem;
+      margin-right: 2rem;
+      width: calc(100% - 4rem);
     }
 
     .industry-report h4~p,
@@ -869,6 +875,8 @@
     .industry-report h4~ol,
     .industry-report h4~table {
       margin-left: 3rem;
+      margin-right: 3rem;
+      width: calc(100% - 6rem);
     }
 
     /* Paragraph spacing */
@@ -1676,7 +1684,7 @@
       <form id="chatForm" class="p-4 flex border-t border-slate-300 bg-white">
         <input id="chatInput" type="text" placeholder="Type your question…"
           class="flex-grow border border-slate-300 rounded-l-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent" />
-        <button
+        <button type="submit"
           class="bg-gradient-to-r from-green-500 to-green-600 text-white px-6 py-2 rounded-r-md hover:from-green-600 hover:to-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-1 transition-all duration-150 ease-in-out font-semibold">Send</button>
       </form>
     </div>
@@ -2007,8 +2015,17 @@
     const body = document.body;
 
     function setMode(mode) {
+      // Clear and restore chat history for the new mode
+      if (typeof clearAndRestoreChatHistory === 'function') {
+        clearAndRestoreChatHistory(mode);
+      }
+
       currentMode = mode;
       const navLogo = document.getElementById('navLogo');
+      const analystToggleRow = document.getElementById('analystToggleRow');
+      const chatBtn = document.getElementById('chatBtn');
+      const chatModalHeader = document.querySelector('#chatModal > div > div:first-child');
+      const chatModalSelect = document.getElementById('aiModelSelector');
 
       if (mode === 'industry') {
         // Switch to industry mode
@@ -2031,6 +2048,34 @@
         // Change logo to blue
         navLogo.classList.remove('text-green-600', 'hover:text-green-700');
         navLogo.classList.add('text-blue-600', 'hover:text-blue-700');
+
+        // Hide analyst reports toggle
+        if (analystToggleRow) analystToggleRow.classList.add('hidden');
+
+        // Change Chat Button to Blue
+        if (chatBtn) {
+          chatBtn.classList.remove('from-green-500', 'to-green-600', 'hover:from-green-600', 'hover:to-green-700', 'focus:ring-green-500');
+          chatBtn.classList.add('from-blue-500', 'to-blue-600', 'hover:from-blue-600', 'hover:to-blue-700', 'focus:ring-blue-500');
+        }
+
+        // Change Chat Modal Header to Blue
+        if (chatModalHeader) {
+          chatModalHeader.classList.remove('from-green-500', 'to-green-600');
+          chatModalHeader.classList.add('from-blue-500', 'to-blue-600');
+        }
+
+        // Hide Model Selector in Industry Mode (backend uses fixed model)
+        if (chatModalSelect) {
+          chatModalSelect.classList.add('hidden');
+        }
+
+        // Change Send Button to Blue
+        const chatSendBtn = document.querySelector('#chatForm button[type="submit"]');
+        if (chatSendBtn) {
+          chatSendBtn.classList.remove('from-green-500', 'to-green-600', 'hover:from-green-600', 'hover:to-green-700', 'focus:ring-green-500');
+          chatSendBtn.classList.add('from-blue-500', 'to-blue-600', 'hover:from-blue-600', 'hover:to-blue-700', 'focus:ring-blue-500');
+        }
+
       } else {
         // Switch to company mode
         body.classList.remove('theme-industry');
@@ -2052,6 +2097,33 @@
         // Change logo to green
         navLogo.classList.remove('text-blue-600', 'hover:text-blue-700');
         navLogo.classList.add('text-green-600', 'hover:text-green-700');
+
+        // Show analyst reports toggle
+        if (analystToggleRow) analystToggleRow.classList.remove('hidden');
+
+        // Change Chat Button to Green
+        if (chatBtn) {
+          chatBtn.classList.remove('from-blue-500', 'to-blue-600', 'hover:from-blue-600', 'hover:to-blue-700', 'focus:ring-blue-500');
+          chatBtn.classList.add('from-green-500', 'to-green-600', 'hover:from-green-600', 'hover:to-green-700', 'focus:ring-green-500');
+        }
+
+        // Change Chat Modal Header to Green
+        if (chatModalHeader) {
+          chatModalHeader.classList.remove('from-blue-500', 'to-blue-600');
+          chatModalHeader.classList.add('from-green-500', 'to-green-600');
+        }
+
+        // Show Model Selector in Company Mode
+        if (chatModalSelect) {
+          chatModalSelect.classList.remove('hidden');
+        }
+
+        // Change Send Button to Green
+        const chatSendBtn = document.querySelector('#chatForm button[type="submit"]');
+        if (chatSendBtn) {
+          chatSendBtn.classList.remove('from-blue-500', 'to-blue-600', 'hover:from-blue-600', 'hover:to-blue-700', 'focus:ring-blue-500');
+          chatSendBtn.classList.add('from-green-500', 'to-green-600', 'hover:from-green-600', 'hover:to-green-700', 'focus:ring-green-500');
+        }
       }
     }
 
@@ -2679,6 +2751,10 @@
           if (statusPayload.status === 'complete') {
             console.log('[INDUSTRY_RESEARCH_DEBUG] Job complete! Report length:', statusPayload.report?.length || 0);
             isComplete = true;
+
+            // Save context for Industry Chatbot
+            window.currentIndustryName = industry;
+            window.currentIndustryReport = statusPayload.report;
 
             if (sseConnection) sseConnection.close();
             document.getElementById('progress-container')?.classList.remove('visible');
@@ -3657,6 +3733,10 @@
     let isFullscreen = false;
     const chatContainer = chatModal.querySelector('div.bg-white');
 
+    // Separate chat histories for Company vs Industry modes
+    let companyChatHistory = [];
+    let industryChatHistory = [];
+
     chatBtn.onclick = () => chatModal.classList.remove('hidden');
     chatClose.onclick = () => {
       chatModal.classList.add('hidden');
@@ -3702,18 +3782,33 @@
       try {
         const selectedModel = modelSelector.value;
         const useAnalystReports = document.getElementById('analystReportsToggle').checked;
-        const res = await fetch('/chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            question: q,
-            model: selectedModel,
-            analysis_key: currentAnalysisKey,
-            company_name: window.currentCompanyName || '',
-            ticker: window.currentTicker || '',
-            use_analyst_reports: useAnalystReports
-          })
-        });
+        let res;
+        // Check if we are in Industry Mode
+        if (typeof currentMode !== 'undefined' && currentMode === 'industry') {
+          res = await fetch('/industry-chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              question: q,
+              industry: window.currentIndustryName || '',
+              report_context: window.currentIndustryReport || ''
+            })
+          });
+        } else {
+          // Default to Company Mode
+          res = await fetch('/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              question: q,
+              model: selectedModel,
+              analysis_key: currentAnalysisKey,
+              company_name: window.currentCompanyName || '',
+              ticker: window.currentTicker || '',
+              use_analyst_reports: useAnalystReports
+            })
+          });
+        }
         const { answer, error, raw_news_summary } = await res.json();
         removeTypingIndicator();
         if (error) { appendMessage(`Error: ${error}`, 'error'); }
@@ -3734,7 +3829,8 @@
         messageDiv.classList.add('max-w-[80%]', 'bg-slate-200', 'text-slate-700', 'self-start', 'rounded-bl-none');
         messageDiv.innerHTML = `<div class="flex items-center space-x-1"><div class="w-2 h-2 bg-slate-400 rounded-full animate-pulse delay-75"></div><div class="w-2 h-2 bg-slate-400 rounded-full animate-pulse delay-150"></div><div class="w-2 h-2 bg-slate-400 rounded-full animate-pulse delay-300"></div></div>`;
       } else if (sender === 'user') {
-        messageDiv.classList.add('max-w-[80%]', 'bg-green-600', 'text-white', 'self-end', 'rounded-br-none');
+        const userBgColor = currentMode === 'industry' ? 'bg-blue-600' : 'bg-green-600';
+        messageDiv.classList.add('max-w-[80%]', userBgColor, 'text-white', 'self-end', 'rounded-br-none');
         messageDiv.textContent = text;
       } else if (sender === 'bot') {
         messageDiv.classList.add('max-w-full', 'text-slate-900', 'self-start', 'rounded-bl-none', 'bot-message', 'relative', 'pr-12');
@@ -3781,6 +3877,25 @@
       const typingIndicator = document.getElementById('typingIndicator');
       if (typingIndicator) typingIndicator.remove();
     }
+
+    // Function to save current chat and restore the new mode's chat
+    function clearAndRestoreChatHistory(newMode) {
+      // Save current chat messages to the appropriate history
+      const currentChatMessages = Array.from(chatLog.children);
+      if (currentMode === 'company') {
+        companyChatHistory = currentChatMessages;
+      } else if (currentMode === 'industry') {
+        industryChatHistory = currentChatMessages;
+      }
+
+      // Clear the chat log
+      chatLog.innerHTML = '';
+
+      // Restore messages for the new mode
+      const messagesToRestore = newMode === 'company' ? companyChatHistory : industryChatHistory;
+      messagesToRestore.forEach(msg => chatLog.appendChild(msg));
+    }
+
     let currentAnalysisKey = null; 
   </script>
 
