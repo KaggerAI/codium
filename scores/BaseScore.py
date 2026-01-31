@@ -134,9 +134,9 @@ class BaseScore(ABC):
         if self.df.empty:
             return PlotScore.empty_figure("No data to plot.")
 
-        # Determine the date range: last 2 years from the most recent data point
+        # Determine the date range: last 3 years from the most recent data point
         end_date = self.df.index.max()
-        start_date = end_date - np.timedelta64(2 * 365, 'D') # Approx 2 years
+        start_date = end_date - np.timedelta64(3 * 365, 'D') # Approx 3 years
         
         # Filter the DataFrame for plotting
         df_to_plot = self.df[self.df.index >= start_date]
@@ -155,9 +155,9 @@ class BaseScore(ABC):
         if self.df.empty:
             return PlotScore.empty_figure("No data to plot.")
 
-        # Determine the date range: last 2 years from the most recent data point
+        # Determine the date range: last 3 years from the most recent data point
         end_date = self.df.index.max()
-        start_date = end_date - np.timedelta64(2 * 365, 'D') # Approx 2 years
+        start_date = end_date - np.timedelta64(3 * 365, 'D') # Approx 3 years
         
         # Filter the DataFrame for plotting
         df_to_plot = self.df[self.df.index >= start_date]

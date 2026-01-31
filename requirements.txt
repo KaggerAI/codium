@@ -50,3 +50,9 @@ vaderSentiment==3.3.2
 resend
 bcrypt
 python-dotenv
+
+# --- Real-time Communication (Budget Live) ---
+flask-socketio>=5.3.0
+python-socketio>=5.0.0
+python-engineio>=4.0.0
+

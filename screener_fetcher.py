@@ -980,8 +980,8 @@ def _parse_peer_table(soup, ticker: str) -> dict:
             else:
                 peers_data.append(cleaned_record)
         
-        # Limit to 6 peers max
-        peers_data = peers_data[:6]
+        # Limit to 10 peers max
+        peers_data = peers_data[:10]
         
         print(f"SUCCESS: Screener.in peer comparison fetched - 1 company + {len(peers_data)} peers")
         return {

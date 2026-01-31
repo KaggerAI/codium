@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🇮🇳 Live Budget 2026 — Kagger AI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+    <style>
+        /* Pulsing live indicator */
+        @keyframes pulse-live {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.5;
+            }
+        }
+
+        .animate-pulse-live {
+            animation: pulse-live 1.5s ease-in-out infinite;
+        }
+
+        /* Smooth scroll for transcript */
+        #liveTranscript {
+            scroll-behavior: smooth;
+        }
+
+        /* Fade in animation for new transcript */
+        .transcript-line {
+            animation: fadeIn 0.3s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* Highlight card animation */
+        .highlight-card {
+            animation: slideIn 0.4s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateX(-20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        /* Impact badge colors */
+        .impact-positive {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .impact-negative {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .impact-neutral {
+            background: #f3f4f6;
+            color: #374151;
+        }
+
+        .impact-mixed {
+            background: #fef3c7;
+            color: #92400e;
+        }
+    </style>
+</head>
+
+<body class="bg-slate-100 min-h-screen">
+    <!-- NAVBAR -->
+    <nav class="bg-white shadow-md sticky top-0 z-50">
+        <div class="container mx-auto px-6 py-4 flex items-center justify-between">
+            <a href="/app" class="text-3xl font-extrabold text-green-600 hover:text-green-700 transition-colors">Kagger
+                AI</a>
+            <div class="flex items-center gap-6">
+                <a href="/app" class="text-slate-600 hover:text-green-600 font-medium transition-colors">← Back to
+                    App</a>
+                <div id="connectionStatus"
+                    class="flex items-center gap-2 px-3 py-1 rounded-full bg-slate-200 text-slate-600 text-sm">
+                    <span class="w-2 h-2 rounded-full bg-slate-400"></span>
+                    Disconnected
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- MAIN CONTENT -->
+    <main class="container mx-auto px-4 py-8">
+        <!-- Header -->
+        <div class="text-center mb-8">
+            <h1 class="text-4xl font-bold text-slate-800 mb-2">🇮🇳 Union Budget 2026 - Live Analysis</h1>
+            <p class="text-slate-500 text-lg">Real-time transcription and AI-powered insights from the Finance
+                Minister's speech</p>
+        </div>
+
+        <!-- Controls Panel -->
+        <div id="adminControls" class="hidden bg-white rounded-2xl shadow-xl p-6 mb-8 max-w-4xl mx-auto">
+            <div class="flex flex-wrap items-center justify-between gap-4">
+                <!-- Audio Source Selection -->
+                <div class="flex items-center gap-4">
+                    <span class="text-slate-700 font-medium">Audio Source:</span>
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="radio" name="audioSource" value="microphone" checked class="accent-orange-500">
+                        <span class="text-slate-600">🎤 Microphone</span>
+                    </label>
+                </div>
+
+                <!-- Control Buttons -->
+                <div class="flex gap-3">
+                    <button id="startBtn" onclick="startSession()"
+                        class="px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl font-semibold shadow-lg hover:shadow-xl transition-all flex items-center gap-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                        </svg>
+                        Start Listening
+                    </button>
+                    <button id="stopBtn" onclick="stopSession()" disabled
+                        class="px-6 py-3 bg-gradient-to-r from-red-500 to-rose-600 text-white rounded-xl font-semibold shadow-lg hover:shadow-xl transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
+                        </svg>
+                        Stop
+                    </button>
+                </div>
+            </div>
+
+            <!-- Upload & Deep Scan -->
+            <div class="mt-6 pt-6 border-t border-slate-100">
+                <div class="flex flex-wrap items-center justify-between gap-4">
+                    <div class="flex items-center gap-4">
+                        <span class="text-slate-700 font-medium">📁 Transcript Management:</span>
+                        <input type="file" id="transcriptFile" accept=".txt"
+                            class="text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200">
+                    </div>
+                    <div class="flex gap-2">
+                        <button onclick="uploadTranscript()"
+                            class="px-6 py-2 bg-slate-800 text-white rounded-xl font-medium hover:bg-slate-900 transition-all">
+                            Ingest & Analyze
+                        </button>
+                        <button onclick="deepScan()"
+                            class="px-6 py-2 bg-gradient-to-r from-indigo-600 to-violet-700 text-white rounded-xl font-medium shadow-md hover:shadow-lg transition-all flex items-center gap-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                            </svg>
+                            Deep Scan (Full)
+                        </button>
+                    </div>
+                </div>
+                <p class="text-xs text-slate-400 mt-2 italic"><b>Deep Scan</b> analyzes the *entire* transcript from
+                    start
+                    to finish. Use this if the speech is exceptionally long and needs a comprehensive re-check.</p>
+            </div>
+
+            <!-- Status Bar -->
+            <div id="statusBar" class="mt-4 p-3 bg-slate-50 rounded-lg text-center text-slate-500 text-sm">
+                Click "Start Listening" to begin live transcription.
+            </div>
+        </div>
+
+        <!-- Observer Message -->
+        <div id="observerControls" class="hidden bg-white rounded-2xl shadow-xl p-8 mb-8 max-w-4xl mx-auto text-center">
+            <div class="inline-flex items-center justify-center w-12 h-12 bg-blue-100 text-blue-600 rounded-full mb-4">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                </svg>
+            </div>
+            <h3 class="text-xl font-bold text-slate-800 mb-2">Live View Active</h3>
+            <p class="text-slate-500">You are following the live budget analysis. Updates will appear in real-time as
+                the speech progresses.</p>
+        </div>
+
+        <!-- Main Content Grid -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 max-w-7xl mx-auto">
+            <!-- Left: Live Transcript -->
+            <div class="bg-slate-900 rounded-2xl overflow-hidden shadow-xl">
+                <div class="bg-slate-800 px-6 py-4 flex items-center justify-between">
+                    <h2 class="text-xl font-semibold text-white flex items-center gap-2">
+                        📝 Live Transcript
+                    </h2>
+                    <div id="transcriptStatus"
+                        class="flex items-center gap-2 px-3 py-1 rounded-full bg-slate-700 text-slate-400 text-sm">
+                        <span class="w-2 h-2 rounded-full bg-slate-500"></span>
+                        Idle
+                    </div>
+                </div>
+                <div id="liveTranscript"
+                    class="h-[500px] overflow-y-auto p-6 text-slate-300 font-mono text-sm leading-relaxed space-y-2">
+                    <p class="text-slate-500 italic">Transcript will appear here when you start listening...</p>
+                </div>
+                <div class="bg-slate-800 px-6 py-3 text-slate-400 text-xs">
+                    <span id="transcriptStats">0 characters transcribed</span>
+                </div>
+            </div>
+
+            <!-- Right: AI Insights -->
+            <div class="space-y-6">
+                <!-- Key Highlights -->
+                <div
+                    class="bg-gradient-to-br from-orange-50 to-amber-50 border border-orange-200 rounded-2xl overflow-hidden shadow-lg">
+                    <div
+                        class="bg-gradient-to-r from-orange-500 to-amber-500 px-6 py-4 flex items-center justify-between">
+                        <h3 class="text-xl font-semibold text-white flex items-center gap-2">
+                            🔑 Key Highlights
+                            <span id="highlightCount" class="ml-2 px-2 py-0.5 bg-white/20 rounded-full text-sm">0</span>
+                        </h3>
+                        <select id="categoryFilter" onchange="filterHighlights()"
+                            class="bg-white/20 text-white text-xs rounded border border-white/30 px-2 py-1 focus:outline-none cursor-pointer">
+                            <option value="all" class="text-slate-800">All Categories</option>
+                            <option value="tax" class="text-slate-800">Tax</option>
+                            <option value="sector" class="text-slate-800">Sector</option>
+                            <option value="capex" class="text-slate-800">Capex/Investment</option>
+                            <option value="pli" class="text-slate-800">PLI Scheme</option>
+                            <option value="financing" class="text-slate-800">Financing</option>
+                            <option value="fiscal" class="text-slate-800">Fiscal</option>
+                            <option value="regulation" class="text-slate-800">Regulation</option>
+                            <option value="other" class="text-slate-800">Other</option>
+                        </select>
+                    </div>
+                    <div id="keyHighlights" class="p-4 space-y-3 max-h-[250px] overflow-y-auto">
+                        <p class="text-slate-400 italic text-center py-4">Key announcements will be extracted here...
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Sector Impacts -->
+                <div
+                    class="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl overflow-hidden shadow-lg">
+                    <div
+                        class="bg-gradient-to-r from-blue-500 to-indigo-500 px-6 py-4 flex items-center justify-between">
+                        <h3 class="text-xl font-semibold text-white flex items-center gap-2">
+                            📊 Sector Impacts
+                            <span id="sectorCount" class="ml-2 px-2 py-0.5 bg-white/20 rounded-full text-sm">0</span>
+                        </h3>
+                        <select id="sectorFilter" onchange="filterSectors()"
+                            class="bg-white/20 text-white text-xs rounded border border-white/30 px-2 py-1 focus:outline-none cursor-pointer">
+                            <option value="all" class="text-slate-800">All Sectors</option>
+                        </select>
+                    </div>
+                    <div id="sectorImpacts" class="p-4 grid grid-cols-2 gap-3 max-h-[250px] overflow-y-auto">
+                        <p class="col-span-2 text-slate-400 italic text-center py-4">Sector-wise analysis will appear
+                            here...</p>
+                    </div>
+                </div>
+
+                <!-- Quick Stats -->
+                <div class="bg-white rounded-2xl shadow-lg p-6">
+                    <h3 class="text-lg font-semibold text-slate-700 mb-4">📈 Session Stats</h3>
+                    <div class="grid grid-cols-3 gap-4 text-center">
+                        <div class="bg-slate-50 rounded-xl p-4">
+                            <div id="chunkCount" class="text-2xl font-bold text-orange-500">0</div>
+                            <div class="text-xs text-slate-500">Audio Chunks</div>
+                        </div>
+                        <div class="bg-slate-50 rounded-xl p-4">
+                            <div id="wordCount" class="text-2xl font-bold text-blue-500">0</div>
+                            <div class="text-xs text-slate-500">Words</div>
+                        </div>
+                        <div class="bg-slate-50 rounded-xl p-4">
+                            <div id="durationDisplay" class="text-2xl font-bold text-green-500">0:00</div>
+                            <div class="text-xs text-slate-500">Duration</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // =====================================================================
+        // BUDGET LIVE TRANSCRIPTION CLIENT
+        // =====================================================================
+
+        let socket = null;
+        let mediaRecorder = null;
+        let audioStream = null;
+        let isSessionActive = false;
+        let isAdmin = false;
+        let startTime = null;
+        let durationInterval = null;
+        let fullTranscript = '';
+        let chunksSent = 0;
+        let allSectors = new Set();
+        let allHighlights = []; // Store all highlights for filtering
+
+        // UI Elements
+        const adminControls = document.getElementById('adminControls');
+        const observerControls = document.getElementById('observerControls');
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const statusBar = document.getElementById('statusBar');
+        const transcriptStatus = document.getElementById('transcriptStatus');
+        const connectionStatus = document.getElementById('connectionStatus');
+        const liveTranscript = document.getElementById('liveTranscript');
+        const keyHighlights = document.getElementById('keyHighlights');
+        const categoryFilter = document.getElementById('categoryFilter');
+        const sectorImpacts = document.getElementById('sectorImpacts');
+        const sectorFilter = document.getElementById('sectorFilter');
+
+        // Check user role and toggle controls
+        async function checkUserRole() {
+            try {
+                const response = await fetch('/api/me');
+                if (!response.ok) throw new Error('Not logged in');
+                const data = await response.json();
+
+                if (data.email === 'nikhil.banthiya@gmail.com') {
+                    isAdmin = true;
+                    adminControls.classList.remove('hidden');
+                    observerControls.classList.add('hidden');
+                } else {
+                    isAdmin = false;
+                    adminControls.classList.add('hidden');
+                    observerControls.classList.remove('hidden');
+                }
+            } catch (e) {
+                console.warn('Role check failed:', e);
+                observerControls.classList.remove('hidden');
+            }
+        }
+
+        // Initialize Socket.IO connection
+        function initSocket() {
+            socket = io({
+                transports: ['websocket', 'polling'],
+                reconnection: true,
+                reconnectionAttempts: 20,
+                reconnectionDelay: 1000,
+                reconnectionDelayMax: 5000,
+                timeout: 30000
+            });
+
+            socket.on('connect', () => {
+                console.log('Connected to server');
+                updateConnectionStatus(true);
+                // Join the shared budget room to get updates
+                socket.emit('join_budget_room');
+            });
+
+            socket.on('initial_state', (data) => {
+                console.log('Received initial state:', data);
+                // Sync current transcript
+                if (data.full_transcript) {
+                    liveTranscript.innerHTML = '';
+                    fullTranscript = '';
+                    addTranscriptLine(data.full_transcript);
+                }
+                // Sync analysis
+                if (data.highlights) updateHighlights(data.highlights);
+                if (data.sectors) updateSectorImpacts(data.sectors);
+
+                isSessionActive = data.is_active;
+                updateTranscriptStatus(isSessionActive);
+
+                if (isSessionActive && isAdmin) {
+                    startBtn.disabled = true;
+                    stopBtn.disabled = false;
+                    if (!durationInterval) {
+                        startTime = Date.now() - (data.duration * 1000);
+                        durationInterval = setInterval(updateDuration, 1000);
+                    }
+                }
+            });
+
+            socket.on('disconnect', (reason) => {
+                console.log('Disconnected:', reason);
+                updateConnectionStatus(false);
+            });
+
+            socket.on('session_started', (data) => {
+                console.log('Budget session started:', data);
+                isSessionActive = true;
+                updateTranscriptStatus(true);
+                updateStatus('🔴 Live - Tracking budget speech...', 'success');
+                if (isAdmin) {
+                    startBtn.disabled = true;
+                    stopBtn.disabled = false;
+                    if (!startTime) startTime = Date.now();
+                    if (!durationInterval) durationInterval = setInterval(updateDuration, 1000);
+                }
+            });
+
+            socket.on('transcription_update', (data) => {
+                if (data.transcript && data.transcript.trim()) {
+                    addTranscriptLine(data.transcript);
+                }
+                if (data.highlights && data.highlights.length > 0) {
+                    updateHighlights(data.highlights);
+                }
+                if (data.sectors && Object.keys(data.sectors).length > 0) {
+                    updateSectorImpacts(data.sectors);
+                }
+                document.getElementById('chunkCount').textContent = data.chunk_id || chunksSent;
+            });
+
+            socket.on('session_stopped', (data) => {
+                console.log('Session stopped:', data);
+                isSessionActive = false;
+                updateTranscriptStatus(false);
+                if (isAdmin) {
+                    startBtn.disabled = false;
+                    stopBtn.disabled = true;
+                    if (durationInterval) { clearInterval(durationInterval); durationInterval = null; }
+                }
+                updateStatus('Session ended by admin.', 'info');
+            });
+
+            socket.on('session_error', (data) => {
+                updateStatus('❌ Error: ' + data.error, 'error');
+            });
+        }
+
+        // Start transcription session (Admin Only)
+        async function startSession() {
+            if (!isAdmin || isSessionActive) return;
+            try {
+                isSessionActive = true;
+                startBtn.disabled = true;
+
+                updateStatus('🎤 Requesting microphone access...', 'info');
+                audioStream = await navigator.mediaDevices.getUserMedia({
+                    audio: { sampleRate: 16000, channelCount: 1, echoCancellation: true, noiseSuppression: true }
+                });
+
+                const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm';
+                socket.emit('start_budget_session');
+
+                const recordChunk = () => {
+                    if (!isSessionActive) return;
+                    const recorder = new MediaRecorder(audioStream, { mimeType });
+                    recorder.ondataavailable = (event) => {
+                        if (event.data.size > 0 && socket && socket.connected && isSessionActive) {
+                            const reader = new FileReader();
+                            reader.onloadend = () => {
+                                const base64Audio = reader.result.split(',')[1];
+                                socket.emit('audio_chunk', { audio: base64Audio, mime_type: mimeType });
+                                chunksSent++;
+                            };
+                            reader.readAsDataURL(event.data);
+                        }
+                    };
+                    recorder.start();
+                    setTimeout(() => {
+                        if (recorder.state === 'recording') recorder.stop();
+                        if (isSessionActive) recordChunk();
+                    }, 3000);
+                };
+                recordChunk();
+            } catch (error) {
+                isSessionActive = false;
+                startBtn.disabled = false;
+                updateStatus('❌ Failed to access microphone: ' + error.message, 'error');
+            }
+        }
+
+        function stopSession() {
+            if (!isAdmin) return;
+            isSessionActive = false;
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+            if (audioStream) {
+                audioStream.getTracks().forEach(track => track.stop());
+                audioStream = null;
+            }
+            socket.emit('stop_budget_session');
+        }
+
+        async function deepScan() {
+            if (!isAdmin) return;
+            if (!confirm('Deep Scan will re-analyze the ENTIRE transcript. This may take a few seconds and uses more AI tokens. Continue?')) return;
+
+            updateStatus('🔍 Running Deep Scan across full transcript...', 'info');
+            try {
+                const response = await fetch('/api/budget/deep-scan', { method: 'POST' });
+                const data = await response.json();
+                if (data.success) {
+                    updateStatus('✨ Deep Scan complete! All highlights and sectors refreshed.', 'success');
+                } else {
+                    updateStatus('❌ Deep Scan failed: ' + data.error, 'error');
+                }
+            } catch (e) {
+                updateStatus('❌ Network error during Deep Scan', 'error');
+            }
+        }
+
+        // New feature: Transcript Upload (Admin Only)
+        async function uploadTranscript() {
+            const fileInput = document.getElementById('transcriptFile');
+            const file = fileInput.files[0];
+            if (!file) { alert('Please select a .txt file'); return; }
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            updateStatus('⏳ Uploading and analyzing transcript...', 'info');
+            try {
+                const response = await fetch('/api/budget/upload-transcript', { method: 'POST', body: formData });
+                const data = await response.json();
+                if (data.success) {
+                    updateStatus('✅ Transcript ingested and analyzed!', 'success');
+                    fileInput.value = '';
+                } else {
+                    updateStatus('❌ Upload failed: ' + data.error, 'error');
+                }
+            } catch (e) {
+                updateStatus('❌ Network error during upload', 'error');
+            }
+        }
+
+        // New feature: Sector Impact Filtering
+        function filterSectors() {
+            const filterValue = sectorFilter.value.toLowerCase();
+            const cards = sectorImpacts.querySelectorAll('[data-sector]');
+
+            cards.forEach(card => {
+                const sectorName = card.getAttribute('data-sector').toLowerCase();
+                if (filterValue === 'all' || sectorName.includes(filterValue)) {
+                    card.classList.remove('hidden');
+                } else {
+                    card.classList.add('hidden');
+                }
+            });
+        }
+
+        function updateSectorImpacts(sectors) {
+            const placeholder = sectorImpacts.querySelector('.italic');
+            if (placeholder) sectorImpacts.innerHTML = '';
+
+            Object.entries(sectors).forEach(([sector, data]) => {
+                // Track for filter dropdown
+                if (!allSectors.has(sector)) {
+                    allSectors.add(sector);
+                    const option = document.createElement('option');
+                    option.value = sector;
+                    option.textContent = sector;
+                    option.className = 'text-slate-800';
+                    sectorFilter.appendChild(option);
+                }
+
+                let card = sectorImpacts.querySelector(`[data-sector="${sector}"]`);
+                if (!card) {
+                    card = document.createElement('div');
+                    card.className = 'bg-white rounded-lg p-3 shadow-sm';
+                    card.setAttribute('data-sector', sector);
+                    sectorImpacts.appendChild(card);
+                }
+
+                card.innerHTML = `
+                  <div class="flex items-center justify-between mb-2">
+                    <span class="font-semibold text-slate-700">${sector}</span>
+                    <span class="px-2 py-0.5 rounded-full text-xs font-medium impact-${data.impact_type}">${data.impact_type}</span>
+                  </div>
+                  <p class="text-xs text-slate-500">${data.summary}</p>
+                `;
+            });
+
+            document.getElementById('sectorCount').textContent = sectorImpacts.children.length;
+            filterSectors(); // Re-apply current filter
+        }
+
+        function addTranscriptLine(text) {
+            const placeholder = liveTranscript.querySelector('.italic');
+            if (placeholder) placeholder.remove();
+
+            const p = document.createElement('p');
+            p.className = 'transcript-line text-slate-200';
+            p.textContent = text;
+            liveTranscript.appendChild(p);
+            liveTranscript.scrollTop = liveTranscript.scrollHeight;
+
+            fullTranscript += ' ' + text;
+            const wordCount = fullTranscript.trim().split(/\s+/).filter(w => w).length;
+            document.getElementById('wordCount').textContent = wordCount;
+            document.getElementById('transcriptStats').textContent = `${fullTranscript.length} characters transcribed`;
+        }
+
+        // Existing UI Helpers
+        function updateHighlights(highlights) {
+            if (!highlights || highlights.length === 0) return;
+
+            // Store all highlights globally for filtering
+            highlights.forEach(h => {
+                if (!allHighlights.some(existing => existing.title === h.title)) {
+                    allHighlights.push(h);
+                }
+            });
+
+            filterHighlights();
+        }
+
+        function filterHighlights() {
+            const filterValue = categoryFilter.value;
+            const filteredHighlights = filterValue === 'all'
+                ? allHighlights
+                : allHighlights.filter(h => h.category.toLowerCase() === filterValue);
+
+            keyHighlights.innerHTML = '';
+
+            if (filteredHighlights.length === 0) {
+                keyHighlights.innerHTML = `<p class="text-slate-400 italic text-center py-4">No highlights found for this category.</p>`;
+                document.getElementById('highlightCount').textContent = '0';
+                return;
+            }
+
+            filteredHighlights.forEach(h => {
+                const div = document.createElement('div');
+                const impactColor = h.impact === 'positive' ? 'green' : (h.impact === 'negative' ? 'red' : 'blue');
+                const categoryLabel = h.category.toUpperCase();
+
+                div.className = 'highlight-card bg-white p-4 rounded-xl shadow-sm border-l-4 border-' + impactColor + '-500 hover:shadow-md transition-all';
+                div.innerHTML = `
+                    <div class="flex justify-between items-start mb-1">
+                        <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 font-mono">${categoryLabel}</span>
+                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-${impactColor}-100 text-${impactColor}-700">
+                            ${h.impact}
+                        </span>
+                    </div>
+                    <h4 class="font-bold text-slate-800 text-sm mb-1">${h.title}</h4>
+                    <p class="text-slate-600 text-xs">${h.details}</p>
+                    ${h.sectors_affected && h.sectors_affected.length > 0 ? `
+                        <div class="mt-2 flex flex-wrap gap-1">
+                            ${h.sectors_affected.map(s => `<span class="px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded text-[9px] font-medium">${s}</span>`).join('')}
+                        </div>
+                    ` : ''}
+                `;
+                keyHighlights.appendChild(div);
+            });
+
+            document.getElementById('highlightCount').textContent = filteredHighlights.length;
+        }
+
+        function updateConnectionStatus(connected) {
+            if (connected) {
+                connectionStatus.innerHTML = '<span class="w-2 h-2 rounded-full bg-green-500"></span> Connected';
+                connectionStatus.className = 'flex items-center gap-2 px-3 py-1 rounded-full bg-green-100 text-green-700 text-sm';
+            } else {
+                connectionStatus.innerHTML = '<span class="w-2 h-2 rounded-full bg-slate-400"></span> Disconnected';
+                connectionStatus.className = 'flex items-center gap-2 px-3 py-1 rounded-full bg-slate-200 text-slate-600 text-sm';
+            }
+        }
+
+        function updateTranscriptStatus(live) {
+            if (live) {
+                transcriptStatus.innerHTML = '<span class="w-2 h-2 rounded-full bg-red-500 animate-pulse-live"></span> Live';
+                transcriptStatus.className = 'flex items-center gap-2 px-3 py-1 rounded-full bg-red-600 text-white text-sm';
+            } else {
+                transcriptStatus.innerHTML = '<span class="w-2 h-2 rounded-full bg-slate-500"></span> Inactive';
+                transcriptStatus.className = 'flex items-center gap-2 px-3 py-1 rounded-full bg-slate-700 text-slate-400 text-sm';
+            }
+        }
+
+        function updateStatus(message, type = 'info') {
+            const colors = { success: 'bg-green-50 text-green-700 border border-green-200', error: 'bg-red-50 text-red-700 border border-red-200', warning: 'bg-yellow-50 text-yellow-700 border border-yellow-200', info: 'bg-slate-50 text-slate-600' };
+            statusBar.className = `mt-4 p-3 rounded-lg text-center text-sm ${colors[type] || colors.info}`;
+            statusBar.textContent = message;
+        }
+
+        function updateDuration() {
+            if (!startTime) return;
+            const elapsed = Math.floor((Date.now() - startTime) / 1000);
+            const minutes = Math.floor(elapsed / 60);
+            const seconds = elapsed % 60;
+            document.getElementById('durationDisplay').textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            checkUserRole();
+            initSocket();
+        });
+        window.addEventListener('beforeunload', () => { if (isSessionActive && isAdmin) stopSession(); });
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,514 @@
+"""
+budget_live.py — Live Union Budget Transcription & Analysis Module
+
+This module handles real-time audio transcription and AI analysis of the
+Union Budget speech using Google's Gemini API with chunk-based audio processing.
+
+Features:
+- Chunk-based audio transcription via Gemini 2.5 Flash
+- AI-powered extraction of key budget announcements
+- Sector-wise impact analysis
+- Tax and fiscal policy summarization
+"""
+
+import os
+import json
+import base64
+import tempfile
+import time
+from typing import Optional, Dict, Any, List, Callable
+from dataclasses import dataclass, field
+from datetime import datetime
+import traceback
+from io import BytesIO
+
+# Standard Gemini API
+import google.generativeai as genai
+
+# Configuration
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+TRANSCRIPTION_MODEL = "gemini-3-flash-preview"
+ANALYSIS_MODEL = "gemini-3-flash-preview"
+
+# Configure Gemini on module load
+if GOOGLE_API_KEY:
+    genai.configure(api_key=GOOGLE_API_KEY)
+
+# Budget-specific system instruction for better context
+BUDGET_SYSTEM_INSTRUCTION = """You are an expert Indian financial analyst specializing in conducting analysis of the 2026 Union Budget of India.
+Your task is to transcribe and analyze the live Union Budget speech.
+
+When transcribing:
+- Accurately capture all numbers, percentages, and amounts mentioned (in crores, lakhs, etc.)
+- Note sector names, scheme names, and policy announcements
+- Capture Hindi terms with their English equivalents when relevant
+- Focus on financial figures, tax rates, and budget allocations
+
+When analyzing, focus on:
+1. Tax changes (income tax slabs, corporate tax, GST, customs duty, excise)
+2. Sector allocations and Capex (Defense, Railways, Healthcare, Education, Infrastructure, Agriculture)
+3. New schemes (like PLI, PM-KISAN, etc.) and initiatives with their budgetary allocation
+4. Fiscal targets (deficit targets, borrowing, GDP growth projections)
+5. Market implications for different sectors (Banking, IT, Pharma, Auto, FMCG, etc.)
+6. Changes in government policies and regulations
+"""
+
+
+@dataclass
+class BudgetHighlight:
+    """Represents a key budget announcement"""
+    category: str  # 'tax', 'sector', 'capex', 'pli', 'financing', 'fiscal', 'regulation', 'other'
+    title: str
+    details: str
+    impact: str  # 'positive', 'negative', 'neutral'
+    sectors_affected: List[str] = field(default_factory=list)
+    timestamp: str = field(default_factory=lambda: datetime.now().isoformat())
+
+
+@dataclass 
+class SectorImpact:
+    """Represents the budget's impact on a specific sector"""
+    sector: str
+    impact_type: str  # 'positive', 'negative', 'neutral', 'mixed'
+    summary: str
+    key_points: List[str] = field(default_factory=list)
+
+
+class BudgetLiveSession:
+    """
+    Manages a live budget transcription session using chunk-based processing.
+    
+    Handles:
+    - Audio chunk transcription via Gemini
+    - Transcript accumulation
+    - Periodic analysis and highlight extraction
+    """
+    
+    def __init__(self, session_id: str):
+        self.session_id = session_id
+        
+        self.transcript_buffer: List[str] = []
+        self.full_transcript: str = ""
+        self.highlights: List[BudgetHighlight] = []
+        self.sector_impacts: Dict[str, SectorImpact] = {}
+        
+        self.is_active = False
+        self.start_time = None
+        
+        # Analysis state
+        self.last_analysis_length = 0
+        self.analysis_threshold = 500  # Analyze every ~500 chars of new content
+        self.chunk_count = 0
+        
+        # Gemini model instance
+        self.model = None
+        
+    def start(self) -> bool:
+        """Initialize the transcription session"""
+        if not GOOGLE_API_KEY:
+            raise RuntimeError("GOOGLE_API_KEY environment variable not set")
+        
+        try:
+            genai.configure(api_key=GOOGLE_API_KEY)
+            self.model = genai.GenerativeModel(
+                TRANSCRIPTION_MODEL,
+                system_instruction=BUDGET_SYSTEM_INSTRUCTION
+            )
+            self.is_active = True
+            self.start_time = datetime.now()
+            print(f"INFO: Budget Live session {self.session_id} started at {self.start_time}")
+            return True
+            
+        except Exception as e:
+            print(f"ERROR: Failed to start Budget Live session: {e}")
+            traceback.print_exc()
+            raise
+    
+    def process_audio_chunk(self, audio_data: bytes, mime_type: str = "audio/webm") -> Dict[str, Any]:
+        """
+        Process an incoming audio chunk from the browser.
+        
+        Uses inline audio data with gemini-2.0-flash for audio transcription.
+        
+        Args:
+            audio_data: Raw audio bytes from MediaRecorder
+            mime_type: Audio format (default: audio/webm from browser)
+        
+        Returns:
+            Dict with transcription and any new highlights
+        """
+        if not self.is_active:
+            return {"error": "Session not active", "transcript": ""}
+        
+        result = {
+            "transcript": "",
+            "highlights": [],
+            "sectors": {},
+            "chunk_id": self.chunk_count
+        }
+        
+        self.chunk_count += 1
+        
+        try:
+            # Skip very small chunks (likely silence or noise)
+            if len(audio_data) < 1000:  # Less than 1KB
+                return result
+
+            # Clean mime type (e.g., "audio/webm;codecs=opus" -> "audio/webm")
+            clean_mime_type = mime_type.split(';')[0].strip()
+            
+            # Create inline audio data for Gemini
+            # Format: audio first, then instruction (more reliable for audio processing)
+            audio_part = {
+                "inline_data": {
+                    "mime_type": clean_mime_type,
+                    "data": base64.b64encode(audio_data).decode('utf-8')
+                }
+            }
+            
+            # Use gemini-3-flash-preview which has better audio support
+            transcription_model = genai.GenerativeModel(TRANSCRIPTION_MODEL)
+            
+            # Audio-first prompt with explicit instruction
+            response = transcription_model.generate_content(
+                [
+                    audio_part,  # Audio first!
+                    "Listen to this audio and transcribe the spoken words verbatim. "
+                    "This is from an Indian government budget speech. "
+                    "Output ONLY the transcription - no explanations or commentary. "
+                    "If silent or unclear, say [SILENCE] or [UNCLEAR]."
+                ],
+                generation_config=genai.types.GenerationConfig(
+                    temperature=0.0,
+                    max_output_tokens=1500
+                )
+            )
+            
+            if response.text:
+                transcript_text = response.text.strip()
+                
+                # Filter out error messages and refusals
+                refusal_phrases = [
+                    "I am sorry",
+                    "I cannot",
+                    "I'm unable",
+                    "I am unable",
+                    "text-based AI",
+                    "cannot process audio",
+                    "cannot transcribe",
+                    "Please provide",
+                    "I don't have",
+                    "unable to process"
+                ]
+                
+                is_refusal = any(phrase.lower() in transcript_text.lower() for phrase in refusal_phrases)
+                
+                if is_refusal:
+                    print(f"DEBUG: Chunk {self.chunk_count} - Model refused, skipping")
+                    return result
+                
+                # Valid transcription
+                if transcript_text and transcript_text not in ["[UNCLEAR]", "[SILENCE]", ""]:
+                    self.transcript_buffer.append(transcript_text)
+                    self.full_transcript += " " + transcript_text
+                    result["transcript"] = transcript_text
+                    print(f"DEBUG: Chunk {self.chunk_count} transcribed: {transcript_text[:100]}...")
+            
+            # Trigger analysis if we have enough new content
+            new_content_length = len(self.full_transcript) - self.last_analysis_length
+            if new_content_length > self.analysis_threshold:
+                analysis_result = self._analyze_content()
+                if analysis_result:
+                    result["highlights"] = [h.__dict__ for h in self.highlights[-5:]]
+                    result["sectors"] = {k: v.__dict__ for k, v in self.sector_impacts.items()}
+                self.last_analysis_length = len(self.full_transcript)
+            
+            return result
+            
+        except Exception as e:
+            print(f"ERROR: Processing audio chunk {self.chunk_count}: {e}")
+            traceback.print_exc()
+            return {"error": str(e), "transcript": "", "chunk_id": self.chunk_count}
+    
+    def deep_scan(self) -> Dict[str, Any]:
+        """Perform a comprehensive scan of the entire transcript (Admin only)"""
+        print(f"INFO: Running Deep Scan for session {self.session_id} ({len(self.full_transcript)} chars)")
+        # We pass full_scan=True to ensure the prompt considers the whole text
+        self._analyze_content(full_scan=True)
+        return self.get_state()
+
+    def _analyze_content(self, full_scan: bool = False) -> bool:
+        """
+        Internal method to analyze transcript and extract highlights/sectors.
+        
+        Args:
+            full_scan: If True, analyzes the entire transcript. 
+                       If False, analyzes only the most recent part.
+        """
+        if not self.full_transcript or len(self.full_transcript) < 100:
+            return False
+        
+        try:
+            # Use whole transcript for deep scan, otherwise last ~3000 chars
+            analysis_text = self.full_transcript if full_scan else self.full_transcript[-3000:]
+            
+            prompt_type = "COMPREHENSIVE" if full_scan else "INCREMENTAL"
+            analysis_prompt = f"""Analyze this Union Budget 2026 speech ({prompt_type} ANALYSIS) and extract key information.
+
+TRANSCRIPT:
+{analysis_text}
+
+Extract and return as JSON:
+1. "highlights": Array of important announcements, each with:
+   - "category": One of "tax", "sector", "capex", "pli", "financing", "fiscal", "regulation", "other"
+   - "title": Brief title (max 10 words)
+   - "details": Key details (max 50 words)
+   - "impact": "positive", "negative", or "neutral" for markets
+   - "sectors_affected": Array of affected sectors like ["Banking", "IT", "Pharma"]
+
+2. "sectors": Object mapping sector names to their impact:
+   - "impact_type": "positive", "negative", "neutral", or "mixed"
+   - "summary": Brief summary (max 30 words)
+   - "key_points": Array of 2-3 key points
+
+{"Only include information found in this text. For a comprehensive scan, capture all key points across the entire text." if full_scan else "Only include NEW information not already covered. If nothing significant, return empty arrays/objects."}
+"""
+            
+            analysis_model = genai.GenerativeModel(ANALYSIS_MODEL)
+            response = analysis_model.generate_content(
+                analysis_prompt,
+                generation_config=genai.types.GenerationConfig(
+                    temperature=0.3,
+                    response_mime_type="application/json"
+                )
+            )
+            
+            if response.text:
+                analysis = json.loads(response.text)
+                
+                # Update highlights
+                for h in analysis.get("highlights", []):
+                    highlight = BudgetHighlight(
+                        category=h.get("category", "other"),
+                        title=h.get("title", ""),
+                        details=h.get("details", ""),
+                        impact=h.get("impact", "neutral"),
+                        sectors_affected=h.get("sectors_affected", [])
+                    )
+                    # Avoid duplicates by checking title
+                    if not any(existing.title == highlight.title for existing in self.highlights):
+                        self.highlights.append(highlight)
+                        print(f"DEBUG: New highlight: {highlight.title}")
+                
+                # Update sector impacts
+                for sector, impact_data in analysis.get("sectors", {}).items():
+                    self.sector_impacts[sector] = SectorImpact(
+                        sector=sector,
+                        impact_type=impact_data.get("impact_type", "neutral"),
+                        summary=impact_data.get("summary", ""),
+                        key_points=impact_data.get("key_points", [])
+                    )
+                
+                return True
+                            
+        except json.JSONDecodeError as je:
+            print(f"WARN: JSON parse error in analysis: {je}")
+        except Exception as e:
+            print(f"WARN: Analysis failed: {e}")
+            traceback.print_exc()
+        
+        return False
+    
+    def stop(self) -> Dict[str, Any]:
+        """Stop the session and return summary"""
+        self.is_active = False
+        
+        duration = 0
+        if self.start_time:
+            duration = (datetime.now() - self.start_time).total_seconds()
+        
+        print(f"INFO: Budget Live session {self.session_id} stopped. "
+              f"Duration: {duration:.1f}s, Chunks: {self.chunk_count}, "
+              f"Transcript: {len(self.full_transcript)} chars")
+        
+        return {
+            "session_id": self.session_id,
+            "duration_seconds": duration,
+            "chunks_processed": self.chunk_count,
+            "transcript_length": len(self.full_transcript),
+            "highlights_count": len(self.highlights),
+            "sectors_analyzed": list(self.sector_impacts.keys())
+        }
+    
+    def get_summary(self) -> Dict[str, Any]:
+        """Get current session summary"""
+        return {
+            "session_id": self.session_id,
+            "is_active": self.is_active,
+            "chunks_processed": self.chunk_count,
+            "transcript_length": len(self.full_transcript),
+            "transcript_preview": self.full_transcript[-500:] if self.full_transcript else "",
+            "highlights": [h.__dict__ for h in self.highlights],
+            "sectors": {k: v.__dict__ for k, v in self.sector_impacts.items()}
+        }
+    
+    def get_full_transcript(self) -> str:
+        """Get the complete transcript"""
+        return self.full_transcript
+
+    def get_state(self) -> Dict[str, Any]:
+        """Returns current state of the session for new joins/sync"""
+        return {
+            "full_transcript": self.full_transcript,
+            "highlights": [h.__dict__ for h in self.highlights],
+            "sectors": {k: v.__dict__ for k, v in self.sector_impacts.items()},
+            "is_active": self.is_active,
+            "chunk_count": self.chunk_count,
+            "duration": (datetime.now() - self.start_time).total_seconds() if self.start_time else 0
+        }
+
+    def ingest_full_transcript(self, text: str) -> Dict[str, Any]:
+        """Ingests a full transcript and re-analyzes everything (Admin only)"""
+        # Save old length to trigger analysis properly
+        self.full_transcript = text
+        self.chunk_count += 1 # Increment for signaling
+        
+        # Trigger analysis on the bulk text
+        self._analyze_content()
+        return self.get_state()
+
+
+def transcribe_audio_simple(audio_bytes: bytes, mime_type: str = "audio/webm") -> str:
+    """
+    Simple one-shot audio transcription using Gemini.
+    Useful for testing or processing recorded audio.
+    
+    Args:
+        audio_bytes: Raw audio data
+        mime_type: Audio format
+    
+    Returns:
+        Transcribed text
+    """
+    if not GOOGLE_API_KEY:
+        return "[No API key configured]"
+    
+    try:
+        genai.configure(api_key=GOOGLE_API_KEY)
+        model = genai.GenerativeModel(TRANSCRIPTION_MODEL)
+        
+        audio_part = {
+            "inline_data": {
+                "mime_type": mime_type,
+                "data": base64.b64encode(audio_bytes).decode('utf-8')
+            }
+        }
+        
+        response = model.generate_content([
+            "Transcribe this audio accurately. Output only the spoken words.",
+            audio_part
+        ])
+        
+        return response.text if response.text else ""
+        
+    except Exception as e:
+        print(f"ERROR: Simple transcription failed: {e}")
+        return f"[Transcription error: {e}]"
+
+
+def analyze_budget_text(text: str) -> Dict[str, Any]:
+    """
+    Analyze budget speech text for key announcements.
+    Standalone function for on-demand analysis.
+    
+    Args:
+        text: Budget speech text to analyze
+    
+    Returns:
+        Dict with highlights, tax_changes, and sector_impacts
+    """
+    if not text or len(text) < 50:
+        return {"error": "Insufficient text for analysis"}
+    
+    if not GOOGLE_API_KEY:
+        return {"error": "No API key configured"}
+    
+    try:
+        genai.configure(api_key=GOOGLE_API_KEY)
+        model = genai.GenerativeModel(ANALYSIS_MODEL)
+        
+        prompt = f"""Analyze this Union Budget 2026 speech excerpt comprehensively.
+
+BUDGET SPEECH TEXT:
+{text}
+
+Provide a detailed analysis in JSON format with these sections:
+
+1. "summary": A 2-3 sentence executive summary of the key themes
+
+2. "highlights": Array of 5-10 most important announcements, each with:
+   - "category": "tax", "sector", "scheme", "fiscal", or "infrastructure"
+   - "title": Brief descriptive title
+   - "details": Specific details including numbers/amounts
+   - "impact": "positive", "negative", or "neutral" for markets
+   - "sectors_affected": List of affected stock market sectors
+
+3. "tax_changes": Object with:
+   - "income_tax": Any changes to income tax slabs
+   - "corporate_tax": Corporate tax changes
+   - "gst": GST-related announcements
+   - "customs_duty": Import/export duty changes
+   - "other": Any other tax measures
+
+4. "sector_allocations": Object mapping sectors to their budget allocation details
+
+5. "sector_impacts": Object mapping stock market sectors to:
+   - "impact_type": "positive", "negative", "neutral", or "mixed"
+   - "summary": Why this sector is affected
+   - "stocks_to_watch": Types of companies that may benefit/suffer
+
+6. "fiscal_outlook": Object with deficit targets, growth projections, borrowing plans
+"""
+        
+        response = model.generate_content(
+            prompt,
+            generation_config=genai.types.GenerationConfig(
+                temperature=0.2,
+                response_mime_type="application/json"
+            )
+        )
+        
+        if response.text:
+            return json.loads(response.text)
+        return {"error": "Empty response from API"}
+        
+    except json.JSONDecodeError as je:
+        print(f"ERROR: JSON parse error: {je}")
+        return {"error": "Failed to parse analysis response"}
+    except Exception as e:
+        print(f"ERROR: Budget analysis failed: {e}")
+        return {"error": str(e)}
+
+
+# Session storage (in-memory for single-worker, would need Redis for multi-worker)
+_active_sessions: Dict[str, BudgetLiveSession] = {}
+
+
+def get_session(session_id: str) -> Optional[BudgetLiveSession]:
+    """Get an active session by ID"""
+    return _active_sessions.get(session_id)
+
+
+def create_session(session_id: str) -> BudgetLiveSession:
+    """Create a new session"""
+    session = BudgetLiveSession(session_id)
+    _active_sessions[session_id] = session
+    return session
+
+
+def remove_session(session_id: str) -> Optional[Dict[str, Any]]:
+    """Remove a session and return its summary"""
+    session = _active_sessions.pop(session_id, None)
+    if session:
+        return session.stop()
+    return None

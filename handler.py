@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+
 """
 handler.py — Technical analysis web-server
 
@@ -107,6 +108,19 @@ app.config["COMPRESS_MIMETYPES"] = [
 app.config["COMPRESS_LEVEL"] = 6  # Balance between speed and CPU usage
 app.config["COMPRESS_MIN_SIZE"] = 500 # Don't bother compressing tiny responses
 Compress(app)
+
+# =====================================================================
+# FLASK-SOCKETIO FOR REAL-TIME BUDGET TRANSCRIPTION
+# =====================================================================
+from flask_socketio import SocketIO, emit
+socketio = SocketIO(
+    app, 
+    cors_allowed_origins="*", 
+    async_mode='threading',  # Changed from eventlet to threading for compatibility with httpx/asyncio
+    ping_timeout=60,       # Increase to 60s to handle long Gemini processing
+    ping_interval=25,      # Ping every 25s
+    max_http_buffer_size=10000000 # 10MB to accommodate large audio chunks
+)
 
 # =====================================================================
 # INDUSTRY RESEARCH JOB STORAGE (Redis-backed for multi-instance support)
@@ -3108,7 +3122,7 @@ You must follow these writing rules exactly. Any failure to follow a negative di
 def extract_metrics_via_ai(ticker, company_name=None):
     """
     Extract financial metrics using Perplexity sonar model with web search.
-    Returns metrics for the main company AND 4-6 peer competitors.
+    Returns metrics for the main company AND 10 peer competitors.
     """
     # Use company name if provided, otherwise just ticker
     search_name = company_name if company_name and company_name != ticker else ticker
@@ -3131,7 +3145,7 @@ If you cannot find a value, use "N/A" - but ALWAYS return the complete JSON stru
 
 Search for "{search_name} peer comparison" and "{ticker} peer comparison" on screener.in, moneycontrol.com, and trendlyne.com.
 
-Return data for {ticker} and 4-6 of its most relevant peers in this EXACT JSON format:
+Return data for {ticker} and 10 of its most relevant peers in this EXACT JSON format:
 {{
   "company": {{
     "ticker": "{ticker}",
@@ -5385,8 +5399,207 @@ def list_precache_jobs():
 # END: Admin Batch Pre-Caching System
 # =====================================================================
 
+# =====================================================================
+# BUDGET LIVE TRANSCRIPTION - SocketIO Endpoints
+# =====================================================================
+from budget_live import (
+    BudgetLiveSession, 
+    create_session, 
+    get_session, 
+    remove_session,
+    analyze_budget_text
+)
+
+# Store a single global budget session for 2026
+GLOBAL_BUDGET_SESSION = BudgetLiveSession("global_2026")
+
+@socketio.on('connect')
+def handle_connect():
+    print(f"INFO: Client connected: {request.sid}")
+    emit('connected', {'status': 'ok', 'sid': request.sid})
+
+@socketio.on('join_budget_room')
+def handle_join_budget_room():
+    """Add user to the shared budget room and send current state"""
+    from flask_socketio import join_room
+    join_room('budget_room')
+    print(f"INFO: Client {request.sid} joined budget_room")
+    
+    # Send current state to late joiners
+    state = GLOBAL_BUDGET_SESSION.get_state()
+    emit('initial_state', state)
+
+@socketio.on('disconnect')
+def handle_disconnect():
+    print(f"INFO: Client disconnected: {request.sid}")
+    # No aggressive cleanup - session is global
+
+@socketio.on('start_budget_session')
+def handle_start_budget_session(data=None):
+    """Start the shared budget transcription session (Admin only)"""
+    # Security: Only nikhil.banthiya@gmail.com should be able to start/stop the session
+    # We can check session['user_email'] or an admin flag
+    from flask import session as flask_session
+    user_email = flask_session.get('user_email')
+    
+    if user_email != 'nikhil.banthiya@gmail.com':
+        print(f"WARN: Unauthorized start_budget_session attempt by {user_email}")
+        emit('session_error', {'error': 'Only the admin can control the live session.'})
+        return
+
+    print(f"INFO: Starting global budget session by {user_email}")
+    
+    try:
+        if not GLOBAL_BUDGET_SESSION.is_active:
+            GLOBAL_BUDGET_SESSION.start()
+        
+        socketio.emit('session_started', {
+            'status': 'ok',
+            'message': 'Live budget transcription started.'
+        }, room='budget_room')
+    except Exception as e:
+        print(f"ERROR: Failed to start/reconnect budget session: {e}")
+        emit('session_error', {'error': str(e)})
+
+@socketio.on('audio_chunk')
+def handle_audio_chunk(data=None):
+    """Process incoming audio chunk and broadcast update to all users"""
+    if not data or not GLOBAL_BUDGET_SESSION.is_active:
+        return
+        
+    try:
+        # Extract audio data
+        audio_b64 = data.get('audio', '')
+        mime_type = data.get('mime_type', 'audio/webm')
+        
+        if audio_b64:
+            import base64
+            audio_bytes = base64.b64decode(audio_b64)
+            
+            # Process the chunk (using threading mode for SocketIO)
+            result = GLOBAL_BUDGET_SESSION.process_audio_chunk(audio_bytes, mime_type)
+            
+            # Broadcast transcription update to ALL users in the budget room
+            socketio.emit('transcription_update', {
+                'transcript': result.get('transcript', ''),
+                'chunk_id': result.get('chunk_id', 0),
+                'highlights': result.get('highlights', []),
+                'sectors': result.get('sectors', {})
+            }, room='budget_room')
+        else:
+            emit('transcription_update', {'transcript': '', 'error': 'No audio data received'})
+            
+    except Exception as e:
+        print(f"ERROR: Processing audio chunk: {e}")
+        emit('transcription_update', {'transcript': '', 'error': str(e)})
+
+@socketio.on('stop_budget_session')
+def handle_stop_budget_session(data=None):
+    """Stop the budget transcription session (Admin only)"""
+    from flask import session as flask_session
+    user_email = flask_session.get('user_email')
+    
+    if user_email != 'nikhil.banthiya@gmail.com':
+        print(f"WARN: Unauthorized stop_budget_session attempt by {user_email}")
+        emit('session_error', {'error': 'Only the admin can control the live session.'})
+        return
+
+    print(f"INFO: Stopping global budget session by {user_email}")
+    summary = GLOBAL_BUDGET_SESSION.stop()
+    
+    socketio.emit('session_stopped', {
+        'status': 'ok',
+        'summary': summary
+    }, room='budget_room')
+
+@socketio.on('get_budget_summary')
+def handle_get_budget_summary(data=None):
+    """Get current session summary"""
+    # Anyone can get the summary of the global session
+    summary = GLOBAL_BUDGET_SESSION.get_summary()
+    emit('budget_summary', summary)
+
+# REST endpoints for budget analysis
+@app.route('/api/budget/analyze', methods=['POST'])
+def api_budget_analyze():
+    """Analyze budget text on demand"""
+    try:
+        data = request.get_json(force=True)
+        text = data.get('text', '')
+        
+        if not text:
+            return jsonify({'error': 'No text provided'}), 400
+        
+        result = analyze_budget_text(text)
+        return jsonify(result)
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/budget/upload-transcript', methods=['POST'])
+def upload_budget_transcript():
+    """Upload a full transcript for analysis (Admin only)"""
+    from flask import session as flask_session
+    user_email = flask_session.get('user_email')
+    
+    if user_email != 'nikhil.banthiya@gmail.com':
+        return jsonify({'error': 'Admin access required'}), 403
+    
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file segment found'}), 400
+    
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': 'No selected file'}), 400
+    
+    if file and file.filename.endswith('.txt'):
+        try:
+            content = file.read().decode('utf-8')
+            state = GLOBAL_BUDGET_SESSION.ingest_full_transcript(content)
+            
+            # Broadcast the updated state to all participants
+            socketio.emit('initial_state', state, room='budget_room')
+            
+            return jsonify({'success': True, 'message': 'Transcript uploaded and analyzed.'})
+        except Exception as e:
+            print(f"ERROR: Transcript ingestion failed: {e}")
+            return jsonify({'error': str(e)}), 500
+            
+    return jsonify({'error': 'Invalid file format. Only .txt allowed.'}), 400
+
+@app.route('/api/budget/deep-scan', methods=['POST'])
+def api_budget_deep_scan():
+    """Trigger a full re-analysis of the entire transcript (Admin only)"""
+    from flask import session as flask_session
+    user_email = flask_session.get('user_email')
+    
+    if user_email != 'nikhil.banthiya@gmail.com':
+        return jsonify({'error': 'Admin access required'}), 403
+    
+    try:
+        state = GLOBAL_BUDGET_SESSION.deep_scan()
+        
+        # Broadcast the comprehensive updated state
+        socketio.emit('initial_state', state, room='budget_room')
+        
+        return jsonify({'success': True, 'message': 'Deep scan complete across the whole transcript.'})
+    except Exception as e:
+        print(f"ERROR: Deep scan failed: {e}")
+        return jsonify({'error': str(e)}), 500
+
+# Serve the budget.html page
+@app.route('/budget')
+def serve_budget_page():
+    """Serve the Live Budget transcription page"""
+    return app.send_static_file('budget.html')
+
+# =====================================================================
+# END: Budget Live Transcription
+# =====================================================================
+
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=8000, debug=True)
+    # Use socketio.run for WebSocket support
+    socketio.run(app, host='0.0.0.0', port=8000, debug=True)
 
 # Wrap the WSGI app in ASGI middleware for Uvicorn
 # app = ASGIMiddleware(app)
