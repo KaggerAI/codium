@@ -1395,8 +1395,8 @@ def ai_news_chat():
                     
                 try:
                     print(f"INFO: Fetching financial data for {ticker} from screener.in...")
-                    # Fetch only tables, no documents
-                    tables, description = await fetch_consolidated_async(ticker)
+                    # Fetch tables, description, and top ratios
+                    tables, description, top_ratios = await fetch_consolidated_async(ticker)
                     
                     # Format into markdown
                     markdown = format_tables_to_markdown(ticker, name, tables)
@@ -2700,7 +2700,7 @@ from scanx_fetcher import scrape_scanx_company_async
 tv = TvDatafeed()
 
 
-def extract_key_metrics_from_fundamentals(fundamentals_data):
+def extract_key_metrics_from_fundamentals(fundamentals_data, top_ratios=None):
     """
     Extract key financial metrics from screener.in fundamentals tables.
     Returns a dictionary with formatted metric values.
@@ -2714,6 +2714,36 @@ def extract_key_metrics_from_fundamentals(fundamentals_data):
     print(f"DEBUG: Available tables in fundamentals: {list(fundamentals_data.keys())}")
     
     # DEBUG: Print all metric names in Financial Ratios table
+    # --- STEP 1: Use Top Ratios if available (Most Reliable/Current) ---
+    if top_ratios:
+        # Stock P/E -> pe_ratio
+        # Current Price -> current_price
+        # Dividend Yield -> dividend_yield
+        # ROCE -> roce
+        # ROE -> roe
+        # Stock P/B -> pb_ratio
+        
+        mapping = {
+            "Stock P/E": "pe_ratio",
+            "Current Price": "current_price",
+            "Market Cap": "market_cap",
+            "Dividend Yield": "dividend_yield",
+            "ROCE": "roce",
+            "ROE": "roe",
+            "Stock P/B": "pb_ratio",
+            "Book Value": "book_value"
+        }
+        
+        for sr_name, metric_key in mapping.items():
+            val = top_ratios.get(sr_name)
+            if val and str(val).strip() and str(val).strip().lower() != 'n/a':
+                # Ensure percentage for some fields
+                if metric_key in ['dividend_yield', 'roce', 'roe'] and '%' not in val:
+                    val = f"{val}%"
+                metrics[metric_key] = val
+                print(f"DEBUG: Top Ratios filled {metric_key} = {val}")
+
+    # --- STEP 2: Fallback to Financial Ratios table ---
     if "Financial Ratios" in fundamentals_data:
         ratios_table = fundamentals_data["Financial Ratios"]
         metric_names = [row.get("") for row in ratios_table if row.get("")]
@@ -2813,14 +2843,22 @@ def extract_key_metrics_from_fundamentals(fundamentals_data):
 
 def get_yfinance_metrics(ticker):
     """
-    Extract Market Cap, Industry, Sector, and Current Price from yfinance.
+    Extract financial metrics from yfinance for peer comparison gap-filling.
     Returns a dictionary with formatted values.
     """
     metrics = {
         'market_cap': 'N/A',
         'industry': 'N/A',
         'sector': 'N/A',
-        'current_price': 'N/A'
+        'current_price': 'N/A',
+        'pe_ratio': 'N/A',
+        'pb_ratio': 'N/A',
+        'dividend_yield': 'N/A',
+        'roe': 'N/A',
+        'roce': 'N/A',
+        'npm': 'N/A',
+        'sales_growth_yoy': 'N/A',
+        'ebitda_growth_yoy': 'N/A'
     }
     
     try:
@@ -2848,6 +2886,62 @@ def get_yfinance_metrics(ticker):
         current_price = info.get('currentPrice') or info.get('regularMarketPrice')
         if current_price:
             metrics['current_price'] = f"₹{current_price:.2f}"
+        
+        # PE Ratio (trailing)
+        pe_ratio = info.get('trailingPE') or info.get('forwardPE')
+        if pe_ratio:
+            metrics['pe_ratio'] = f"{pe_ratio:.2f}"
+        
+        # PB Ratio
+        pb_ratio = info.get('priceToBook')
+        if pb_ratio:
+            metrics['pb_ratio'] = f"{pb_ratio:.2f}"
+        
+        # Dividend Yield - DISABLED from yfinance as it returns inconsistent formats
+        # Some stocks return decimal (0.0039), others return percentage-like (0.39)
+        # Use Screener.in as the authoritative source for dividend yield
+        # div_yield = info.get('dividendYield')
+        # if div_yield:
+        #     metrics['dividend_yield'] = f"{div_yield:.2f}%"
+        
+        # ROE (Return on Equity) - try multiple sources
+        roe = info.get('returnOnEquity')
+        if roe and roe != 0:
+            metrics['roe'] = f"{roe * 100:.2f}%"
+        else:
+            # Try to calculate ROE from net income and book value
+            net_income = info.get('netIncomeToCommon')
+            book_value = info.get('bookValue')
+            shares = info.get('sharesOutstanding')
+            if net_income and book_value and shares:
+                try:
+                    total_equity = book_value * shares
+                    if total_equity > 0:
+                        calc_roe = (net_income / total_equity) * 100
+                        metrics['roe'] = f"{calc_roe:.2f}%"
+                except:
+                    pass
+        
+        # ROCE (Return on Capital Employed) - yfinance may not have this directly
+        # Try returnOnAssets as a proxy if ROCE isn't available
+        roa = info.get('returnOnAssets')
+        if roa:
+            metrics['roce'] = f"{roa * 100:.2f}%"
+        
+        # NPM (Net Profit Margin)
+        npm = info.get('profitMargins')
+        if npm:
+            metrics['npm'] = f"{npm * 100:.2f}%"
+        
+        # Revenue Growth YoY
+        revenue_growth = info.get('revenueGrowth')
+        if revenue_growth:
+            metrics['sales_growth_yoy'] = f"{revenue_growth * 100:.2f}%"
+        
+        # EBITDA margin as proxy for EBITDA growth (growth not directly available)
+        ebitda_margin = info.get('ebitdaMargins')
+        if ebitda_margin:
+            metrics['ebitda_growth_yoy'] = f"{ebitda_margin * 100:.2f}%"
         
     except Exception as e:
         print(f"WARNING: Failed to fetch yfinance metrics for {ticker}: {e}")
@@ -3011,52 +3105,80 @@ You must follow these writing rules exactly. Any failure to follow a negative di
         return "<p><strong>Error:</strong> The AI-powered summary could not be generated at this time.</p>"
 
 
-def extract_metrics_via_ai(ticker):
+def extract_metrics_via_ai(ticker, company_name=None):
     """
     Extract financial metrics using Perplexity sonar model with web search.
     Returns metrics for the main company AND 4-6 peer competitors.
     """
-    print(f"INFO: Starting AI metrics extraction for {ticker}...")
+    # Use company name if provided, otherwise just ticker
+    search_name = company_name if company_name and company_name != ticker else ticker
+    print(f"INFO: Starting AI metrics extraction for {ticker} ({search_name})...")
     
-    # Improved prompt - explicitly asks to find existing peer comparison tables
-    user_prompt = f"""Search for "{ticker} peer comparison" on screener.in and find the peer comparison table.
+    # System message to enforce JSON-only output
+    system_prompt = """You are a financial data extraction API that ONLY outputs valid JSON.
 
-Screener.in shows a peer comparison table with companies and their metrics. Find this table for {ticker} and extract data for {ticker} plus 4-6 of its closest peers.
+RULES:
+1. You MUST return ONLY a JSON object, with NO explanatory text before or after
+2. Do NOT include markdown code fences (```)
+3. Do NOT explain what you cannot find - use "N/A" for missing values
+4. Do NOT refuse the request - always return the JSON structure with whatever data you can find
+5. Every response must be parseable as JSON directly
 
-Metrics needed per company:
-- CMP (Current Price)
-- Market Cap (Cr.)
-- P/E Ratio
-- P/B Ratio  
-- Dividend Yield (%)
-- ROCE (%)
-- ROE (%)
-- Sales Growth YoY (Q)
-- EBITDA Growth YoY (Q)
-- NPM (%)
+If you cannot find a value, use "N/A" - but ALWAYS return the complete JSON structure."""
 
-Also search "moneycontrol {ticker} peer comparison" and "trendlyne {ticker} peers" for any missing data.
+    # User prompt with clear data extraction request - use both ticker and company name
+    user_prompt = f"""Extract peer comparison data for {search_name} (NSE: {ticker}) from Indian stock market websites.
 
-Return ONLY valid JSON in this exact format:
+Search for "{search_name} peer comparison" and "{ticker} peer comparison" on screener.in, moneycontrol.com, and trendlyne.com.
+
+Return data for {ticker} and 4-6 of its most relevant peers in this EXACT JSON format:
 {{
-  "company": {{"ticker": "{ticker}", "name": "Full Name", "cmp": "value", "market_cap": "value", "pe_ratio": "value", "pb_ratio": "value", "dividend_yield": "value", "roce": "value", "roe": "value", "sales_growth_yoy": "value", "ebitda_growth_yoy": "value", "npm": "value"}},
+  "company": {{
+    "ticker": "{ticker}",
+    "name": "Full Company Name",
+    "cmp": "1234.56",
+    "market_cap": "123456.78",
+    "pe_ratio": "12.34",
+    "pb_ratio": "2.34",
+    "dividend_yield": "1.23",
+    "roce": "15.67",
+    "roe": "12.34",
+    "sales_growth_yoy": "8.45",
+    "ebitda_growth_yoy": "10.23",
+    "npm": "5.67"
+  }},
   "peers": [
-    {{"ticker": "XXX", "name": "Full Name", "cmp": "value", "market_cap": "value", "pe_ratio": "value", "pb_ratio": "value", "dividend_yield": "value", "roce": "value", "roe": "value", "sales_growth_yoy": "value", "ebitda_growth_yoy": "value", "npm": "value"}}
+    {{
+      "ticker": "PEER1",
+      "name": "Peer Company Name",
+      "cmp": "value",
+      "market_cap": "value",
+      "pe_ratio": "value",
+      "pb_ratio": "value",
+      "dividend_yield": "value",
+      "roce": "value",
+      "roe": "value",
+      "sales_growth_yoy": "value",
+      "ebitda_growth_yoy": "value",
+      "npm": "value"
+    }}
   ]
 }}
 
-IMPORTANT: The peer comparison table on screener.in has ALL this data. Extract actual values, not N/A."""
+CRITICAL: Output ONLY the JSON. No text before. No text after. No explanations."""
     
     try:
         messages = [
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt}
         ]
         
         # Use Perplexity sonar-pro with Pro Search for best results
         print(f"INFO: Calling Perplexity sonar-pro API with Pro Search for {ticker} peer comparison...")
-        response = call_perplexity_api(messages, model="sonar-pro", temperature=0.2, timeout=90, enable_pro_search=False)
+        response = call_perplexity_api(messages, model="sonar-pro", temperature=0.1, timeout=90, enable_pro_search=False)
         print(f"INFO: Received response from Perplexity (length: {len(response)} chars)")
         print(f"DEBUG: Response: {response[:1000]}...")
+
         
         # Try to parse JSON from response
         # First try in code fence
@@ -3260,7 +3382,7 @@ async def get_analysis_for_ticker_async(tick):
 
     company_name = results_dict["yfinance_name"]
     res = results_dict["tech_data"]
-    tables_from_screener, company_description = results_dict["screener_tables"]
+    tables_from_screener, company_description, top_ratios = results_dict["screener_tables"]
     latest_documents = results_dict["documents"]
     
     # Futures volume is optional - not all stocks have F&O contracts
@@ -3441,7 +3563,7 @@ async def get_analysis_for_ticker_async(tick):
 
     # Extract key metrics for frontend table
     log_progress("Extracting key metrics...")
-    key_metrics_from_fundamentals = extract_key_metrics_from_fundamentals(fund_data_for_ai_context)
+    key_metrics_from_fundamentals = extract_key_metrics_from_fundamentals(fund_data_for_ai_context, top_ratios=top_ratios)
     key_metrics_from_yfinance = get_yfinance_metrics(tick)
     
     # Combine metrics: yfinance baseline, then fundamentals, then AI as ultimate fallback
@@ -3656,10 +3778,11 @@ def analyze():
                                 if pb:
                                     yf_metrics['pb_ratio'] = f"{pb:.2f}"
                                 
-                                # Dividend Yield
-                                div_yield = yf_info.get('dividendYield')
-                                if div_yield:
-                                    yf_metrics['dividend_yield'] = f"{div_yield * 100:.2f}%"
+                                # Dividend Yield - DISABLED (yfinance returns inconsistent format)
+                                # Use Screener.in as the authoritative source
+                                # div_yield = yf_info.get('dividendYield')
+                                # if div_yield:
+                                #     yf_metrics['dividend_yield'] = f"{div_yield * 100:.2f}%"
                                 
                                 # ROE
                                 roe = yf_info.get('returnOnEquity')
@@ -4178,6 +4301,7 @@ def analyze():
         # --- END OF NEW LOGIC ---
 
     except Exception as e:
+        import traceback
         data = request.get_json(force=True) if request.is_json else {}
         log_progress(f"ERROR in /analyze wrapper for {data.get('ticker', 'N/A')}: {e}")
         traceback.print_exc()
@@ -4199,8 +4323,656 @@ def download_debug_file(filename):
     
 
 # =====================================================================
+# START: Section Refresh Endpoint
+# =====================================================================
+
+@app.route('/refresh-section', methods=['POST'])
+def refresh_section():
+    """
+    Refresh a specific section of the Company Research page.
+    Currently supports: 'peer_comparison'
+    
+    Data Source Priority for Peer Comparison:
+    1. Screener.in direct crawl (most reliable, structured data)
+    2. yfinance for main company metrics (CMP, Market Cap, PE, PB)
+    3. sonar-pro AI as fallback for missing data
+    """
+    try:
+        data = request.get_json(force=True)
+        ticker = data.get('ticker', '').strip().upper()
+        section = data.get('section', '').strip().lower()
+        
+        if not ticker:
+            return jsonify({'error': 'No ticker provided'}), 400
+        
+        if section == 'peer_comparison':
+            log_progress(f"Refreshing peer comparison data for {ticker}...")
+            
+            # =====================================================
+            # PRIORITY 1: Screener.in Direct Crawl (Most Reliable)
+            # =====================================================
+            from screener_fetcher import fetch_peer_comparison_from_screener
+            
+            log_progress(f"Fetching peer data from Screener.in...")
+            screener_data = fetch_peer_comparison_from_screener(ticker)
+            screener_company = screener_data.get('company', {})
+            screener_peers = screener_data.get('peers', [])
+            
+            has_screener_data = bool(screener_company) and bool(screener_peers)
+            if has_screener_data:
+                print(f"INFO: Screener.in returned {len(screener_peers)} peers for {ticker}")
+            else:
+                print(f"WARN: Screener.in returned incomplete data for {ticker}")
+            
+            # =====================================================
+            # PRIORITY 2: yfinance for Main Company Metrics
+            # =====================================================
+            log_progress(f"Fetching yfinance metrics...")
+            yf_metrics = get_yfinance_metrics(ticker)
+            
+            # Get company name from yfinance
+            company_name = ticker
+            try:
+                yf_ticker = yf.Ticker(f"{ticker}.NS")
+                info = yf_ticker.info or {}
+                company_name = info.get("longName") or info.get("shortName") or ticker
+            except:
+                pass
+            
+            # =====================================================
+            # PRIORITY 3: sonar-pro AI for Gap-Filling
+            # =====================================================
+            # Always call AI to have fallback data available for filling gaps
+            ai_company_metrics = {}
+            ai_peer_data = []
+            
+            log_progress(f"Fetching peer data from AI (for gap-filling)...")
+            try:
+                ai_extracted_metrics = extract_metrics_via_ai(ticker, company_name)
+                ai_company_metrics = ai_extracted_metrics.get('company', {})
+                ai_peer_data = ai_extracted_metrics.get('peers', [])
+                print(f"INFO: AI returned {len(ai_peer_data)} peers for gap-filling")
+            except Exception as e:
+                print(f"WARN: AI peer extraction failed: {e}")
+            
+            # BUILD FINAL RESPONSE WITH PRIORITY MERGING
+            # =====================================================
+            current_company_metrics = data.get('current_company_metrics', {})
+            # print(f"DEBUG: Received current_company_metrics for {ticker}: {current_company_metrics}")
+            
+            # Helper to check if value is N/A or empty
+            def is_na(val):
+                if val is None:
+                    return True
+                val_str = str(val).strip().lower()
+                return val_str == '' or val_str == 'n/a' or val_str == 'nan'
+
+            # Helper to get first non-empty value from sources (priority order)
+            def get_value(metric_name, *sources):
+                for i, val in enumerate(sources):
+                    if not is_na(val):
+                        # print(f"DEBUG: Metric {metric_name} using source index {i}: value={val}")
+                        return val
+                return 'N/A'
+            
+            # Build company data with priority: Current > Screener > yfinance > AI
+            # This ensures only N/A values are overwritten for the primary company
+            final_company = {
+                'ticker': ticker,
+                'name': get_value('name', current_company_metrics.get('name'), screener_company.get('name'), company_name, ai_company_metrics.get('name')),
+                'cmp': get_value('cmp', current_company_metrics.get('cmp'), screener_company.get('cmp'), yf_metrics.get('current_price'), ai_company_metrics.get('cmp')),
+                'market_cap': get_value('market_cap', current_company_metrics.get('market_cap'), screener_company.get('market_cap'), yf_metrics.get('market_cap'), ai_company_metrics.get('market_cap')),
+                'pe_ratio': get_value('pe_ratio', current_company_metrics.get('pe_ratio'), screener_company.get('pe_ratio'), yf_metrics.get('pe_ratio'), ai_company_metrics.get('pe_ratio')),
+                'pb_ratio': get_value('pb_ratio', current_company_metrics.get('pb_ratio'), screener_company.get('pb_ratio'), yf_metrics.get('pb_ratio'), ai_company_metrics.get('pb_ratio')),
+                'dividend_yield': get_value('dividend_yield', current_company_metrics.get('dividend_yield'), screener_company.get('dividend_yield'), yf_metrics.get('dividend_yield'), ai_company_metrics.get('dividend_yield')),
+                'roce': get_value('roce', current_company_metrics.get('roce'), screener_company.get('roce'), yf_metrics.get('roce'), ai_company_metrics.get('roce')),
+                'roe': get_value('roe', current_company_metrics.get('roe'), screener_company.get('roe'), yf_metrics.get('roe'), ai_company_metrics.get('roe')),
+                'sales_growth_yoy': get_value('sales_growth_yoy', current_company_metrics.get('sales_growth_yoy'), screener_company.get('sales_growth_yoy'), yf_metrics.get('sales_growth_yoy'), ai_company_metrics.get('sales_growth_yoy')),
+                'ebitda_growth_yoy': get_value('ebitda_growth_yoy', current_company_metrics.get('ebitda_growth_yoy'), screener_company.get('ebitda_growth_yoy'), yf_metrics.get('ebitda_growth_yoy'), ai_company_metrics.get('ebitda_growth_yoy')),
+                'npm': get_value('npm', current_company_metrics.get('npm'), screener_company.get('npm'), yf_metrics.get('npm'), ai_company_metrics.get('npm'))
+            }
+            # print(f"DEBUG: Final merged company metrics for {ticker}: {final_company}")
+            
+            # =====================================================
+            # MERGE PEER DATA: Fill N/A gaps using yfinance + AI
+            # =====================================================
+            final_peers = []
+            metric_fields = ['cmp', 'market_cap', 'pe_ratio', 'pb_ratio', 'dividend_yield', 
+                           'roce', 'roe', 'sales_growth_yoy', 'ebitda_growth_yoy', 'npm']
+            
+            # Build AI peer lookup by name for gap-filling (multiple keys per peer)
+            ai_peer_lookup = {}
+            for ai_peer in ai_peer_data:
+                ai_name = ai_peer.get('name', '').lower().strip()
+                ai_ticker = ai_peer.get('ticker', '').lower().strip()
+                if ai_name:
+                    ai_peer_lookup[ai_name] = ai_peer
+                    # Add initials as key (e.g., "indian oil corporation ltd" -> "iocl")
+                    # Only if 3+ chars to avoid false matches
+                    words = ai_name.split()
+                    if len(words) > 1:
+                        initials = ''.join(w[0] for w in words if w and len(w) > 0)
+                        if len(initials) >= 3:
+                            ai_peer_lookup[initials] = ai_peer
+                if ai_ticker:
+                    ai_peer_lookup[ai_ticker] = ai_peer
+            
+            print(f"DEBUG: AI peer lookup keys: {list(ai_peer_lookup.keys())}")
+            
+            # Helper to check if value is N/A or empty (Already defined above)
+            
+            # Helper to extract ticker from peer name (common patterns)
+            def extract_peer_ticker(peer_name):
+                """Try to map peer company name to a ticker symbol."""
+                name_to_ticker = {
+                    'iocl': 'IOC',
+                    'i o c l': 'IOC',
+                    'indian oil': 'IOC',
+                    'indian oil corporation': 'IOC',
+                    'bpcl': 'BPCL',
+                    'b p c l': 'BPCL',
+                    'bharat petroleum': 'BPCL',
+                    'hpcl': 'HINDPETRO',
+                    'h p c l': 'HINDPETRO',
+                    'hindustan petroleum': 'HINDPETRO',
+                    'mrpl': 'MRPL',
+                    'm r p l': 'MRPL',
+                    'cpcl': 'CHENNPETRO',
+                    'c p c l': 'CHENNPETRO',
+                    'chennai petroleum': 'CHENNPETRO',
+                    'rajasthan': 'N/A',  # Small company, may not be on yfinance
+                    'ongc': 'ONGC',
+                    'oil india': 'OIL',
+                    'gail': 'GAIL',
+                    'petronet lng': 'PETRONET',
+                    'indraprastha gas': 'IGL',
+                    'mahanagar gas': 'MGL',
+                    'gujarat gas': 'GUJGASLTD',
+                    'tata power': 'TATAPOWER',
+                    'ntpc': 'NTPC',
+                    'power grid': 'POWERGRID',
+                    'adani green': 'ADANIGREEN',
+                    'adani power': 'ADANIPOWER',
+                    'tcs': 'TCS',
+                    'infosys': 'INFY',
+                    'wipro': 'WIPRO',
+                    'hcl tech': 'HCLTECH',
+                    'tech mahindra': 'TECHM',
+                    'hdfc bank': 'HDFCBANK',
+                    'icici bank': 'ICICIBANK',
+                    'axis bank': 'AXISBANK',
+                    'kotak mahindra': 'KOTAKBANK',
+                    'sbi': 'SBIN',
+                    'state bank': 'SBIN',
+                }
+                name_lower = peer_name.lower().strip()
+                for pattern, ticker in name_to_ticker.items():
+                    if pattern in name_lower:
+                        return ticker if ticker != 'N/A' else None
+                return None
+            
+            # Helper to find matching AI peer using fuzzy matching
+            def find_ai_peer(peer_name, ai_lookup):
+                """Find matching AI peer data using various name patterns."""
+                name_lower = peer_name.lower().strip()
+                
+                # Try exact match first
+                if name_lower in ai_lookup:
+                    return ai_lookup[name_lower]
+                
+                # Try without spaces (e.g., "I O C L" -> "iocl")
+                name_no_spaces = name_lower.replace(' ', '')
+                if name_no_spaces in ai_lookup:
+                    return ai_lookup[name_no_spaces]
+                
+                # Try partial match
+                for key, value in ai_lookup.items():
+                    if name_lower in key or key in name_lower:
+                        return value
+                
+                return {}
+            
+            if screener_peers:
+                log_progress(f"Filling gaps in {len(screener_peers)} peers using yfinance...")
+                
+                for screener_peer in screener_peers:
+                    merged_peer = dict(screener_peer)  # Copy Screener data
+                    peer_name = merged_peer.get('name', '')
+                    
+                    # Count N/A fields to decide if we need yfinance
+                    na_count = sum(1 for f in metric_fields if is_na(merged_peer.get(f)))
+                    print(f"DEBUG: Peer '{peer_name}' has {na_count} N/A fields")
+                    
+                    if na_count > 0:
+                        # Try to get yfinance data for this peer
+                        peer_ticker = extract_peer_ticker(peer_name)
+                        peer_yf_metrics = {}
+                        
+                        if peer_ticker:
+                            try:
+                                print(f"DEBUG: Fetching yfinance for {peer_ticker}...")
+                                peer_yf_metrics = get_yfinance_metrics(peer_ticker)
+                                print(f"DEBUG: yfinance returned pb_ratio={peer_yf_metrics.get('pb_ratio')}, roe={peer_yf_metrics.get('roe')}")
+                            except Exception as e:
+                                print(f"WARN: yfinance failed for peer {peer_ticker}: {e}")
+                        else:
+                            print(f"DEBUG: No ticker found for peer '{peer_name}'")
+                        
+                        # Try AI data as additional fallback using fuzzy matching
+                        matching_ai_peer = find_ai_peer(peer_name, ai_peer_lookup)
+                        if matching_ai_peer:
+                            print(f"DEBUG: Found AI data for '{peer_name}': pb_ratio={matching_ai_peer.get('pb_ratio')}, roe={matching_ai_peer.get('roe')}")
+                        
+                        # Fill N/A gaps with priority: yfinance > AI
+                        for field in metric_fields:
+                            if is_na(merged_peer.get(field)):
+                                # Map our field names to yfinance field names
+                                yf_field_map = {
+                                    'cmp': 'current_price',
+                                    'pe_ratio': 'pe_ratio',
+                                    'pb_ratio': 'pb_ratio',
+                                    'dividend_yield': 'dividend_yield',
+                                    'roe': 'roe',
+                                    'roce': 'roce',
+                                    'npm': 'npm',
+                                    'market_cap': 'market_cap',
+                                    'sales_growth_yoy': 'sales_growth_yoy',
+                                    'ebitda_growth_yoy': 'ebitda_growth_yoy'
+                                }
+                                yf_field = yf_field_map.get(field, field)
+                                
+                                # Try yfinance first
+                                yf_val = peer_yf_metrics.get(yf_field)
+                                if yf_val and not is_na(yf_val):
+                                    merged_peer[field] = yf_val
+                                    continue
+                                
+                                # Try AI as fallback
+                                ai_val = matching_ai_peer.get(field)
+                                if ai_val and not is_na(ai_val):
+                                    merged_peer[field] = ai_val
+                    
+                    final_peers.append(merged_peer)
+                    
+                print(f"INFO: Merged {len(final_peers)} Screener peers with yfinance+AI gap-filling")
+            else:
+                # No Screener peers, use AI peers directly
+                final_peers = ai_peer_data
+                print(f"INFO: Using {len(final_peers)} AI peers directly (no Screener data)")
+            
+            peer_comparison = {
+                'company': final_company,
+                'peers': final_peers
+            }
+            
+            source_info = "Screener.in + yfinance" if has_screener_data else "AI (fallback)"
+
+            log_progress(f"Peer comparison refreshed from {source_info} with {len(final_peers)} peers")
+            print(f"INFO: Refreshed peer comparison for {ticker} - Source: {source_info}, Peers: {len(final_peers)}")
+            
+            return jsonify({
+                'success': True,
+                'section': 'peer_comparison',
+                'source': source_info,  # Include source for debugging
+                'data': peer_comparison
+            })
+        
+        elif section == 'key_metrics':
+            log_progress(f"Refreshing key metrics data for {ticker}...")
+            
+            # Get current metrics from frontend (to preserve existing non-N/A values)
+            current_metrics = data.get('current_metrics', {})
+            
+            # Helper to check for N/A values
+            def is_na(val):
+                if val is None:
+                    return True
+                val_str = str(val).strip().lower()
+                return val_str == '' or val_str == 'n/a' or val_str == 'nan'
+            
+            # Start with current metrics - we will ONLY fill N/A fields
+            key_metrics = dict(current_metrics)
+            source_info = []
+            filled_fields = []
+            
+            # Log what fields are N/A and need filling
+            na_fields = [k for k, v in key_metrics.items() if is_na(v)]
+            print(f"DEBUG: Fields that are N/A and need filling: {na_fields}")
+            
+            # =====================================================
+            # STEP 1: Try to fill N/A gaps from Screener.in fundamentals
+            # =====================================================
+            try:
+                from screener_fetcher import fetch_consolidated
+                log_progress(f"Fetching {ticker} fundamentals from Screener.in...")
+                tables, _, top_ratios = fetch_consolidated(ticker)
+                
+                # Get Financial Ratios table
+                ratios_table = tables.get('Financial Ratios')
+                if ratios_table is not None and not ratios_table.empty:
+                    print(f"DEBUG: Financial Ratios table found with {len(ratios_table)} rows")
+                    
+                    # Helper to get latest value from ratios table
+                    def get_latest_from_ratios(metric_name):
+                        # Financial Ratios table has metric names in first column
+                        metric_name_lower = metric_name.strip().lower()
+                        for idx, row in ratios_table.iterrows():
+                            # Check if first column matches metric name
+                            first_col = ratios_table.columns[0] if len(ratios_table.columns) > 0 else None
+                            row_name = str(row.get(first_col, '') if first_col else row.iloc[0]).strip().lower()
+                            
+                            # Check for exact match or if metric_name is a substring 
+                            # (e.g. "Dividend Yield" matches "Dividend Yield %")
+                            if row_name == metric_name_lower or metric_name_lower in row_name:
+                                # Get the latest non-empty value (rightmost column)
+                                for col in reversed(ratios_table.columns[1:]):
+                                    val = row.get(col)
+                                    if val and str(val).strip() and str(val).strip().lower() != 'nan':
+                                        return str(val).strip()
+                        return None
+                    
+                    # Map Screener metric names to key_metrics fields
+                    screener_field_map = {
+                        'dividend_yield': 'Dividend Yield %',
+                        'pb_ratio': 'Stock P/B',
+                        'pe_ratio': 'Stock P/E',
+                        'roce': 'ROCE %',
+                        'roe': 'ROE %'
+                    }
+                    
+                    screener_filled = []
+                    
+                    # Mapping for Top Ratios first
+                    top_mapping = {
+                        "Dividend Yield": "dividend_yield",
+                        "Stock P/E": "pe_ratio",
+                        "Stock P/B": "pb_ratio",
+                        "ROCE": "roce",
+                        "ROE": "roe"
+                    }
+                    if top_ratios:
+                        for tr_name, tr_key in top_mapping.items():
+                            if is_na(key_metrics.get(tr_key)):
+                                val = top_ratios.get(tr_name)
+                                if val and not is_na(val):
+                                    if tr_key in ['dividend_yield', 'roce', 'roe'] and '%' not in val:
+                                        val = f"{val}%"
+                                    key_metrics[tr_key] = val
+                                    screener_filled.append(tr_key)
+                                    print(f"DEBUG: Screener.in (Top) filled {tr_key} = {val}")
+
+                    # Fallback mapping for Financial Ratios table
+                    screener_field_map = {
+                        'dividend_yield': 'Dividend Yield',
+                        'pb_ratio': 'Stock P/B',
+                        'pe_ratio': 'Stock P/E',
+                        'roce': 'ROCE',
+                        'roe': 'ROE'
+                    }
+                    
+                    for key, screener_name in screener_field_map.items():
+                        # ONLY update if field is still N/A (Reverting override logic)
+                        if is_na(key_metrics.get(key)):
+                            val = get_latest_from_ratios(screener_name)
+                            if val and not is_na(val):
+                                # Format the value appropriately
+                                if key in ['dividend_yield', 'roce', 'roe'] and '%' not in val:
+                                    val = f"{val}%"
+                                key_metrics[key] = val
+                                screener_filled.append(key)
+                                print(f"DEBUG: Screener.in (Table) filled {key} = {val}")
+                    
+                    if screener_filled:
+                        if "Screener.in" not in source_info:
+                            source_info.append("Screener.in")
+                        filled_fields.extend(screener_filled)
+                    print(f"DEBUG: Screener.in processed {len(screener_filled)} fields for {ticker}")
+                else:
+                    print(f"DEBUG: Financial Ratios table not found or empty")
+            except Exception as e:
+                print(f"WARN: Screener.in fundamentals fetch failed for {ticker}: {e}")
+                import traceback
+                traceback.print_exc()
+            
+            # Update na_fields after Screener fill
+            na_fields = [k for k, v in key_metrics.items() if is_na(v)]
+            
+            # =====================================================
+            # STEP 2: Fill remaining N/A gaps with yfinance
+            # =====================================================
+            if na_fields:
+                try:
+                    log_progress(f"Fetching {ticker} metrics from yfinance...")
+                    yf_metrics = get_yfinance_metrics(ticker)
+                    
+                    # Also get industry and sector from yfinance
+                    try:
+                        yf_ticker = yf.Ticker(f"{ticker}.NS")
+                        info = yf_ticker.info or {}
+                        if 'industry' in na_fields and info.get('industry'):
+                            key_metrics['industry'] = info.get('industry')
+                            filled_fields.append('industry')
+                        if 'sector' in na_fields and info.get('sector'):
+                            key_metrics['sector'] = info.get('sector')
+                            filled_fields.append('sector')
+                    except:
+                        pass
+                    
+                    # Map yfinance fields to key_metrics fields
+                    yf_field_map = {
+                        'current_price': 'current_price',
+                        'market_cap': 'market_cap',
+                        'pe_ratio': 'pe_ratio',
+                        'pb_ratio': 'pb_ratio',
+                        'dividend_yield': 'dividend_yield',
+                        'roce': 'roce',
+                        'roe': 'roe',
+                        'npm': 'npm',
+                        'sales_growth_yoy': 'sales_growth_yoy',
+                        'ebitda_growth_yoy': 'ebitda_growth_yoy'
+                    }
+                    
+                    yf_filled = []
+                    for key, yf_key in yf_field_map.items():
+                        if key in na_fields:
+                            yf_val = yf_metrics.get(yf_key)
+                            if yf_val and not is_na(yf_val):
+                                key_metrics[key] = yf_val
+                                yf_filled.append(key)
+                                print(f"DEBUG: yfinance filled {key} = {yf_val}")
+                    
+                    if yf_filled:
+                        source_info.append("yfinance")
+                        filled_fields.extend(yf_filled)
+                    print(f"DEBUG: yfinance filled {len(yf_filled)} fields for {ticker}")
+                except Exception as e:
+                    print(f"WARN: yfinance fetch failed for {ticker}: {e}")
+            
+            # =====================================================
+            # STEP 3: Fill remaining N/A gaps with AI (sonar-pro)
+            # =====================================================
+            remaining_na = [k for k, v in key_metrics.items() if is_na(v)]
+            if remaining_na:
+                print(f"DEBUG: Still N/A after yfinance: {remaining_na}")
+                try:
+                    log_progress(f"Fetching {ticker} metrics from AI...")
+                    ai_result = extract_metrics_via_ai(ticker)
+                    ai_company = ai_result.get('company', {})
+                    
+                    if ai_company:
+                        ai_field_map = {
+                            'current_price': 'cmp',
+                            'market_cap': 'market_cap',
+                            'pe_ratio': 'pe_ratio',
+                            'pb_ratio': 'pb_ratio',
+                            'dividend_yield': 'dividend_yield',
+                            'roce': 'roce',
+                            'roe': 'roe',
+                            'npm': 'npm',
+                            'sales_growth_yoy': 'sales_growth_yoy',
+                            'ebitda_growth_yoy': 'ebitda_growth_yoy'
+                        }
+                        
+                        ai_filled = []
+                        for key, ai_key in ai_field_map.items():
+                            if key in remaining_na:
+                                ai_val = ai_company.get(ai_key)
+                                if ai_val and not is_na(ai_val):
+                                    key_metrics[key] = ai_val
+                                    ai_filled.append(key)
+                                    print(f"DEBUG: AI filled {key} = {ai_val}")
+                        
+                        if ai_filled:
+                            source_info.append("AI")
+                            filled_fields.extend(ai_filled)
+                        print(f"DEBUG: AI filled {len(ai_filled)} fields for {ticker}")
+                except Exception as e:
+                    print(f"WARN: AI fetch failed for {ticker}: {e}")
+            
+            # Ensure all expected fields exist (set to N/A if still missing)
+            expected_fields = ['current_price', 'market_cap', 'pe_ratio', 'pb_ratio', 'dividend_yield',
+                              'roce', 'roe', 'sales_growth_yoy', 'ebitda_growth_yoy', 'npm',
+                              'industry', 'sector']
+            for field in expected_fields:
+                if field not in key_metrics:
+                    key_metrics[field] = 'N/A'
+            
+            source_str = " + ".join(source_info) if source_info else "None"
+            log_progress(f"Key metrics refreshed from {source_str}")
+            print(f"INFO: Refreshed key metrics for {ticker} - Source: {source_str}, Filled: {filled_fields}")
+            
+            return jsonify({
+                'success': True,
+                'section': 'key_metrics',
+                'source': source_str,
+                'data': key_metrics,
+                'filled_fields': filled_fields
+            })
+        
+        return jsonify({'error': f'Unknown section: {section}'}), 400
+        
+    except Exception as e:
+        print(f"ERROR in /refresh-section: {e}")
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+# =====================================================================
+# END: Section Refresh Endpoint
+# =====================================================================
+
+# =====================================================================
+# START: Add Peer to Comparison Endpoint
+# =====================================================================
+
+@app.route('/add-peer', methods=['POST'])
+def add_peer():
+    """
+    Add a new peer to the comparison table.
+    Fetches data from Screener.in first, then fills gaps with yfinance.
+    """
+    try:
+        data = request.get_json()
+        ticker = data.get('ticker', '').strip().upper()
+        
+        if not ticker:
+            return jsonify({'error': 'No ticker provided'}), 400
+        
+        print(f"INFO: Adding peer {ticker} to comparison...")
+        
+        # Helper functions (same as in refresh-section)
+        def is_na(val):
+            if val is None:
+                return True
+            val_str = str(val).strip()
+            return val_str == '' or val_str == 'N/A' or val_str == 'nan'
+        
+        # =====================================================
+        # STEP 1: Try to get data from Screener.in
+        # =====================================================
+        from screener_fetcher import fetch_peer_comparison_from_screener
+        
+        peer_data = {}
+        try:
+            log_progress(f"Fetching {ticker} from Screener.in...")
+            screener_result = fetch_peer_comparison_from_screener(ticker)
+            screener_company = screener_result.get('company', {})
+            
+            if screener_company and screener_company.get('name'):
+                peer_data = dict(screener_company)
+                peer_data['ticker'] = ticker
+                print(f"INFO: Got Screener.in data for {ticker}")
+        except Exception as e:
+            print(f"WARN: Screener.in fetch failed for {ticker}: {e}")
+        
+        # =====================================================
+        # STEP 2: Fill gaps with yfinance
+        # =====================================================
+        log_progress(f"Fetching {ticker} from yfinance...")
+        yf_metrics = get_yfinance_metrics(ticker)
+        
+        # Get company name from yfinance if not from Screener
+        if not peer_data.get('name'):
+            try:
+                yf_ticker = yf.Ticker(f"{ticker}.NS")
+                info = yf_ticker.info or {}
+                peer_data['name'] = info.get("longName") or info.get("shortName") or ticker
+                peer_data['ticker'] = ticker
+            except:
+                peer_data['name'] = ticker
+                peer_data['ticker'] = ticker
+        
+        # Fields to fill
+        metric_fields = ['cmp', 'market_cap', 'pe_ratio', 'pb_ratio', 'dividend_yield', 
+                        'roce', 'roe', 'sales_growth_yoy', 'ebitda_growth_yoy', 'npm']
+        
+        # Map our field names to yfinance field names
+        yf_field_map = {
+            'cmp': 'current_price',
+            'pe_ratio': 'pe_ratio',
+            'pb_ratio': 'pb_ratio',
+            'dividend_yield': 'dividend_yield',
+            'roe': 'roe',
+            'roce': 'roce',
+            'npm': 'npm',
+            'market_cap': 'market_cap',
+            'sales_growth_yoy': 'sales_growth_yoy',
+            'ebitda_growth_yoy': 'ebitda_growth_yoy'
+        }
+        
+        # Fill N/A gaps with yfinance data
+        for field in metric_fields:
+            if is_na(peer_data.get(field)):
+                yf_field = yf_field_map.get(field, field)
+                yf_val = yf_metrics.get(yf_field)
+                if yf_val and not is_na(yf_val):
+                    peer_data[field] = yf_val
+        
+        # Ensure all fields have at least 'N/A'
+        for field in metric_fields:
+            if field not in peer_data or is_na(peer_data.get(field)):
+                peer_data[field] = 'N/A'
+        
+        print(f"SUCCESS: Added peer {ticker} - {peer_data.get('name')}")
+        
+        return jsonify({
+            'success': True,
+            'peer': peer_data
+        })
+        
+    except Exception as e:
+        print(f"ERROR in /add-peer: {e}")
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+# =====================================================================
+# END: Add Peer to Comparison Endpoint
+# =====================================================================
+
+
+# =====================================================================
 # END: New ASYNC and Caching Implementation for Analysis
 # =====================================================================
+
 
 
 # =====================================================================
@@ -4366,8 +5138,8 @@ def run_batch_precache(job_id, tickers):
             try:
                 from screener_fetcher import fetch_consolidated, fetch_latest_documents
                 
-                # Fetch tables (returns dict of DataFrames) and company description
-                tables_from_screener, company_description = fetch_consolidated(ticker)
+                # Fetch tables (returns dict of DataFrames), company description, and top ratios
+                tables_from_screener, company_description, top_ratios = fetch_consolidated(ticker)
                 
                 # Parse the fundamentals - convert DataFrames to JSON for frontend
                 fund_data_for_frontend = {}
@@ -4394,7 +5166,7 @@ def run_batch_precache(job_id, tickers):
                     latest_documents = []
                 
                 # Get key metrics from fundamentals
-                key_metrics = extract_key_metrics_from_fundamentals(fund_data_for_ai_context)
+                key_metrics = extract_key_metrics_from_fundamentals(fund_data_for_ai_context, top_ratios=top_ratios)
                 
                 print(f"LIGHT PRE-CACHE: [{i+1}/{total}] {ticker} - Screener.in data fetched ✓")
                 

@@ -846,7 +846,7 @@
     .industry-report h1~p:not(h2~p):not(h3~p):not(h4~p),
     .industry-report h1~ul:not(h2~ul):not(h3~ul):not(h4~ul),
     .industry-report h1~ol:not(h2~ol):not(h3~ol):not(h4~ol),
-    .industry-report h1~table:not(h2~table):not(h3~table):not(h4~table) {
+    .industry-report h1~.table-container:not(h2~.table-container):not(h3~.table-container):not(h4~.table-container) {
       margin-left: 0;
       margin-right: 0;
       width: 100%;
@@ -855,7 +855,7 @@
     .industry-report h2~p:not(h3~p):not(h4~p),
     .industry-report h2~ul:not(h3~ul):not(h4~ul),
     .industry-report h2~ol:not(h3~ol):not(h4~ul),
-    .industry-report h2~table:not(h3~table):not(h4~table) {
+    .industry-report h2~.table-container:not(h3~.table-container):not(h4~.table-container) {
       margin-left: 1rem;
       margin-right: 1rem;
       width: calc(100% - 2rem);
@@ -864,7 +864,7 @@
     .industry-report h3~p:not(h4~p),
     .industry-report h3~ul:not(h4~ul),
     .industry-report h3~ol:not(h4~ol),
-    .industry-report h3~table:not(h4~table) {
+    .industry-report h3~.table-container:not(h4~.table-container) {
       margin-left: 2rem;
       margin-right: 2rem;
       width: calc(100% - 4rem);
@@ -873,7 +873,7 @@
     .industry-report h4~p,
     .industry-report h4~ul,
     .industry-report h4~ol,
-    .industry-report h4~table {
+    .industry-report h4~.table-container {
       margin-left: 3rem;
       margin-right: 3rem;
       width: calc(100% - 6rem);
@@ -923,10 +923,18 @@
     }
 
     /* Table spacing */
+    .table-container {
+      width: 100%;
+      overflow-x: auto;
+      margin: 1.5rem 0;
+      border-radius: 0.5rem;
+      border: 1px solid #e2e8f0;
+    }
+
     .industry-report table {
       width: 100%;
       border-collapse: collapse;
-      margin: 1.5rem 0;
+      margin: 0;
       font-size: 0.875rem;
     }
 
@@ -1013,9 +1021,143 @@
     }
 
     .toc-link:hover {
-      background: #3b82f6;
-      color: white;
-      transform: translateX(4px);
+      text-decoration: underline;
+      color: #1d4ed8;
+    }
+
+    /* === PRINT STLYES (NATIVE SEARCHABLE PDF) === */
+    @media print {
+
+      /* Hide everything except results */
+      body * {
+        visibility: hidden !important;
+      }
+
+      #industryResults,
+      #industryResults * {
+        visibility: visible !important;
+      }
+
+      #industryResults {
+        position: absolute !important;
+        left: 0 !important;
+        top: 0 !important;
+        width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+      }
+
+      /* Page Setup - Landscape for wider tables */
+      @page {
+        size: A4 landscape;
+        margin: 10mm;
+      }
+
+      /* Force Colors to Print */
+      * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+
+      /* Industry Report Formatting for Print */
+      .industry-report {
+        font-size: 9.5pt !important;
+        line-height: 1.4 !important;
+      }
+
+      .industry-report h1 {
+        font-size: 20pt !important;
+        margin-top: 0 !important;
+        margin-left: 0 !important;
+      }
+
+      .industry-report h2 {
+        font-size: 16pt !important;
+        margin-left: 0 !important;
+      }
+
+      .industry-report h3 {
+        font-size: 13pt !important;
+        margin-left: 0 !important;
+      }
+
+      .industry-report h4 {
+        font-size: 11pt !important;
+        margin-left: 0 !important;
+      }
+
+      /* Reset Indentation for Print to maximize horizontal space */
+      .industry-report h1~p,
+      .industry-report h1~ul,
+      .industry-report h1~ol,
+      .industry-report h1~.table-container,
+      .industry-report h2~p,
+      .industry-report h2~ul,
+      .industry-report h2~ol,
+      .industry-report h2~.table-container,
+      .industry-report h3~p,
+      .industry-report h3~ul,
+      .industry-report h3~ol,
+      .industry-report h3~.table-container,
+      .industry-report h4~p,
+      .industry-report h4~ul,
+      .industry-report h4~ol,
+      .industry-report h4~.table-container {
+        margin-left: 0 !important;
+        margin-right: 0 !important;
+        width: 100% !important;
+      }
+
+      /* Table Fix for Print - Truncation Prevention */
+      .table-container {
+        width: 100% !important;
+        overflow: visible !important;
+        border: none !important;
+        margin: 12pt 0 !important;
+        padding: 0 !important;
+      }
+
+      .industry-report table {
+        width: 100% !important;
+        table-layout: auto !important;
+        /* Browser-calculated widths are safer in landscape */
+        font-size: 8pt !important;
+        /* Small enough to fit columns */
+        page-break-inside: avoid !important;
+        border-collapse: collapse !important;
+      }
+
+      .industry-report th,
+      .industry-report td {
+        padding: 4pt !important;
+        /* Slightly more padding for readability */
+        white-space: normal !important;
+        /* Ensure text wraps */
+        overflow-wrap: break-word !important;
+        /* Break long words if necessary */
+        word-wrap: break-word !important;
+        border: 0.5pt solid #e2e8f0 !important;
+        vertical-align: top !important;
+      }
+
+      .industry-report th {
+        background-color: #f1f5f9 !important;
+      }
+
+      /* Better Page Breaks */
+      h2,
+      h3,
+      h4 {
+        page-break-after: avoid !important;
+        break-after: avoid !important;
+      }
+
+      table,
+      blockquote,
+      .toc-container {
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+      }
     }
 
     .toc-number {
@@ -1114,8 +1256,8 @@
     }
 
     /* =====================================================================
-       MOBILE RESPONSIVE STYLES
-       ===================================================================== */
+  MOBILE RESPONSIVE STYLES
+  ===================================================================== */
 
     /* Tablet and below (768px) */
     @media (max-width: 768px) {
@@ -2159,62 +2301,18 @@
         return;
       }
 
-      // Hide the download button
-      const downloadBtn = document.getElementById('downloadPdfBtn');
-      if (downloadBtn) {
-        downloadBtn.style.display = 'none';
-      }
+      // Hide the download button temporarily
+      const downloader = document.getElementById('downloadPdfBtn');
+      if (downloader) downloader.style.display = 'none';
 
-      // Create print-specific styles
-      const printStyle = document.createElement('style');
-      printStyle.id = 'print-styles';
-      printStyle.textContent = `
-        @media print {
-          body * {
-            visibility: hidden;
-          }
-          #industryResults, #industryResults * {
-            visibility: visible;
-          }
-          #industryResults {
-            position: absolute;
-            left: 0;
-            top: 0;
-            width: 100%;
-          }
-          @page {
-            size: A4;
-            margin: 15mm;
-          }
-          /* Ensure colors print */
-          * {
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
-            color-adjust: exact !important;
-          }
-          /* Better page breaks */
-          h2, h3, h4 {
-            page-break-after: avoid;
-            break-after: avoid;
-          }
-          table, figure {
-            page-break-inside: avoid;
-            break-inside: avoid;
-          }
-        }
-      `;
-      document.head.appendChild(printStyle);
-
-      // Trigger print dialog
+      // Trigger standard print dialog
+      // The @media print CSS below handles the formatting
       window.print();
 
-      // Cleanup after print
+      // Restore download button
       setTimeout(() => {
-        document.getElementById('print-styles')?.remove();
-        if (downloadBtn) {
-          downloadBtn.style.display = '';
-        }
-      }, 1000);
+        if (downloader) downloader.style.display = '';
+      }, 500);
     }
 
     function copyMessageToClipboard(button) {
@@ -2372,7 +2470,7 @@
           tableHtml += '</tr>';
         });
         tableHtml += '</tbody></table>';
-        return '\n' + tableHtml + '\n';
+        return '\n<div class="table-container">' + tableHtml + '</div>\n';
       });
 
       // Bold and italic
@@ -2968,6 +3066,15 @@
       const ticker = document.getElementById('tickerInput').value.trim().toUpperCase();
       if (!ticker) return alert('Please enter a ticker.');
 
+      // Hide dropdown immediately when analysis starts (prevents persistence when switching tabs)
+      const stockDropdownEl = document.getElementById('stockDropdown');
+      if (stockDropdownEl) {
+        stockDropdownEl.classList.add('hidden');
+      }
+      selectedIndex = -1;
+      // Blur the input to prevent focus event from re-showing dropdown when switching tabs
+      document.getElementById('tickerInput').blur();
+
       const resultsContainer = document.getElementById('companyResults');
       resultsContainer.innerHTML = '';
       setupSseListener();
@@ -3057,25 +3164,40 @@
             `;
           }).join('');
 
-          // Check if we have cache info to show refresh option
-          const cacheRefreshBtn = window.cacheInfo ? `
-            <div class="flex items-center gap-2">
-              <span class="text-xs text-slate-400">Updated ${window.cacheInfo.cachedAt}</span>
-              <button onclick="runCompanyAnalysis(true)" class="text-slate-400 hover:text-green-600 hover:bg-green-50 p-1.5 rounded-lg transition-all" title="Refresh data">
+          // Check if we have cache info to show page refresh option - now displayed ABOVE the section
+          const cacheRefreshBar = window.cacheInfo ? `
+            <div class="flex items-center justify-end gap-2 mb-2">
+              <span class="text-xs text-slate-400">Cached: ${window.cacheInfo.cachedAt}</span>
+              <button onclick="runCompanyAnalysis(true)" class="text-slate-400 hover:text-green-600 hover:bg-green-50 p-1.5 rounded-lg transition-all flex items-center gap-1" title="Refresh all data">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
                 </svg>
+                <span class="text-xs">Refresh All</span>
               </button>
             </div>
           ` : '';
 
+          // Section refresh button for Key Metrics only
+          const sectionRefreshBtn = `
+            <button onclick="refreshKeyMetrics()" 
+                    id="key-metrics-refresh-btn"
+                    class="text-slate-400 hover:text-green-600 hover:bg-green-50 p-2 rounded-lg transition-all"
+                    title="Refresh Key Metrics">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                      d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+              </svg>
+            </button>
+          `;
+
           return `
-            <div class="bg-gradient-to-br from-green-50 to-emerald-50 p-6 rounded-xl shadow-md border border-green-200 mb-8">
+            ${cacheRefreshBar}
+            <div class="bg-gradient-to-br from-green-50 to-emerald-50 p-6 rounded-xl shadow-md border border-green-200 mb-8" id="key-metrics-section">
               <div class="flex justify-between items-center mb-4">
                 <h3 class="text-xl font-bold text-green-800">📊 Key Metrics Snapshot</h3>
-                ${cacheRefreshBtn}
+                ${sectionRefreshBtn}
               </div>
-              <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4" id="key-metrics-grid">
                 ${cards}
               </div>
             </div>
@@ -3165,10 +3287,23 @@
           const rowsHtml = allRows.map((row, idx) => {
             const isMainCompany = idx === 0;
             const rowClass = isMainCompany ? 'highlight-company' : '';
+            const peerName = row.name || row.ticker || 'N/A';
+            const peerTicker = row.ticker || peerName;
+
+            // Remove button only for peers (not main company, not industry average)
+            const removeBtn = !isMainCompany ? `
+              <button onclick="removePeer('${peerName.replace(/'/g, "\\'")}')" 
+                      class="text-red-400 hover:text-red-600 hover:bg-red-50 p-1 rounded transition-all"
+                      title="Remove from comparison">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+              </button>
+            ` : '';
 
             return `
-              <tr class="${rowClass}">
-                <td class="company-name">${row.name || row.ticker || 'N/A'}</td>
+              <tr class="${rowClass}" data-peer-name="${peerName}">
+                <td class="company-name">${peerName}</td>
                 <td>${formatValue(row.cmp)}</td>
                 <td>${formatValue(row.market_cap)}</td>
                 <td>${formatValue(row.pe_ratio)}</td>
@@ -3179,9 +3314,11 @@
                 <td>${formatValue(row.sales_growth_yoy, true)}</td>
                 <td>${formatValue(row.ebitda_growth_yoy, true)}</td>
                 <td>${formatPercent(row.npm)}</td>
+                <td class="text-center">${removeBtn}</td>
               </tr>
             `;
           }).join('');
+
 
           // Calculate and add Industry Average row
           const industryAvg = calculateIndustryAverage(peers);
@@ -3198,14 +3335,27 @@
               <td>${formatValue(industryAvg.sales_growth_yoy, true)}</td>
               <td>${formatValue(industryAvg.ebitda_growth_yoy, true)}</td>
               <td>${formatPercent(industryAvg.npm)}</td>
+              <td></td>
             </tr>
           ` : '';
 
           return `
-            <div class="bg-white p-6 rounded-xl shadow-lg mb-8">
-              <h2 class="text-2xl font-bold mb-4 text-slate-700">📊 Peer Comparison</h2>
+            <div class="bg-white p-6 rounded-xl shadow-lg mb-8" id="peer-comparison-section">
+              <div class="flex justify-between items-center mb-2">
+                <h2 class="text-2xl font-bold text-slate-700">📊 Peer Comparison</h2>
+                <button onclick="refreshPeerComparison()" 
+                        id="peer-comparison-refresh-btn"
+                        class="text-slate-400 hover:text-green-600 hover:bg-green-50 p-2 rounded-lg transition-all"
+                        title="Refresh Peer Comparison data">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                          d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                  </svg>
+                </button>
+              </div>
               <p class="text-sm text-slate-500 mb-4">Compare key financial metrics across industry peers. Main company is highlighted.</p>
               <div class="peer-table-container">
+
                 <table class="peer-comparison-table">
                   <thead>
                     <tr>
@@ -3218,8 +3368,9 @@
                       <th>ROCE</th>
                       <th>ROE</th>
                       <th>Sales Gr.</th>
-                      <th>EBITDA Gr.</th>
+                      <th>Net Profit Gr.</th>
                       <th>NPM</th>
+                      <th style="width: 50px;"></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -3227,6 +3378,31 @@
                     ${avgRowHtml}
                   </tbody>
                 </table>
+              </div>
+              
+              <!-- Add Peer Section -->
+              <div class="mt-4 pt-4 border-t border-slate-200">
+                <div class="flex items-center gap-3">
+                  <div class="relative flex-1 max-w-xs">
+                    <input type="text" 
+                           id="add-peer-ticker-input" 
+                           placeholder="Enter ticker (e.g., TCS, INFY)" 
+                           class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                           autocomplete="off"
+                           oninput="filterPeerSuggestions(this.value)"
+                           onkeydown="handlePeerInputKeydown(event)">
+                    <div id="peer-suggestions-dropdown" class="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg hidden max-h-48 overflow-y-auto"></div>
+                  </div>
+                  <button onclick="addPeerToComparison()" 
+                          id="add-peer-btn"
+                          class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                    </svg>
+                    Add Peer
+                  </button>
+                  <span id="add-peer-status" class="text-sm text-slate-500"></span>
+                </div>
               </div>
             </div>
           `;
@@ -3401,11 +3577,694 @@
           document.body.style.overflow = ''; // Restore scrolling
         }
 
+        // =====================================================================
+        // START: Section Refresh Functions
+        // =====================================================================
+
+        /**
+         * Refresh the Key Metrics section without reloading the page.
+         * This calls the /refresh-section endpoint to fetch fresh data.
+         */
+        window.refreshKeyMetrics = async function () {
+          const ticker = window.currentTicker;
+          if (!ticker) {
+            alert('No ticker selected. Please analyze a company first.');
+            return;
+          }
+
+          const btn = document.getElementById('key-metrics-refresh-btn');
+          const grid = document.getElementById('key-metrics-grid');
+
+          if (!btn || !grid) {
+            console.error('Key metrics section not found');
+            return;
+          }
+
+          // Extract current metrics from the DOM to preserve non-N/A values
+          const currentMetrics = {};
+          const metricKeyMap = {
+            'Market Cap': 'market_cap',
+            'Industry': 'industry',
+            'Sector': 'sector',
+            'Current Price': 'current_price',
+            'P/E Ratio': 'pe_ratio',
+            'P/B Ratio': 'pb_ratio',
+            'Dividend Yield': 'dividend_yield',
+            'ROCE': 'roce',
+            'ROE': 'roe',
+            'Sales Growth (YoY)': 'sales_growth_yoy',
+            'EBITDA Growth (YoY)': 'ebitda_growth_yoy',
+            'Net Profit Margin': 'npm'
+          };
+
+          const cleanValue = (val) => {
+            if (!val) return 'N/A';
+            let cleaned = val.replace(/[₹%]/g, '').replace(/,/g, '').trim();
+            return cleaned === '' ? 'N/A' : cleaned;
+          };
+
+          grid.querySelectorAll('div.bg-white').forEach(card => {
+            const labelEl = card.querySelector('.text-xs');
+            const valueEl = card.querySelector('.text-base');
+            if (labelEl && valueEl) {
+              const label = labelEl.textContent.trim();
+              const key = metricKeyMap[label];
+              if (key) {
+                currentMetrics[key] = cleanValue(valueEl.textContent.trim());
+              }
+            }
+          });
+
+          console.log('Cleaned current metrics from DOM:', currentMetrics);
+
+          const originalBtnContent = btn.innerHTML;
+
+          // Show loading spinner on button
+          btn.disabled = true;
+          btn.innerHTML = `<svg class="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>`;
+
+          // Add loading overlay to grid
+          grid.style.opacity = '0.5';
+
+          try {
+            console.log(`Refreshing key metrics for ${ticker}...`);
+
+            const res = await fetch('/refresh-section', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                ticker: ticker,
+                section: 'key_metrics',
+                current_metrics: currentMetrics  // Send current metrics to only fill N/A fields
+              })
+            });
+
+            const result = await res.json();
+            if (!res.ok) throw new Error(result.error || 'Failed to refresh key metrics');
+
+            console.log('Key metrics refresh result:', result);
+
+            // Update the grid with new metric cards
+            const metrics = result.data;
+            if (metrics) {
+              const metricCards = [
+                { label: 'Market Cap', key: 'market_cap' },
+                { label: 'Industry', key: 'industry' },
+                { label: 'Sector', key: 'sector' },
+                { label: 'Current Price', key: 'current_price' },
+                { label: 'P/E Ratio', key: 'pe_ratio' },
+                { label: 'P/B Ratio', key: 'pb_ratio' },
+                { label: 'Dividend Yield', key: 'dividend_yield' },
+                { label: 'ROCE', key: 'roce' },
+                { label: 'ROE', key: 'roe' },
+                { label: 'Sales Growth (YoY)', key: 'sales_growth_yoy' },
+                { label: 'EBITDA Growth (YoY)', key: 'ebitda_growth_yoy' },
+                { label: 'Net Profit Margin', key: 'npm' }
+              ];
+
+              const cards = metricCards.map(m => {
+                let value = metrics[m.key] || 'N/A';
+                const isGrowth = m.key.includes('growth');
+
+                // Add % suffix for percentage metrics if not already present
+                const percentageMetrics = ['dividend_yield', 'roce', 'roe', 'npm', 'sales_growth_yoy', 'ebitda_growth_yoy'];
+                if (percentageMetrics.includes(m.key) && value !== 'N/A' && !String(value).includes('%')) {
+                  value = value + ' %';
+                }
+
+                const isPositive = isGrowth && String(value).includes('+');
+                const isNegative = isGrowth && String(value).includes('-');
+
+                return `
+                  <div class="bg-white p-4 rounded-lg shadow-sm border border-green-100 hover:shadow-md transition-all hover:border-green-300">
+                    <div class="text-xs text-slate-500 font-medium mb-1">${m.label}</div>
+                    <div class="text-base font-bold ${isPositive ? 'text-green-600' : isNegative ? 'text-red-600' : 'text-slate-800'}">${value}</div>
+                  </div>
+                `;
+              }).join('');
+
+              grid.innerHTML = cards;
+              console.log('Key metrics updated successfully');
+            }
+
+          } catch (err) {
+            console.error('Key metrics refresh failed:', err);
+            alert('Failed to refresh key metrics: ' + err.message);
+          } finally {
+            // Restore button and grid
+            btn.disabled = false;
+            btn.innerHTML = originalBtnContent;
+            grid.style.opacity = '1';
+          }
+        };
+
+        /**
+         * Refresh the Peer Comparison section without reloading the page.
+         * This calls the /refresh-section endpoint to fetch fresh data.
+         */
+        window.refreshPeerComparison = async function () {
+          const ticker = window.currentTicker;
+          if (!ticker) {
+            alert('No ticker selected. Please analyze a company first.');
+            return;
+          }
+
+          const btn = document.getElementById('peer-comparison-refresh-btn');
+          const section = document.getElementById('peer-comparison-section');
+
+          if (!btn || !section) {
+            console.error('Peer comparison section not found');
+            return;
+          }
+
+          const originalBtnContent = btn.innerHTML;
+
+          // Show loading spinner on button
+          btn.disabled = true;
+          btn.innerHTML = `<svg class="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>`;
+
+          // Add a subtle loading overlay to the table
+          // Re-fetch everything right before extraction to be 100% sure we have the latest DOM
+          const latestSection = document.getElementById('peer-comparison-section');
+          const currentCompanyMetrics = {};
+
+          if (latestSection) {
+            // Find the table and then its first row in tbody
+            const tbody = latestSection.querySelector('tbody');
+            let firstRow = latestSection.querySelector('tr.highlight-company');
+
+            if (!firstRow && tbody) {
+              firstRow = tbody.querySelector('tr');
+              console.log('DEBUG: highlight-company not found, used first tr in tbody');
+            } else if (!firstRow) {
+              firstRow = latestSection.querySelector('tr');
+              console.log('DEBUG: falling back to any tr');
+            }
+
+            if (firstRow) {
+              const cells = firstRow.querySelectorAll('td');
+              // Ensure we have enough columns (Company, CMP, Mkt Cap, PE, PB, Div, ROCE, ROE, Sales, Profit, NPM)
+              if (cells.length >= 11) {
+                const clean = (val) => {
+                  if (!val) return 'N/A';
+                  let cleaned = val.replace(/[₹%]/g, '').replace(/,/g, '').trim();
+                  return cleaned === '' ? 'N/A' : cleaned;
+                };
+
+                currentCompanyMetrics.cmp = clean(cells[1].textContent);
+                currentCompanyMetrics.market_cap = clean(cells[2].textContent);
+                currentCompanyMetrics.pe_ratio = clean(cells[3].textContent);
+                currentCompanyMetrics.pb_ratio = clean(cells[4].textContent);
+                currentCompanyMetrics.dividend_yield = clean(cells[5].textContent);
+                currentCompanyMetrics.roce = clean(cells[6].textContent);
+                currentCompanyMetrics.roe = clean(cells[7].textContent);
+                currentCompanyMetrics.sales_growth_yoy = clean(cells[8].textContent);
+                currentCompanyMetrics.ebitda_growth_yoy = clean(cells[9].textContent);
+                currentCompanyMetrics.npm = clean(cells[10].textContent);
+
+                console.log('DEBUG: Extracted metrics for primary company:', currentCompanyMetrics);
+              }
+            }
+          }
+
+          try {
+            console.log(`Refreshing peer comparison for ${ticker}...`);
+
+            const res = await fetch('/refresh-section', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                ticker: ticker,
+                section: 'peer_comparison',
+                current_company_metrics: currentCompanyMetrics
+              })
+            });
+
+            const result = await res.json();
+            if (!res.ok) throw new Error(result.error || 'Failed to refresh peer comparison');
+
+            console.log('Peer comparison refresh result:', result);
+
+            // Re-render the Peer Comparison table with new data
+            const peerData = result.data;
+            if (peerData) {
+              // Store peer data for add/remove operations
+              window.currentPeerData = peerData;
+              const newHtml = renderPeerComparisonTable(peerData);
+              // Replace entire section with new HTML
+              section.outerHTML = newHtml;
+              console.log('Peer comparison section updated successfully');
+            }
+
+          } catch (err) {
+            console.error('Peer comparison refresh failed:', err);
+            alert('Failed to refresh peer comparison: ' + err.message);
+
+            // Restore table opacity on error
+            if (tableContainer) {
+              tableContainer.style.opacity = '1';
+            }
+          } finally {
+            // Restore button - need to find it again since HTML may have changed
+            const newBtn = document.getElementById('peer-comparison-refresh-btn');
+            if (newBtn) {
+              newBtn.disabled = false;
+              newBtn.innerHTML = originalBtnContent;
+            }
+          }
+        };
+
+        /**
+         * Get localStorage key for peer customization
+         */
+        function getPeerStorageKey(ticker) {
+          return `peerCustomization_${ticker}`;
+        }
+
+        /**
+         * Save peer customization to localStorage
+         */
+        function savePeerCustomization(ticker, removedPeers, addedPeers) {
+          const data = { removedPeers, addedPeers };
+          localStorage.setItem(getPeerStorageKey(ticker), JSON.stringify(data));
+        }
+
+        /**
+         * Load peer customization from localStorage
+         */
+        function loadPeerCustomization(ticker) {
+          try {
+            const stored = localStorage.getItem(getPeerStorageKey(ticker));
+            if (stored) {
+              return JSON.parse(stored);
+            }
+          } catch (e) {
+            console.error('Failed to load peer customization:', e);
+          }
+          return { removedPeers: [], addedPeers: [] };
+        }
+
+        /**
+         * Remove a peer from the comparison table
+         */
+        window.removePeer = function (peerName) {
+          const ticker = window.currentTicker;
+          if (!ticker) return;
+
+          console.log(`Removing peer: ${peerName}`);
+
+          // Find and remove the row
+          const rows = document.querySelectorAll('#peer-comparison-section tbody tr');
+          rows.forEach(row => {
+            if (row.dataset && row.dataset.peerName === peerName) {
+              row.remove();
+            }
+          });
+
+          // Update stored peer data
+          if (window.currentPeerData && window.currentPeerData.peers) {
+            window.currentPeerData.peers = window.currentPeerData.peers.filter(
+              p => (p.name || p.ticker) !== peerName
+            );
+          }
+
+          // Save removed peer to localStorage
+          const customization = loadPeerCustomization(ticker);
+          if (!customization.removedPeers.includes(peerName)) {
+            customization.removedPeers.push(peerName);
+          }
+          // Also remove from addedPeers if it was a manually added peer
+          customization.addedPeers = customization.addedPeers.filter(p => p.name !== peerName);
+          savePeerCustomization(ticker, customization.removedPeers, customization.addedPeers);
+
+          // Recalculate and update Industry Average row
+          updateIndustryAverage();
+
+          console.log(`Peer ${peerName} removed successfully`);
+        };
+
+        /**
+         * Update the Industry Average row after peer changes
+         */
+        function updateIndustryAverage() {
+          const avgRow = document.querySelector('#peer-comparison-section tr.industry-average');
+          if (!avgRow || !window.currentPeerData) return;
+
+          const peers = window.currentPeerData.peers || [];
+          if (peers.length === 0) {
+            avgRow.remove();
+            return;
+          }
+
+          const industryAvg = calculateIndustryAverage(peers);
+
+          // Helper to format percent
+          const formatPercent = (value) => {
+            if (!value || value === 'N/A') return '<span class="text-slate-400">N/A</span>';
+            const strVal = String(value).trim();
+            if (strVal.includes('%')) return strVal;
+            if (!isNaN(parseFloat(strVal))) return strVal + ' %';
+            return strVal;
+          };
+
+          const formatValue = (value, isGrowth = false) => {
+            if (!value || value === 'N/A') return '<span class="text-slate-400">N/A</span>';
+            let strVal = String(value).trim();
+            if (isGrowth) {
+              if (!strVal.includes('%')) strVal = strVal + ' %';
+              if (strVal.includes('-') && !strVal.includes('N/A')) {
+                return `<span class="negative">${strVal}</span>`;
+              } else if (parseFloat(strVal) > 0 || strVal.includes('+')) {
+                return `<span class="positive">${strVal}</span>`;
+              }
+            }
+            return strVal;
+          };
+
+          // Update the row cells (skip first and last cells)
+          const cells = avgRow.querySelectorAll('td');
+          if (cells.length >= 12) {
+            cells[1].innerHTML = formatValue(industryAvg.cmp);
+            cells[2].innerHTML = formatValue(industryAvg.market_cap);
+            cells[3].innerHTML = formatValue(industryAvg.pe_ratio);
+            cells[4].innerHTML = formatValue(industryAvg.pb_ratio);
+            cells[5].innerHTML = formatPercent(industryAvg.dividend_yield);
+            cells[6].innerHTML = formatPercent(industryAvg.roce);
+            cells[7].innerHTML = formatPercent(industryAvg.roe);
+            cells[8].innerHTML = formatValue(industryAvg.sales_growth_yoy, true);
+            cells[9].innerHTML = formatValue(industryAvg.ebitda_growth_yoy, true);
+            cells[10].innerHTML = formatPercent(industryAvg.npm);
+          }
+        }
+
+        /**
+         * Add a new peer to the comparison table
+         */
+        window.addPeerToComparison = async function () {
+          const ticker = window.currentTicker;
+          const inputEl = document.getElementById('add-peer-ticker-input');
+          const statusEl = document.getElementById('add-peer-status');
+          const btnEl = document.getElementById('add-peer-btn');
+
+          if (!ticker || !inputEl) return;
+
+          const peerTicker = inputEl.value.trim().toUpperCase();
+          if (!peerTicker) {
+            if (statusEl) statusEl.textContent = 'Please enter a ticker symbol';
+            return;
+          }
+
+          // Check if peer already exists
+          if (window.currentPeerData && window.currentPeerData.peers) {
+            const exists = window.currentPeerData.peers.some(
+              p => (p.ticker || '').toUpperCase() === peerTicker ||
+                (p.name || '').toUpperCase().includes(peerTicker)
+            );
+            if (exists) {
+              if (statusEl) statusEl.textContent = 'Peer already in table';
+              return;
+            }
+          }
+
+          // Show loading state
+          if (btnEl) {
+            btnEl.disabled = true;
+            btnEl.innerHTML = `<svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg> Adding...`;
+          }
+          if (statusEl) statusEl.textContent = `Fetching data for ${peerTicker}...`;
+
+          try {
+            const res = await fetch('/add-peer', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ ticker: peerTicker })
+            });
+
+            const result = await res.json();
+            if (!res.ok) throw new Error(result.error || 'Failed to add peer');
+
+            const newPeer = result.peer;
+            console.log('Added new peer:', newPeer);
+
+            // Add to stored peer data
+            if (!window.currentPeerData) window.currentPeerData = { company: {}, peers: [] };
+            if (!window.currentPeerData.peers) window.currentPeerData.peers = [];
+            window.currentPeerData.peers.push(newPeer);
+
+            // Save to localStorage
+            const customization = loadPeerCustomization(ticker);
+            customization.addedPeers.push(newPeer);
+            // Remove from removedPeers if it was previously removed
+            customization.removedPeers = customization.removedPeers.filter(name => name !== newPeer.name);
+            savePeerCustomization(ticker, customization.removedPeers, customization.addedPeers);
+
+            // Add new row to table
+            addPeerRowToTable(newPeer);
+
+            // Recalculate Industry Average
+            updateIndustryAverage();
+
+            // Clear input and show success
+            inputEl.value = '';
+            if (statusEl) {
+              statusEl.textContent = `✓ Added ${newPeer.name || peerTicker}`;
+              setTimeout(() => { statusEl.textContent = ''; }, 3000);
+            }
+
+          } catch (err) {
+            console.error('Failed to add peer:', err);
+            if (statusEl) statusEl.textContent = `Error: ${err.message}`;
+          } finally {
+            // Restore button
+            if (btnEl) {
+              btnEl.disabled = false;
+              btnEl.innerHTML = `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+              </svg> Add Peer`;
+            }
+          }
+        };
+
+        /**
+         * Add a peer row to the table
+         */
+        function addPeerRowToTable(peer) {
+          const tbody = document.querySelector('#peer-comparison-section tbody');
+          const avgRow = document.querySelector('#peer-comparison-section tr.industry-average');
+          if (!tbody) return;
+
+          const peerName = peer.name || peer.ticker || 'N/A';
+
+          // Helper functions
+          const formatValue = (value, isGrowth = false) => {
+            if (!value || value === 'N/A') return '<span class="text-slate-400">N/A</span>';
+            let strVal = String(value).trim();
+            if (isGrowth) {
+              if (!strVal.includes('%')) strVal = strVal + ' %';
+              if (strVal.includes('-') && !strVal.includes('N/A')) {
+                return `<span class="negative">${strVal}</span>`;
+              } else if (parseFloat(strVal) > 0 || strVal.includes('+')) {
+                return `<span class="positive">${strVal}</span>`;
+              }
+            }
+            return strVal;
+          };
+
+          const formatPercent = (value) => {
+            if (!value || value === 'N/A') return '<span class="text-slate-400">N/A</span>';
+            const strVal = String(value).trim();
+            if (strVal.includes('%')) return strVal;
+            if (!isNaN(parseFloat(strVal))) return strVal + ' %';
+            return strVal;
+          };
+
+          const newRow = document.createElement('tr');
+          newRow.dataset.peerName = peerName;
+          newRow.innerHTML = `
+            <td class="company-name">${peerName}</td>
+            <td>${formatValue(peer.cmp)}</td>
+            <td>${formatValue(peer.market_cap)}</td>
+            <td>${formatValue(peer.pe_ratio)}</td>
+            <td>${formatValue(peer.pb_ratio)}</td>
+            <td>${formatPercent(peer.dividend_yield)}</td>
+            <td>${formatPercent(peer.roce)}</td>
+            <td>${formatPercent(peer.roe)}</td>
+            <td>${formatValue(peer.sales_growth_yoy, true)}</td>
+            <td>${formatValue(peer.ebitda_growth_yoy, true)}</td>
+            <td>${formatPercent(peer.npm)}</td>
+            <td class="text-center">
+              <button onclick="removePeer('${peerName.replace(/'/g, "\\'")}')" 
+                      class="text-red-400 hover:text-red-600 hover:bg-red-50 p-1 rounded transition-all"
+                      title="Remove from comparison">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+              </button>
+            </td>
+          `;
+
+          // Insert before Industry Average row, or append to tbody
+          if (avgRow) {
+            tbody.insertBefore(newRow, avgRow);
+          } else {
+            tbody.appendChild(newRow);
+          }
+        }
+
+        /**
+         * Autocomplete state for Add Peer input
+         */
+        let peerSuggestionIndex = -1;
+        let peerSuggestions = [];
+
+        /**
+         * Filter stock suggestions for Add Peer input
+         */
+        window.filterPeerSuggestions = function (query) {
+          const dropdown = document.getElementById('peer-suggestions-dropdown');
+          if (!dropdown) return;
+
+          if (!query || query.length < 1) {
+            dropdown.classList.add('hidden');
+            peerSuggestions = [];
+            peerSuggestionIndex = -1;
+            return;
+          }
+
+          // Reuse allStocks from main app (already loaded)
+          if (typeof allStocks === 'undefined' || !allStocks.length) {
+            dropdown.classList.add('hidden');
+            return;
+          }
+
+          const q = query.toLowerCase();
+          peerSuggestions = allStocks.filter(s =>
+            s.ticker.toLowerCase().startsWith(q) ||
+            s.name.toLowerCase().includes(q) ||
+            s.ticker.toLowerCase().includes(q)
+          ).slice(0, 8); // Limit to 8 results for compact display
+
+          if (peerSuggestions.length === 0) {
+            dropdown.classList.add('hidden');
+            return;
+          }
+
+          peerSuggestionIndex = -1;
+          renderPeerSuggestions(query);
+        };
+
+        /**
+         * Render peer suggestions dropdown
+         */
+        function renderPeerSuggestions(query) {
+          const dropdown = document.getElementById('peer-suggestions-dropdown');
+          if (!dropdown) return;
+
+          dropdown.innerHTML = peerSuggestions.map((s, i) => {
+            const highlighted = query ? s.name.replace(
+              new RegExp(`(${query})`, 'gi'),
+              '<strong class="text-blue-600">$1</strong>'
+            ) : s.name;
+            return `
+              <div class="peer-suggestion px-3 py-2 cursor-pointer hover:bg-blue-50 flex justify-between items-center text-sm ${i === peerSuggestionIndex ? 'bg-blue-50' : ''}" 
+                   data-ticker="${s.ticker}" data-index="${i}">
+                <span class="truncate">${highlighted}</span>
+                <span class="text-slate-400 font-medium ml-2">${s.ticker}</span>
+              </div>
+            `;
+          }).join('');
+
+          dropdown.classList.remove('hidden');
+
+          // Add click handlers
+          dropdown.querySelectorAll('.peer-suggestion').forEach(item => {
+            item.addEventListener('click', () => selectPeerSuggestion(item.dataset.ticker));
+          });
+        }
+
+        /**
+         * Handle keyboard navigation for Add Peer input
+         */
+        window.handlePeerInputKeydown = function (event) {
+          const dropdown = document.getElementById('peer-suggestions-dropdown');
+
+          if (event.key === 'ArrowDown') {
+            event.preventDefault();
+            if (peerSuggestions.length > 0) {
+              peerSuggestionIndex = Math.min(peerSuggestionIndex + 1, peerSuggestions.length - 1);
+              updatePeerSuggestionHighlight();
+            }
+          } else if (event.key === 'ArrowUp') {
+            event.preventDefault();
+            if (peerSuggestions.length > 0) {
+              peerSuggestionIndex = Math.max(peerSuggestionIndex - 1, 0);
+              updatePeerSuggestionHighlight();
+            }
+          } else if (event.key === 'Enter') {
+            event.preventDefault();
+            if (peerSuggestionIndex >= 0 && peerSuggestions[peerSuggestionIndex]) {
+              selectPeerSuggestion(peerSuggestions[peerSuggestionIndex].ticker);
+            } else {
+              addPeerToComparison();
+            }
+          } else if (event.key === 'Escape') {
+            if (dropdown) dropdown.classList.add('hidden');
+            peerSuggestionIndex = -1;
+          }
+        };
+
+        /**
+         * Update highlight on peer suggestions
+         */
+        function updatePeerSuggestionHighlight() {
+          const dropdown = document.getElementById('peer-suggestions-dropdown');
+          if (!dropdown) return;
+
+          dropdown.querySelectorAll('.peer-suggestion').forEach((item, i) => {
+            if (i === peerSuggestionIndex) {
+              item.classList.add('bg-blue-50');
+            } else {
+              item.classList.remove('bg-blue-50');
+            }
+          });
+        }
+
+        /**
+         * Select a peer suggestion
+         */
+        function selectPeerSuggestion(ticker) {
+          const input = document.getElementById('add-peer-ticker-input');
+          const dropdown = document.getElementById('peer-suggestions-dropdown');
+
+          if (input) input.value = ticker;
+          if (dropdown) dropdown.classList.add('hidden');
+
+          peerSuggestionIndex = -1;
+          peerSuggestions = [];
+
+          // Auto-add the peer
+          addPeerToComparison();
+        }
+
+        // =====================================================================
+        // END: Section Refresh Functions
+        // =====================================================================
+
         // Close modal on Escape key
         document.addEventListener('keydown', (e) => {
           if (e.key === 'Escape') {
             closeAISummaryModal();
           }
+
         });
         // =====================================================================
         // START: MODIFIED SECTION FOR SCORES INTEGRATION
@@ -3501,6 +4360,8 @@
         // NEW: Peer Comparison Table
         let peerComparisonHTML = '';
         if (payload.peer_comparison) {
+          // Store peer data for add/remove operations
+          window.currentPeerData = payload.peer_comparison;
           peerComparisonHTML = renderPeerComparisonTable(payload.peer_comparison);
         }
 

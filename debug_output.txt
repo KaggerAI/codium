@@ -41,3 +41,35 @@ Found 10 panels
 
 6. Searching raw HTML for '/get-document/' pattern:
    Found 12 matches: ['/get-document/report/pdf/92971/', '/get-document/report/pdf/92971/', '/get-document/report/pdf/91972/', '/get-document/report/pdf/91972/', '/get-document/report/pdf/91856/']
+2026-01-31 09:48:31.317339 - Failed to extract text from https://trendlyne.com/get-document/report/pdf/91484/: Cookies expired - please re-export cookies from browser
+2026-01-31 09:48:31.736861 - Failed to extract text from https://trendlyne.com/get-document/report/pdf/91340/: Cookies expired - please re-export cookies from browser
+2026-01-31 10:06:36.579696 - Failed to extract text from https://trendlyne.com/get-document/report/pdf/91484/: Cookies expired - please re-export cookies from browser
+2026-01-31 10:06:36.993105 - Failed to extract text from https://trendlyne.com/get-document/report/pdf/91340/: Cookies expired - please re-export cookies from browser
+2026-01-31 10:11:39.168779 - Failed to extract text from https://trendlyne.com/get-document/report/pdf/91484/: Cookies expired - please re-export cookies from browser
+2026-01-31 10:11:39.608506 - Failed to extract text from https://trendlyne.com/get-document/report/pdf/91340/: Cookies expired - please re-export cookies from browser
+2026-01-31 10:33:50.519357 - Failed to extract text from https://trendlyne.com/get-document/report/pdf/91484/: Cookies expired - please re-export cookies from browser
+2026-01-31 10:33:51.004930 - Failed to extract text from https://trendlyne.com/get-document/report/pdf/91340/: Cookies expired - please re-export cookies from browser
+2026-01-31 10:47:41.726472 - Failed to extract text from https://trendlyne.com/get-document/report/pdf/91484/: Cookies expired - please re-export cookies from browser
+2026-01-31 10:47:42.239655 - Failed to extract text from https://trendlyne.com/get-document/report/pdf/91340/: Cookies expired - please re-export cookies from browser
+2026-01-31 10:58:45.108311 - Failed to extract text from https://trendlyne.com/get-document/report/pdf/91484/: Cookies expired - please re-export cookies from browser
+2026-01-31 10:58:45.600388 - Failed to extract text from https://trendlyne.com/get-document/report/pdf/91340/: Cookies expired - please re-export cookies from browser
+2026-01-31 11:08:59.699179 - Failed to extract text from https://trendlyne.com/get-document/report/pdf/91484/: Cookies expired - please re-export cookies from browser
+2026-01-31 11:09:00.214737 - Failed to extract text from https://trendlyne.com/get-document/report/pdf/91340/: Cookies expired - please re-export cookies from browser
+2026-01-31 11:24:52.415896 - Failed to extract text from https://trendlyne.com/get-document/report/pdf/91484/: Cookies expired - please re-export cookies from browser
+2026-01-31 11:24:52.934994 - Failed to extract text from https://trendlyne.com/get-document/report/pdf/91340/: Cookies expired - please re-export cookies from browser
+2026-01-31 11:56:57.956588 - Failed to extract text from https://trendlyne.com/get-document/report/pdf/91484/: Cookies expired - please re-export cookies from browser
+2026-01-31 11:56:58.478760 - Failed to extract text from https://trendlyne.com/get-document/report/pdf/91340/: Cookies expired - please re-export cookies from browser
+2026-01-31 12:10:28.086586 - Failed to extract text from https://trendlyne.com/get-document/report/pdf/91484/: Cookies expired - please re-export cookies from browser
+2026-01-31 12:10:28.665717 - Failed to extract text from https://trendlyne.com/get-document/report/pdf/91340/: Cookies expired - please re-export cookies from browser
+2026-01-31 12:20:34.850759 - Failed to extract text from https://trendlyne.com/get-document/report/pdf/91484/: Cookies expired - please re-export cookies from browser
+2026-01-31 12:20:35.378643 - Failed to extract text from https://trendlyne.com/get-document/report/pdf/91340/: Cookies expired - please re-export cookies from browser
+2026-01-31 12:29:20.374990 - Failed to extract text from https://trendlyne.com/get-document/report/pdf/91484/: Cookies expired - please re-export cookies from browser
+2026-01-31 12:29:20.864831 - Failed to extract text from https://trendlyne.com/get-document/report/pdf/91340/: Cookies expired - please re-export cookies from browser
+2026-01-31 12:39:27.801250 - Failed to extract text from https://trendlyne.com/get-document/report/pdf/91484/: Cookies expired - please re-export cookies from browser
+2026-01-31 12:39:28.350458 - Failed to extract text from https://trendlyne.com/get-document/report/pdf/91340/: Cookies expired - please re-export cookies from browser
+2026-01-31 12:46:17.242011 - Failed to extract text from https://trendlyne.com/get-document/report/pdf/91484/: Cookies expired - please re-export cookies from browser
+2026-01-31 12:46:17.761227 - Failed to extract text from https://trendlyne.com/get-document/report/pdf/91340/: Cookies expired - please re-export cookies from browser
+2026-01-31 13:55:22.008621 - Failed to extract text from https://trendlyne.com/get-document/report/pdf/61061/: Cookies expired - please re-export cookies from browser
+2026-01-31 13:55:22.778833 - Failed to extract text from https://trendlyne.com/get-document/report/pdf/69570/: Cookies expired - please re-export cookies from browser
+2026-01-31 13:55:23.464822 - Failed to extract text from https://trendlyne.com/get-document/report/pdf/61370/: Cookies expired - please re-export cookies from browser
+2026-01-31 13:55:24.487203 - Failed to extract text from https://trendlyne.com/get-document/report/pdf/61072/: Cookies expired - please re-export cookies from browser

@@ -57,6 +57,30 @@ PATTERNS = [
 
 # --- Helper and Fetching Functions ---
 
+def scrape_top_ratios(soup: BeautifulSoup) -> dict:
+    """
+    Scrapes the top ratios section (ul#top-ratios) from a Screener.in page.
+    Returns a dict mapping metric labels to their values.
+    """
+    top_ratios = {}
+    try:
+        ratios_list = soup.select("#top-ratios li")
+        for li in ratios_list:
+            name_span = li.select_one(".name")
+            value_span = li.select_one(".value .number")
+            if not value_span:
+                 value_span = li.select_one(".value")
+            
+            if name_span and value_span:
+                name = name_span.get_text(strip=True)
+                # Extract only the text, avoiding nested elements if possible
+                value = value_span.get_text(strip=True)
+                top_ratios[name] = value
+    except Exception as e:
+        log_progress(f"WARN: Error scraping top ratios: {e}")
+    return top_ratios
+
+
 def clean_df(df: pd.DataFrame) -> pd.DataFrame:
     # No changes needed in this function
     df = df.copy()
@@ -126,6 +150,8 @@ async def fetch_consolidated_async(ticker: str) -> tuple[dict[str, pd.DataFrame]
     # --- NEW ROBUST PARSING LOGIC ---
     tables = {}
     description = ""
+    top_ratios = scrape_top_ratios(soup)
+    
     try:
         about_p = soup.select_one(".company-info .about p")
         if about_p:
@@ -163,7 +189,7 @@ async def fetch_consolidated_async(ticker: str) -> tuple[dict[str, pd.DataFrame]
     # The old "Growth Patterns" came from tables we are no longer using.
     # The primary financial tables are the priority and are now correctly fetched.
 
-    return tables, description
+    return tables, description, top_ratios
 
 # async def fetch_consolidated_async(ticker: str) -> tuple[dict[str, pd.DataFrame], str]:
 #     """
@@ -227,7 +253,7 @@ async def fetch_consolidated_async(ticker: str) -> tuple[dict[str, pd.DataFrame]
 #         tables["Growth Patterns"] = merged
 #     return tables, description
 
-def fetch_consolidated(ticker: str) -> tuple[dict[str, pd.DataFrame], str]:
+def fetch_consolidated(ticker: str) -> tuple[dict[str, pd.DataFrame], str, dict]:
     
     url = BASE_URL.format(ticker=ticker)
     response = requests.get(url, headers=HEADERS)
@@ -249,6 +275,9 @@ def fetch_consolidated(ticker: str) -> tuple[dict[str, pd.DataFrame], str]:
     except Exception as e:
         log_progress(f"WARN: Could not parse company description for {ticker}. Reason: {e}")
 
+    # --- Top Ratios Scraping ---
+    top_ratios = scrape_top_ratios(soup)
+
     # --- Main financial tables ---
     raw = pd.read_html(text)
     tables = {LABELS.get(i): clean_df(df) for i, df in enumerate(raw, start=1) if LABELS.get(i)}
@@ -268,7 +297,7 @@ def fetch_consolidated(ticker: str) -> tuple[dict[str, pd.DataFrame], str]:
         merged.index.name = ""
         tables["Growth Patterns"] = merged
 
-    return tables, description
+    return tables, description, top_ratios
 
 async def get_company_id_async(ticker: str) -> int:
     url = "https://www.screener.in/api/company/search/"
@@ -494,8 +523,8 @@ async def summarize_presentation_with_gemini_async(pdf_url: str) -> str:
 
             Do not summarize aggressively. The goal is a comprehensive, data-rich extraction of all relevant information from the document."""
 
-            log_progress("Calling Gemini 2.5 Flash to extract insights from Investor Presentation...")
-            model = genai.GenerativeModel('gemini-2.5-flash') # Using the latest model
+            log_progress("Calling Gemini 3 Flash to extract insights from Investor Presentation...")
+            model = genai.GenerativeModel('gemini-3-flash-preview') # Using the latest model
             
             # Use the SYNCHRONOUS version of the call inside this blocking function
             response = model.generate_content([prompt, pdf_file])
@@ -579,8 +608,8 @@ def summarize_presentation_with_gemini(pdf_url: str) -> str:
         Do not summarize aggressively. The goal is a comprehensive, data-rich extraction of all relevant information from the document.
         """
 
-        log_progress("Calling Gemini 2.5 Flash to extract insights from Investor Presentation...")
-        model = genai.GenerativeModel('gemini-2.5-flash') # Using the latest model
+        log_progress("Calling Gemini 3 Flash to extract insights from Investor Presentation...")
+        model = genai.GenerativeModel('gemini-3-flash-preview') # Using the latest model
         # model = genai.GenerativeModel('gemini-1.5-flash-latest')
         response = model.generate_content([prompt, pdf_file])
 
@@ -712,4 +741,255 @@ def fetch_latest_documents(ticker: str) -> list[dict]:
         print(f"ERROR: Could not fetch documents for {ticker}. Reason: {e}")
         traceback.print_exc()
         return []
+
+
+# =====================================================================
+# Peer Comparison Data Fetcher (Direct Screener.in Scrape)
+# =====================================================================
+
+def fetch_peer_comparison_from_screener(ticker: str) -> dict:
+    """
+    Fetches peer comparison data directly from Screener.in by scraping the 
+    peer comparison table (section id: #peers).
+    
+    Uses a two-stage approach like fetch_consolidated_async:
+    STAGE 1: Fast HTTP fetch (works if content is server-rendered)
+    STAGE 2: Playwright browser fetch (fallback for JS-rendered content)
+    
+    Returns:
+        dict: {
+            'company': {'name': str, 'cmp': str, 'market_cap': str, ...},
+            'peers': [{'name': str, 'cmp': str, 'market_cap': str, ...}, ...]
+        }
+    """
+    import asyncio
+    
+    # Run the async version in a new event loop for sync compatibility
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            # If we're already in an async context, run in a new thread
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(asyncio.run, fetch_peer_comparison_from_screener_async(ticker))
+                return future.result(timeout=60)
+        else:
+            return loop.run_until_complete(fetch_peer_comparison_from_screener_async(ticker))
+    except RuntimeError:
+        # No event loop exists, create one
+        return asyncio.run(fetch_peer_comparison_from_screener_async(ticker))
+    except Exception as e:
+        print(f"ERROR: Sync wrapper for peer comparison failed: {e}")
+        return {'company': {}, 'peers': []}
+
+
+async def fetch_peer_comparison_from_screener_async(ticker: str) -> dict:
+    """
+    Async version of fetch_peer_comparison_from_screener.
+    Uses a two-stage approach:
+    STAGE 1: Fast httpx fetch
+    STAGE 2: Playwright browser fetch (fallback for JS-rendered content)
+    """
+    from playwright.async_api import async_playwright
+    
+    standalone_url = f"https://www.screener.in/company/{ticker}/"
+    consolidated_url = standalone_url + "consolidated/"
+    
+    try:
+        # =====================================================
+        # STAGE 1: FAST HTTP FETCH
+        # =====================================================
+        log_progress(f"Attempting fast fetch for {ticker} peer comparison...")
+        soup = None
         
+        async with httpx.AsyncClient() as client:
+            for url in [consolidated_url, standalone_url]:
+                try:
+                    response = await client.get(url, headers=HEADERS, timeout=30.0)
+                    response.raise_for_status()
+                    soup = BeautifulSoup(response.text, 'html.parser')
+                    
+                    # Check if peer section has a table (indicating content is loaded)
+                    peers_section = soup.select_one("#peers")
+                    if peers_section and peers_section.select_one("table"):
+                        log_progress(f"Fast fetch found peer table at {url}")
+                        return _parse_peer_table(soup, ticker)
+                except httpx.HTTPStatusError as e:
+                    print(f"WARN: HTTP error fetching {url}: {e}")
+                    continue
+                except Exception as e:
+                    print(f"WARN: Error fetching {url}: {e}")
+                    continue
+        
+        # =====================================================
+        # STAGE 2: PLAYWRIGHT BROWSER FETCH (JS-rendered content)
+        # =====================================================
+        log_progress(f"Fast fetch insufficient. Using browser for {ticker} peer comparison...")
+        
+        async with async_playwright() as p:
+            browser = await p.chromium.launch()
+            page = await browser.new_page()
+            try:
+                # Try standalone first (more likely to have peer data)
+                await page.goto(standalone_url, wait_until='networkidle', timeout=45000)
+                
+                # Wait specifically for the peers section to be loaded
+                try:
+                    await page.wait_for_selector('#peers table', timeout=10000)
+                    log_progress(f"Browser found peer table for {ticker}")
+                except:
+                    log_progress(f"Peer table not found after wait, proceeding anyway...")
+                
+                html = await page.content()
+            finally:
+                await browser.close()
+        
+        soup = BeautifulSoup(html, 'html.parser')
+        return _parse_peer_table(soup, ticker)
+        
+    except Exception as e:
+        print(f"ERROR: Async peer comparison fetch failed for {ticker}: {e}")
+        traceback.print_exc()
+        return {'company': {}, 'peers': []}
+
+
+def _parse_peer_table(soup, ticker: str) -> dict:
+    """Helper function to parse the peer table from BeautifulSoup object."""
+    try:
+        peers_section = soup.select_one("#peers")
+        if not peers_section:
+            print(f"WARN: No #peers section found for {ticker}")
+            return {'company': {}, 'peers': []}
+        
+        table = peers_section.select_one("table")
+        if not table:
+            print(f"WARN: No peer comparison table found for {ticker}")
+            return {'company': {}, 'peers': []}
+        
+        # Parse the table using pandas
+        try:
+            df_list = pd.read_html(str(table))
+            if not df_list:
+                return {'company': {}, 'peers': []}
+            df = df_list[0]
+        except Exception as e:
+            print(f"ERROR: Failed to parse peer comparison table: {e}")
+            return {'company': {}, 'peers': []}
+        
+        # Clean up the DataFrame
+        df = clean_df(df)
+        
+        # Debug: Print actual columns found
+        print(f"DEBUG: Screener columns found: {list(df.columns)}")
+        
+        # Map Screener.in column names to our standard names
+        # Screener columns: S.No., Name, CMP Rs., P/E, Mar Cap Rs.Cr., Div Yld %, 
+        # NP Qtr Rs.Cr., Qtr Profit Var %, Sales Qtr Rs.Cr., Qtr Sales Var %, ROCE %
+        column_mapping = {}
+        for col in df.columns:
+            col_lower = col.lower().strip()
+            
+            # Skip S.No. column
+            if 's.no' in col_lower or col_lower == 's.no.':
+                continue
+            
+            if 'name' in col_lower:
+                column_mapping[col] = 'name'
+            elif 'cmp' in col_lower or col_lower == 'price':
+                column_mapping[col] = 'cmp'
+            elif 'mar cap' in col_lower or 'market cap' in col_lower or 'mcap' in col_lower:
+                column_mapping[col] = 'market_cap'
+            elif 'p/e' in col_lower or col_lower == 'pe':
+                column_mapping[col] = 'pe_ratio'
+            elif 'p/b' in col_lower or col_lower == 'pb':
+                column_mapping[col] = 'pb_ratio'
+            elif 'div' in col_lower and ('yld' in col_lower or 'yield' in col_lower or '%' in col_lower):
+                column_mapping[col] = 'dividend_yield'
+            elif 'roce' in col_lower:
+                column_mapping[col] = 'roce'
+            elif 'roe' in col_lower:
+                column_mapping[col] = 'roe'
+            # Qtr Sales Var % -> sales_growth_yoy
+            elif 'sales' in col_lower and 'var' in col_lower:
+                column_mapping[col] = 'sales_growth_yoy'
+            # Qtr Profit Var % -> ebitda_growth_yoy (as proxy)
+            elif 'profit' in col_lower and 'var' in col_lower:
+                column_mapping[col] = 'ebitda_growth_yoy'
+            # NP Qtr can help calculate NPM if needed
+            elif 'np qtr' in col_lower or 'net profit' in col_lower:
+                column_mapping[col] = 'np_qtr'
+            # Sales Qtr for context
+            elif 'sales qtr' in col_lower or 'sales' in col_lower and 'qtr' in col_lower:
+                column_mapping[col] = 'sales_qtr'
+            elif 'npm' in col_lower or 'np margin' in col_lower or 'net margin' in col_lower:
+                column_mapping[col] = 'npm'
+        
+        print(f"DEBUG: Column mapping: {column_mapping}")
+        
+        # Rename columns
+        df = df.rename(columns=column_mapping)
+
+        
+        # Convert to list of dicts
+        records = df.to_dict('records')
+        
+        if not records:
+            return {'company': {}, 'peers': []}
+        
+        # First row is typically the main company (or find it by ticker match)
+        company_data = {}
+        peers_data = []
+        
+        ticker_upper = ticker.upper()
+        company_found = False
+        
+        for i, record in enumerate(records):
+            # Clean the record - convert all values to strings and handle NaN
+            cleaned_record = {}
+            # Include all standard metric columns plus the new ones we're extracting
+            allowed_keys = ['name', 'cmp', 'market_cap', 'pe_ratio', 'pb_ratio', 
+                          'dividend_yield', 'roce', 'roe', 'sales_growth_yoy', 
+                          'ebitda_growth_yoy', 'npm', 'np_qtr', 'sales_qtr']
+            for key, value in record.items():
+                if key in allowed_keys:
+                    if pd.isna(value):
+                        cleaned_record[key] = 'N/A'
+                    else:
+                        cleaned_record[key] = str(value).strip()
+            
+            # Calculate NPM if we have NP Qtr and Sales Qtr
+            np_qtr = cleaned_record.get('np_qtr', 'N/A')
+            sales_qtr = cleaned_record.get('sales_qtr', 'N/A')
+            if np_qtr != 'N/A' and sales_qtr != 'N/A':
+                try:
+                    np_val = float(np_qtr.replace(',', ''))
+                    sales_val = float(sales_qtr.replace(',', ''))
+                    if sales_val > 0:
+                        npm_calc = (np_val / sales_val) * 100
+                        cleaned_record['npm'] = f"{npm_calc:.2f}"
+                except:
+                    pass
+
+            
+            # Check if this is the main company (first row or name contains ticker)
+            name = cleaned_record.get('name', '')
+            if not company_found and (i == 0 or ticker_upper in name.upper()):
+                cleaned_record['ticker'] = ticker
+                company_data = cleaned_record
+                company_found = True
+            else:
+                peers_data.append(cleaned_record)
+        
+        # Limit to 6 peers max
+        peers_data = peers_data[:6]
+        
+        print(f"SUCCESS: Screener.in peer comparison fetched - 1 company + {len(peers_data)} peers")
+        return {
+            'company': company_data,
+            'peers': peers_data
+        }
+        
+    except Exception as e:
+        print(f"ERROR: Failed to parse peer table: {e}")
+        traceback.print_exc()
+        return {'company': {}, 'peers': []}
