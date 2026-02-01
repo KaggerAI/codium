@@ -86,6 +86,61 @@
             background: #fef3c7;
             color: #92400e;
         }
+
+        /* Chat Styles */
+        .chat-container {
+            border-radius: 1rem;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            background: white;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
+        }
+
+        .chat-log {
+            height: 350px;
+            overflow-y: auto;
+            padding: 1rem;
+            background: #f8fafc;
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .chat-message {
+            max-width: 85%;
+            padding: 0.75rem 1rem;
+            border-radius: 1rem;
+            font-size: 0.875rem;
+            line-height: 1.5;
+        }
+
+        .chat-message.user {
+            align-self: flex-end;
+            background: #10b981;
+            color: white;
+            border-bottom-right-radius: 0.25rem;
+        }
+
+        .chat-message.bot {
+            align-self: flex-start;
+            background: white;
+            color: #1e293b;
+            border: 1px solid #e2e8f0;
+            border-bottom-left-radius: 0.25rem;
+        }
+
+        .chat-message.bot .prose {
+            max-width: none;
+        }
+
+        .chat-message.bot pre {
+            background-color: #f1f5f9;
+            padding: 0.5rem;
+            border-radius: 0.5rem;
+            margin: 0.5rem 0;
+            overflow-x: auto;
+        }
     </style>
 </head>
 
@@ -225,6 +280,28 @@
 
             <!-- Right: AI Insights -->
             <div class="space-y-6">
+                <!-- Chat with AI (Prominent Callout) -->
+                <div class="bg-gradient-to-r from-green-600 to-emerald-700 rounded-2xl p-6 shadow-xl text-white">
+                    <div class="flex items-center justify-between mb-4">
+                        <div>
+                            <h3 class="text-xl font-bold">💬 Chat with Budget AI</h3>
+                            <p class="text-green-100 text-sm">Ask anything about the transcript or live speech</p>
+                        </div>
+                        <div class="bg-white/20 p-3 rounded-full animate-bounce">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                            </svg>
+                        </div>
+                    </div>
+                    <button onclick="toggleChat()"
+                        class="w-full py-3 bg-white text-green-700 rounded-xl font-bold shadow-lg hover:bg-green-50 transition-all flex items-center justify-center gap-2">
+                        Open Budget Chatbot
+                    </button>
+                    <p class="text-[10px] text-green-200 mt-3 text-center italic">Powered by GPT-5-Mini with Full Speech
+                        Context</p>
+                </div>
+
                 <!-- Key Highlights -->
                 <div
                     class="bg-gradient-to-br from-orange-50 to-amber-50 border border-orange-200 rounded-2xl overflow-hidden shadow-lg">
@@ -295,6 +372,53 @@
         </div>
     </main>
 
+    <!-- Chat Modal -->
+    <div id="chatModal"
+        class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm hidden items-center justify-center p-4 z-[100]">
+        <div
+            class="bg-white w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden flex flex-col h-[600px] animate-fadeIn">
+            <!-- Modal Header -->
+            <div
+                class="bg-gradient-to-r from-green-600 to-emerald-700 px-6 py-4 flex items-center justify-between text-white">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
+                        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                        </svg>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-lg">Budget AI Assistant</h3>
+                        <p class="text-xs text-green-100 italic">Analyzes live transcript & documents</p>
+                    </div>
+                </div>
+                <button onclick="toggleChat()" class="text-white/80 hover:text-white text-2xl">×</button>
+            </div>
+
+            <!-- Chat Log -->
+            <div id="budgetChatLog" class="chat-log flex-1">
+                <div class="chat-message bot shadow-sm">
+                    <p>Hello! I am your <b>Budget AI Assistant</b>. I have the full context of the current speech and
+                        any uploaded transcripts. What would you like to know about the Union Budget 2026?</p>
+                </div>
+            </div>
+
+            <!-- Chat Form -->
+            <form id="budgetChatForm" class="p-4 border-t border-slate-100 bg-white flex gap-2">
+                <input type="text" id="budgetChatInput" placeholder="Ask about income tax, sector capex, GDP..."
+                    class="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 transition-all">
+                <button type="submit"
+                    class="bg-green-600 text-white p-3 rounded-xl hover:bg-green-700 transition-all shadow-md active:scale-95 disabled:opacity-50"
+                    id="budgetChatSend">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                    </svg>
+                </button>
+            </form>
+        </div>
+    </div>
+
     <script>
         // =====================================================================
         // BUDGET LIVE TRANSCRIPTION CLIENT
@@ -311,6 +435,8 @@
         let chunksSent = 0;
         let allSectors = new Set();
         let allHighlights = []; // Store all highlights for filtering
+        let guestQuestionsCount = 0;
+        const MAX_GUEST_QUESTIONS = 10;
 
         // UI Elements
         const adminControls = document.getElementById('adminControls');
@@ -337,14 +463,46 @@
                     isAdmin = true;
                     adminControls.classList.remove('hidden');
                     observerControls.classList.add('hidden');
+                    document.getElementById('userBadge').textContent = 'Admin Mode';
                 } else {
                     isAdmin = false;
                     adminControls.classList.add('hidden');
                     observerControls.classList.remove('hidden');
+                    document.getElementById('userBadge').textContent = 'Subscriber Mode';
                 }
+                document.getElementById('userBadge').classList.remove('hidden');
             } catch (e) {
                 console.warn('Role check failed:', e);
                 observerControls.classList.remove('hidden');
+                document.getElementById('userBadge').textContent = 'Guest Mode';
+                document.getElementById('userBadge').classList.remove('hidden');
+                isAdmin = false;
+
+                // Initialize guest count from localStorage if missing in session (backend handles final enforcement)
+                guestQuestionsCount = parseInt(localStorage.getItem('budget_guest_q_count') || '0');
+                updateChatLimitUI();
+            }
+        }
+
+        function updateChatLimitUI() {
+            if (isAdmin || document.getElementById('userBadge').textContent === 'Subscriber Mode') return;
+
+            const remaining = Math.max(0, MAX_GUEST_QUESTIONS - guestQuestionsCount);
+            const subtext = document.querySelector('#chatModal .text-green-100');
+            if (subtext) {
+                subtext.innerHTML = `Guest Mode: <b>${remaining}</b> questions remaining`;
+            }
+
+            if (remaining <= 0) {
+                const chatForm = document.getElementById('budgetChatForm');
+                if (chatForm) {
+                    chatForm.innerHTML = `
+                        <div class="w-full text-center py-2">
+                            <p class="text-slate-500 text-sm mb-2">You have reached the guest limit of 10 questions.</p>
+                            <a href="/login" class="inline-block bg-green-600 text-white px-6 py-2 rounded-xl text-sm font-bold hover:bg-green-700 transition-all">Login for Unlimited Access</a>
+                        </div>
+                    `;
+                }
             }
         }
 
@@ -692,9 +850,83 @@
             document.getElementById('durationDisplay').textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
         }
 
+        function toggleChat() {
+            const modal = document.getElementById('chatModal');
+            modal.classList.toggle('hidden');
+            modal.classList.toggle('flex');
+            if (modal.classList.contains('flex')) {
+                document.getElementById('budgetChatInput').focus();
+            }
+        }
+
+        async function sendBudgetMessage(e) {
+            if (e) e.preventDefault();
+            const input = document.getElementById('budgetChatInput');
+            const question = input.value.trim();
+            if (!question) return;
+
+            const chatLog = document.getElementById('budgetChatLog');
+            const sendBtn = document.getElementById('budgetChatSend');
+
+            // Add user message
+            const userMsg = document.createElement('div');
+            userMsg.className = 'chat-message user shadow-sm';
+            userMsg.textContent = question;
+            chatLog.appendChild(userMsg);
+            input.value = '';
+            chatLog.scrollTop = chatLog.scrollHeight;
+
+            // Loading state
+            sendBtn.disabled = true;
+            const botMsg = document.createElement('div');
+            botMsg.className = 'chat-message bot shadow-sm';
+            botMsg.innerHTML = '<div class="flex gap-1"><span class="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce"></span><span class="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce [animation-delay:0.2s]"></span><span class="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce [animation-delay:0.4s]"></span></div>';
+            chatLog.appendChild(botMsg);
+            chatLog.scrollTop = chatLog.scrollHeight;
+
+            try {
+                const response = await fetch('/api/budget/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ question })
+                });
+                const data = await response.json();
+
+                if (data.success || data.answer) {
+                    botMsg.innerHTML = `<div class="prose prose-sm">${marked.parse(data.answer)}</div>`;
+
+                    // Increment local guest count if not logged in
+                    if (document.getElementById('userBadge').textContent === 'Guest Mode') {
+                        guestQuestionsCount++;
+                        localStorage.setItem('budget_guest_q_count', guestQuestionsCount);
+                        updateChatLimitUI();
+                    }
+                } else {
+                    if (data.limit_reached) {
+                        botMsg.innerHTML = `<p class="text-orange-500 font-medium">⚠️ ${data.error}</p>`;
+                        guestQuestionsCount = 10;
+                        localStorage.setItem('budget_guest_q_count', 10);
+                        updateChatLimitUI();
+                    } else {
+                        botMsg.innerHTML = `<p class="text-red-500 font-medium">❌ Error: ${data.error || 'Failed to get answer'}</p>`;
+                    }
+                }
+            } catch (err) {
+                botMsg.innerHTML = `<p class="text-red-500 font-medium">❌ Network error occurred.</p>`;
+            } finally {
+                sendBtn.disabled = false;
+                chatLog.scrollTop = chatLog.scrollHeight;
+            }
+        }
+
         document.addEventListener('DOMContentLoaded', () => {
             checkUserRole();
             initSocket();
+
+            const chatForm = document.getElementById('budgetChatForm');
+            if (chatForm) {
+                chatForm.addEventListener('submit', sendBudgetMessage);
+            }
         });
         window.addEventListener('beforeunload', () => { if (isSessionActive && isAdmin) stopSession(); });
     </script>

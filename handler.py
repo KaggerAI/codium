@@ -5409,9 +5409,63 @@ from budget_live import (
     remove_session,
     analyze_budget_text
 )
+from prompts import get_budget_chat_prompt
 
 # Store a single global budget session for 2026
 GLOBAL_BUDGET_SESSION = BudgetLiveSession("global_2026")
+
+@app.route('/api/budget/chat', methods=['POST'])
+def api_budget_chat():
+    """AI Chatbot for the Budget section using gpt-5-mini"""
+    try:
+        data = request.get_json(force=True)
+        user_question = data.get('question', '').strip()
+        
+        if not user_question:
+            return jsonify({'error': 'No question provided'}), 400
+        
+        # Question Limit for Guests
+        from flask import session as flask_session
+        is_logged_in = 'user_id' in flask_session
+        
+        if not is_logged_in:
+            guest_count = flask_session.get('budget_guest_count', 0)
+            if guest_count >= 10:
+                return jsonify({
+                    'error': 'Chat limit reached (10 questions). Please login for unlimited access.',
+                    'limit_reached': True
+                }), 403
+            flask_session['budget_guest_count'] = guest_count + 1
+            print(f"DEBUG: Guest Budget Chat ({guest_count + 1}/10)", file=sys.stderr)
+
+        # Get full context from the global budget session
+        context = GLOBAL_BUDGET_SESSION.get_ai_context()
+        
+        system_prompt = get_budget_chat_prompt(context)
+        
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_question}
+        ]
+        
+        print(f"INFO: Calling GPT-5-Mini for Budget Chat: {user_question[:100]}...", file=sys.stderr)
+        
+        # Use gpt-5-mini as requested
+        answer = call_generative_ai_model(
+            model="gpt-5-mini",
+            messages=messages,
+            temperature=1
+        )
+        
+        return jsonify({
+            'answer': answer,
+            'status': 'success'
+        })
+        
+    except Exception as e:
+        print(f"CRITICAL ERROR in /api/budget/chat: {e}", file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
+        return jsonify({'error': f'An unexpected error occurred: {str(e)}'}), 500
 
 @socketio.on('connect')
 def handle_connect():

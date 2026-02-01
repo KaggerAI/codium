@@ -377,6 +377,28 @@ Extract and return as JSON:
         self._analyze_content()
         return self.get_state()
 
+    def get_ai_context(self) -> str:
+        """
+        Consolidates the entire session context into a single string for AI chat.
+        Includes full transcript, all extracted highlights, and sector impacts.
+        """
+        context_parts = []
+        
+        context_parts.append("=== BUDGET TRANSCRIPT (Full) ===")
+        context_parts.append(self.full_transcript if self.full_transcript else "[No transcript yet]")
+        
+        if self.highlights:
+            context_parts.append("\n=== EXTRACTED KEY HIGHLIGHTS ===")
+            for h in self.highlights:
+                context_parts.append(f"- [{h.category.upper()}] {h.title}: {h.details} (Impact: {h.impact})")
+        
+        if self.sector_impacts:
+            context_parts.append("\n=== SECTOR IMPACTS ===")
+            for sector, data in self.sector_impacts.items():
+                context_parts.append(f"- {sector}: {data.impact_type.upper()} - {data.summary}")
+        
+        return "\n".join(context_parts)
+
 
 def transcribe_audio_simple(audio_bytes: bytes, mime_type: str = "audio/webm") -> str:
     """
