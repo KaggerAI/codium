@@ -5606,9 +5606,23 @@ def upload_budget_transcript():
     if file.filename == '':
         return jsonify({'error': 'No selected file'}), 400
     
-    if file and file.filename.endswith('.txt'):
+    if file:
+        filename = file.filename.lower()
         try:
-            content = file.read().decode('utf-8')
+            if filename.endswith('.txt'):
+                content = file.read().decode('utf-8')
+            elif filename.endswith('.docx'):
+                from docx import Document
+                import io
+                content = ""
+                doc = Document(io.BytesIO(file.read()))
+                content = "\n".join([para.text for para in doc.paragraphs])
+            else:
+                return jsonify({'error': 'Invalid file format. Only .txt and .docx allowed.'}), 400
+
+            if not content.strip():
+                return jsonify({'error': 'File is empty'}), 400
+
             state = GLOBAL_BUDGET_SESSION.ingest_full_transcript(content)
             
             # Broadcast the updated state to all participants
@@ -5619,7 +5633,7 @@ def upload_budget_transcript():
             print(f"ERROR: Transcript ingestion failed: {e}")
             return jsonify({'error': str(e)}), 500
             
-    return jsonify({'error': 'Invalid file format. Only .txt allowed.'}), 400
+    return jsonify({'error': 'No file selected'}), 400
 
 @app.route('/api/budget/deep-scan', methods=['POST'])
 def api_budget_deep_scan():
