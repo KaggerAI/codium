@@ -141,6 +141,92 @@
             margin: 0.5rem 0;
             overflow-x: auto;
         }
+
+        /* Markdown Styling for Bot Messages */
+        .chat-message.bot p {
+            margin-bottom: 0.75rem;
+            line-height: 1.6;
+        }
+
+        .chat-message.bot p:last-child {
+            margin-bottom: 0;
+        }
+
+        .chat-message.bot strong {
+            font-weight: 700;
+            color: #0f172a;
+        }
+
+        .chat-message.bot ul,
+        .chat-message.bot ol {
+            margin: 0.75rem 0;
+            padding-left: 1.5rem;
+        }
+
+        .chat-message.bot ul {
+            list-style-type: disc;
+        }
+
+        .chat-message.bot ol {
+            list-style-type: decimal;
+        }
+
+        .chat-message.bot li {
+            margin-bottom: 0.4rem;
+            line-height: 1.5;
+        }
+
+        .chat-message.bot h1,
+        .chat-message.bot h2,
+        .chat-message.bot h3,
+        .chat-message.bot h4 {
+            font-weight: 700;
+            color: #1e293b;
+            margin: 1.25rem 0 0.5rem 0;
+        }
+
+        .chat-message.bot h3 {
+            font-size: 1.1rem;
+        }
+
+        .chat-message.bot h4 {
+            font-size: 1rem;
+        }
+
+        .chat-message.bot table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0;
+            font-size: 0.8rem;
+        }
+
+        .chat-message.bot th,
+        .chat-message.bot td {
+            border: 1px solid #e2e8f0;
+            padding: 0.5rem;
+            text-align: left;
+        }
+
+        .chat-message.bot th {
+            background: #f8fafc;
+            font-weight: 600;
+        }
+
+        .chat-message.bot code {
+            background: #f1f5f9;
+            padding: 0.2rem 0.4rem;
+            border-radius: 0.25rem;
+            font-family: monospace;
+            font-size: 0.85em;
+        }
+
+        .chat-message.bot pre {
+            background-color: #f1f5f9;
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            overflow-x: auto;
+            margin: 1rem 0;
+        }
     </style>
 </head>
 
@@ -157,6 +243,9 @@
                     class="flex items-center gap-2 px-3 py-1 rounded-full bg-slate-200 text-slate-600 text-sm">
                     <span class="w-2 h-2 rounded-full bg-slate-400"></span>
                     Disconnected
+                </div>
+                <div id="userBadge"
+                    class="hidden px-3 py-1 rounded-full bg-slate-100 text-slate-600 text-sm font-medium border border-slate-200">
                 </div>
             </div>
         </div>
@@ -436,6 +525,7 @@
         let allSectors = new Set();
         let allHighlights = []; // Store all highlights for filtering
         let guestQuestionsCount = 0;
+        let currentUserMode = 'guest'; // 'admin', 'subscriber', 'guest'
         const MAX_GUEST_QUESTIONS = 10;
 
         // UI Elements
@@ -459,33 +549,41 @@
                 if (!response.ok) throw new Error('Not logged in');
                 const data = await response.json();
 
+                const userBadge = document.getElementById('userBadge');
                 if (data.email === 'nikhil.banthiya@gmail.com') {
                     isAdmin = true;
+                    currentUserMode = 'admin';
                     adminControls.classList.remove('hidden');
                     observerControls.classList.add('hidden');
-                    document.getElementById('userBadge').textContent = 'Admin Mode';
+                    if (userBadge) userBadge.textContent = 'Admin Mode';
                 } else {
                     isAdmin = false;
+                    currentUserMode = 'subscriber';
                     adminControls.classList.add('hidden');
                     observerControls.classList.remove('hidden');
-                    document.getElementById('userBadge').textContent = 'Subscriber Mode';
+                    if (userBadge) userBadge.textContent = 'Subscriber Mode';
                 }
-                document.getElementById('userBadge').classList.remove('hidden');
+                if (userBadge) userBadge.classList.remove('hidden');
             } catch (e) {
                 console.warn('Role check failed:', e);
                 observerControls.classList.remove('hidden');
-                document.getElementById('userBadge').textContent = 'Guest Mode';
-                document.getElementById('userBadge').classList.remove('hidden');
                 isAdmin = false;
+                currentUserMode = 'guest';
 
-                // Initialize guest count from localStorage if missing in session (backend handles final enforcement)
+                const userBadge = document.getElementById('userBadge');
+                if (userBadge) {
+                    userBadge.textContent = 'Guest Mode';
+                    userBadge.classList.remove('hidden');
+                }
+
+                // Initialize guest count from localStorage if missing in session
                 guestQuestionsCount = parseInt(localStorage.getItem('budget_guest_q_count') || '0');
                 updateChatLimitUI();
             }
         }
 
         function updateChatLimitUI() {
-            if (isAdmin || document.getElementById('userBadge').textContent === 'Subscriber Mode') return;
+            if (currentUserMode === 'admin' || currentUserMode === 'subscriber') return;
 
             const remaining = Math.max(0, MAX_GUEST_QUESTIONS - guestQuestionsCount);
             const subtext = document.querySelector('#chatModal .text-green-100');
@@ -885,18 +983,31 @@
             chatLog.scrollTop = chatLog.scrollHeight;
 
             try {
+                console.log("Sending question to AI:", question);
                 const response = await fetch('/api/budget/chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ question })
                 });
-                const data = await response.json();
 
-                if (data.success || data.answer) {
-                    botMsg.innerHTML = `<div class="prose prose-sm">${marked.parse(data.answer)}</div>`;
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error("Server returned error:", response.status, errorText);
+                    throw new Error(`Server error (${response.status}): ${errorText}`);
+                }
+
+                const data = await response.json();
+                console.log("AI Response received:", data);
+
+                if (data.status === 'success' || data.answer) {
+                    // Render HTML with specified marked options
+                    botMsg.innerHTML = marked.parse(data.answer, {
+                        breaks: true,
+                        gfm: true
+                    });
 
                     // Increment local guest count if not logged in
-                    if (document.getElementById('userBadge').textContent === 'Guest Mode') {
+                    if (currentUserMode === 'guest') {
                         guestQuestionsCount++;
                         localStorage.setItem('budget_guest_q_count', guestQuestionsCount);
                         updateChatLimitUI();
@@ -912,7 +1023,8 @@
                     }
                 }
             } catch (err) {
-                botMsg.innerHTML = `<p class="text-red-500 font-medium">❌ Network error occurred.</p>`;
+                console.error("Budget Chat JS Error:", err);
+                botMsg.innerHTML = `<p class="text-red-500 font-medium">❌ Error: ${err.message || 'Network error occurred.'}</p>`;
             } finally {
                 sendBtn.disabled = false;
                 chatLog.scrollTop = chatLog.scrollHeight;

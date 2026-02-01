@@ -128,3 +128,6 @@ cython_debug/
 # SQLite database (generated on each environment)
 kagger.db
 *.db
+
+# Budget persistent data
+budget_session_*.json
