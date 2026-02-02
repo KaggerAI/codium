@@ -5438,14 +5438,22 @@ def api_budget_chat():
             flask_session['budget_guest_count'] = guest_count + 1
             print(f"DEBUG: Guest Budget Chat ({guest_count + 1}/10)", file=sys.stderr)
 
+        history = data.get('history', [])
+        
         # Get full context from the global budget session
         budget_context = GLOBAL_BUDGET_SESSION.get_ai_context()
         
         # STEP 1: Research Phase (Perplexity Sonar)
-        research_messages = [
-            {"role": "system", "content": "You are a research assistant. Find the latest news and market reactions related to the user's question about the Indian Budget 2026. Provide a concise summary with citations."},
-            {"role": "user", "content": user_question}
-        ]
+        # Use history for context if available
+        if history:
+            research_messages = [
+                {"role": "system", "content": "You are a research assistant. Find the latest news and market reactions related to the conversation about the Indian Budget 2026. Provide a concise summary with citations."}
+            ] + history
+        else:
+            research_messages = [
+                {"role": "system", "content": "You are a research assistant. Find the latest news and market reactions related to the user's question about the Indian Budget 2026. Provide a concise summary with citations."},
+                {"role": "user", "content": user_question}
+            ]
         
         web_results = None
         try:
@@ -5462,10 +5470,15 @@ def api_budget_chat():
         # STEP 2: Synthesis Phase (GPT-5-Mini)
         system_prompt = get_budget_chat_prompt(budget_context, web_results=web_results)
         
-        synthesis_messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_question}
-        ]
+        if history:
+            synthesis_messages = [
+                {"role": "system", "content": system_prompt}
+            ] + history
+        else:
+            synthesis_messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_question}
+            ]
         
         print(f"INFO: Calling GPT-5-Mini for Budget Synthesis...", file=sys.stderr)
         answer = call_generative_ai_model(

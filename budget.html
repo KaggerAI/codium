@@ -517,6 +517,7 @@
         let mediaRecorder = null;
         let audioStream = null;
         let isSessionActive = false;
+        let budgetChatHistory = []; // NEW: Store conversation context
         let isAdmin = false;
         let startTime = null;
         let durationInterval = null;
@@ -969,6 +970,10 @@
             const question = input.value.trim();
             if (!question) return;
 
+            // Add to history
+            budgetChatHistory.push({ role: "user", content: question });
+            if (budgetChatHistory.length > 20) budgetChatHistory = budgetChatHistory.slice(-20);
+
             const chatLog = document.getElementById('budgetChatLog');
             const sendBtn = document.getElementById('budgetChatSend');
 
@@ -1002,7 +1007,10 @@
                 const response = await fetch('/api/budget/chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ question })
+                    body: JSON.stringify({
+                        question,
+                        history: budgetChatHistory
+                    })
                 });
 
                 if (!response.ok) {
@@ -1015,11 +1023,14 @@
                 console.log("AI Response received:", data);
 
                 if (data.status === 'success' || data.answer) {
-                    // Render HTML with specified marked options
                     botMsg.innerHTML = marked.parse(data.answer, {
                         breaks: true,
                         gfm: true
                     });
+
+                    // Add to history
+                    budgetChatHistory.push({ role: "assistant", content: data.answer });
+                    if (budgetChatHistory.length > 20) budgetChatHistory = budgetChatHistory.slice(-20);
 
                     // Increment local guest count if not logged in
                     if (currentUserMode === 'guest') {
