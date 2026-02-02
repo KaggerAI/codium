@@ -234,31 +234,37 @@ class BudgetLiveSession:
         """Perform a comprehensive scan of the entire transcript (Admin only)"""
         print(f"INFO: Running Deep Scan for session {self.session_id} ({len(self.full_transcript)} chars)")
         # We pass full_scan=True to ensure the prompt considers the whole text
-        self._analyze_content(full_scan=True)
+        self._analyze_content(full_scan=True, clear_existing=True)
         return self.get_state()
 
-    def _analyze_content(self, full_scan: bool = False) -> bool:
+    def _analyze_content(self, full_scan: bool = False, clear_existing: bool = False) -> bool:
         """
         Internal method to analyze transcript and extract highlights/sectors.
         
         Args:
             full_scan: If True, analyzes the entire transcript. 
                        If False, analyzes only the most recent part.
+            clear_existing: If True, clears existing highlights/sectors before adding new ones.
         """
         if not self.full_transcript or len(self.full_transcript) < 100:
             return False
         
         try:
+            # Clear existing data if requested
+            if clear_existing:
+                self.highlights = []
+                self.sector_impacts = {}
+
             # Use whole transcript for deep scan, otherwise last ~3000 chars
             analysis_text = self.full_transcript if full_scan else self.full_transcript[-3000:]
             
             prompt_type = "COMPREHENSIVE" if full_scan else "INCREMENTAL"
-            analysis_prompt = f"""Analyze this Union Budget 2026 speech ({prompt_type} ANALYSIS) and extract key information.
+            analysis_prompt = f"""Analyze this Union Budget 2026 speech ({prompt_type} ANALYSIS) and extract detailed information.
 
 TRANSCRIPT:
 {analysis_text}
 
-Extract and return as JSON:
+Extract and return as JSON (Be extremely thorough, identify at least 20-25 items if the text allows):
 1. "highlights": Array of important announcements, each with:
    - "category": One of "tax", "sector", "capex", "pli", "financing", "fiscal", "regulation", "other"
    - "title": Brief title (max 10 words)
@@ -266,15 +272,18 @@ Extract and return as JSON:
    - "impact": "positive", "negative", or "neutral" for markets
    - "sectors_affected": Array of affected sectors like ["Banking", "IT", "Pharma"]
 
-2. "sectors": Object mapping sector names to their impact:
+2. "sectors": Object mapping sector names to their impact (Identify all affected sectors, up to 25):
    - "impact_type": "positive", "negative", "neutral", or "mixed"
    - "summary": Brief summary (max 30 words)
    - "key_points": Array of 2-3 key points
 
-{"Only include information found in this text. For a comprehensive scan, capture all key points across the entire text." if full_scan else "Only include NEW information not already covered. If nothing significant, return empty arrays/objects."}
+{f"Analyze the entire text and extract ALL significant announcements (up to 25 key highlights)." if full_scan else "Only include NEW information not already covered. If nothing significant, return empty arrays/objects."}
 """
             
-            analysis_model = genai.GenerativeModel(ANALYSIS_MODEL)
+            analysis_model = genai.GenerativeModel(
+                ANALYSIS_MODEL,
+                system_instruction=BUDGET_SYSTEM_INSTRUCTION
+            )
             response = analysis_model.generate_content(
                 analysis_prompt,
                 generation_config=genai.types.GenerationConfig(
@@ -373,8 +382,8 @@ Extract and return as JSON:
         self.full_transcript = text
         self.chunk_count += 1 # Increment for signaling
         
-        # Trigger analysis on the bulk text
-        self._analyze_content()
+        # Trigger COMPREHENSIVE analysis and CLEAR old results
+        self._analyze_content(full_scan=True, clear_existing=True)
         return self.get_state()
 
     def get_ai_context(self) -> str:

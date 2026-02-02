@@ -631,8 +631,14 @@
                     addTranscriptLine(data.full_transcript);
                 }
                 // Sync analysis
-                if (data.highlights) updateHighlights(data.highlights);
-                if (data.sectors) updateSectorImpacts(data.sectors);
+                if (data.highlights) {
+                    allHighlights = []; // Clear existing for fresh state
+                    updateHighlights(data.highlights);
+                }
+                if (data.sectors) {
+                    sectorImpacts.innerHTML = ''; // Clear for fresh state
+                    updateSectorImpacts(data.sectors);
+                }
 
                 isSessionActive = data.is_active;
                 updateTranscriptStatus(isSessionActive);
@@ -978,7 +984,16 @@
             sendBtn.disabled = true;
             const botMsg = document.createElement('div');
             botMsg.className = 'chat-message bot shadow-sm';
-            botMsg.innerHTML = '<div class="flex gap-1"><span class="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce"></span><span class="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce [animation-delay:0.2s]"></span><span class="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce [animation-delay:0.4s]"></span></div>';
+            botMsg.innerHTML = `
+                <div class="flex items-center gap-3">
+                    <div class="flex gap-1">
+                        <span class="w-1.5 h-1.5 bg-green-500 rounded-full animate-bounce"></span>
+                        <span class="w-1.5 h-1.5 bg-green-500 rounded-full animate-bounce [animation-delay:0.2s]"></span>
+                        <span class="w-1.5 h-1.5 bg-green-500 rounded-full animate-bounce [animation-delay:0.4s]"></span>
+                    </div>
+                    <span class="text-xs font-medium text-slate-500 animate-pulse">Researching live web & budget transcript...</span>
+                </div>
+            `;
             chatLog.appendChild(botMsg);
             chatLog.scrollTop = chatLog.scrollHeight;
 

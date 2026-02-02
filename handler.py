@@ -5439,26 +5439,44 @@ def api_budget_chat():
             print(f"DEBUG: Guest Budget Chat ({guest_count + 1}/10)", file=sys.stderr)
 
         # Get full context from the global budget session
-        context = GLOBAL_BUDGET_SESSION.get_ai_context()
+        budget_context = GLOBAL_BUDGET_SESSION.get_ai_context()
         
-        system_prompt = get_budget_chat_prompt(context)
+        # STEP 1: Research Phase (Perplexity Sonar)
+        research_messages = [
+            {"role": "system", "content": "You are a research assistant. Find the latest news and market reactions related to the user's question about the Indian Budget 2026. Provide a concise summary with citations."},
+            {"role": "user", "content": user_question}
+        ]
         
-        messages = [
+        web_results = None
+        try:
+            print(f"INFO: Calling Sonar-Pro for Budget Research: {user_question[:100]}...", file=sys.stderr)
+            web_results = call_perplexity_api(
+                messages=research_messages,
+                model="sonar-pro",
+                enable_pro_search=True,
+                timeout=60
+            )
+        except Exception as research_error:
+            print(f"WARN: Budget Research failed: {research_error}. Proceeding with local context only.", file=sys.stderr)
+
+        # STEP 2: Synthesis Phase (GPT-5-Mini)
+        system_prompt = get_budget_chat_prompt(budget_context, web_results=web_results)
+        
+        synthesis_messages = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_question}
         ]
         
-        print(f"INFO: Calling GPT-5-Mini for Budget Chat: {user_question[:100]}...", file=sys.stderr)
-        
-        # Use gpt-5-mini as requested
+        print(f"INFO: Calling GPT-5-Mini for Budget Synthesis...", file=sys.stderr)
         answer = call_generative_ai_model(
             model="gpt-5-mini",
-            messages=messages,
+            messages=synthesis_messages,
             temperature=1
         )
         
         return jsonify({
             'answer': answer,
+            'web_researched': bool(web_results),
             'status': 'success'
         })
         
