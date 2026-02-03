@@ -264,18 +264,18 @@ class BudgetLiveSession:
 TRANSCRIPT:
 {analysis_text}
 
-Extract and return as JSON (Be extremely thorough, identify at least 20-25 items if the text allows):
-1. "highlights": Array of important announcements, each with:
-   - "category": One of "tax", "sector", "capex", "pli", "financing", "fiscal", "regulation", "other"
-   - "title": Brief title (max 10 words)
-   - "details": Key details (max 50 words)
-   - "impact": "positive", "negative", or "neutral" for markets
-   - "sectors_affected": Array of affected sectors like ["Banking", "IT", "Pharma"]
+Extract and return as a single JSON object (Be extremely thorough, identify at least 20-25 items if the text allows):
+- "highlights": Array of important announcements, each with:
+    - "category": One of "tax", "sector", "capex", "pli", "financing", "fiscal", "regulation", "other"
+    - "title": Brief title (max 10 words)
+    - "details": Key details (max 50 words)
+    - "impact": "positive", "negative", or "neutral" for markets
+    - "sectors_affected": Array of affected sectors like ["Banking", "IT", "Pharma"]
 
-2. "sectors": Object mapping sector names to their impact (Identify all affected sectors, up to 25):
-   - "impact_type": "positive", "negative", "neutral", or "mixed"
-   - "summary": Brief summary (max 30 words)
-   - "key_points": Array of 2-3 key points
+- "sectors": Object mapping sector names to their impact (Identify all affected sectors, up to 25):
+    - "impact_type": "positive", "negative", "neutral", or "mixed"
+    - "summary": Brief summary (max 30 words)
+    - "key_points": Array of 2-3 key points
 
 {f"Analyze the entire text and extract ALL significant announcements (up to 25 key highlights)." if full_scan else "Only include NEW information not already covered. If nothing significant, return empty arrays/objects."}
 """
@@ -293,32 +293,48 @@ Extract and return as JSON (Be extremely thorough, identify at least 20-25 items
             )
             
             if response.text:
-                analysis = json.loads(response.text)
-                
-                # Update highlights
-                for h in analysis.get("highlights", []):
-                    highlight = BudgetHighlight(
-                        category=h.get("category", "other"),
-                        title=h.get("title", ""),
-                        details=h.get("details", ""),
-                        impact=h.get("impact", "neutral"),
-                        sectors_affected=h.get("sectors_affected", [])
-                    )
-                    # Avoid duplicates by checking title
-                    if not any(existing.title == highlight.title for existing in self.highlights):
-                        self.highlights.append(highlight)
-                        print(f"DEBUG: New highlight: {highlight.title}")
-                
-                # Update sector impacts
-                for sector, impact_data in analysis.get("sectors", {}).items():
-                    self.sector_impacts[sector] = SectorImpact(
-                        sector=sector,
-                        impact_type=impact_data.get("impact_type", "neutral"),
-                        summary=impact_data.get("summary", ""),
-                        key_points=impact_data.get("key_points", [])
-                    )
-                
-                return True
+                try:
+                    # Parse the JSON response
+                    analysis = json.loads(response.text)
+                    
+                    # Robustness check: Ensure response is a dictionary
+                    if not isinstance(analysis, dict):
+                        print(f"ERROR: AI analysis returned {type(analysis)} instead of dictionary. Value: {response.text[:500]}")
+                        return False
+                        
+                    # Update highlights
+                    highlights_data = analysis.get("highlights")
+                    if isinstance(highlights_data, list):
+                        for h in highlights_data:
+                            if not isinstance(h, dict): continue
+                            highlight = BudgetHighlight(
+                                category=h.get("category", "other"),
+                                title=h.get("title", ""),
+                                details=h.get("details", ""),
+                                impact=h.get("impact", "neutral"),
+                                sectors_affected=h.get("sectors_affected", [])
+                            )
+                            # Avoid duplicates by checking title
+                            if not any(existing.title == highlight.title for existing in self.highlights):
+                                self.highlights.append(highlight)
+                                print(f"DEBUG: New highlight: {highlight.title}")
+                    
+                    # Update sector impacts
+                    sectors_data = analysis.get("sectors")
+                    if isinstance(sectors_data, dict):
+                        for sector, impact_data in sectors_data.items():
+                            if not isinstance(impact_data, dict): continue
+                            self.sector_impacts[sector] = SectorImpact(
+                                sector=sector,
+                                impact_type=impact_data.get("impact_type", "neutral"),
+                                summary=impact_data.get("summary", ""),
+                                key_points=impact_data.get("key_points", [])
+                            )
+                    return True
+                except Exception as e:
+                    print(f"ERROR: Failed to process AI analysis JSON: {e}")
+                    traceback.print_exc()
+                    return False
                             
         except json.JSONDecodeError as je:
             print(f"WARN: JSON parse error in analysis: {je}")
