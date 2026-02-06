@@ -394,8 +394,12 @@ def calculate_days_sales_outstanding(retrieved_data, calculation_spec):
 def calculate_price_to_earnings_ratio(retrieved_data, calculation_spec):
     """ P/E = Market Price per Share / EPS """
     inputs = calculation_spec['inputs']
-    market_price = _safe_float(inputs["market_price"]) # Passed directly by orchestrator
-    eps = _get_input_value(retrieved_data, inputs["eps"], allow_zero=False) # EPS from fundamentals
+    market_price = _safe_float(inputs.get("market_price")) # Passed directly by orchestrator
+    # Accept both 'eps' and 'eps_source' keys for compatibility with different AI planner outputs
+    eps_spec = inputs.get("eps") or inputs.get("eps_source")
+    if eps_spec is None:
+        return {"error": "EPS source specification not found in inputs (expected 'eps' or 'eps_source')."}
+    eps = _get_input_value(retrieved_data, eps_spec, allow_zero=False) # EPS from fundamentals
 
     if market_price is None: return {"error": "Market Price not available."}
     if eps is None: return {"value": None, "note": "EPS is zero, negative, or not found/parseable."}

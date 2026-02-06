@@ -20,6 +20,7 @@ import httpx
 import asyncio
 import pandas_market_calendars as mcal
 from playwright.async_api import async_playwright
+from difflib import SequenceMatcher  # For fuzzy name matching in peer comparison
 
 # import os
 # import openai
@@ -747,7 +748,7 @@ def fetch_latest_documents(ticker: str) -> list[dict]:
 # Peer Comparison Data Fetcher (Direct Screener.in Scrape)
 # =====================================================================
 
-def fetch_peer_comparison_from_screener(ticker: str) -> dict:
+def fetch_peer_comparison_from_screener(ticker: str, company_name: str = None) -> dict:
     """
     Fetches peer comparison data directly from Screener.in by scraping the 
     peer comparison table (section id: #peers).
@@ -755,6 +756,10 @@ def fetch_peer_comparison_from_screener(ticker: str) -> dict:
     Uses a two-stage approach like fetch_consolidated_async:
     STAGE 1: Fast HTTP fetch (works if content is server-rendered)
     STAGE 2: Playwright browser fetch (fallback for JS-rendered content)
+    
+    Args:
+        ticker: Stock ticker (e.g., 'NH')
+        company_name: Optional company name from yfinance for fuzzy matching
     
     Returns:
         dict: {
@@ -771,24 +776,28 @@ def fetch_peer_comparison_from_screener(ticker: str) -> dict:
             # If we're already in an async context, run in a new thread
             import concurrent.futures
             with concurrent.futures.ThreadPoolExecutor() as executor:
-                future = executor.submit(asyncio.run, fetch_peer_comparison_from_screener_async(ticker))
+                future = executor.submit(asyncio.run, fetch_peer_comparison_from_screener_async(ticker, company_name))
                 return future.result(timeout=60)
         else:
-            return loop.run_until_complete(fetch_peer_comparison_from_screener_async(ticker))
+            return loop.run_until_complete(fetch_peer_comparison_from_screener_async(ticker, company_name))
     except RuntimeError:
         # No event loop exists, create one
-        return asyncio.run(fetch_peer_comparison_from_screener_async(ticker))
+        return asyncio.run(fetch_peer_comparison_from_screener_async(ticker, company_name))
     except Exception as e:
         print(f"ERROR: Sync wrapper for peer comparison failed: {e}")
         return {'company': {}, 'peers': []}
 
 
-async def fetch_peer_comparison_from_screener_async(ticker: str) -> dict:
+async def fetch_peer_comparison_from_screener_async(ticker: str, company_name: str = None) -> dict:
     """
     Async version of fetch_peer_comparison_from_screener.
     Uses a two-stage approach:
     STAGE 1: Fast httpx fetch
     STAGE 2: Playwright browser fetch (fallback for JS-rendered content)
+    
+    Args:
+        ticker: Stock ticker (e.g., 'NARAYANAHRU')
+        company_name: Optional company name from yfinance for fuzzy matching
     """
     from playwright.async_api import async_playwright
     
@@ -813,7 +822,7 @@ async def fetch_peer_comparison_from_screener_async(ticker: str) -> dict:
                     peers_section = soup.select_one("#peers")
                     if peers_section and peers_section.select_one("table"):
                         log_progress(f"Fast fetch found peer table at {url}")
-                        return _parse_peer_table(soup, ticker)
+                        return _parse_peer_table(soup, ticker, company_name)
                 except httpx.HTTPStatusError as e:
                     print(f"WARN: HTTP error fetching {url}: {e}")
                     continue
@@ -830,22 +839,32 @@ async def fetch_peer_comparison_from_screener_async(ticker: str) -> dict:
             browser = await p.chromium.launch()
             page = await browser.new_page()
             try:
-                # Try standalone first (more likely to have peer data)
-                await page.goto(standalone_url, wait_until='networkidle', timeout=45000)
+                # Try consolidated first, then standalone (consolidated has accurate data)
+                html = None
+                for url in [consolidated_url, standalone_url]:
+                    try:
+                        await page.goto(url, wait_until='networkidle', timeout=30000)
+                        # Wait for the peers section table
+                        try:
+                            await page.wait_for_selector('#peers table', timeout=5000)
+                            log_progress(f"Browser found peer table at {url}")
+                            html = await page.content()
+                            break  # Found table, stop trying
+                        except:
+                            log_progress(f"Peer table not found at {url}, trying next...")
+                            continue
+                    except Exception as e:
+                        print(f"WARN: Browser failed to load {url}: {e}")
+                        continue
                 
-                # Wait specifically for the peers section to be loaded
-                try:
-                    await page.wait_for_selector('#peers table', timeout=10000)
-                    log_progress(f"Browser found peer table for {ticker}")
-                except:
-                    log_progress(f"Peer table not found after wait, proceeding anyway...")
-                
-                html = await page.content()
+                if not html:
+                    # Last resort - get whatever we have
+                    html = await page.content()
             finally:
                 await browser.close()
         
         soup = BeautifulSoup(html, 'html.parser')
-        return _parse_peer_table(soup, ticker)
+        return _parse_peer_table(soup, ticker, company_name)
         
     except Exception as e:
         print(f"ERROR: Async peer comparison fetch failed for {ticker}: {e}")
@@ -853,8 +872,16 @@ async def fetch_peer_comparison_from_screener_async(ticker: str) -> dict:
         return {'company': {}, 'peers': []}
 
 
-def _parse_peer_table(soup, ticker: str) -> dict:
-    """Helper function to parse the peer table from BeautifulSoup object."""
+def _parse_peer_table(soup, ticker: str, company_name: str = None) -> dict:
+    """
+    Helper function to parse the peer table from BeautifulSoup object.
+    
+    Args:
+        soup: BeautifulSoup object of the page
+        ticker: Stock ticker (e.g., 'NARAYANAHRU')
+        company_name: Optional company name from yfinance (e.g., 'Narayana Hrudayalaya Ltd')
+                      Used for fuzzy matching when ticker doesn't appear in screener names.
+    """
     try:
         peers_section = soup.select_one("#peers")
         if not peers_section:
@@ -895,14 +922,22 @@ def _parse_peer_table(soup, ticker: str) -> dict:
             
             if 'name' in col_lower:
                 column_mapping[col] = 'name'
+            # IMPORTANT: Check for P/B ratio patterns BEFORE 'cmp' to avoid false match
+            # Screener uses "CMP / BV" for Price-to-Book
+            elif 'bv' in col_lower and 'cmp' in col_lower:
+                # Handles: "CMP / BV", "CMP/BV", "CMP/ BV", "CMP /BV" etc.
+                column_mapping[col] = 'pb_ratio'
+                print(f"DEBUG: Mapped column '{col}' -> pb_ratio")
             elif 'cmp' in col_lower or col_lower == 'price':
                 column_mapping[col] = 'cmp'
             elif 'mar cap' in col_lower or 'market cap' in col_lower or 'mcap' in col_lower:
                 column_mapping[col] = 'market_cap'
             elif 'p/e' in col_lower or col_lower == 'pe':
                 column_mapping[col] = 'pe_ratio'
-            elif 'p/b' in col_lower or col_lower == 'pb':
+            # P/B ratio: additional patterns
+            elif 'p/b' in col_lower or col_lower == 'pb' or 'pbv' in col_lower:
                 column_mapping[col] = 'pb_ratio'
+                print(f"DEBUG: Mapped column '{col}' -> pb_ratio")
             elif 'div' in col_lower and ('yld' in col_lower or 'yield' in col_lower or '%' in col_lower):
                 column_mapping[col] = 'dividend_yield'
             elif 'roce' in col_lower:
@@ -912,9 +947,13 @@ def _parse_peer_table(soup, ticker: str) -> dict:
             # Qtr Sales Var % -> sales_growth_yoy
             elif 'sales' in col_lower and 'var' in col_lower:
                 column_mapping[col] = 'sales_growth_yoy'
-            # Qtr Profit Var % -> ebitda_growth_yoy (as proxy)
-            elif 'profit' in col_lower and 'var' in col_lower:
+            # OPM % / Operating Margin / Financing Margin -> ebitda_growth_yoy (operating margin, not net profit)
+            elif 'opm' in col_lower or 'operating margin' in col_lower or 'financing margin' in col_lower:
                 column_mapping[col] = 'ebitda_growth_yoy'
+                print(f"DEBUG: Mapped '{col}' -> ebitda_growth_yoy (operating margin)")
+            # Net Profit Gr / Qtr Profit Var -> separate field (NOT ebitda)
+            elif 'profit' in col_lower and ('var' in col_lower or 'gr' in col_lower):
+                column_mapping[col] = 'net_profit_growth'  # Separate from EBITDA
             # NP Qtr can help calculate NPM if needed
             elif 'np qtr' in col_lower or 'net profit' in col_lower:
                 column_mapping[col] = 'np_qtr'
@@ -936,13 +975,76 @@ def _parse_peer_table(soup, ticker: str) -> dict:
         if not records:
             return {'company': {}, 'peers': []}
         
-        # First row is typically the main company (or find it by ticker match)
+        # =====================================================================
+        # IMPROVED: Two-pass company identification with fuzzy name matching
+        # =====================================================================
+        # The old logic assumed row 0 was always the searched company, which
+        # is incorrect when screener.in has a different sorting order.
+        # 
+        # New approach:
+        # 1. First pass: Find best fuzzy match for company_name among all records
+        # 2. If no good match (threshold 0.5), fall back to first row
+        # =====================================================================
+        
         company_data = {}
         peers_data = []
         
-        ticker_upper = ticker.upper()
-        company_found = False
+        # Extract all names from records for matching
+        record_names = [(i, record.get('name', '')) for i, record in enumerate(records)]
         
+        # Helper function for fuzzy matching
+        def fuzzy_match_score(name1: str, name2: str) -> float:
+            """Calculate similarity ratio between two names (0.0 to 1.0)."""
+            if not name1 or not name2:
+                return 0.0
+            # Normalize: lowercase, remove common suffixes
+            n1 = name1.lower().replace('ltd.', '').replace('ltd', '').replace('limited', '').strip()
+            n2 = name2.lower().replace('ltd.', '').replace('ltd', '').replace('limited', '').strip()
+            return SequenceMatcher(None, n1, n2).ratio()
+        
+        # Strategy prioritization:
+        # 1. Fuzzy match on company_name (most reliable when provided)
+        # 2. Ticker substring match (works for some cases like 'INFY' in 'Infosys')
+        # 3. Fallback to first row (legacy behavior)
+        
+        company_index = None
+        best_match_score = 0.0
+        MATCH_THRESHOLD = 0.5  # Minimum similarity to consider a match
+        ticker_upper = ticker.upper()
+        
+        # STRATEGY 1: Fuzzy match using company_name (if provided)
+        if company_name and company_index is None:
+            for i, record_name in record_names:
+                if not record_name:
+                    continue
+                score = fuzzy_match_score(company_name, record_name)
+                if score > best_match_score:
+                    best_match_score = score
+                    if score >= MATCH_THRESHOLD:
+                        company_index = i
+            
+            if company_index is not None:
+                print(f"DEBUG: Found company by fuzzy match: '{record_names[company_index][1]}' " 
+                      f"matches '{company_name}' (score: {best_match_score:.2f})")
+        
+        # STRATEGY 2: Ticker substring match (fallback)
+        if company_index is None:
+            for i, record_name in record_names:
+                if not record_name:
+                    continue
+                record_name_upper = record_name.upper()
+                # Check if ticker appears in the name (e.g., "INFY" in "Infosys Ltd")  
+                if ticker_upper in record_name_upper:
+                    company_index = i
+                    print(f"DEBUG: Found company by ticker match: '{record_name}' contains '{ticker_upper}'")
+                    break
+        
+        # STRATEGY 3: Fallback to first row (legacy behavior)
+        if company_index is None:
+            company_index = 0
+            print(f"WARN: Could not find {ticker} in peer table by name, using first row as fallback")
+        
+        # Now process records with proper company identification
         for i, record in enumerate(records):
             # Clean the record - convert all values to strings and handle NaN
             cleaned_record = {}
@@ -971,12 +1073,10 @@ def _parse_peer_table(soup, ticker: str) -> dict:
                     pass
 
             
-            # Check if this is the main company (first row or name contains ticker)
-            name = cleaned_record.get('name', '')
-            if not company_found and (i == 0 or ticker_upper in name.upper()):
+            # Use the identified company_index to determine company vs peer
+            if i == company_index:
                 cleaned_record['ticker'] = ticker
                 company_data = cleaned_record
-                company_found = True
             else:
                 peers_data.append(cleaned_record)
         

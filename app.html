@@ -48,6 +48,15 @@
       border-top-right-radius: 0;
     }
 
+    /* === AI MODEL SELECTOR DROPDOWN INDENT === */
+    #sidebarAiModelSelector optgroup {
+      padding-left: 4px;
+    }
+
+    #sidebarAiModelSelector option {
+      padding-left: 8px;
+    }
+
     #stockDropdown::-webkit-scrollbar {
       width: 8px;
     }
@@ -1558,6 +1567,238 @@
         font-size: 0.8rem;
       }
     }
+
+    /* === SIDEBAR LAYOUT === */
+    .app-layout {
+      display: flex;
+      justify-content: center;
+      gap: 2rem;
+      align-items: flex-start;
+      margin-top: 2rem;
+      transition: all 0.5s ease-in-out;
+    }
+
+    .main-content {
+      width: 100%;
+      max-width: 1000px;
+      transition: all 0.5s ease-in-out;
+    }
+
+    .chat-sidebar {
+      width: 420px;
+      position: sticky;
+      top: 6rem;
+      /* Adjusted to sit below the sticky navbar */
+      height: calc(100vh - 7rem);
+      background: white;
+      border-radius: 1.25rem;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+      display: flex;
+      flex-direction: column;
+      border: 1px solid #e2e8f0;
+      transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+      z-index: 40;
+    }
+
+    .chat-sidebar.collapsed {
+      width: 0;
+      margin-left: -2rem;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateX(20px);
+    }
+
+    @media (max-width: 1200px) {
+      .app-layout {
+        flex-direction: column;
+      }
+
+      .chat-sidebar {
+        width: 100%;
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        top: auto;
+        height: 80vh;
+        z-index: 100;
+        border-radius: 2rem 2rem 0 0;
+        transform: translateY(100%);
+      }
+
+      .chat-sidebar.active {
+        transform: translateY(0);
+      }
+
+      .chat-sidebar.collapsed {
+        margin-left: 0;
+        transform: translateY(100%);
+      }
+    }
+
+    .chat-header {
+      background: linear-gradient(135deg, var(--primary-500), var(--primary-600));
+      padding: 1rem 1.5rem;
+      /* Slightly reduced padding for a tighter look */
+      color: white;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      min-height: 4.5rem;
+      /* Ensure consistent height */
+    }
+
+    .chat-header select option,
+    .chat-header select optgroup {
+      background-color: white;
+      color: #1e293b;
+      /* slate-800 */
+    }
+
+    /* 
+     * Sidebar Chat Styling - UNIFORM FONT SIZE
+     * All elements use the same 0.7rem font size
+     * Using !important to ensure these override any browser defaults
+     */
+    #sidebarChatLog .bot-message,
+    #sidebarChatLog .message-content,
+    #sidebarChatLog .message-content * {
+      font-size: 0.77rem !important;
+      line-height: 1.5 !important;
+    }
+
+    #sidebarChatLog .message-content p {
+      margin-bottom: 0.35rem !important;
+    }
+
+    #sidebarChatLog .message-content p:last-child {
+      margin-bottom: 0 !important;
+    }
+
+    #sidebarChatLog .message-content strong {
+      font-weight: 700 !important;
+      color: #0f172a !important;
+    }
+
+    #sidebarChatLog .message-content ul,
+    #sidebarChatLog .message-content ol {
+      margin: 0.18rem 0 !important;
+      padding-left: 0.85rem !important;
+    }
+
+    #sidebarChatLog .message-content ul {
+      list-style-type: disc !important;
+    }
+
+    #sidebarChatLog .message-content ol {
+      list-style-type: decimal !important;
+    }
+
+    #sidebarChatLog .message-content li {
+      margin-bottom: 0.12rem !important;
+      margin-top: 0 !important;
+      padding: 0 !important;
+      line-height: 1.4 !important;
+    }
+
+    /* Remove all margins from elements inside list items */
+    #sidebarChatLog .message-content li p,
+    #sidebarChatLog .message-content li br {
+      margin: 0 !important;
+      padding: 0 !important;
+    }
+
+    /* Make br tags less impactful */
+    #sidebarChatLog .message-content br {
+      display: block !important;
+      content: "" !important;
+      margin-top: 0.1rem !important;
+    }
+
+    /* Reduce spacing between paragraph and list that follows */
+    #sidebarChatLog .message-content p+ul,
+    #sidebarChatLog .message-content p+ol {
+      margin-top: 0.08rem !important;
+    }
+
+    #sidebarChatLog .message-content h1,
+    #sidebarChatLog .message-content h2,
+    #sidebarChatLog .message-content h3,
+    #sidebarChatLog .message-content h4,
+    #sidebarChatLog .message-content h5,
+    #sidebarChatLog .message-content h6 {
+      font-weight: 700 !important;
+      color: #1e293b !important;
+      margin: 0.5rem 0 0.2rem 0 !important;
+    }
+
+    #sidebarChatLog .message-content h1:first-child,
+    #sidebarChatLog .message-content h2:first-child,
+    #sidebarChatLog .message-content h3:first-child {
+      margin-top: 0 !important;
+    }
+
+    #sidebarChatLog .message-content table {
+      width: 100% !important;
+      border-collapse: collapse !important;
+      margin: 0.4rem 0 !important;
+    }
+
+    #sidebarChatLog .message-content th,
+    #sidebarChatLog .message-content td {
+      border: 1px solid #e2e8f0 !important;
+      padding: 0.2rem !important;
+      text-align: left !important;
+    }
+
+    #sidebarChatLog .message-content th {
+      background: #f8fafc !important;
+      font-weight: 600 !important;
+    }
+
+    #sidebarChatLog .message-content code {
+      background: #f1f5f9 !important;
+      padding: 0.1rem 0.2rem !important;
+      border-radius: 0.14rem !important;
+      font-family: monospace !important;
+    }
+
+    #sidebarChatLog .message-content pre {
+      background-color: #f1f5f9 !important;
+      padding: 0.35rem !important;
+      border-radius: 0.25rem !important;
+      overflow-x: auto !important;
+      margin: 0.4rem 0 !important;
+    }
+
+
+    .ask-ai-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: var(--primary-50);
+      color: var(--primary-700);
+      padding: 0.6rem 1.2rem;
+      border-radius: 0.75rem;
+      font-weight: 600;
+      font-size: 0.875rem;
+      border: 1px solid var(--primary-200);
+      transition: all 0.2s;
+      cursor: pointer;
+      margin-top: 1.5rem;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    }
+
+    .ask-ai-btn:hover {
+      background: var(--primary-100);
+      transform: translateY(-2px);
+      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+    }
+
+    .ask-ai-btn svg {
+      width: 1.25rem;
+      height: 1.25rem;
+    }
   </style>
 
 </head>
@@ -1596,7 +1837,7 @@
         </li>
         <!-- Live Budget Button -->
         <li>
-          <a href="/budget"
+          <button onclick="showSection('budget')"
             class="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-orange-500 to-red-600 text-white rounded-lg font-medium hover:opacity-90 transition-all shadow-md animate-pulse"
             id="budget-tab-btn">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1604,7 +1845,7 @@
                 d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
             </svg>
             🇮🇳 Live Budget 2026
-          </a>
+          </button>
         </li>
         <li>
           <a href="/admin" id="admin-link"
@@ -1653,97 +1894,189 @@
     </div>
   </div>
 
-  <!-- MAIN -->
-  <main class="container mx-auto mt-8 mb-12 px-4">
-    <div id="searchCard" class="bg-white p-8 rounded-xl shadow-lg w-full max-w-3xl mx-auto mb-12 theme-transition">
-      <!-- Toggle Switch -->
-      <div class="mode-toggle-container">
-        <span id="companyLabel" class="mode-label text-green-700">🏢 Company Search</span>
-        <div id="modeToggle" class="toggle-switch theme-transition" role="switch" aria-checked="false" tabindex="0">
-        </div>
-        <span id="industryLabel" class="mode-label text-blue-700 inactive">🏭 Industry Research</span>
-      </div>
+  <!-- MAIN (Larger max-width to accommodate sidebar) -->
+  <main class="mx-auto mt-8 mb-12 px-4 w-full" style="max-width: 1600px;">
+    <div class="app-layout">
+      <div class="main-content">
+        <!-- Main Search Card (Company/Industry Toggle) -->
+        <div id="searchCard"
+          class="bg-white p-8 rounded-xl shadow-lg w-full mb-12 theme-transition border border-slate-100">
+          <!-- Toggle Switch -->
+          <div class="mode-toggle-container">
+            <span id="companyLabel" class="mode-label text-green-700">🏢 Company Search</span>
+            <div id="modeToggle" class="toggle-switch theme-transition" role="switch" aria-checked="false" tabindex="0">
+            </div>
+            <span id="industryLabel" class="mode-label text-blue-700 inactive">🏭 Industry Research</span>
+          </div>
 
-      <!-- Dynamic Title -->
-      <h1 id="mainTitle" class="text-4xl font-bold mb-2 text-center text-slate-700 theme-transition">AI-based Stock
-        Research</h1>
-      <p id="mainSubtitle" class="text-center text-slate-500 mb-8 theme-transition">Analyze stocks using Kagger's
-        Multi-agentic AI system created exclusively for Indian Companies</p>
+          <!-- Dynamic Title -->
+          <h1 id="mainTitle" class="text-4xl font-bold mb-2 text-center text-slate-700 theme-transition">AI-based Stock
+            Research</h1>
+          <p id="mainSubtitle" class="text-center text-slate-500 mb-8 theme-transition">Analyze stocks using Kagger's
+            Multi-agentic AI system created exclusively for Indian Companies</p>
 
-      <!-- Company Search Form -->
-      <div id="companyForm">
-        <div class="flex relative">
-          <div class="flex-grow relative">
-            <input id="tickerInput" type="text"
-              placeholder="Search stock name or ticker (e.g. TCS, Reliance, HDFC Bank)"
-              class="w-full border border-slate-300 rounded-l-md px-4 py-3 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-lg theme-transition"
-              autocomplete="off" />
-            <div id="stockDropdown"
-              class="absolute left-0 right-0 top-full bg-white border border-slate-300 rounded-b-md shadow-lg z-50 max-h-64 overflow-y-auto hidden">
-              <!-- Autocomplete results will appear here -->
+          <!-- Company Search Form -->
+          <div id="companyForm">
+            <div class="flex relative">
+              <div class="flex-grow relative">
+                <input id="tickerInput" type="text"
+                  placeholder="Search stock name or ticker (e.g. TCS, Reliance, HDFC Bank)"
+                  class="w-full border border-slate-300 rounded-l-md px-4 py-3 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-lg theme-transition"
+                  autocomplete="off" />
+                <div id="stockDropdown"
+                  class="absolute left-0 right-0 top-full bg-white border border-slate-300 rounded-b-md shadow-lg z-50 max-h-64 overflow-y-auto hidden">
+                  <!-- Autocomplete results will appear here -->
+                </div>
+              </div>
+              <button id="goBtn"
+                class="bg-gradient-to-r from-green-500 to-green-600 text-white px-8 py-3 rounded-r-md hover:from-green-600 hover:to-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-all duration-150 ease-in-out font-semibold text-lg theme-transition">
+                Analyze
+              </button>
             </div>
           </div>
-          <button id="goBtn"
-            class="bg-gradient-to-r from-green-500 to-green-600 text-white px-8 py-3 rounded-r-md hover:from-green-600 hover:to-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-all duration-150 ease-in-out font-semibold text-lg theme-transition">
-            Analyze
-          </button>
-        </div>
-      </div>
 
-      <!-- Industry Search Form -->
-      <div id="industryForm" class="hidden">
-        <div class="flex">
-          <input id="industryInput" type="text"
-            placeholder="Enter an industry (e.g. EV Battery, Generic Pharma, Specialty Chemicals)"
-            class="flex-grow border border-slate-300 rounded-l-md px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-lg" />
-          <button id="industryGoBtn"
-            class="bg-gradient-to-r from-blue-500 to-blue-600 text-white px-8 py-3 rounded-r-md hover:from-blue-600 hover:to-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-150 ease-in-out font-semibold text-lg">
-            🔍 Research
-          </button>
+          <!-- Industry Search Form -->
+          <div id="industryForm" class="hidden">
+            <div class="flex">
+              <input id="industryInput" type="text"
+                placeholder="Enter an industry (e.g. EV Battery, Generic Pharma, Specialty Chemicals)"
+                class="flex-grow border border-slate-300 rounded-l-md px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-lg" />
+              <button id="industryGoBtn"
+                class="bg-gradient-to-r from-blue-500 to-blue-600 text-white px-8 py-3 rounded-r-md hover:from-blue-600 hover:to-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-150 ease-in-out font-semibold text-lg">
+                🔍 Research
+              </button>
+            </div>
+
+            <!-- Industry Options -->
+            <div class="industry-fields">
+              <div>
+                <label for="horizonSelect">Time Horizon</label>
+                <select id="horizonSelect">
+                  <option value="3">3 Years</option>
+                  <option value="5" selected>5 Years</option>
+                  <option value="7">7 Years</option>
+                  <option value="10">10 Years</option>
+                </select>
+              </div>
+              <div>
+                <label for="depthSelect">Research Depth</label>
+                <select id="depthSelect">
+                  <option value="BRIEF">Brief</option>
+                  <option value="STANDARD" selected>Standard</option>
+                  <option value="DEEP">Deep</option>
+                </select>
+              </div>
+              <div>
+                <label for="tickersInput">Specific Tickers (optional)</label>
+                <input id="tickersInput" type="text" placeholder="e.g. TATAMOTORS, M&M" />
+              </div>
+            </div>
+
+            <p class="text-xs text-slate-400 mt-3 text-center">⏱️ Deep research may take 3-5 minutes. Results are
+              comprehensive investor-grade reports.</p>
+          </div>
+        </div> <!-- end searchCard -->
+
+        <div id="progress-container" class="theme-transition">
+          <div id="progress-messages"></div>
         </div>
 
-        <!-- Industry Options -->
-        <div class="industry-fields">
-          <div>
-            <label for="horizonSelect">Time Horizon</label>
-            <select id="horizonSelect">
-              <option value="3">3 Years</option>
-              <option value="5" selected>5 Years</option>
-              <option value="7">7 Years</option>
-              <option value="10">10 Years</option>
+        <!-- Results - Separate containers for caching -->
+        <div id="companyResults" class="w-full space-y-10">
+          <!-- Company analysis results will be dynamically inserted here -->
+        </div>
+        <div id="industryResults" class="w-full space-y-10 hidden">
+          <!-- Industry research results will be dynamically inserted here -->
+        </div>
+        <div id="debug-link-container" class="text-center mt-6"></div>
+      </div> <!-- end main-content -->
+
+      <!-- Chat Sidebar -->
+      <aside id="chatSidebar" class="chat-sidebar collapsed overflow-hidden">
+        <div class="chat-header relative">
+          <!-- Close button in top-right corner -->
+          <button id="sidebarClose"
+            class="absolute top-2 right-3 text-white hover:text-white/80 transition-colors text-2xl leading-none">×</button>
+
+          <div class="flex items-center justify-between w-full pr-8">
+            <div class="flex flex-col flex-shrink-0 whitespace-nowrap">
+              <span class="font-bold text-lg">Kagger AI Analyst</span>
+              <span class="text-xs opacity-80">Multi-agentic Intelligence</span>
+            </div>
+            <select id="sidebarAiModelSelector"
+              class="ml-auto bg-white/20 text-white text-xs rounded-md px-2 py-1 border border-white/30 focus:ring-2 focus:ring-white/80 focus:outline-none max-w-[170px] truncate">
+              <optgroup label="Recommended">
+                <option value="best-fast" selected>Best (Multi-Agent) - Fast</option>
+                <option value="best">Best (Multi-Agent)</option>
+                <option value="best-deep-research">Deep Research</option>
+              </optgroup>
+              <optgroup label="ChatGPT">
+                <option value="gpt-5.2">GPT-5.2</option>
+                <option value="gpt-5.1">GPT-5.1</option>
+                <option value="gpt-5-mini">GPT-5 mini</option>
+              </optgroup>
+              <optgroup label="Perplexity">
+                <option value="sonar-pro">Sonar Pro</option>
+                <option value="sonar-reasoning">Sonar Reasoning</option>
+              </optgroup>
+              <optgroup label="Deepseek">
+                <option value="r1-1776">Deepseek R1</option>
+              </optgroup>
+              <optgroup label="Google Gemini">
+                <option value="gemini-3-flash-preview">Gemini 3 Flash</option>
+                <option value="gemini-3-pro-preview">Gemini 3 Pro</option>
+              </optgroup>
             </select>
           </div>
-          <div>
-            <label for="depthSelect">Research Depth</label>
-            <select id="depthSelect">
-              <option value="BRIEF">Brief</option>
-              <option value="STANDARD" selected>Standard</option>
-              <option value="DEEP">Deep</option>
-            </select>
-          </div>
-          <div>
-            <label for="tickersInput">Specific Tickers (optional)</label>
-            <input id="tickersInput" type="text" placeholder="e.g. TATAMOTORS, M&M" />
+        </div>
+
+        <div id="sidebarChatLog" class="flex-1 p-4 space-y-4 overflow-y-auto bg-slate-50 scroll-smooth">
+          <!-- Welcome message -->
+          <div id="sidebarWelcomeMessage"
+            class="bg-white p-4 rounded-lg shadow-sm border border-slate-200 text-sm text-slate-600">
+            <p class="font-semibold text-slate-800 mb-1">Welcome to Kagger AI!</p>
+            <p>I can help you analyze financial data, interpret charts, and research market trends. Ask me anything
+              about the analysis on the left.</p>
           </div>
         </div>
 
-        <p class="text-xs text-slate-400 mt-3 text-center">⏱️ Deep research may take 3-5 minutes. Results are
-          comprehensive investor-grade reports.</p>
-      </div>
-    </div>
+        <!-- Analyst Reports Toggle in Sidebar -->
+        <div id="sidebarAnalystToggleRow"
+          class="px-4 py-2 border-t border-slate-200 bg-slate-50 flex items-center justify-between">
+          <label class="flex items-center cursor-pointer gap-2">
+            <div class="relative">
+              <input type="checkbox" id="sidebarAnalystReportsToggle" class="sr-only peer">
+              <div
+                class="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-green-500">
+              </div>
+            </div>
+            <span class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Analyst Reports</span>
+          </label>
+          <div id="sidebarAnalystStatus" class="text-[10px] text-slate-400 flex items-center gap-1 hidden">
+            <svg class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor"
+                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+              </path>
+            </svg>
+            <span id="sidebarAnalystStatusText">Syncing...</span>
+          </div>
+        </div>
 
-    <div id="progress-container" class="theme-transition">
-      <div id="progress-messages"></div>
+        <form id="sidebarChatForm" class="p-4 bg-white border-t border-slate-200 shadow-lg">
+          <div class="flex gap-2">
+            <input id="sidebarChatInput" type="text" placeholder="Ask about this analysis..."
+              class="flex-grow border border-slate-200 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm" />
+            <button type="submit" class="bg-green-600 text-white p-2 rounded-lg hover:bg-green-700 transition-colors">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path>
+              </svg>
+            </button>
+          </div>
+        </form>
+      </aside>
     </div>
-
-    <!-- Results - Separate containers for caching -->
-    <div id="companyResults" class="w-full space-y-10">
-      <!-- Company analysis results will be dynamically inserted here -->
-    </div>
-    <div id="industryResults" class="w-full space-y-10 hidden">
-      <!-- Industry research results will be dynamically inserted here -->
-    </div>
-    <div id="debug-link-container" class="text-center mt-6"></div>
   </main>
 
   <!-- Chat launcher button -->
@@ -1777,7 +2110,8 @@
           <select id="aiModelSelector"
             class="bg-green-700/50 text-white text-sm rounded-md p-1 border border-green-400 focus:ring-2 focus:ring-white/80 focus:outline-none">
             <optgroup label="Recommended">
-              <option value="best" selected>Best (Multi-Agent)</option>
+              <option value="best-fast" selected>Best (Multi-Agent) - Fast</option>
+              <option value="best">Best (Multi-Agent)</option>
               <option value="best-deep-research">Best Model - Deep Research</option>
             </optgroup>
             <optgroup label="ChatGPT">
@@ -1967,6 +2301,20 @@
       }
 
       html += `</tbody></table></div>`;
+
+      // Add Ask AI button for Tables
+      html += `
+        <div class="flex justify-center mb-10">
+          <button onclick="askAI('Analyze the ${tableName} table for ${window.currentCompanyName || ''} and highlight any significant trends or anomalies.')" 
+                  class="ask-ai-btn !mt-0">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+            </svg>
+            Ask AI to Analyze This Table
+          </button>
+        </div>
+      `;
+
       return html;
     }
 
@@ -1979,7 +2327,22 @@
       if (data.buy_percentage) html += `<div><span class="font-bold text-green-600">${data.buy_percentage}</span><span class="text-sm text-slate-500 ml-1">Buy</span></div>`;
       if (data.hold_percentage) html += `<div><span class="font-bold text-yellow-500">${data.hold_percentage}</span><span class="text-sm text-slate-500 ml-1">Hold</span></div>`;
       if (data.sell_percentage) html += `<div><span class="font-bold text-red-600">${data.sell_percentage}</span><span class="text-sm text-slate-500 ml-1">Sell</span></div>`;
-      html += '</div></div>';
+      html += '</div>';
+
+      // Add Ask AI button for Analyst Ratings
+      html += `
+        <div class="mt-4 pt-4 border-t border-slate-200/50">
+          <button onclick="askAI('What is the consensus view among analysts for ${window.currentCompanyName || ''} and what are the main reasons for their ratings?')" 
+                  class="ask-ai-btn !mt-0 px-3 py-1.5 text-xs">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"></path>
+            </svg>
+            Ask AI to Explain Consensus
+          </button>
+        </div>
+      `;
+
+      html += '</div>';
       return html;
     }
 
@@ -2212,15 +2575,25 @@
           chatBtn.classList.add('from-blue-500', 'to-blue-600', 'hover:from-blue-600', 'hover:to-blue-700', 'focus:ring-blue-500');
         }
 
-        // Change Chat Modal Header to Blue
-        if (chatModalHeader) {
-          chatModalHeader.classList.remove('from-green-500', 'to-green-600');
-          chatModalHeader.classList.add('from-blue-500', 'to-blue-600');
+        // --- NEW: Update Sidebar Header and Elements for Industry Mode ---
+        const sidebarHeader = document.querySelector('.chat-header');
+        if (sidebarHeader) {
+          sidebarHeader.classList.remove('from-green-500', 'to-green-600');
+          sidebarHeader.classList.add('from-blue-600', 'to-blue-700');
         }
 
-        // Hide Model Selector in Industry Mode (backend uses fixed model)
-        if (chatModalSelect) {
-          chatModalSelect.classList.add('hidden');
+        const sidebarSendBtn = document.querySelector('#sidebarChatForm button[type="submit"]');
+        if (sidebarSendBtn) {
+          sidebarSendBtn.classList.remove('bg-green-600', 'hover:bg-green-700');
+          sidebarSendBtn.classList.add('bg-blue-600', 'hover:bg-blue-700');
+        }
+
+        if (modelSelector) {
+          modelSelector.classList.add('hidden');
+        }
+
+        if (analystReportsToggle) {
+          document.getElementById('sidebarAnalystToggleRow')?.classList.add('hidden');
         }
 
         // Change Send Button to Blue
@@ -2255,28 +2628,31 @@
         // Show analyst reports toggle
         if (analystToggleRow) analystToggleRow.classList.remove('hidden');
 
-        // Change Chat Button to Green
+        // Change Chat Button back to Green
         if (chatBtn) {
           chatBtn.classList.remove('from-blue-500', 'to-blue-600', 'hover:from-blue-600', 'hover:to-blue-700', 'focus:ring-blue-500');
           chatBtn.classList.add('from-green-500', 'to-green-600', 'hover:from-green-600', 'hover:to-green-700', 'focus:ring-green-500');
         }
 
-        // Change Chat Modal Header to Green
-        if (chatModalHeader) {
-          chatModalHeader.classList.remove('from-blue-500', 'to-blue-600');
-          chatModalHeader.classList.add('from-green-500', 'to-green-600');
+        // --- NEW: Update Sidebar Header for Company Mode ---
+        const sidebarHeader = document.querySelector('.chat-header');
+        if (sidebarHeader) {
+          sidebarHeader.classList.remove('from-blue-600', 'to-blue-700');
+          sidebarHeader.classList.add('from-green-500', 'to-green-600');
         }
 
-        // Show Model Selector in Company Mode
-        if (chatModalSelect) {
-          chatModalSelect.classList.remove('hidden');
+        const sidebarSendBtn = document.querySelector('#sidebarChatForm button[type="submit"]');
+        if (sidebarSendBtn) {
+          sidebarSendBtn.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+          sidebarSendBtn.classList.add('bg-green-600', 'hover:bg-green-700');
         }
 
-        // Change Send Button to Green
-        const chatSendBtn = document.querySelector('#chatForm button[type="submit"]');
-        if (chatSendBtn) {
-          chatSendBtn.classList.remove('from-blue-500', 'to-blue-600', 'hover:from-blue-600', 'hover:to-blue-700', 'focus:ring-blue-500');
-          chatSendBtn.classList.add('from-green-500', 'to-green-600', 'hover:from-green-600', 'hover:to-green-700', 'focus:ring-green-500');
+        if (modelSelector) {
+          modelSelector.classList.remove('hidden');
+        }
+
+        if (analystReportsToggle) {
+          document.getElementById('sidebarAnalystToggleRow')?.classList.remove('hidden');
         }
       }
     }
@@ -2679,6 +3055,8 @@
       industryResultsContainer.innerHTML = '';
       setupSseListener();
 
+      // Open AI Chat Sidebar moved to pollForIndustryResult (complete)
+
       // Show loading state
       industryResultsContainer.innerHTML = `
         <div class="bg-white p-8 rounded-xl shadow-lg">
@@ -2866,6 +3244,12 @@
             window.currentIndustryName = industry;
             window.currentIndustryReport = statusPayload.report;
 
+            // Open AI Chat Sidebar now that we have results
+            if (typeof toggleChatSidebar === 'function') {
+              toggleChatSidebar(true);
+              appendMessage(`The ${industry} industry report is ready. How can I help you analyze it?`, 'bot');
+            }
+
             if (sseConnection) sseConnection.close();
             document.getElementById('progress-container')?.classList.remove('visible');
 
@@ -2894,6 +3278,16 @@
                 ${tocHtml}
                 <div class="industry-report">
                   ${reportHtml}
+                </div>
+                <!-- Ask AI Button for Industry Report -->
+                <div class="mt-8 pt-6 border-t border-slate-200 flex justify-center">
+                  <button onclick="askAI('Based on this report for the ${industry} industry, what are the top 3 investment opportunities or risks I should be aware of?')" 
+                          class="ask-ai-btn !mt-0">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"></path>
+                    </svg>
+                    Ask AI analyst to summarize opportunities
+                  </button>
                 </div>
               </div>
             `;
@@ -3091,6 +3485,8 @@
       resultsContainer.innerHTML = '';
       setupSseListener();
 
+      // Open AI Chat Sidebar moved to after initial payload load
+
       try {
         const res = await fetch('/analyze', {
           method: 'POST',
@@ -3125,6 +3521,11 @@
 
         if (sseConnection) sseConnection.close();
         document.getElementById('progress-container')?.classList.remove('visible');
+
+        // Open AI Chat Sidebar automatically now that results are ready
+        if (typeof toggleChatSidebar === 'function') {
+          toggleChatSidebar(true);
+        }
 
         const companyName = payload.company_name || payload.ticker;
         // --- START: TEMPORARY TEST DATA ---
@@ -3211,6 +3612,15 @@
               </div>
               <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4" id="key-metrics-grid">
                 ${cards}
+              </div>
+              <div class="mt-6 pt-4 border-t border-green-200/50 flex justify-center">
+                <button onclick="askAI('Analyze these key metrics for ${window.currentCompanyName || ''} and tell me if they indicate a strong financial position.')" 
+                        class="ask-ai-btn">
+                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"></path>
+                  </svg>
+                  Ask AI About These Metrics
+                </button>
               </div>
             </div>
           `;
@@ -3732,6 +4142,58 @@
             grid.style.opacity = '1';
           }
         };
+
+        /**
+         * Update Key Metrics Snapshot section with data from peer comparison refresh.
+         * This ensures Key Metrics matches Peer Comparison after refresh.
+         */
+        function updateKeyMetricsFromRefresh(keyMetrics) {
+          if (!keyMetrics) return;
+
+          const grid = document.getElementById('key-metrics-grid');
+          if (!grid) {
+            console.log('Key metrics grid not found, skipping update');
+            return;
+          }
+
+          // Metric definitions matching the original render
+          const metricDefs = [
+            { key: 'current_price', label: 'Current Price' },
+            { key: 'market_cap', label: 'Market Cap' },
+            { key: 'pe_ratio', label: 'P/E Ratio' },
+            { key: 'pb_ratio', label: 'P/B Ratio' },
+            { key: 'dividend_yield', label: 'Dividend Yield' },
+            { key: 'roce', label: 'ROCE' },
+            { key: 'roe', label: 'ROE' },
+            { key: 'sales_growth_yoy', label: 'Sales Growth (YoY)', isGrowth: true },
+            { key: 'ebitda_growth_yoy', label: 'EBITDA Growth (YoY)', isGrowth: true },
+            { key: 'npm', label: 'Net Profit Margin' }
+          ];
+
+          const cards = metricDefs.map(m => {
+            let value = keyMetrics[m.key] || 'N/A';
+            const isGrowth = m.isGrowth || false;
+
+            // Format percentages
+            const percentageMetrics = ['dividend_yield', 'roce', 'roe', 'npm', 'sales_growth_yoy', 'ebitda_growth_yoy'];
+            if (percentageMetrics.includes(m.key) && value !== 'N/A' && !String(value).includes('%')) {
+              value = value + ' %';
+            }
+
+            const isPositive = isGrowth && String(value).includes('+');
+            const isNegative = isGrowth && String(value).includes('-');
+
+            return `
+              <div class="bg-white p-4 rounded-lg shadow-sm border border-green-100 hover:shadow-md transition-all hover:border-green-300">
+                <div class="text-xs text-slate-500 font-medium mb-1">${m.label}</div>
+                <div class="text-base font-bold ${isPositive ? 'text-green-600' : isNegative ? 'text-red-600' : 'text-slate-800'}">${value}</div>
+              </div>
+            `;
+          }).join('');
+
+          grid.innerHTML = cards;
+          console.log('Key Metrics Snapshot updated from peer comparison refresh');
+        }
 
         /**
          * Refresh the Peer Comparison section without reloading the page.
@@ -4550,8 +5012,8 @@
     let analystPollingInterval = null;
 
     function pollAnalystTextsStatus(analysisKey) {
-      const statusEl = document.getElementById('analystStatus');
-      const statusText = document.getElementById('analystStatusText');
+      const statusEl = document.getElementById('sidebarAnalystStatus');
+      const statusText = document.getElementById('sidebarAnalystStatusText');
 
       // Defensive null check - elements may not exist on fast cache returns
       if (!statusEl || !statusText) {
@@ -4601,23 +5063,73 @@
     }
 
     // Chat functionality
-    const chatBtn = document.getElementById('chatBtn'), chatModal = document.getElementById('chatModal'), chatClose = document.getElementById('chatClose'), chatExpand = document.getElementById('chatExpand'), chatLog = document.getElementById('chatLog'), chatForm = document.getElementById('chatForm'), chatInput = document.getElementById('chatInput'), modelSelector = document.getElementById('aiModelSelector');
+    // --- AI Chat Sidebar Initialization ---
+    const chatBtn = document.getElementById('chatBtn');
+
+    // Global helper for contextual AI queries
+    window.askAI = function (question) {
+      if (!question) return;
+      if (typeof toggleChatSidebar === 'function') {
+        toggleChatSidebar(true);
+
+        // Wait for sidebar to animate or focus
+        setTimeout(() => {
+          if (chatInput) {
+            chatInput.value = question;
+            // Optionally auto-submit:
+            chatForm.dispatchEvent(new Event('submit'));
+          }
+        }, 500);
+      }
+    };
+    const chatSidebar = document.getElementById('chatSidebar');
+    const sidebarClose = document.getElementById('sidebarClose');
+    const chatLog = document.getElementById('sidebarChatLog');
+    const chatForm = document.getElementById('sidebarChatForm');
+    const chatInput = document.getElementById('sidebarChatInput');
+    const modelSelector = document.getElementById('sidebarAiModelSelector');
+    const analystReportsToggle = document.getElementById('sidebarAnalystReportsToggle');
+    const analystStatus = document.getElementById('sidebarAnalystStatus');
+    const analystStatusText = document.getElementById('sidebarAnalystStatusText');
+
+    function toggleChatSidebar(force = null) {
+      if (!chatSidebar) return;
+      const isCollapsed = chatSidebar.classList.contains('collapsed');
+      const shouldShow = force !== null ? force : isCollapsed;
+
+      if (shouldShow) {
+        chatSidebar.classList.remove('collapsed');
+        chatSidebar.classList.add('active');
+        chatBtn.classList.add('opacity-0', 'pointer-events-none');
+        setTimeout(() => chatInput.focus(), 400);
+      } else {
+        chatSidebar.classList.add('collapsed');
+        chatSidebar.classList.remove('active');
+        chatBtn.classList.remove('opacity-0', 'pointer-events-none');
+      }
+    }
+
+    if (chatBtn) chatBtn.onclick = () => toggleChatSidebar(true);
+    if (sidebarClose) sidebarClose.onclick = () => toggleChatSidebar(false);
+
+    // Initial check for layout
+    window.addEventListener('resize', () => {
+      if (window.innerWidth < 1200 && !chatSidebar.classList.contains('collapsed')) {
+        chatSidebar.classList.add('active');
+      }
+    });
 
     let isFullscreen = false;
-    const chatContainer = chatModal.querySelector('div.bg-white');
+    const chatModal = document.getElementById('chatModal');
+    const chatExpand = document.getElementById('chatExpand');
+    const chatContainer = chatModal ? chatModal.querySelector('div.bg-white') : null;
 
     // Separate chat histories for Company vs Industry modes
     let companyChatHistory = [];
     let industryChatHistory = [];
 
-    chatBtn.onclick = () => chatModal.classList.remove('hidden');
-    chatClose.onclick = () => {
-      chatModal.classList.add('hidden');
-      if (isFullscreen) toggleFullscreen(); // Exit fullscreen when closing
-    };
-
-    // Fullscreen toggle
-    chatExpand.onclick = () => toggleFullscreen();
+    // Fullscreen toggle (keep for legacy modal or adapt later)
+    if (chatExpand) chatExpand.onclick = () => toggleFullscreen();
 
     function toggleFullscreen() {
       isFullscreen = !isFullscreen;
@@ -4654,7 +5166,7 @@
       appendMessage('...', 'bot', true);
       try {
         const selectedModel = modelSelector.value;
-        const useAnalystReports = document.getElementById('analystReportsToggle').checked;
+        const useAnalystReports = analystReportsToggle ? analystReportsToggle.checked : false;
         let res;
         // Check if we are in Industry Mode
         if (typeof currentMode !== 'undefined' && currentMode === 'industry') {
@@ -4695,17 +5207,25 @@
     });
 
     function appendMessage(text, sender, isTyping = false) {
+      // Hide welcome message on first interaction
+      const welcomeMsg = document.getElementById('sidebarWelcomeMessage');
+      if (welcomeMsg && (sender === 'user' || sender === 'bot')) {
+        welcomeMsg.classList.add('hidden');
+      }
+
       const messageDiv = document.createElement('div');
-      messageDiv.classList.add('p-3', 'rounded-lg', 'text-sm', 'leading-relaxed', 'break-words');
+      // Base classes - but NOT text-sm/leading-relaxed for bot messages (CSS controls those)
+      messageDiv.classList.add('p-3', 'rounded-lg', 'break-words');
       if (isTyping) {
         messageDiv.id = 'typingIndicator';
-        messageDiv.classList.add('max-w-[80%]', 'bg-slate-200', 'text-slate-700', 'self-start', 'rounded-bl-none');
+        messageDiv.classList.add('max-w-[80%]', 'bg-slate-200', 'text-slate-700', 'self-start', 'rounded-bl-none', 'text-sm', 'leading-relaxed');
         messageDiv.innerHTML = `<div class="flex items-center space-x-1"><div class="w-2 h-2 bg-slate-400 rounded-full animate-pulse delay-75"></div><div class="w-2 h-2 bg-slate-400 rounded-full animate-pulse delay-150"></div><div class="w-2 h-2 bg-slate-400 rounded-full animate-pulse delay-300"></div></div>`;
       } else if (sender === 'user') {
         const userBgColor = currentMode === 'industry' ? 'bg-blue-600' : 'bg-green-600';
-        messageDiv.classList.add('max-w-[80%]', userBgColor, 'text-white', 'self-end', 'rounded-br-none');
+        messageDiv.classList.add('max-w-[80%]', userBgColor, 'text-white', 'self-end', 'rounded-br-none', 'text-sm', 'leading-relaxed');
         messageDiv.textContent = text;
       } else if (sender === 'bot') {
+        // Bot messages: DO NOT add text-sm/leading-relaxed - let CSS handle font/spacing
         messageDiv.classList.add('max-w-full', 'text-slate-900', 'self-start', 'rounded-bl-none', 'bot-message', 'relative', 'pr-12');
         // Use the enhanced markdown renderer (without TOC)
         const { html } = renderMarkdownToHtml(text, false);
@@ -4933,6 +5453,8 @@
       // Hide all overlay sections first
       newsSection.style.display = 'none';
       if (chartSection) chartSection.style.display = 'none';
+      const budgetSection = document.getElementById('budget-section');
+      if (budgetSection) budgetSection.style.display = 'none';
       document.body.style.overflow = '';
 
       if (s === 'news') {
@@ -4944,6 +5466,11 @@
           chartSection.style.display = 'block';
           document.body.style.overflow = 'hidden';
           setTimeout(() => document.getElementById('chartStockInput')?.focus(), 100);
+        }
+      } else if (s === 'budget') {
+        if (budgetSection) {
+          budgetSection.style.display = 'block';
+          document.body.style.overflow = 'hidden';
         }
       }
       // 'analyze' just closes overlays (default case - no special action needed)
@@ -5231,6 +5758,38 @@
         <!-- Chart analysis results rendered here -->
       </div>
     </main>
+  </div>
+
+  <!-- BUDGET LIVE SECTION -->
+  <div id="budget-section"
+    style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:white;z-index:100;">
+    <header class="fixed top-0 left-0 right-0 z-[110] bg-white border-b border-slate-200 shadow-sm">
+      <div class="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div
+            class="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-500 to-red-600 flex items-center justify-center">
+            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+            </svg>
+          </div>
+          <div>
+            <h1 class="text-xl font-bold text-slate-800">Live Budget 2026</h1>
+            <p class="text-xs text-slate-400 font-medium">Real-time Insights & AI Analysis</p>
+          </div>
+        </div>
+        <button onclick="showSection('analyze')"
+          class="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 transition-all text-sm font-semibold text-slate-700 flex items-center gap-2 rounded-xl shadow-sm border border-slate-200">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+          </svg>
+          Back to Analyze
+        </button>
+      </div>
+    </header>
+    <div class="w-full h-full pt-20">
+      <iframe src="/budget?embedded=true" class="w-full h-full border-none"></iframe>
+    </div>
   </div>
 
   <script>

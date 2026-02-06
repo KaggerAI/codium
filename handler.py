@@ -719,7 +719,7 @@ def convert_to_gemini_format(messages):
             gemini_messages.append({'role': role, 'parts': [msg["content"]]})
     return gemini_messages
 
-def call_openai_api(messages, model="gpt-4.1-mini", expect_json_format_flag=False, temperature=1, timeout=180):
+def call_openai_api(messages, model="gpt-5-mini", expect_json_format_flag=False, temperature=1, timeout=180):
     """
     Call OpenAI API with configurable timeout.
     Default timeout is 180 seconds (3 minutes) for slower models like gpt-5-mini.
@@ -897,7 +897,7 @@ def call_perplexity_api(messages, model="sonar-pro", temperature=1, timeout=120,
 
 
 
-def call_gemini_api(messages, model="gemini-2.5-flash", temperature=1, use_google_search=False):
+def call_gemini_api(messages, model="gemini-3-flash-preview", temperature=1, use_google_search=False):
     if not GOOGLE_API_KEY:
         raise ValueError("Google Gemini API key is not configured.")
     try:
@@ -940,8 +940,8 @@ def call_generative_ai_model(model, messages, temperature=1, timeout=180):
             return call_gemini_api(messages, model=model, temperature=temperature)
         else:
             # Default to a reliable, cheap model if the selection is unknown
-            print(f"WARN: Unknown model '{model}', defaulting to 'gpt-4o-mini'.")
-            return call_openai_api(messages, model='gpt-4o-mini', temperature=temperature, timeout=timeout)
+            print(f"WARN: Unknown model '{model}', defaulting to 5-mini'.")
+            return call_openai_api(messages, model='gpt-5-mini', temperature=temperature, timeout=timeout)
     except Exception as e:
         # Catch errors from any of the specific API call functions
         error_message = f"An error occurred while calling the AI model '{model}': {str(e)}"
@@ -1276,11 +1276,10 @@ IMPORTANT RULES:
 HOW TO WRITE THE ENHANCED QUERY
 The enhanced_query must:
 1. Be a single, detailed research request suitable for Sonar-Pro with Pro Search. The request should not be more than 100 words long. 
-2. Request must include Trump's statements/actions related to India over last 2-3 days, tariff hikes/threats to India, Trump's global actions and implications for Indian industries/companies.
-3. If it's a company/stock query, request: "latest material developments", "earnings/guidance", "segment drivers", "regulatory issues", "competitive landscape", "valuation context (directional, not exact unless sourced)", and "near-term catalysts/tailwind/headwind".
-4. If it's an industry/market/macro/Nifty/Sensex query, request: "recent tariff hikes/threats", "drivers", "recent news", "global cues", "Trump's statements/actions", "data points", "policy/regulation", "winners/losers", "second-order effects", "leading indicators", and "implications for listed Indian companies".
-5. If user asks for "quick" or "summary", still generate a thorough query but request a concise output.
-6. Ensure the Sonar-Pro query mentions that answer should be maximum 500 words
+2. If it's a company/stock query, request: "latest material developments", "earnings/guidance", "segment drivers", "regulatory issues", "competitive landscape", "valuation context (directional, not exact unless sourced)", and "near-term catalysts/tailwind/headwind".
+3. If it's an industry/market/macro/Nifty/Sensex query, request: "recent tariff hikes/threats", "drivers", "recent news", "global cues", "Trump's statements/actions", "data points", "policy/regulation", "winners/losers", "second-order effects", "leading indicators", and "implications for listed Indian companies".
+4. If user asks for "quick" or "summary", still generate a thorough query but request a concise output.
+5. Ensure the Sonar-Pro query mentions that answer should be maximum 500 words
 
 CONVERSATION CONTEXT USAGE
 - Use prior assistant/user messages in the current thread to resolve pronouns and continuity.
@@ -1363,7 +1362,7 @@ def ai_news_chat():
     """
     AI-Enhanced News endpoint - the world's most advanced financial research engine.
     Uses two-stage processing:
-    1. Intent Enhancement: GPT-4.1-mini deciphers hidden intent
+    1. Intent Enhancement: GPT-5-mini deciphers hidden intent
     2. Research: Perplexity sonar-pro with Pro Search answers the enhanced query
     """
     try:
@@ -2192,16 +2191,79 @@ def chat():
         # =====================================================
         
         is_best_mode = selected_model in ('best', 'best-deep-research')
+        is_best_fast_mode = selected_model == 'best-fast'
         is_deep_research_mode = selected_model == 'best-deep-research'
         central_brain_plan = None
         parsed_plan = {}
         ai_plan_json_str = "{}"
         thought_process_str = "No thought process generated."
 
-        if is_best_mode:
+        if is_best_fast_mode:
+            # --- FAST MODE: MERGED STAGE 1+2 ---
+            # Combines Central Brain + Tactical Planner into ONE GPT-5-mini call
+            log_progress("Fast Mode: Unified Planner creating strategy & data plan...")
+            print("INFO: Fast Mode - Merged Planner running...", file=sys.stderr)
+            fast_start_time = time.time()
+            
+            from prompts import get_merged_planner_prompt
+            merged_prompt = get_merged_planner_prompt()
+            schema_description = get_data_schema_description(last_analysis)
+            
+            merged_user_content = (
+                f"**Company:** {company_name} ({ticker})\n\n"
+                f"**User Question:** \"{user_question}\"\n\n"
+                f"**Data Schema Description:**\n{schema_description}\n\n"
+                f"**Summary Context:**\n{str(last_analysis.get('summary', ''))[:2000]}"
+            )
+            
+            merged_messages = [
+                {"role": "system", "content": merged_prompt},
+                {"role": "user", "content": merged_user_content}
+            ]
+            
+            merged_response_str = call_generative_ai_model("gemini-3-flash-preview", merged_messages, temperature=1)
+            
+            try:
+                # Try to parse JSON (may or may not have code blocks)
+                json_match = re.search(r"```json\s*([\s\S]*?)\s*```", merged_response_str, re.MULTILINE)
+                if json_match:
+                    merged_plan = json.loads(json_match.group(1))
+                else:
+                    merged_plan = json.loads(merged_response_str)
+                
+                # Extract Central Brain-like parts for downstream compatibility
+                central_brain_plan = {
+                    "thought_process": merged_plan.get("thought_process", ""),
+                    "user_intent": merged_plan.get("user_intent", ""),
+                    "peripheral_questions": merged_plan.get("peripheral_questions", []),
+                    "agent_directives": merged_plan.get("agent_directives", [])
+                }
+                thought_process_str = merged_plan.get("thought_process", "Fast mode planning complete.")
+                
+                # Extract Tactical Plan parts
+                parsed_plan = {
+                    "retrieve_data": merged_plan.get("retrieve_data", {}),
+                    "perform_calculations": merged_plan.get("perform_calculations", []),
+                    "fetch_external_news": merged_plan.get("fetch_external_news", {})
+                }
+                ai_plan_json_str = json.dumps(parsed_plan, indent=2)
+                
+                fast_elapsed = time.time() - fast_start_time
+                print(f"INFO: Fast Mode - Merged Planner completed in {fast_elapsed:.1f}s", file=sys.stderr)
+                print(f"--- Merged Plan ---\n{json.dumps(merged_plan, indent=2)}\n--------------------------", file=sys.stderr)
+                log_progress(f"✓ Strategy & data plan ready ({fast_elapsed:.1f}s)")
+                
+            except (json.JSONDecodeError, AttributeError) as e:
+                print(f"ERROR: Could not parse Merged Plan: {e}", file=sys.stderr)
+                print(f"Raw response: {merged_response_str[:1000]}", file=sys.stderr)
+                return jsonify({'error': 'Failed to create unified strategic plan.'}), 500
+
+        elif is_best_mode:
+            # --- STANDARD BEST MODE: STAGE 1 + STAGE 2 ---
             # --- STAGE 1: CENTRAL BRAIN ---
             log_progress("Central Brain is analyzing the query and forming a strategy...")
             print("INFO: Central Brain running...", file=sys.stderr)
+            stage1_start_time = time.time()
             
             central_brain_prompt = get_central_brain_prompt()
             brain_messages = [
@@ -2210,6 +2272,7 @@ def chat():
             ]
             
             central_brain_response_str = call_generative_ai_model("gpt-5-mini", brain_messages, temperature=1)
+            stage1_elapsed = time.time() - stage1_start_time
 
             try:
                 json_match = re.search(r"```json\s*([\s\S]*?)\s*```", central_brain_response_str, re.MULTILINE)
@@ -2219,6 +2282,8 @@ def chat():
                     central_brain_plan = json.loads(central_brain_response_str)
 
                 thought_process_str = central_brain_plan.get("thought_process", "Central Brain planning complete.")
+                print(f"INFO: ✓ Central Brain completed in {stage1_elapsed:.1f}s", file=sys.stderr)
+                log_progress(f"✓ Strategic plan ready ({stage1_elapsed:.1f}s)")
                 print(f"--- Central Brain Plan ---\n{json.dumps(central_brain_plan, indent=2)}\n--------------------------", file=sys.stderr)
                 
             except (json.JSONDecodeError, AttributeError) as e:
@@ -2228,6 +2293,7 @@ def chat():
             # --- STAGE 2: TACTICAL PLANNER ---
             log_progress("Tactical Planner is creating a detailed data retrieval plan...")
             print("INFO: Tactical Planner running...", file=sys.stderr)
+            stage2_start_time = time.time()
             
             schema_description = get_data_schema_description(last_analysis)
             planning_system_prompt = get_planning_system_prompt()
@@ -2245,6 +2311,7 @@ def chat():
             ]
             
             tactical_plan_response_str = call_openai_api(planner_messages, model='o4-mini', expect_json_format_flag=True, temperature=1)
+            stage2_elapsed = time.time() - stage2_start_time
             
             try:
                 json_match = re.search(r"```json\s*([\s\S]*?)\s*```", tactical_plan_response_str, re.MULTILINE)
@@ -2255,6 +2322,9 @@ def chat():
                     parsed_plan = json.loads(tactical_plan_response_str)
                     ai_plan_json_str = tactical_plan_response_str
 
+                print(f"INFO: ✓ Tactical Planner completed in {stage2_elapsed:.1f}s", file=sys.stderr)
+                log_progress(f"✓ Tactical plan ready ({stage2_elapsed:.1f}s)")
+                print(f"INFO: Stage 1+2 Total: {stage1_elapsed + stage2_elapsed:.1f}s", file=sys.stderr)
                 print(f"--- Tactical Execution Plan ---\n{json.dumps(parsed_plan, indent=2)}\n--------------------------", file=sys.stderr)
 
             except json.JSONDecodeError as e:
@@ -2285,41 +2355,63 @@ def chat():
                  print(f"ERROR: Could not parse standard plan: {e}", file=sys.stderr)
                  return jsonify({'error': 'Failed to create a standard execution plan.'}), 500
 
-        # --- STAGE 3: EXECUTION ---
-        log_progress("Executing plan: Fetching news and internal data...")
-        print("INFO: Execution Stage...", file=sys.stderr)
+        # --- STAGE 3: EXECUTION (PARALLELIZED) ---
+        log_progress("Executing plan: Fetching news & consulting agents in parallel...")
+        print("INFO: Execution Stage (PARALLEL)...", file=sys.stderr)
+        stage3_start_time = time.time()
         
-        news_summary = None
+        # =====================================================================
+        # PARALLEL AGENT EXECUTION: News, ARA, EIA run concurrently
+        # =====================================================================
+        
+        # --- Prepare agent activation flags and directives ---
         news_plan = parsed_plan.get("fetch_external_news", {})
-        if news_plan.get("needed"):
-            sonar_prompt = news_plan.get("prompt_for_sonar", f"Get the latest news for {last_analysis.get('ticker')}")
-            try:
-                news_messages = [{"role": "user", "content": sonar_prompt}]
-                # Use sonar-deep-research with extended timeout for deep research mode
-                if is_deep_research_mode:
-                    news_summary = call_perplexity_api(news_messages, model="sonar-deep-research", timeout=600)
-                else:
-                    news_summary = call_perplexity_api(news_messages, model="sonar-pro")
-            except Exception as e:
-                print(f"ERROR: News fetching failed: {e}", file=sys.stderr)
-                news_summary = f"Error: Failed to fetch real-time news. {e}"
-
-        # --- ARA (Analyst Report Agent) Execution ---
-        ara_response = None
-        use_analyst_reports = data.get('use_analyst_reports', False)
+        news_needed = news_plan.get("needed", False)
+        sonar_prompt = news_plan.get("prompt_for_sonar", f"Get the latest news for {last_analysis.get('ticker')}")
         
-        # Check if Central Brain activated ARA or user toggle is on
+        use_analyst_reports = data.get('use_analyst_reports', False)
         ara_directive = None
+        eia_directive = None
         if central_brain_plan and 'agent_directives' in central_brain_plan:
             for directive in central_brain_plan.get('agent_directives', []):
                 if directive.get('agent_name') == 'ARA':
                     ara_directive = directive.get('directive', '')
-                    break
+                elif directive.get('agent_name') == 'EIA':
+                    eia_directive = directive.get('directive', '')
         
-        if ara_directive or use_analyst_reports:
-            log_progress("Consulting Analyst Report Agent...")
-            print(f"INFO: ARA activated. Directive: {ara_directive[:100] if ara_directive else 'User toggle enabled'}...", file=sys.stderr)
-            
+        ara_needed = bool(ara_directive or use_analyst_reports)
+        eia_needed = bool(eia_directive)
+        
+        # Log which agents will run
+        agents_running = []
+        if news_needed: agents_running.append("MIA (News)")
+        if ara_needed: agents_running.append("ARA (Analyst)")
+        if eia_needed: agents_running.append("EIA (Earnings)")
+        print(f"INFO: Starting parallel agents: {', '.join(agents_running) if agents_running else 'None'}", file=sys.stderr)
+        
+        # --- Define async wrapper functions for each agent ---
+        async def fetch_news_async():
+            """Fetch real-time news via Perplexity API"""
+            if not news_needed:
+                return None
+            try:
+                news_messages = [{"role": "user", "content": sonar_prompt}]
+                if is_deep_research_mode:
+                    result = await asyncio.to_thread(call_perplexity_api, news_messages, "sonar-deep-research", 1, 600)
+                else:
+                    result = await asyncio.to_thread(call_perplexity_api, news_messages, "sonar-pro")
+                elapsed = time.time() - stage3_start_time
+                print(f"INFO: ✓ MIA (News) completed in {elapsed:.1f}s", file=sys.stderr)
+                log_progress(f"✓ News fetched ({elapsed:.1f}s)")
+                return result
+            except Exception as e:
+                print(f"ERROR: News fetching failed: {e}", file=sys.stderr)
+                return f"Error: Failed to fetch real-time news. {e}"
+        
+        async def run_ara_async():
+            """Run Analyst Report Agent via Gemini API"""
+            if not ara_needed:
+                return None
             try:
                 # Get cached analyst PDF texts
                 analyst_texts = None
@@ -2330,25 +2422,26 @@ def chat():
                     else:
                         analyst_texts = cached_texts
                 
-                if analyst_texts and len(analyst_texts) > 0:
-                    # Build context from analyst report texts
-                    ara_context = f"**User Question:** {user_question}\n\n"
-                    ara_context += f"**Company:** {company_name} ({ticker})\n\n"
-                    ara_context += "**Available Analyst Research Reports:**\n\n"
-                    
-                    for i, report in enumerate(analyst_texts, 1):
-                        ara_context += f"--- REPORT {i}: {report.get('brokerage', 'Unknown')} ---\n"
-                        ara_context += f"Date: {report.get('date', 'N/A')}\n"
-                        ara_context += f"Recommendation: {report.get('recommendation', 'N/A')}\n"
-                        ara_context += f"Target Price: {report.get('target_price', 'N/A')}\n"
-                        ara_context += f"Upside: {report.get('upside', 'N/A')}\n\n"
-                        # Include PDF text (truncated if very long)
-                        pdf_text = report.get('pdf_text', '')[:15000]  # Max 15k chars per report
-                        ara_context += f"**Report Content:**\n{pdf_text}\n\n"
-                    
-                    # Create ARA prompt - use Central Brain's directive if available
-                    if ara_directive:
-                        ara_prompt = f"""You are the Analyst Report Agent (ARA). Your task is to study the brokerage research reports provided below and answer the user's question based on analyst insights.
+                if not analyst_texts or len(analyst_texts) == 0:
+                    print("WARN: ARA activated but no analyst texts found in cache", file=sys.stderr)
+                    return "Analyst report texts are not yet available. They may still be loading in the background."
+                
+                # Build context from analyst report texts
+                ara_context = f"**User Question:** {user_question}\n\n"
+                ara_context += f"**Company:** {company_name} ({ticker})\n\n"
+                ara_context += "**Available Analyst Research Reports:**\n\n"
+                
+                for i, report in enumerate(analyst_texts, 1):
+                    ara_context += f"--- REPORT {i}: {report.get('brokerage', 'Unknown')} ---\n"
+                    ara_context += f"Date: {report.get('date', 'N/A')}\n"
+                    ara_context += f"Recommendation: {report.get('recommendation', 'N/A')}\n"
+                    ara_context += f"Target Price: {report.get('target_price', 'N/A')}\n"
+                    ara_context += f"Upside: {report.get('upside', 'N/A')}\n\n"
+                    pdf_text = report.get('pdf_text', '')[:15000]
+                    ara_context += f"**Report Content:**\n{pdf_text}\n\n"
+                
+                if ara_directive:
+                    ara_prompt = f"""You are the Analyst Report Agent (ARA). Your task is to study the brokerage research reports provided below and answer the user's question based on analyst insights.
 
 **Your Directive from Central Brain:**
 {ara_directive}
@@ -2363,9 +2456,8 @@ def chat():
 - Be concise but comprehensive
 - If the reports don't contain information to answer the question, say so clearly
 """
-                    else:
-                        # If user toggle is on but no specific directive, create a general one
-                        ara_prompt = f"""You are the Analyst Report Agent (ARA). Study the brokerage research reports below and provide relevant insights for the user's question.
+                else:
+                    ara_prompt = f"""You are the Analyst Report Agent (ARA). Study the brokerage research reports below and provide relevant insights for the user's question.
 
 {ara_context}
 
@@ -2376,53 +2468,40 @@ def chat():
 - If two or more analyst/brokerage reports have wildly differing views, state all views and reason a likely best answer using reasoning
 - Provide answer in plain text paragraphs
 """
-                    
-                    # Call Gemini for ARA (using flash for speed)
-                    ara_messages = [{"role": "user", "content": ara_prompt}]
-                    ara_response = call_gemini_api(ara_messages, model="gemini-3-flash-preview", temperature=1)
-                    print(f"INFO: ARA response received ({len(ara_response)} chars)", file=sys.stderr)
-                else:
-                    ara_response = "Analyst report texts are not yet available. They may still be loading in the background."
-                    print("WARN: ARA activated but no analyst texts found in cache", file=sys.stderr)
+                
+                ara_messages = [{"role": "user", "content": ara_prompt}]
+                result = await asyncio.to_thread(call_gemini_api, ara_messages, "gemini-3-flash-preview", 1)
+                elapsed = time.time() - stage3_start_time
+                print(f"INFO: ✓ ARA (Analyst) completed in {elapsed:.1f}s ({len(result)} chars)", file=sys.stderr)
+                log_progress(f"✓ Analyst insights ready ({elapsed:.1f}s)")
+                return result
             except Exception as e:
                 print(f"ERROR: ARA execution failed: {e}", file=sys.stderr)
-                ara_response = f"Error consulting analyst reports: {e}"
-
-        # --- EIA (Earnings Intelligence Agent) Execution ---
-        eia_response = None
-        eia_directive = None
+                return f"Error consulting analyst reports: {e}"
         
-        # Check if Central Brain activated EIA
-        if central_brain_plan and 'agent_directives' in central_brain_plan:
-            for directive in central_brain_plan.get('agent_directives', []):
-                if directive.get('agent_name') == 'EIA':
-                    eia_directive = directive.get('directive', '')
-                    break
-        
-        if eia_directive:
-            log_progress("Consulting Earnings Intelligence Agent...")
-            print(f"INFO: EIA activated. Directive: {eia_directive[:100]}...", file=sys.stderr)
-            
+        async def run_eia_async():
+            """Run Earnings Intelligence Agent via OpenAI API"""
+            if not eia_needed:
+                return None
             try:
-                # Get documents and filter for Concall transcripts only
                 documents = last_analysis.get('documents', [])
                 concall_docs = [d for d in documents if d.get('type') == 'Concall']
                 
-                if concall_docs:
-                    # Build context from concall transcripts
-                    eia_context = f"**User Question:** {user_question}\n\n"
-                    eia_context += f"**Company:** {company_name} ({ticker})\n\n"
-                    eia_context += "**Concall Transcript(s):**\n\n"
-                    
-                    for doc in concall_docs:
-                        eia_context += f"--- {doc.get('text', 'Concall Transcript')} ---\n"
-                        # Get full content summary (limit to 30k chars per doc)
-                        content = doc.get('content_summary', '')
-                        if content:
-                            eia_context += content[:30000] + "\n\n"
-                    
-                    # Create EIA prompt using Central Brain's directive
-                    eia_prompt = f"""
+                if not concall_docs:
+                    print("WARN: EIA activated but no concall documents found", file=sys.stderr)
+                    return "No concall transcript available for analysis."
+                
+                eia_context = f"**User Question:** {user_question}\n\n"
+                eia_context += f"**Company:** {company_name} ({ticker})\n\n"
+                eia_context += "**Concall Transcript(s):**\n\n"
+                
+                for doc in concall_docs:
+                    eia_context += f"--- {doc.get('text', 'Concall Transcript')} ---\n"
+                    content = doc.get('content_summary', '')
+                    if content:
+                        eia_context += content[:30000] + "\n\n"
+                
+                eia_prompt = f"""
 {eia_context}
 
 **Central Brain Directive:** {eia_directive}
@@ -2434,18 +2513,47 @@ def chat():
 - Note any discrepancies between what management says vs the numbers
 - Provide your answer in plain text paragraphs, citing specific quotes where relevant
 """
-                    
-                    # Call GPT-4.1-mini for EIA analysis
-                    eia_messages = [{"role": "user", "content": eia_prompt}]
-                    eia_response = call_openai_api(eia_messages, model='gpt-4.1-mini', temperature=1)
-                    print(f"INFO: EIA response received ({len(eia_response)} chars)", file=sys.stderr)
+                
+                eia_messages = [{"role": "user", "content": eia_prompt}]
+                # Use Gemini Flash for best-fast mode, GPT-5-mini otherwise
+                if is_best_fast_mode:
+                    result = await asyncio.to_thread(call_gemini_api, eia_messages, 'gemini-3-flash-preview', 1)
                 else:
-                    eia_response = "No concall transcript available for analysis."
-                    print("WARN: EIA activated but no concall documents found", file=sys.stderr)
+                    result = await asyncio.to_thread(call_openai_api, eia_messages, 'gpt-5-mini', False, 1, 180)
+                elapsed = time.time() - stage3_start_time
+                print(f"INFO: ✓ EIA (Earnings) completed in {elapsed:.1f}s ({len(result)} chars)", file=sys.stderr)
+                log_progress(f"✓ Earnings analysis ready ({elapsed:.1f}s)")
+                return result
             except Exception as e:
                 print(f"ERROR: EIA execution failed: {e}", file=sys.stderr)
-                eia_response = f"Error analyzing concall transcript: {e}"
-
+                return f"Error analyzing concall transcript: {e}"
+        
+        # --- Run all agents in parallel ---
+        async def run_parallel_agents():
+            return await asyncio.gather(
+                fetch_news_async(),
+                run_ara_async(),
+                run_eia_async(),
+                return_exceptions=True
+            )
+        
+        news_summary, ara_response, eia_response = asyncio.run(run_parallel_agents())
+        
+        # Handle any exceptions that were returned
+        if isinstance(news_summary, Exception):
+            print(f"ERROR: News agent raised exception: {news_summary}", file=sys.stderr)
+            news_summary = f"Error: {news_summary}"
+        if isinstance(ara_response, Exception):
+            print(f"ERROR: ARA agent raised exception: {ara_response}", file=sys.stderr)
+            ara_response = f"Error: {ara_response}"
+        if isinstance(eia_response, Exception):
+            print(f"ERROR: EIA agent raised exception: {eia_response}", file=sys.stderr)
+            eia_response = f"Error: {eia_response}"
+        
+        stage3_elapsed = time.time() - stage3_start_time
+        print(f"INFO: Stage 3 (Parallel Agents) completed in {stage3_elapsed:.1f}s total", file=sys.stderr)
+        
+        # --- Synchronous data retrieval and calculations ---
         retrieve_data_spec = parsed_plan.get("retrieve_data", {})
         retrieved_fundamental_data = retrieve_data_based_on_plan(retrieve_data_spec, last_analysis)
 
@@ -2475,7 +2583,13 @@ def chat():
             {"role": "user", "content": f"Please synthesize an answer based on: {json.dumps(final_context_for_answer, indent=2, default=str)[:100000]}"}
         ]
         
-        answerer_model = 'gpt-5-mini' if is_best_mode else selected_model
+        # Use Gemini Flash for best-fast mode, GPT-5-mini for best mode
+        if is_best_fast_mode:
+            answerer_model = 'gemini-3-flash-preview'
+        elif is_best_mode:
+            answerer_model = 'gpt-5-mini'
+        else:
+            answerer_model = selected_model
         final_answer = call_generative_ai_model(
             model=answerer_model,
             messages=answering_messages,
@@ -4363,12 +4477,24 @@ def refresh_section():
             log_progress(f"Refreshing peer comparison data for {ticker}...")
             
             # =====================================================
-            # PRIORITY 1: Screener.in Direct Crawl (Most Reliable)
+            # STEP 1: Get company name from yfinance FIRST (for fuzzy matching)
+            # =====================================================
+            company_name = ticker
+            try:
+                yf_ticker = yf.Ticker(f"{ticker}.NS")
+                info = yf_ticker.info or {}
+                company_name = info.get("longName") or info.get("shortName") or ticker
+                print(f"INFO: Got company name from yfinance: '{company_name}'")
+            except:
+                print(f"WARN: Could not get company name from yfinance, using ticker: '{ticker}'")
+            
+            # =====================================================
+            # STEP 2: Screener.in Direct Crawl (with company_name for matching)
             # =====================================================
             from screener_fetcher import fetch_peer_comparison_from_screener
             
             log_progress(f"Fetching peer data from Screener.in...")
-            screener_data = fetch_peer_comparison_from_screener(ticker)
+            screener_data = fetch_peer_comparison_from_screener(ticker, company_name)
             screener_company = screener_data.get('company', {})
             screener_peers = screener_data.get('peers', [])
             
@@ -4379,19 +4505,11 @@ def refresh_section():
                 print(f"WARN: Screener.in returned incomplete data for {ticker}")
             
             # =====================================================
-            # PRIORITY 2: yfinance for Main Company Metrics
+            # STEP 3: yfinance for Main Company Metrics (gap-filling)
             # =====================================================
             log_progress(f"Fetching yfinance metrics...")
             yf_metrics = get_yfinance_metrics(ticker)
-            
-            # Get company name from yfinance
-            company_name = ticker
-            try:
-                yf_ticker = yf.Ticker(f"{ticker}.NS")
-                info = yf_ticker.info or {}
-                company_name = info.get("longName") or info.get("shortName") or ticker
-            except:
-                pass
+            # Note: company_name already obtained in STEP 1 above
             
             # =====================================================
             # PRIORITY 3: sonar-pro AI for Gap-Filling
@@ -4429,21 +4547,21 @@ def refresh_section():
                         return val
                 return 'N/A'
             
-            # Build company data with priority: Current > Screener > yfinance > AI
-            # This ensures only N/A values are overwritten for the primary company
+            # Build company data with priority: Screener > yfinance > Current > AI
+            # On refresh, we want fresh data from Screener to overwrite old values
             final_company = {
                 'ticker': ticker,
-                'name': get_value('name', current_company_metrics.get('name'), screener_company.get('name'), company_name, ai_company_metrics.get('name')),
-                'cmp': get_value('cmp', current_company_metrics.get('cmp'), screener_company.get('cmp'), yf_metrics.get('current_price'), ai_company_metrics.get('cmp')),
-                'market_cap': get_value('market_cap', current_company_metrics.get('market_cap'), screener_company.get('market_cap'), yf_metrics.get('market_cap'), ai_company_metrics.get('market_cap')),
-                'pe_ratio': get_value('pe_ratio', current_company_metrics.get('pe_ratio'), screener_company.get('pe_ratio'), yf_metrics.get('pe_ratio'), ai_company_metrics.get('pe_ratio')),
-                'pb_ratio': get_value('pb_ratio', current_company_metrics.get('pb_ratio'), screener_company.get('pb_ratio'), yf_metrics.get('pb_ratio'), ai_company_metrics.get('pb_ratio')),
-                'dividend_yield': get_value('dividend_yield', current_company_metrics.get('dividend_yield'), screener_company.get('dividend_yield'), yf_metrics.get('dividend_yield'), ai_company_metrics.get('dividend_yield')),
-                'roce': get_value('roce', current_company_metrics.get('roce'), screener_company.get('roce'), yf_metrics.get('roce'), ai_company_metrics.get('roce')),
-                'roe': get_value('roe', current_company_metrics.get('roe'), screener_company.get('roe'), yf_metrics.get('roe'), ai_company_metrics.get('roe')),
-                'sales_growth_yoy': get_value('sales_growth_yoy', current_company_metrics.get('sales_growth_yoy'), screener_company.get('sales_growth_yoy'), yf_metrics.get('sales_growth_yoy'), ai_company_metrics.get('sales_growth_yoy')),
-                'ebitda_growth_yoy': get_value('ebitda_growth_yoy', current_company_metrics.get('ebitda_growth_yoy'), screener_company.get('ebitda_growth_yoy'), yf_metrics.get('ebitda_growth_yoy'), ai_company_metrics.get('ebitda_growth_yoy')),
-                'npm': get_value('npm', current_company_metrics.get('npm'), screener_company.get('npm'), yf_metrics.get('npm'), ai_company_metrics.get('npm'))
+                'name': get_value('name', screener_company.get('name'), company_name, current_company_metrics.get('name'), ai_company_metrics.get('name')),
+                'cmp': get_value('cmp', screener_company.get('cmp'), yf_metrics.get('current_price'), current_company_metrics.get('cmp'), ai_company_metrics.get('cmp')),
+                'market_cap': get_value('market_cap', screener_company.get('market_cap'), yf_metrics.get('market_cap'), current_company_metrics.get('market_cap'), ai_company_metrics.get('market_cap')),
+                'pe_ratio': get_value('pe_ratio', screener_company.get('pe_ratio'), yf_metrics.get('pe_ratio'), current_company_metrics.get('pe_ratio'), ai_company_metrics.get('pe_ratio')),
+                'pb_ratio': get_value('pb_ratio', screener_company.get('pb_ratio'), yf_metrics.get('pb_ratio'), current_company_metrics.get('pb_ratio'), ai_company_metrics.get('pb_ratio')),
+                'dividend_yield': get_value('dividend_yield', screener_company.get('dividend_yield'), yf_metrics.get('dividend_yield'), current_company_metrics.get('dividend_yield'), ai_company_metrics.get('dividend_yield')),
+                'roce': get_value('roce', screener_company.get('roce'), yf_metrics.get('roce'), current_company_metrics.get('roce'), ai_company_metrics.get('roce')),
+                'roe': get_value('roe', screener_company.get('roe'), yf_metrics.get('roe'), current_company_metrics.get('roe'), ai_company_metrics.get('roe')),
+                'sales_growth_yoy': get_value('sales_growth_yoy', screener_company.get('sales_growth_yoy'), yf_metrics.get('sales_growth_yoy'), current_company_metrics.get('sales_growth_yoy'), ai_company_metrics.get('sales_growth_yoy')),
+                'ebitda_growth_yoy': get_value('ebitda_growth_yoy', screener_company.get('ebitda_growth_yoy'), yf_metrics.get('ebitda_growth_yoy'), current_company_metrics.get('ebitda_growth_yoy'), ai_company_metrics.get('ebitda_growth_yoy')),
+                'npm': get_value('npm', screener_company.get('npm'), yf_metrics.get('npm'), current_company_metrics.get('npm'), ai_company_metrics.get('npm'))
             }
             # print(f"DEBUG: Final merged company metrics for {ticker}: {final_company}")
             
@@ -4620,6 +4738,23 @@ def refresh_section():
             }
             
             source_info = "Screener.in + yfinance" if has_screener_data else "AI (fallback)"
+            
+            # =====================================================
+            # BUILD KEY_METRICS FROM FINAL COMPANY DATA
+            # This ensures Key Metrics Snapshot matches Peer Comparison
+            # =====================================================
+            updated_key_metrics = {
+                'current_price': final_company.get('cmp', 'N/A'),
+                'market_cap': final_company.get('market_cap', 'N/A'),
+                'pe_ratio': final_company.get('pe_ratio', 'N/A'),
+                'pb_ratio': final_company.get('pb_ratio', 'N/A'),
+                'dividend_yield': final_company.get('dividend_yield', 'N/A'),
+                'roce': final_company.get('roce', 'N/A'),
+                'roe': final_company.get('roe', 'N/A'),
+                'sales_growth_yoy': final_company.get('sales_growth_yoy', 'N/A'),
+                'ebitda_growth_yoy': final_company.get('ebitda_growth_yoy', 'N/A'),
+                'npm': final_company.get('npm', 'N/A')
+            }
 
             log_progress(f"Peer comparison refreshed from {source_info} with {len(final_peers)} peers")
             print(f"INFO: Refreshed peer comparison for {ticker} - Source: {source_info}, Peers: {len(final_peers)}")
@@ -4628,7 +4763,8 @@ def refresh_section():
                 'success': True,
                 'section': 'peer_comparison',
                 'source': source_info,  # Include source for debugging
-                'data': peer_comparison
+                'data': peer_comparison,
+                'key_metrics': updated_key_metrics  # NEW: Also update Key Metrics Snapshot
             })
         
         elif section == 'key_metrics':
@@ -4644,7 +4780,7 @@ def refresh_section():
                 val_str = str(val).strip().lower()
                 return val_str == '' or val_str == 'n/a' or val_str == 'nan'
             
-            # Start with current metrics - we will ONLY fill N/A fields
+            # Start with current metrics
             key_metrics = dict(current_metrics)
             source_info = []
             filled_fields = []
@@ -4652,6 +4788,61 @@ def refresh_section():
             # Log what fields are N/A and need filling
             na_fields = [k for k, v in key_metrics.items() if is_na(v)]
             print(f"DEBUG: Fields that are N/A and need filling: {na_fields}")
+            
+            # =====================================================
+            # STEP 0 (NEW): Screener Peer Comparison - ALWAYS UPDATE THESE METRICS
+            # Updates: P/E, P/B, Div Yield, ROCE, ROE, Sales Growth, NPM
+            # =====================================================
+            try:
+                from screener_fetcher import fetch_peer_comparison_from_screener
+                
+                # Get company name for fuzzy matching
+                company_name = ticker
+                try:
+                    yf_ticker = yf.Ticker(f"{ticker}.NS")
+                    info = yf_ticker.info or {}
+                    company_name = info.get("longName") or info.get("shortName") or ticker
+                except:
+                    pass
+                
+                log_progress(f"Fetching {ticker} peer data from Screener.in...")
+                screener_data = fetch_peer_comparison_from_screener(ticker, company_name)
+                screener_company = screener_data.get('company', {})
+                
+                if screener_company:
+                    print(f"DEBUG: Screener peer data company: {screener_company}")
+                    
+                    # Map screener fields to key_metrics - ALWAYS UPDATE (not just N/A)
+                    # These are the 8 metrics user wants to update from screener
+                    peer_field_map = {
+                        'pe_ratio': 'pe_ratio',
+                        'pb_ratio': 'pb_ratio',
+                        'dividend_yield': 'dividend_yield',
+                        'roce': 'roce',
+                        'roe': 'roe',
+                        'sales_growth_yoy': 'sales_growth_yoy',
+                        'ebitda_growth_yoy': 'ebitda_growth_yoy',  # Maps to OPM% / Financing Margin%
+                        'npm': 'npm'
+                    }
+                    
+                    for screener_key, metric_key in peer_field_map.items():
+                        val = screener_company.get(screener_key)
+                        if val and not is_na(val):
+                            key_metrics[metric_key] = val
+                            if metric_key not in filled_fields:
+                                filled_fields.append(metric_key)
+                            print(f"DEBUG: Screener peer filled {metric_key} = {val}")
+                    
+                    if filled_fields:
+                        source_info.append("Screener.in Peers")
+                    print(f"INFO: Screener peer comparison filled {len(filled_fields)} metrics for {ticker}")
+                else:
+                    print(f"WARN: Screener peer comparison returned no company data for {ticker}")
+            except Exception as e:
+                print(f"WARN: Screener peer comparison fetch failed for {ticker}: {e}")
+                import traceback
+                traceback.print_exc()
+
             
             # =====================================================
             # STEP 1: Try to fill N/A gaps from Screener.in fundamentals
