@@ -4,7 +4,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kagger AI - AI-Powered Stock Research</title>
+    <title>Kagger AI - AI-Powered Stock Research for Indian Markets</title>
+    <meta name="description"
+        content="Institutional-grade AI research for Indian stock markets. Multi-agent analysis, real-time news, industry research, and live budget insights.">
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -21,9 +23,17 @@
             box-shadow: 0 0 60px rgba(59, 130, 246, 0.3);
         }
 
+        .glow-purple {
+            box-shadow: 0 0 60px rgba(139, 92, 246, 0.3);
+        }
+
+        .glow-green {
+            box-shadow: 0 0 60px rgba(34, 197, 94, 0.3);
+        }
+
         .card-hover:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+            transform: translateY(-8px);
+            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.3);
         }
 
         @keyframes float {
@@ -38,8 +48,63 @@
             }
         }
 
+        @keyframes pulse-slow {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.7;
+            }
+        }
+
+        @keyframes gradient-shift {
+            0% {
+                background-position: 0% 50%;
+            }
+
+            50% {
+                background-position: 100% 50%;
+            }
+
+            100% {
+                background-position: 0% 50%;
+            }
+        }
+
         .float-animation {
             animation: float 6s ease-in-out infinite;
+        }
+
+        .pulse-slow {
+            animation: pulse-slow 3s ease-in-out infinite;
+        }
+
+        .gradient-animate {
+            background-size: 200% 200%;
+            animation: gradient-shift 8s ease infinite;
+        }
+
+        .feature-card {
+            background: linear-gradient(135deg, rgba(30, 41, 59, 0.8) 0%, rgba(15, 23, 42, 0.9) 100%);
+            backdrop-filter: blur(10px);
+        }
+
+        .stat-counter {
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%);
+        }
+
+        /* Agent flow diagram */
+        .agent-box {
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.2) 0%, rgba(139, 92, 246, 0.2) 100%);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+        }
+
+        .data-flow-line {
+            background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+            height: 2px;
         }
     </style>
 </head>
@@ -63,23 +128,29 @@
     </nav>
 
     <!-- Hero Section -->
-    <section class="container mx-auto px-6 py-20 text-center">
-        <div class="max-w-4xl mx-auto">
-            <div class="inline-block px-4 py-2 bg-blue-600/20 rounded-full text-blue-400 text-sm font-medium mb-6">
-                🚀 AI-Powered Research Platform
+    <section class="container mx-auto px-6 py-16 text-center">
+        <div class="max-w-5xl mx-auto">
+            <div
+                class="inline-block px-4 py-2 bg-gradient-to-r from-blue-600/20 to-purple-600/20 rounded-full text-blue-400 text-sm font-medium mb-6 border border-blue-500/30">
+                🧠 Multi-Agent Agentic AI System • 7+ AI Models Orchestrated
             </div>
-            <h1 class="text-5xl md:text-6xl font-extrabold mb-6 leading-tight">
-                Make Smarter Investment Decisions with
-                <span class="bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent"> AI</span>
+            <h1 class="text-5xl md:text-7xl font-extrabold mb-6 leading-tight">
+                Institutional-Grade
+                <span
+                    class="bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent gradient-animate">
+                    AI Research</span>
+                <br>for Indian Markets
             </h1>
-            <p class="text-xl text-slate-400 mb-10 max-w-2xl mx-auto">
-                Kagger AI combines cutting-edge artificial intelligence with comprehensive financial data
-                to give you research superpowers that were once only available to institutional investors.
+            <p class="text-xl text-slate-400 mb-10 max-w-3xl mx-auto leading-relaxed">
+                Experience the power of <strong class="text-white">multi-agent AI orchestration</strong> that
+                synthesizes
+                real-time data from 5+ sources, analyst reports, concall transcripts, and live market news —
+                delivering insights that <strong class="text-white">once took hours in seconds</strong>.
             </p>
             <div class="flex flex-col sm:flex-row gap-4 justify-center">
                 <a href="/login"
-                    class="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 px-8 py-4 rounded-xl font-semibold text-lg transition-all duration-200 shadow-lg hover:shadow-xl glow">
-                    Get Started →
+                    class="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 px-10 py-4 rounded-xl font-semibold text-lg transition-all duration-300 shadow-lg hover:shadow-xl glow">
+                    Start Researching →
                 </a>
                 <a href="/budget"
                     class="bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 px-8 py-4 rounded-xl font-semibold text-lg transition-all duration-200 shadow-lg hover:shadow-xl flex items-center justify-center gap-2 border border-green-400/30">
@@ -92,128 +163,387 @@
                 </a>
             </div>
             <p class="mt-6 text-slate-500 text-sm">
-                🔒 Platform access by Invitation | 🔴 Budget 2026 is **Publicly Accessible**
+                🔒 Platform access by Invitation Only | 🔴 Budget 2026 is <strong class="text-green-400">Publicly
+                    Accessible</strong>
             </p>
         </div>
     </section>
 
-    <!-- Features Section -->
-    <section class="container mx-auto px-6 py-20">
-        <h2 class="text-3xl font-bold text-center mb-4">What Makes Kagger AI Unique</h2>
-        <p class="text-slate-400 text-center mb-16 max-w-2xl mx-auto">
-            Powered by multiple AI models and real-time data sources, Kagger AI delivers insights in seconds that would
-            take hours of manual research.
-        </p>
-
-        <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <!-- Feature 1 -->
-            <div
-                class="bg-slate-800/50 backdrop-blur-sm p-6 rounded-2xl border border-slate-700 card-hover transition-all duration-300">
-                <div
-                    class="w-14 h-14 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center mb-4">
-                    <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                    </svg>
-                </div>
-                <h3 class="text-xl font-semibold mb-2">AI Summaries</h3>
-                <p class="text-slate-400">
-                    Instant AI-generated summaries of analyst reports with key metrics, price targets, and
-                    recommendations.
-                </p>
+    <!-- Stats Banner -->
+    <section class="container mx-auto px-6 py-8">
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div class="stat-counter rounded-2xl p-6 text-center border border-blue-500/20">
+                <div class="text-4xl font-bold text-blue-400 mb-2">7+</div>
+                <div class="text-slate-400 text-sm">AI Models Orchestrated</div>
             </div>
-
-            <!-- Feature 2 -->
-            <div
-                class="bg-slate-800/50 backdrop-blur-sm p-6 rounded-2xl border border-slate-700 card-hover transition-all duration-300">
-                <div
-                    class="w-14 h-14 bg-gradient-to-br from-green-500 to-green-600 rounded-xl flex items-center justify-center mb-4">
-                    <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                    </svg>
-                </div>
-                <h3 class="text-xl font-semibold mb-2">Technical Analysis</h3>
-                <p class="text-slate-400">
-                    Interactive charts with RSI, MACD, moving averages, and AI-powered technical signals.
-                </p>
+            <div class="stat-counter rounded-2xl p-6 text-center border border-purple-500/20">
+                <div class="text-4xl font-bold text-purple-400 mb-2">10+</div>
+                <div class="text-slate-400 text-sm">Real-Time Data Sources</div>
             </div>
-
-            <!-- Feature 3 -->
-            <div
-                class="bg-slate-800/50 backdrop-blur-sm p-6 rounded-2xl border border-slate-700 card-hover transition-all duration-300">
-                <div
-                    class="w-14 h-14 bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl flex items-center justify-center mb-4">
-                    <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z" />
-                    </svg>
-                </div>
-                <h3 class="text-xl font-semibold mb-2">AI-Enhanced News</h3>
-                <p class="text-slate-400">
-                    Real-time market news with AI that understands your hidden intent and provides deeper insights.
-                </p>
+            <div class="stat-counter rounded-2xl p-6 text-center border border-green-500/20">
+                <div class="text-4xl font-bold text-green-400 mb-2">20</div>
+                <div class="text-slate-400 text-sm">Section Industry Reports</div>
             </div>
-
-            <!-- Feature 4 -->
-            <div
-                class="bg-slate-800/50 backdrop-blur-sm p-6 rounded-2xl border border-slate-700 card-hover transition-all duration-300">
-                <div
-                    class="w-14 h-14 bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl flex items-center justify-center mb-4">
-                    <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
-                    </svg>
-                </div>
-                <h3 class="text-xl font-semibold mb-2">Fundamental Analysis</h3>
-                <p class="text-slate-400">
-                    Deep dive into financials with AI-interpreted data from Screener.in and more.
-                </p>
+            <div class="stat-counter rounded-2xl p-6 text-center border border-orange-500/20">
+                <div class="text-4xl font-bold text-orange-400 mb-2">Live</div>
+                <div class="text-slate-400 text-sm">Budget Transcription</div>
             </div>
         </div>
     </section>
 
-    <!-- How It Works -->
+    <!-- Core Capabilities Section -->
     <section class="container mx-auto px-6 py-20">
-        <h2 class="text-3xl font-bold text-center mb-16">How It Works</h2>
-
-        <div class="grid md:grid-cols-3 gap-8 max-w-4xl mx-auto">
-            <div class="text-center">
-                <div class="w-16 h-16 bg-blue-600/20 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <span class="text-2xl font-bold text-blue-400">1</span>
-                </div>
-                <h3 class="text-xl font-semibold mb-2">Enter Stock Name</h3>
-                <p class="text-slate-400">Search for any Indian stock by name or ticker symbol.</p>
-            </div>
-            <div class="text-center">
-                <div class="w-16 h-16 bg-purple-600/20 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <span class="text-2xl font-bold text-purple-400">2</span>
-                </div>
-                <h3 class="text-xl font-semibold mb-2">AI Analyzes</h3>
-                <p class="text-slate-400">Multiple AI models process data from 5+ sources in seconds.</p>
-            </div>
-            <div class="text-center">
-                <div class="w-16 h-16 bg-green-600/20 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <span class="text-2xl font-bold text-green-400">3</span>
-                </div>
-                <h3 class="text-xl font-semibold mb-2">Get Insights</h3>
-                <p class="text-slate-400">Receive comprehensive analysis with actionable insights.</p>
-            </div>
-        </div>
-    </section>
-
-    <!-- CTA Section -->
-    <section class="container mx-auto px-6 py-20">
-        <div
-            class="bg-gradient-to-r from-blue-600/20 to-purple-600/20 rounded-3xl p-12 text-center border border-slate-700">
-            <h2 class="text-3xl font-bold mb-4">Ready to Supercharge Your Research?</h2>
-            <p class="text-slate-400 mb-8 max-w-xl mx-auto">
-                Join the exclusive community of smart investors using AI to stay ahead of the market.
+        <div class="text-center mb-16">
+            <h2 class="text-4xl font-bold mb-4">Four Powerful Research Engines</h2>
+            <p class="text-slate-400 max-w-2xl mx-auto">
+                Each engine is purpose-built for a specific research need, powered by specialized AI agents and grounded
+                in verified data.
             </p>
-            <a href="/login"
-                class="inline-block bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 px-8 py-4 rounded-xl font-semibold text-lg transition-all duration-200 shadow-lg hover:shadow-xl">
-                Login to Get Started
-            </a>
+        </div>
+
+        <div class="grid lg:grid-cols-2 gap-8">
+
+            <!-- Company Research Card -->
+            <div class="feature-card rounded-3xl p-8 border border-slate-700/50 card-hover transition-all duration-300">
+                <div class="flex items-start gap-4 mb-6">
+                    <div
+                        class="w-16 h-16 bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl flex items-center justify-center flex-shrink-0">
+                        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                        </svg>
+                    </div>
+                    <div>
+                        <h3 class="text-2xl font-bold text-green-400 mb-1">Company Research</h3>
+                        <p class="text-slate-400">Best Model - Deep Research Mode</p>
+                    </div>
+                </div>
+
+                <p class="text-slate-300 mb-6 leading-relaxed">
+                    A <strong class="text-white">multi-agent agentic system</strong> that orchestrates 5 specialized AI
+                    agents
+                    working in parallel to analyze company fundamentals, news, analyst reports, and earnings data.
+                </p>
+
+                <div class="space-y-3 mb-6">
+                    <div class="flex items-center gap-3 text-sm">
+                        <span class="w-2 h-2 bg-green-400 rounded-full"></span>
+                        <span class="text-slate-300"><strong class="text-white">Central Brain (GPT-5-mini)</strong> —
+                            Strategic planning & query decomposition</span>
+                    </div>
+                    <div class="flex items-center gap-3 text-sm">
+                        <span class="w-2 h-2 bg-green-400 rounded-full"></span>
+                        <span class="text-slate-300"><strong class="text-white">MIA (Perplexity)</strong> — Real-time
+                            news with Pro Search</span>
+                    </div>
+                    <div class="flex items-center gap-3 text-sm">
+                        <span class="w-2 h-2 bg-green-400 rounded-full"></span>
+                        <span class="text-slate-300"><strong class="text-white">ARA (Gemini)</strong> — Analyst report
+                            synthesis from PDFs</span>
+                    </div>
+                    <div class="flex items-center gap-3 text-sm">
+                        <span class="w-2 h-2 bg-green-400 rounded-full"></span>
+                        <span class="text-slate-300"><strong class="text-white">EIA (OpenAI)</strong> — Concall Q&A
+                            sentiment analysis</span>
+                    </div>
+                </div>
+
+                <div class="bg-slate-900/50 rounded-xl p-4 border border-slate-700/50">
+                    <p class="text-xs text-slate-400 uppercase tracking-wider mb-2">Data Sources</p>
+                    <div class="flex flex-wrap gap-2">
+                        <span class="px-3 py-1 bg-slate-800 rounded-full text-xs text-slate-300">Screener.in</span>
+                        <span class="px-3 py-1 bg-slate-800 rounded-full text-xs text-slate-300">Trendlyne</span>
+                        <span class="px-3 py-1 bg-slate-800 rounded-full text-xs text-slate-300">TradingView</span>
+                        <span class="px-3 py-1 bg-slate-800 rounded-full text-xs text-slate-300">Analyst Reports</span>
+                        <span class="px-3 py-1 bg-slate-800 rounded-full text-xs text-slate-300">Concall PDFs</span>
+                        <span class="px-3 py-1 bg-slate-800 rounded-full text-xs text-slate-300">NSE/BSE Filings</span>
+                        <span class="px-3 py-1 bg-slate-800 rounded-full text-xs text-slate-300">Market News</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Industry Research Card -->
+            <div class="feature-card rounded-3xl p-8 border border-slate-700/50 card-hover transition-all duration-300">
+                <div class="flex items-start gap-4 mb-6">
+                    <div
+                        class="w-16 h-16 bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl flex items-center justify-center flex-shrink-0">
+                        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                        </svg>
+                    </div>
+                    <div>
+                        <h3 class="text-2xl font-bold text-blue-400 mb-1">Industry Research</h3>
+                        <p class="text-slate-400">20-Section Investor-Grade Reports</p>
+                    </div>
+                </div>
+
+                <p class="text-slate-300 mb-6 leading-relaxed">
+                    Generate comprehensive <strong class="text-white">buy-side equity research reports</strong> for any
+                    Indian industry
+                    using <strong class="text-white">Kagger's Deep Research</strong> model based on Deepseek R1 (Chain
+                    of Thought) with up to 15 minutes of
+                    intensive analysis.
+                </p>
+
+                <div class="space-y-3 mb-6">
+                    <div class="flex items-center gap-3 text-sm">
+                        <span class="w-2 h-2 bg-blue-400 rounded-full"></span>
+                        <span class="text-slate-300"><strong class="text-white">Executive Summary</strong> with top
+                            picks & verdict</span>
+                    </div>
+                    <div class="flex items-center gap-3 text-sm">
+                        <span class="w-2 h-2 bg-blue-400 rounded-full"></span>
+                        <span class="text-slate-300"><strong class="text-white">"Pickaxes vs Gold"</strong> value chain
+                            analysis</span>
+                    </div>
+                    <div class="flex items-center gap-3 text-sm">
+                        <span class="w-2 h-2 bg-blue-400 rounded-full"></span>
+                        <span class="text-slate-300"><strong class="text-white">Scenario Modeling</strong> —
+                            Base/Bull/Bear cases</span>
+                    </div>
+                    <div class="flex items-center gap-3 text-sm">
+                        <span class="w-2 h-2 bg-blue-400 rounded-full"></span>
+                        <span class="text-slate-300"><strong class="text-white">Due Diligence Checklist</strong> — 15+
+                            questions</span>
+                    </div>
+                </div>
+
+                <div class="bg-slate-900/50 rounded-xl p-4 border border-slate-700/50">
+                    <p class="text-xs text-slate-400 uppercase tracking-wider mb-2">Report Sections</p>
+                    <div class="flex flex-wrap gap-2">
+                        <span class="px-3 py-1 bg-slate-800 rounded-full text-xs text-slate-300">Market Sizing</span>
+                        <span class="px-3 py-1 bg-slate-800 rounded-full text-xs text-slate-300">Competitive
+                            Landscape</span>
+                        <span class="px-3 py-1 bg-slate-800 rounded-full text-xs text-slate-300">Regulation</span>
+                        <span class="px-3 py-1 bg-slate-800 rounded-full text-xs text-slate-300">ESG Risks</span>
+                        <span class="px-3 py-1 bg-slate-800 rounded-full text-xs text-slate-300">Valuation</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- News AI Card -->
+            <div class="feature-card rounded-3xl p-8 border border-slate-700/50 card-hover transition-all duration-300">
+                <div class="flex items-start gap-4 mb-6">
+                    <div
+                        class="w-16 h-16 bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl flex items-center justify-center flex-shrink-0">
+                        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z" />
+                        </svg>
+                    </div>
+                    <div>
+                        <h3 class="text-2xl font-bold text-purple-400 mb-1">News AI Chat</h3>
+                        <p class="text-slate-400">Two-Stage Intent Enhancement</p>
+                    </div>
+                </div>
+
+                <p class="text-slate-300 mb-6 leading-relaxed">
+                    Ask any market question and watch our <strong class="text-white">two-stage AI pipeline</strong>
+                    first
+                    enhance your intent with GPT-5-mini, then research via Perplexity Pro Search with <strong
+                        class="text-white">verified financial data</strong>.
+                </p>
+
+                <div class="space-y-3 mb-6">
+                    <div class="flex items-center gap-3 text-sm">
+                        <span class="w-2 h-2 bg-purple-400 rounded-full"></span>
+                        <span class="text-slate-300"><strong class="text-white">@Mention Companies</strong> — Auto-fetch
+                            Screener.in data</span>
+                    </div>
+                    <div class="flex items-center gap-3 text-sm">
+                        <span class="w-2 h-2 bg-purple-400 rounded-full"></span>
+                        <span class="text-slate-300"><strong class="text-white">Intent Enhancement</strong> — Deciphers
+                            hidden investor intent</span>
+                    </div>
+                    <div class="flex items-center gap-3 text-sm">
+                        <span class="w-2 h-2 bg-purple-400 rounded-full"></span>
+                        <span class="text-slate-300"><strong class="text-white">Conversation Memory</strong> —
+                            Context-aware follow-ups</span>
+                    </div>
+                    <div class="flex items-center gap-3 text-sm">
+                        <span class="w-2 h-2 bg-purple-400 rounded-full"></span>
+                        <span class="text-slate-300"><strong class="text-white">No Hallucination</strong> — Grounded in
+                            verified numbers</span>
+                    </div>
+                </div>
+
+                <div class="bg-slate-900/50 rounded-xl p-4 border border-slate-700/50">
+                    <p class="text-xs text-slate-400 uppercase tracking-wider mb-2">Example Queries</p>
+                    <div class="text-sm text-slate-300 space-y-1">
+                        <p>"What's the impact of Trump tariffs on @TCS?"</p>
+                        <p>"Latest news on EV sector and best picks"</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Budget AI Card -->
+            <div class="feature-card rounded-3xl p-8 border border-slate-700/50 card-hover transition-all duration-300">
+                <div class="flex items-start gap-4 mb-6">
+                    <div
+                        class="w-16 h-16 bg-gradient-to-br from-orange-500 to-orange-600 rounded-2xl flex items-center justify-center flex-shrink-0">
+                        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                    </div>
+                    <div>
+                        <h3 class="text-2xl font-bold text-orange-400 mb-1">Budget AI Chat</h3>
+                        <p class="text-slate-400">Live Speech Transcription & Analysis</p>
+                    </div>
+                </div>
+
+                <p class="text-slate-300 mb-6 leading-relaxed">
+                    Experience <strong class="text-white">real-time budget analysis</strong> powered by Gemini's audio
+                    transcription.
+                    Automatic extraction of <strong class="text-white">tax changes, sector impacts, and investment
+                        opportunities</strong> as the FM speaks.
+                </p>
+
+                <div class="space-y-3 mb-6">
+                    <div class="flex items-center gap-3 text-sm">
+                        <span class="w-2 h-2 bg-orange-400 rounded-full"></span>
+                        <span class="text-slate-300"><strong class="text-white">Live Transcription</strong> — Gemini 3
+                            Flash audio processing</span>
+                    </div>
+                    <div class="flex items-center gap-3 text-sm">
+                        <span class="w-2 h-2 bg-orange-400 rounded-full"></span>
+                        <span class="text-slate-300"><strong class="text-white">Auto Highlight Extraction</strong> —
+                            Tax, capex, schemes</span>
+                    </div>
+                    <div class="flex items-center gap-3 text-sm">
+                        <span class="w-2 h-2 bg-orange-400 rounded-full"></span>
+                        <span class="text-slate-300"><strong class="text-white">Sector Impact Cards</strong> — Real-time
+                            market implications</span>
+                    </div>
+                    <div class="flex items-center gap-3 text-sm">
+                        <span class="w-2 h-2 bg-orange-400 rounded-full"></span>
+                        <span class="text-slate-300"><strong class="text-white">Dual-Source RAG</strong> — Transcript +
+                            web research</span>
+                    </div>
+                </div>
+
+                <div class="bg-slate-900/50 rounded-xl p-4 border border-slate-700/50">
+                    <p class="text-xs text-slate-400 uppercase tracking-wider mb-2">Highlight Categories</p>
+                    <div class="flex flex-wrap gap-2">
+                        <span class="px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-xs">Tax Changes</span>
+                        <span class="px-3 py-1 bg-blue-500/20 text-blue-400 rounded-full text-xs">Capex</span>
+                        <span class="px-3 py-1 bg-purple-500/20 text-purple-400 rounded-full text-xs">PLI Schemes</span>
+                        <span class="px-3 py-1 bg-orange-500/20 text-orange-400 rounded-full text-xs">Fiscal</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Architecture Section -->
+    <section class="container mx-auto px-6 py-20">
+        <div class="text-center mb-12">
+            <h2 class="text-3xl font-bold mb-4">Multi-Agent Architecture</h2>
+            <p class="text-slate-400 max-w-2xl mx-auto">
+                Our Company Research engine uses a sophisticated 4-stage pipeline that ensures every response is
+                grounded in verified data.
+            </p>
+        </div>
+
+        <div class="max-w-4xl mx-auto">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <!-- Stage 1 -->
+                <div class="agent-box rounded-xl p-4 text-center">
+                    <div class="text-2xl mb-2">🧠</div>
+                    <div class="text-sm font-semibold text-blue-400">Stage 1</div>
+                    <div class="text-xs text-slate-300 mt-1">Central Brain</div>
+                    <div class="text-xs text-slate-500 mt-1">GPT-5 and Gemini 3</div>
+                </div>
+                <!-- Stage 2 -->
+                <div class="agent-box rounded-xl p-4 text-center">
+                    <div class="text-2xl mb-2">📋</div>
+                    <div class="text-sm font-semibold text-purple-400">Stage 2</div>
+                    <div class="text-xs text-slate-300 mt-1">Tactical Planner</div>
+                    <div class="text-xs text-slate-500 mt-1">OpenAI o4-mini</div>
+                </div>
+                <!-- Stage 3 -->
+                <div class="agent-box rounded-xl p-4 text-center">
+                    <div class="text-2xl mb-2">⚡</div>
+                    <div class="text-sm font-semibold text-green-400">Stage 3</div>
+                    <div class="text-xs text-slate-300 mt-1">Parallel Agents</div>
+                    <div class="text-xs text-slate-500 mt-1">Perplexity • Gemini • Deepseek</div>
+                </div>
+                <!-- Stage 4 -->
+                <div class="agent-box rounded-xl p-4 text-center">
+                    <div class="text-2xl mb-2">✨</div>
+                    <div class="text-sm font-semibold text-orange-400">Stage 4</div>
+                    <div class="text-xs text-slate-300 mt-1">Synthesis</div>
+                    <div class="text-xs text-slate-500 mt-1">GPT-5 and Gemini 3</div>
+                </div>
+            </div>
+
+            <div class="mt-8 text-center text-slate-400 text-sm">
+                <p>Every claim backed by data • No hallucinations • 30+ registered calculations</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Contact Form Section -->
+    <section id="contact" class="container mx-auto px-6 py-20">
+        <div class="max-w-2xl mx-auto">
+            <div
+                class="bg-gradient-to-r from-blue-600/10 to-purple-600/10 rounded-3xl p-8 md:p-12 border border-slate-700">
+                <div class="text-center mb-8">
+                    <h2 class="text-3xl font-bold mb-4">Request Access</h2>
+                    <p class="text-slate-400">
+                        Kagger AI is currently available by invitation only. Fill out the form below and we'll reach out
+                        to discuss access.
+                    </p>
+                </div>
+
+                <form id="contact-form" class="space-y-6">
+                    <div class="grid md:grid-cols-2 gap-6">
+                        <div>
+                            <label class="block text-sm font-medium text-slate-300 mb-2">Name <span
+                                    class="text-red-400">*</span></label>
+                            <input type="text" id="contact-name" required
+                                class="w-full px-4 py-3 bg-slate-900/50 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                                placeholder="Your full name">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-300 mb-2">Email <span
+                                    class="text-red-400">*</span></label>
+                            <input type="email" id="contact-email" required
+                                class="w-full px-4 py-3 bg-slate-900/50 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                                placeholder="you@example.com">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-slate-300 mb-2">Phone <span
+                                class="text-slate-500">(optional)</span></label>
+                        <input type="tel" id="contact-phone"
+                            class="w-full px-4 py-3 bg-slate-900/50 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                            placeholder="+91 98765 43210">
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-slate-300 mb-2">Message <span
+                                class="text-slate-500">(optional)</span></label>
+                        <textarea id="contact-message" rows="4"
+                            class="w-full px-4 py-3 bg-slate-900/50 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all resize-none"
+                            placeholder="Tell us about your investment research needs..."></textarea>
+                    </div>
+
+                    <button type="submit" id="contact-submit"
+                        class="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 px-8 py-4 rounded-xl font-semibold text-lg transition-all duration-200 shadow-lg hover:shadow-xl flex items-center justify-center gap-2">
+                        <span>Submit Request</span>
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                        </svg>
+                    </button>
+                </form>
+
+                <!-- Form Result -->
+                <div id="contact-result" class="hidden mt-6 p-4 rounded-lg text-center"></div>
+            </div>
         </div>
     </section>
 
@@ -228,10 +558,83 @@
                 <span class="text-lg font-semibold">Kagger AI</span>
             </div>
             <p class="text-slate-500 text-sm">
-                © 2026 Kagger AI. AI-Powered Stock Research Platform.
+                © 2026 Kagger AI. Institutional-Grade AI Stock Research for Indian Markets.
             </p>
         </div>
     </footer>
+
+    <script>
+        // Contact Form Submission
+        document.getElementById('contact-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const name = document.getElementById('contact-name').value.trim();
+            const email = document.getElementById('contact-email').value.trim();
+            const phone = document.getElementById('contact-phone').value.trim();
+            const message = document.getElementById('contact-message').value.trim();
+
+            const btn = document.getElementById('contact-submit');
+            const result = document.getElementById('contact-result');
+
+            // Validate
+            if (!name || !email) {
+                result.className = 'mt-6 p-4 rounded-lg text-center bg-red-500/20 border border-red-500/50 text-red-400';
+                result.textContent = 'Please fill in all required fields.';
+                result.classList.remove('hidden');
+                return;
+            }
+
+            // Email validation
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(email)) {
+                result.className = 'mt-6 p-4 rounded-lg text-center bg-red-500/20 border border-red-500/50 text-red-400';
+                result.textContent = 'Please enter a valid email address.';
+                result.classList.remove('hidden');
+                return;
+            }
+
+            btn.disabled = true;
+            btn.innerHTML = '<span class="animate-spin inline-block w-5 h-5 border-2 border-white border-t-transparent rounded-full mr-2"></span> Submitting...';
+            result.classList.add('hidden');
+
+            try {
+                const response = await fetch('/contact-form', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, email, phone, message })
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.success) {
+                    result.className = 'mt-6 p-4 rounded-lg text-center bg-green-500/20 border border-green-500/50 text-green-400';
+                    result.innerHTML = `
+                        <p class="font-medium">✓ Thank you, ${name}!</p>
+                        <p class="text-sm mt-1">We've received your request and will be in touch soon.</p>
+                    `;
+                    // Clear form
+                    document.getElementById('contact-form').reset();
+                } else {
+                    result.className = 'mt-6 p-4 rounded-lg text-center bg-red-500/20 border border-red-500/50 text-red-400';
+                    result.textContent = data.error || 'Something went wrong. Please try again.';
+                }
+                result.classList.remove('hidden');
+
+            } catch (error) {
+                result.className = 'mt-6 p-4 rounded-lg text-center bg-red-500/20 border border-red-500/50 text-red-400';
+                result.textContent = 'Network error. Please try again later.';
+                result.classList.remove('hidden');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = `
+                    <span>Submit Request</span>
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/>
+                    </svg>
+                `;
+            }
+        });
+    </script>
 </body>
 
 </html>

@@ -171,3 +171,7 @@ Found 10 panels
 2026-02-06 20:29:35.607757 - Failed to extract text from https://trendlyne.com/get-document/report/pdf/28249/: Cookies expired - please re-export cookies from browser
 2026-02-06 20:29:36.239420 - Failed to extract text from https://trendlyne.com/get-document/report/pdf/27571/: Cookies expired - please re-export cookies from browser
 2026-02-06 20:29:36.885105 - Failed to extract text from https://trendlyne.com/get-document/report/pdf/22739/: Cookies expired - please re-export cookies from browser
+2026-02-07 00:03:39.585240 - Failed to extract text from https://trendlyne.com/get-document/report/pdf/94770/: Cookies expired - please re-export cookies from browser
+2026-02-07 00:03:40.149226 - Failed to extract text from https://trendlyne.com/get-document/report/pdf/94294/: Cookies expired - please re-export cookies from browser
+2026-02-07 00:03:40.725197 - Failed to extract text from https://trendlyne.com/get-document/report/pdf/5508400/: Cookies expired - please re-export cookies from browser
+2026-02-07 00:03:41.261004 - Failed to extract text from https://trendlyne.com/get-document/report/pdf/94572/: Cookies expired - please re-export cookies from browser

@@ -94,6 +94,53 @@
             </div>
         </div>
 
+        <!-- Contact Requests Section -->
+        <div class="bg-slate-800/50 backdrop-blur-sm rounded-2xl p-6 border border-slate-700 mt-8">
+            <div class="flex items-center justify-between mb-6">
+                <div class="flex items-center gap-3">
+                    <h2 class="text-xl font-bold">📩 Contact Requests</h2>
+                    <span id="contact-count"
+                        class="px-2 py-1 bg-blue-500/20 text-blue-400 rounded-full text-xs font-medium">0</span>
+                </div>
+                <button onclick="loadContactRequests()"
+                    class="text-slate-400 hover:text-white transition-colors text-sm">
+                    ↻ Refresh
+                </button>
+            </div>
+
+            <p class="text-slate-400 text-sm mb-4">
+                Access requests from the landing page contact form. Use status to track outreach progress.
+            </p>
+
+            <div id="contacts-loading" class="text-center py-8 text-slate-400">
+                Loading contact requests...
+            </div>
+
+            <div id="contacts-empty" class="hidden text-center py-8 text-slate-500">
+                No contact requests yet.
+            </div>
+
+            <div id="contacts-table" class="hidden overflow-x-auto">
+                <table class="w-full">
+                    <thead>
+                        <tr class="text-left text-slate-400 text-sm border-b border-slate-700">
+                            <th class="pb-3 font-medium">Name</th>
+                            <th class="pb-3 font-medium">Email</th>
+                            <th class="pb-3 font-medium">Phone</th>
+                            <th class="pb-3 font-medium">Message</th>
+                            <th class="pb-3 font-medium">Submitted</th>
+                            <th class="pb-3 font-medium">Status</th>
+                            <th class="pb-3 font-medium">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="contacts-body" class="text-sm">
+                        <!-- Contact requests will be inserted here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+
         <!-- Overnight Pre-Caching Section -->
         <div class="bg-slate-800/50 backdrop-blur-sm rounded-2xl p-6 border border-slate-700 mt-8">
             <div class="flex items-center justify-between mb-4">
@@ -283,6 +330,145 @@
         }
 
         // =====================================================================
+        // Contact Requests Functions
+        // =====================================================================
+
+        async function loadContactRequests() {
+            const loading = document.getElementById('contacts-loading');
+            const table = document.getElementById('contacts-table');
+            const empty = document.getElementById('contacts-empty');
+            const countBadge = document.getElementById('contact-count');
+            const tbody = document.getElementById('contacts-body');
+
+            loading.classList.remove('hidden');
+            table.classList.add('hidden');
+            empty.classList.add('hidden');
+
+            try {
+                const response = await fetch('/api/admin/contact-requests');
+
+                if (response.status === 401) {
+                    window.location.href = '/login';
+                    return;
+                }
+
+                if (response.status === 403) {
+                    loading.textContent = 'Admin access required';
+                    return;
+                }
+
+                const data = await response.json();
+                countBadge.textContent = data.count || 0;
+
+                if (!data.requests || data.requests.length === 0) {
+                    loading.classList.add('hidden');
+                    empty.classList.remove('hidden');
+                    return;
+                }
+
+                tbody.innerHTML = data.requests.map(req => `
+                    <tr class="border-b border-slate-700/50 hover:bg-slate-700/20">
+                        <td class="py-4 pr-4 font-medium">${escapeHtml(req.name)}</td>
+                        <td class="py-4 pr-4">
+                            <a href="mailto:${escapeHtml(req.email)}" class="text-blue-400 hover:text-blue-300">${escapeHtml(req.email)}</a>
+                        </td>
+                        <td class="py-4 pr-4 text-slate-400">${req.phone ? escapeHtml(req.phone) : '-'}</td>
+                        <td class="py-4 pr-4 text-slate-400 max-w-xs truncate" title="${req.message ? escapeHtml(req.message) : ''}">${req.message ? escapeHtml(req.message.substring(0, 50)) + (req.message.length > 50 ? '...' : '') : '-'}</td>
+                        <td class="py-4 pr-4 text-slate-400">${formatDateTime(req.submitted_at)}</td>
+                        <td class="py-4 pr-4">
+                            <select onchange="updateContactStatus('${req.id}', this.value)" 
+                                class="bg-slate-900 border border-slate-600 rounded px-2 py-1 text-xs ${getStatusClass(req.status)}">
+                                <option value="new" ${req.status === 'new' ? 'selected' : ''}>🔵 New</option>
+                                <option value="contacted" ${req.status === 'contacted' ? 'selected' : ''}>📧 Contacted</option>
+                                <option value="converted" ${req.status === 'converted' ? 'selected' : ''}>✅ Converted</option>
+                                <option value="declined" ${req.status === 'declined' ? 'selected' : ''}>❌ Declined</option>
+                            </select>
+                        </td>
+                        <td class="py-4">
+                            <button onclick="deleteContactRequest('${req.id}', '${escapeHtml(req.name)}')" class="text-red-400 hover:text-red-300 text-sm">
+                                Delete
+                            </button>
+                        </td>
+                    </tr>
+                `).join('');
+
+                loading.classList.add('hidden');
+                table.classList.remove('hidden');
+
+            } catch (error) {
+                loading.textContent = 'Failed to load contact requests';
+                console.error('Error loading contacts:', error);
+            }
+        }
+
+        function getStatusClass(status) {
+            switch (status) {
+                case 'new': return 'text-blue-400';
+                case 'contacted': return 'text-yellow-400';
+                case 'converted': return 'text-green-400';
+                case 'declined': return 'text-red-400';
+                default: return 'text-slate-400';
+            }
+        }
+
+        function formatDateTime(dateStr) {
+            if (!dateStr) return '-';
+            const date = new Date(dateStr);
+            return date.toLocaleDateString('en-IN', {
+                day: 'numeric',
+                month: 'short',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        async function updateContactStatus(requestId, status) {
+            try {
+                const response = await fetch(`/api/admin/contact-requests/${requestId}/status`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status })
+                });
+
+                if (!response.ok) {
+                    const data = await response.json();
+                    alert(data.error || 'Failed to update status');
+                    loadContactRequests(); // Reload to reset
+                }
+            } catch (error) {
+                alert('Network error');
+                loadContactRequests();
+            }
+        }
+
+        async function deleteContactRequest(requestId, name) {
+            if (!confirm(`Delete contact request from ${name}?`)) return;
+
+            try {
+                const response = await fetch(`/api/admin/contact-requests/${requestId}`, {
+                    method: 'DELETE'
+                });
+
+                if (response.ok) {
+                    loadContactRequests();
+                } else {
+                    const data = await response.json();
+                    alert(data.error || 'Failed to delete');
+                }
+            } catch (error) {
+                alert('Network error');
+            }
+        }
+
+        // =====================================================================
         // Pre-Caching Functions
         // =====================================================================
 
@@ -438,6 +624,7 @@
         // Load jobs on page load
         document.addEventListener('DOMContentLoaded', () => {
             loadUsers();
+            loadContactRequests();
             refreshPrecacheJobs();
         });
     </script>

@@ -2000,8 +2000,8 @@
 
           <div class="flex items-center justify-between w-full pr-8">
             <div class="flex flex-col flex-shrink-0 whitespace-nowrap">
-              <span class="font-bold text-lg">Kagger AI Analyst</span>
-              <span class="text-xs opacity-80">Multi-agentic Intelligence</span>
+              <span id="sidebarChatTitle" class="font-bold text-lg">Kagger AI Analyst</span>
+              <span id="sidebarChatSubtitle" class="text-xs opacity-80">Multi-agentic Intelligence</span>
             </div>
             <select id="sidebarAiModelSelector"
               class="ml-auto bg-white/20 text-white text-xs rounded-md px-2 py-1 border border-white/30 focus:ring-2 focus:ring-white/80 focus:outline-none max-w-[170px] truncate">
@@ -2032,11 +2032,25 @@
 
         <div id="sidebarChatLog" class="flex-1 p-4 space-y-4 overflow-y-auto bg-slate-50 scroll-smooth">
           <!-- Welcome message -->
+          <!-- Company Research Welcome Message -->
           <div id="sidebarWelcomeMessage"
             class="bg-white p-4 rounded-lg shadow-sm border border-slate-200 text-sm text-slate-600">
             <p class="font-semibold text-slate-800 mb-1">Welcome to Kagger AI!</p>
             <p>I can help you analyze financial data, interpret charts, and research market trends. Ask me anything
               about the analysis on the left.</p>
+          </div>
+          <!-- Industry Research Welcome Message -->
+          <div id="sidebarIndustryWelcomeMessage"
+            class="hidden bg-white p-4 rounded-lg shadow-sm border border-blue-200 text-sm text-slate-600">
+            <p class="font-semibold text-blue-800 mb-2">Welcome to Kagger Industry Research!</p>
+            <p class="mb-2">I'm your expert industry analyst. I can help you with:</p>
+            <ul class="list-disc list-inside space-y-1 text-xs text-slate-500">
+              <li>Deep-dive analysis of industry trends and dynamics</li>
+              <li>Competitive landscape and market positioning</li>
+              <li>Key growth drivers and risk factors</li>
+              <li>Regulatory environment and policy impacts</li>
+              <li>Investment opportunities within the sector</li>
+            </ul>
           </div>
         </div>
 
@@ -2559,7 +2573,7 @@
         companyResultsContainer.classList.add('hidden');
         industryResultsContainer.classList.remove('hidden');
 
-        mainTitle.textContent = 'AI Industry Research';
+        mainTitle.textContent = 'AI-based Industry Research';
         mainSubtitle.textContent = 'Generate comprehensive investor-grade industry reports using Kagger\'s Deep Research AI';
 
         // Change logo to blue
@@ -2591,6 +2605,18 @@
         if (modelSelector) {
           modelSelector.classList.add('hidden');
         }
+
+        // Update sidebar chat title for industry mode
+        const sidebarChatTitle = document.getElementById('sidebarChatTitle');
+        const sidebarChatSubtitle = document.getElementById('sidebarChatSubtitle');
+        if (sidebarChatTitle) sidebarChatTitle.textContent = 'Kagger Industry Research Analyst';
+        if (sidebarChatSubtitle) sidebarChatSubtitle.textContent = 'Deep Research Intelligence';
+
+        // Toggle welcome messages for industry mode
+        const companyWelcome = document.getElementById('sidebarWelcomeMessage');
+        const industryWelcome = document.getElementById('sidebarIndustryWelcomeMessage');
+        if (companyWelcome) companyWelcome.classList.add('hidden');
+        if (industryWelcome) industryWelcome.classList.remove('hidden');
 
         if (analystReportsToggle) {
           document.getElementById('sidebarAnalystToggleRow')?.classList.add('hidden');
@@ -2650,6 +2676,18 @@
         if (modelSelector) {
           modelSelector.classList.remove('hidden');
         }
+
+        // Restore sidebar chat title for company mode
+        const sidebarChatTitle = document.getElementById('sidebarChatTitle');
+        const sidebarChatSubtitle = document.getElementById('sidebarChatSubtitle');
+        if (sidebarChatTitle) sidebarChatTitle.textContent = 'Kagger AI Analyst';
+        if (sidebarChatSubtitle) sidebarChatSubtitle.textContent = 'Multi-agentic Intelligence';
+
+        // Toggle welcome messages for company mode
+        const companyWelcome = document.getElementById('sidebarWelcomeMessage');
+        const industryWelcome = document.getElementById('sidebarIndustryWelcomeMessage');
+        if (companyWelcome) companyWelcome.classList.remove('hidden');
+        if (industryWelcome) industryWelcome.classList.add('hidden');
 
         if (analystReportsToggle) {
           document.getElementById('sidebarAnalystToggleRow')?.classList.remove('hidden');
@@ -5273,8 +5311,10 @@
 
     // Function to save current chat and restore the new mode's chat
     function clearAndRestoreChatHistory(newMode) {
-      // Save current chat messages to the appropriate history
-      const currentChatMessages = Array.from(chatLog.children);
+      // Save current chat messages to the appropriate history (excluding welcome messages)
+      const currentChatMessages = Array.from(chatLog.children).filter(el =>
+        el.id !== 'sidebarWelcomeMessage' && el.id !== 'sidebarIndustryWelcomeMessage'
+      );
       if (currentMode === 'company') {
         companyChatHistory = currentChatMessages;
       } else if (currentMode === 'industry') {
@@ -5283,6 +5323,20 @@
 
       // Clear the chat log
       chatLog.innerHTML = '';
+
+      // Add the appropriate welcome message first
+      const companyWelcome = document.createElement('div');
+      companyWelcome.id = 'sidebarWelcomeMessage';
+      companyWelcome.className = newMode === 'company' ? 'bg-white p-4 rounded-lg shadow-sm border border-slate-200 text-sm text-slate-600' : 'hidden bg-white p-4 rounded-lg shadow-sm border border-slate-200 text-sm text-slate-600';
+      companyWelcome.innerHTML = '<p class="font-semibold text-slate-800 mb-1">Welcome to Kagger AI!</p><p>I can help you analyze financial data, interpret charts, and research market trends. Ask me anything about the analysis on the left.</p>';
+
+      const industryWelcome = document.createElement('div');
+      industryWelcome.id = 'sidebarIndustryWelcomeMessage';
+      industryWelcome.className = newMode === 'industry' ? 'bg-white p-4 rounded-lg shadow-sm border border-blue-200 text-sm text-slate-600' : 'hidden bg-white p-4 rounded-lg shadow-sm border border-blue-200 text-sm text-slate-600';
+      industryWelcome.innerHTML = '<p class="font-semibold text-blue-800 mb-2">Welcome to Kagger Industry Research!</p><p class="mb-2">I\'m your expert industry analyst. I can help you with:</p><ul class="list-disc list-inside space-y-1 text-xs text-slate-500"><li>Deep-dive analysis of industry trends and dynamics</li><li>Competitive landscape and market positioning</li><li>Key growth drivers and risk factors</li><li>Regulatory environment and policy impacts</li><li>Investment opportunities within the sector</li></ul>';
+
+      chatLog.appendChild(companyWelcome);
+      chatLog.appendChild(industryWelcome);
 
       // Restore messages for the new mode
       const messagesToRestore = newMode === 'company' ? companyChatHistory : industryChatHistory;

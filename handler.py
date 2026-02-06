@@ -566,6 +566,156 @@ def debug_cookies_source():
 def index():
     return send_from_directory('.', 'landing.html')
 
+# =====================================================================
+# CONTACT FORM ENDPOINT (Landing Page Access Requests)
+# =====================================================================
+
+CONTACT_REQUESTS_FILE = os.path.join(os.path.dirname(__file__), 'contact_requests.json')
+
+def load_contact_requests():
+    """Load contact requests from JSON file"""
+    try:
+        if os.path.exists(CONTACT_REQUESTS_FILE):
+            with open(CONTACT_REQUESTS_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+    except Exception as e:
+        print(f"WARN: Failed to load contact requests: {e}")
+    return []
+
+def save_contact_requests(requests):
+    """Save contact requests to JSON file"""
+    try:
+        with open(CONTACT_REQUESTS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(requests, f, indent=2, ensure_ascii=False)
+    except Exception as e:
+        print(f"ERROR: Failed to save contact requests: {e}")
+        raise
+
+@app.route('/contact-form', methods=['POST'])
+def contact_form():
+    """
+    Handle landing page contact form submissions.
+    Stores to contact_requests.json for persistence across deployments.
+    """
+    try:
+        data = request.get_json(force=True)
+        name = data.get('name', '').strip()
+        email = data.get('email', '').strip()
+        phone = data.get('phone', '').strip()
+        message = data.get('message', '').strip()
+        
+        # Validate required fields
+        if not name or not email:
+            return jsonify({'error': 'Name and email are required'}), 400
+        
+        # Basic email validation
+        import re
+        if not re.match(r'^[^\s@]+@[^\s@]+\.[^\s@]+$', email):
+            return jsonify({'error': 'Invalid email format'}), 400
+        
+        # Create request entry
+        from datetime import datetime
+        contact_request = {
+            'id': str(uuid.uuid4())[:8],
+            'name': name,
+            'email': email,
+            'phone': phone if phone else None,
+            'message': message if message else None,
+            'submitted_at': datetime.now().isoformat(),
+            'status': 'new'  # new, contacted, converted, declined
+        }
+        
+        # Load existing requests, add new one, save
+        requests = load_contact_requests()
+        requests.insert(0, contact_request)  # Newest first
+        save_contact_requests(requests)
+        
+        print(f"INFO: New contact request from {name} <{email}>")
+        
+        return jsonify({
+            'success': True,
+            'message': 'Your request has been received. We will be in touch soon.'
+        })
+        
+    except Exception as e:
+        print(f"ERROR: Contact form submission failed: {e}")
+        traceback.print_exc()
+        return jsonify({'error': 'Failed to submit request. Please try again.'}), 500
+
+@app.route('/api/admin/contact-requests', methods=['GET'])
+def get_contact_requests():
+    """Admin endpoint to view all contact requests"""
+    from flask import session
+    
+    # Check authentication
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    # Check admin role
+    from auth.database import User
+    user = User.get_by_id(session['user_id'])
+    if not user or not user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    
+    requests = load_contact_requests()
+    return jsonify({'requests': requests, 'count': len(requests)})
+
+@app.route('/api/admin/contact-requests/<request_id>/status', methods=['PUT'])
+def update_contact_request_status(request_id):
+    """Admin endpoint to update contact request status"""
+    from flask import session
+    
+    # Check authentication
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    # Check admin role
+    from auth.database import User
+    user = User.get_by_id(session['user_id'])
+    if not user or not user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    
+    data = request.get_json(force=True)
+    new_status = data.get('status', '').strip()
+    
+    if new_status not in ['new', 'contacted', 'converted', 'declined']:
+        return jsonify({'error': 'Invalid status'}), 400
+    
+    requests = load_contact_requests()
+    for req in requests:
+        if req.get('id') == request_id:
+            req['status'] = new_status
+            save_contact_requests(requests)
+            return jsonify({'success': True})
+    
+    return jsonify({'error': 'Request not found'}), 404
+
+@app.route('/api/admin/contact-requests/<request_id>', methods=['DELETE'])
+def delete_contact_request(request_id):
+    """Admin endpoint to delete a contact request"""
+    from flask import session
+    
+    # Check authentication
+    if 'user_id' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    # Check admin role
+    from auth.database import User
+    user = User.get_by_id(session['user_id'])
+    if not user or not user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    
+    requests = load_contact_requests()
+    original_count = len(requests)
+    requests = [req for req in requests if req.get('id') != request_id]
+    
+    if len(requests) == original_count:
+        return jsonify({'error': 'Request not found'}), 404
+    
+    save_contact_requests(requests)
+    return jsonify({'success': True})
+
+
 # Login page (public)
 @app.route('/login')
 def login_page():
