@@ -9,7 +9,8 @@ import httpx
 import os
 from io import BytesIO
 import mimetypes
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 import asyncio
 import traceback
 
@@ -18,8 +19,12 @@ TRENDLYNE_USERNAME = os.getenv("TRENDLYNE_USERNAME")
 TRENDLYNE_PASSWORD = os.getenv("TRENDLYNE_PASSWORD")
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 
+genai_client = None
 if GOOGLE_API_KEY:
-    genai.api_key = GOOGLE_API_KEY
+    try:
+        genai_client = genai.Client(api_key=GOOGLE_API_KEY)
+    except Exception as e:
+        print(f"ERROR: Failed to initialize Google GenAI client in pdf_summarizer.py: {e}")
 
 # Session storage (in-memory, will be lost on server restart)
 _trendlyne_session = None
@@ -186,13 +191,19 @@ async def summarize_analyst_pdf_async(pdf_url: str) -> str:
         
         # Define synchronous Gemini tasks (to avoid event loop conflicts)
         def blocking_gemini_tasks(content):
+            global genai_client
+            if not genai_client:
+                raise ValueError("GenAI client not initialized in pdf_summarizer.py")
+                
             print("INFO: Uploading analyst PDF to Google AI File Service...")
             mime_type = "application/pdf"
             
-            pdf_file = genai.upload_file(
-                path=BytesIO(content),
-                display_name=pdf_url.split('/')[-2] + ".pdf",  # Use document ID as filename
-                mime_type=mime_type
+            pdf_file = genai_client.files.upload(
+                file=BytesIO(content),
+                config=types.UploadFileConfig(
+                    display_name=pdf_url.split('/')[-2] + ".pdf",  # Use document ID as filename
+                    mime_type=mime_type
+                )
             )
             
             print(f"INFO: PDF uploaded successfully as '{pdf_file.name}'")
@@ -232,12 +243,17 @@ async def summarize_analyst_pdf_async(pdf_url: str) -> str:
 
 **Format:** Use markdown with clear sections. Include numbers and data points. Be thorough but structured."""
 
-            print("INFO: Calling Gemini 2.5 Flash to summarize analyst report...")
-            model = genai.GenerativeModel('gemini-2.5-flash-lite')
+            print("INFO: Calling Gemini to summarize analyst report...")
             
-            response = model.generate_content([prompt, pdf_file])
+            response = genai_client.models.generate_content(
+                model='gemini-3-flash-preview',
+                contents=[
+                    types.Part.from_text(text=prompt),
+                    pdf_file
+                ]
+            )
             
-            genai.delete_file(pdf_file.name)
+            genai_client.files.delete(name=pdf_file.name)
             print(f"INFO: Cleaned up uploaded file {pdf_file.name}")
             
             return response.text

@@ -7,14 +7,19 @@ Since Trendlyne has strong bot detection, we can use cookies from your logged-in
 import httpx
 import os
 from io import BytesIO
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 import asyncio
 import traceback
 import json
 
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+genai_client = None
 if GOOGLE_API_KEY:
-    genai.api_key = GOOGLE_API_KEY
+    try:
+        genai_client = genai.Client(api_key=GOOGLE_API_KEY)
+    except Exception as e:
+        print(f"ERROR: Failed to initialize Google GenAI client in pdf_summarizer_cookies.py: {e}")
 
 # Store cookies here - loaded from env var or file
 TRENDLYNE_COOKIES = {}
@@ -81,11 +86,17 @@ async def summarize_analyst_pdf_async(pdf_url: str) -> str:
         pdf_content = await download_analyst_pdf_with_cookies(pdf_url)
         
         def blocking_gemini_tasks(content):
+            global genai_client
+            if not genai_client:
+                raise ValueError("GenAI client not initialized in pdf_summarizer_cookies.py")
+                
             print("INFO: Uploading PDF to Gemini...")
-            pdf_file = genai.upload_file(
-                path=BytesIO(content),
-                display_name=pdf_url.split('/')[-2] + ".pdf",
-                mime_type="application/pdf"
+            pdf_file = genai_client.files.upload(
+                file=BytesIO(content),
+                config=types.UploadFileConfig(
+                    display_name=pdf_url.split('/')[-2] + ".pdf",
+                    mime_type="application/pdf"
+                )
             )
             
             prompt = """You are an expert financial analyst. Analyze this brokerage research report and provide a comprehensive, well-structured summary.
@@ -207,10 +218,15 @@ Create a table with quarterly/annual financial metrics:
 **IMPORTANT:** Extract ACTUAL numbers from the PDF. If data is not available, write "Not disclosed". Use Indian number format (Crores, Lakhs) and ₹ symbol.
 """
             
-            model = genai.GenerativeModel('gemini-2.5-flash-lite')
-            response = model.generate_content([prompt, pdf_file])
+            response = genai_client.models.generate_content(
+                model='gemini-3-flash-preview', # Standardizing to the model used in handler.py and screens_fetcher
+                contents=[
+                    types.Part.from_text(text=prompt),
+                    pdf_file
+                ]
+            )
             
-            genai.delete_file(pdf_file.name)
+            genai_client.files.delete(name=pdf_file.name)
             return response.text
         
         return await asyncio.to_thread(blocking_gemini_tasks, pdf_content)

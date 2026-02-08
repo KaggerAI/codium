@@ -208,6 +208,40 @@ async def fetch_consolidated_async(ticker: str) -> tuple[dict[str, pd.DataFrame]
 
     return tables, description, top_ratios, is_consolidated
 
+async def fetch_latest_quarter_header_async(ticker: str) -> str:
+    """
+    Fast fetch of the latest quarterly result column header (e.g., 'Dec 2023').
+    Used for cache validity checking.
+    """
+    standalone_url = f"https://www.screener.in/company/{ticker}/"
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(standalone_url, headers=HEADERS, timeout=15.0)
+            if response.status_code != 200:
+                return ""
+            text = response.text
+        except Exception:
+            return ""
+
+    soup = BeautifulSoup(text, 'html.parser')
+    quarters_section = soup.select_one("#quarters")
+    if quarters_section:
+        table_html = quarters_section.select_one(".data-table")
+        if table_html:
+            try:
+                # Use a fast way to get just the headers
+                # pd.read_html can be slow, but for a single small table it's fine
+                # Alternatively, we can just use BeautifulSoup to find the last th
+                headers = table_html.select("th")
+                if headers:
+                    # Filter out empty headers and get the last one
+                    valid_headers = [h.get_text(strip=True) for h in headers if h.get_text(strip=True)]
+                    if valid_headers:
+                        return valid_headers[-1]
+            except Exception as e:
+                print(f"DEBUG: Error parsing quarter header for {ticker}: {e}")
+    return ""
+
 # async def fetch_consolidated_async(ticker: str) -> tuple[dict[str, pd.DataFrame], str]:
 #     """
 #     Fetches financial tables and company description from Screener.in.
@@ -695,19 +729,22 @@ def summarize_presentation_with_gemini(pdf_url: str) -> str:
         log_progress("Uploading PDF to Google AI File Service...")
         mime_type = mimetypes.guess_type(pdf_url)[0] or 'application/pdf'
 
-        # --- FIX STARTS HERE ---
+        # --- FIX: Using the new google-genai SDK syntax (synchronous) ---
+        global genai_client
+        if not genai_client:
+             genai_client = genai.Client(api_key=GOOGLE_API_KEY)
 
-        # --- FIX STARTS HERE (Using the new google-genai SDK syntax) ---
-        pdf_file = genai.upload_file(
-            path=BytesIO(pdf_content),
-            display_name=pdf_url.split('/')[-1],
-            mime_type=mime_type
+        pdf_file = genai_client.files.upload(
+            file=BytesIO(pdf_content),
+            config=types.UploadFileConfig(
+                display_name=pdf_url.split('/')[-1],
+                mime_type=mime_type
+            )
         )
-        # --- FIX ENDS HERE ---
 
         print(f"PDF uploaded successfully as '{pdf_file.name}'.")
 
-        # CHANGED: The prompt is now much more detailed to ensure a comprehensive summary.
+        # Prompt remains the same
         prompt = """
         You are an expert financial data extractor AI. Your task is to perform a forensic-level analysis of the entire provided investor presentation PDF. Leave no stone unturned. Analyze every page of the document.
 
@@ -736,13 +773,20 @@ def summarize_presentation_with_gemini(pdf_url: str) -> str:
         Do not summarize aggressively. The goal is a comprehensive, data-rich extraction of all relevant information from the document.
         """
 
-        log_progress("Calling Gemini 3 Flash to extract insights from Investor Presentation...")
-        model = genai.GenerativeModel('gemini-3-flash-preview') # Using the latest model
-        # model = genai.GenerativeModel('gemini-1.5-flash-latest')
-        response = model.generate_content([prompt, pdf_file])
+        log_progress("Calling Gemini to extract insights from Investor Presentation...")
+        
+        # New SDK generation syntax
+        response = genai_client.models.generate_content(
+            model='gemini-3-flash-preview',
+            contents=[
+                types.Part.from_text(text=prompt),
+                pdf_file
+            ]
+        )
 
-        genai.delete_file(pdf_file.name)
+        genai_client.files.delete(name=pdf_file.name)
         print(f"Cleaned up uploaded file {pdf_file.name}.")
+        return response.text
 
         return response.text
 

@@ -1596,7 +1596,7 @@ def ai_news_chat():
                 try:
                     print(f"INFO: Fetching financial data for {ticker} from screener.in...")
                     # Fetch tables, description, and top ratios
-                    tables, description, top_ratios = await fetch_consolidated_async(ticker)
+                    tables, description, top_ratios, is_consolidated_flag = await fetch_consolidated_async(ticker)
                     
                     # Format into markdown
                     markdown = format_tables_to_markdown(ticker, name, tables)
@@ -3023,7 +3023,8 @@ from screener_fetcher import (
     get_company_id_async,
     fetch_chart_data_async,
     parse_chart_json,
-    fetch_latest_documents_async
+    fetch_latest_documents_async,
+    fetch_latest_quarter_header_async
 )
 
 from scanx_fetcher import scrape_scanx_company_async
@@ -4037,8 +4038,8 @@ def analyze():
     - Use force_refresh=true to bypass cache and get fresh data
     - Cache expires after 1 week (604800 seconds)
     """
-    # 6 hours in seconds
-    STOCK_CACHE_TTL = 21600
+    # 3 months in seconds (90 days * 24 * 3600)
+    STOCK_CACHE_TTL = 7776000
     global last_analysis
     
     try:
@@ -4062,10 +4063,35 @@ def analyze():
                     else:
                         cached_result = cached_blob
                     
+                    # --- NEW: Check for Quarterly Updates ---
+                    try:
+                        # 1. Get current latest quarter from cache
+                        cached_fund = cached_result.get('fundamentals', {})
+                        q_results_json = cached_fund.get('Quarterly Results')
+                        if q_results_json:
+                            # Parse JSON (stored with orient='split' and transposed)
+                            q_data = json.loads(q_results_json)
+                            q_headers = [str(h).strip() for h in q_data.get('index', []) if h and str(h).strip()]
+                            if q_headers:
+                                cached_latest_q = q_headers[-1]
+                                
+                                # 2. Fetch latest quarter from Screener.in live
+                                log_progress(f"Checking for new quarterly results for {tick}...")
+                                live_latest_q = asyncio.run(fetch_latest_quarter_header_async(tick))
+                                
+                                if live_latest_q and live_latest_q != cached_latest_q:
+                                    print(f"INFO: NEW RESULTS FOUND: {cached_latest_q} -> {live_latest_q}. Forcing refresh for {tick}.")
+                                    log_progress(f"New quarterly results ({live_latest_q}) found. Refreshing analysis...")
+                                    force_refresh = True
+                                else:
+                                    print(f"INFO: No new results for {tick} (Latest: {cached_latest_q}).")
+                    except Exception as check_err:
+                        print(f"WARN: Smart refresh check failed for {tick}: {check_err}")
+                    
                     # Check if this is a LIGHT CACHE (only Screener.in + AI Summary)
                     is_light_cache = cached_result.get('light_cache', False)
                     
-                    if is_light_cache:
+                    if is_light_cache and not force_refresh:
                         # ============================================================
                         # LIGHT CACHE HIT: Use cached Screener + AI Summary, fetch only missing data
                         # ============================================================
@@ -4471,7 +4497,7 @@ def analyze():
                             traceback.print_exc()
                             # Fall through to full analysis below
                     
-                    else:
+                    elif not force_refresh:
                         # FULL CACHE HIT: Return immediately
                         print(f"FULL CACHE HIT: Returning cached analysis for {tick}")
                         log_progress(f"Cache hit for {tick} - returning instantly!")
@@ -5634,7 +5660,7 @@ def run_batch_precache(job_id, tickers):
                 from screener_fetcher import fetch_consolidated, fetch_latest_documents
                 
                 # Fetch tables (returns dict of DataFrames), company description, and top ratios
-                tables_from_screener, company_description, top_ratios = fetch_consolidated(ticker)
+                tables_from_screener, company_description, top_ratios, is_consolidated_screener = fetch_consolidated(ticker)
                 
                 # Parse the fundamentals - convert DataFrames to JSON for frontend
                 fund_data_for_frontend = {}
@@ -5701,6 +5727,7 @@ def run_batch_precache(job_id, tickers):
                 'cached_at': datetime.now().isoformat(),
                 'from_cache': False,
                 'light_cache': True,  # Flag to indicate this is a light cache
+                'is_consolidated': is_consolidated_screener,
                 # Empty placeholders for full analysis data
                 'summary': [],
                 'chart_close_json': None,

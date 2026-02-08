@@ -1584,6 +1584,10 @@
       transition: all 0.5s ease-in-out;
     }
 
+    .main-content.expanded {
+      max-width: 1600px;
+    }
+
     .chat-sidebar {
       width: 420px;
       position: sticky;
@@ -1897,7 +1901,7 @@
   <!-- MAIN (Larger max-width to accommodate sidebar) -->
   <main class="mx-auto mt-8 mb-12 px-4 w-full" style="max-width: 1600px;">
     <div class="app-layout">
-      <div class="main-content">
+      <div class="main-content expanded">
         <!-- Main Search Card (Company/Industry Toggle) -->
         <div id="searchCard"
           class="bg-white p-8 rounded-xl shadow-lg w-full mb-12 theme-transition border border-slate-100">
@@ -5134,15 +5138,18 @@
       if (!chatSidebar) return;
       const isCollapsed = chatSidebar.classList.contains('collapsed');
       const shouldShow = force !== null ? force : isCollapsed;
+      const mainContent = document.querySelector('.main-content');
 
       if (shouldShow) {
         chatSidebar.classList.remove('collapsed');
         chatSidebar.classList.add('active');
+        if (mainContent) mainContent.classList.remove('expanded');
         chatBtn.classList.add('opacity-0', 'pointer-events-none');
         setTimeout(() => chatInput.focus(), 400);
       } else {
         chatSidebar.classList.add('collapsed');
         chatSidebar.classList.remove('active');
+        if (mainContent) mainContent.classList.add('expanded');
         chatBtn.classList.remove('opacity-0', 'pointer-events-none');
       }
     }
