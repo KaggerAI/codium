@@ -62,9 +62,10 @@ class Data:
                 if label == "PE Ratio" and 'PE' in df.columns:
                     print(f"DEBUG: Found PE Ratio data with {len(df)} rows")
                     processed_dfs.append(df[['PE']])
-                elif label == "PB Ratio" and 'Price to BV' in df.columns:
+                elif label == "PB Ratio" and any(c in df.columns for c in ['Price to BV', 'Price to book value']):
                     print(f"DEBUG: Found PB Ratio data with {len(df)} rows")
-                    df_pb = df[['Price to BV']].rename(columns={'Price to BV': 'PB'})
+                    pb_col = 'Price to BV' if 'Price to BV' in df.columns else 'Price to book value'
+                    df_pb = df[[pb_col]].rename(columns={pb_col: 'PB'})
                     processed_dfs.append(df_pb)
                 elif label == "EV / EBITDA" and 'EV / EBITDA' in df.columns:
                     print(f"DEBUG: Found EV/EBITDA data with {len(df)} rows")

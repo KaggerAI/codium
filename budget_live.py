@@ -22,8 +22,9 @@ from datetime import datetime
 import traceback
 from io import BytesIO
 
-# Standard Gemini API
-import google.generativeai as genai
+# Standard Gemini API (New v1.0 SDK)
+from google import genai
+from google.genai import types
 
 # Configuration
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
@@ -31,8 +32,12 @@ TRANSCRIPTION_MODEL = "gemini-3-flash-preview"
 ANALYSIS_MODEL = "gemini-3-flash-preview"
 
 # Configure Gemini on module load
+genai_client = None
 if GOOGLE_API_KEY:
-    genai.configure(api_key=GOOGLE_API_KEY)
+    try:
+        genai_client = genai.Client(api_key=GOOGLE_API_KEY)
+    except Exception as e:
+        print(f"ERROR: Failed to initialize Gemini client in budget_live: {e}")
 
 # Budget-specific system instruction for better context
 BUDGET_SYSTEM_INSTRUCTION = """You are an expert Indian financial analyst specializing in conducting analysis of the 2026 Union Budget of India.
@@ -109,11 +114,7 @@ class BudgetLiveSession:
             raise RuntimeError("GOOGLE_API_KEY environment variable not set")
         
         try:
-            genai.configure(api_key=GOOGLE_API_KEY)
-            self.model = genai.GenerativeModel(
-                TRANSCRIPTION_MODEL,
-                system_instruction=BUDGET_SYSTEM_INSTRUCTION
-            )
+            # Note: client is now global to the module
             self.is_active = True
             self.start_time = datetime.now()
             print(f"INFO: Budget Live session {self.session_id} started at {self.start_time}")
@@ -166,19 +167,24 @@ class BudgetLiveSession:
                 }
             }
             
-            # Use gemini-3-flash-preview which has better audio support
-            transcription_model = genai.GenerativeModel(TRANSCRIPTION_MODEL)
-            
-            # Audio-first prompt with explicit instruction
-            response = transcription_model.generate_content(
-                [
-                    audio_part,  # Audio first!
-                    "Listen to this audio and transcribe the spoken words verbatim. "
-                    "This is from an Indian government budget speech. "
-                    "Output ONLY the transcription - no explanations or commentary. "
-                    "If silent or unclear, say [SILENCE] or [UNCLEAR]."
+            # Use the new SDK for audio transcription
+            global genai_client
+            if not genai_client:
+                raise ValueError("GenAI client not initialized")
+                
+            response = genai_client.models.generate_content(
+                model=TRANSCRIPTION_MODEL,
+                contents=[
+                    types.Part.from_bytes(data=audio_data, mime_type=clean_mime_type),
+                    types.Part.from_text(text=(
+                        "Listen to this audio and transcribe the spoken words verbatim. "
+                        "This is from an Indian government budget speech. "
+                        "Output ONLY the transcription - no explanations or commentary. "
+                        "If silent or unclear, say [SILENCE] or [UNCLEAR]."
+                    ))
                 ],
-                generation_config=genai.types.GenerationConfig(
+                config=types.GenerateContentConfig(
+                    system_instruction=BUDGET_SYSTEM_INSTRUCTION,
                     temperature=0.0,
                     max_output_tokens=1500
                 )
@@ -280,13 +286,15 @@ Extract and return as a single JSON object (Be extremely thorough, identify at l
 {f"Analyze the entire text and extract ALL significant announcements (up to 25 key highlights)." if full_scan else "Only include NEW information not already covered. If nothing significant, return empty arrays/objects."}
 """
             
-            analysis_model = genai.GenerativeModel(
-                ANALYSIS_MODEL,
-                system_instruction=BUDGET_SYSTEM_INSTRUCTION
-            )
-            response = analysis_model.generate_content(
-                analysis_prompt,
-                generation_config=genai.types.GenerationConfig(
+            global genai_client
+            if not genai_client:
+                return False
+
+            response = genai_client.models.generate_content(
+                model=ANALYSIS_MODEL,
+                contents=analysis_prompt,
+                config=types.GenerateContentConfig(
+                    system_instruction=BUDGET_SYSTEM_INSTRUCTION,
                     temperature=0.3,
                     response_mime_type="application/json"
                 )
@@ -441,20 +449,17 @@ def transcribe_audio_simple(audio_bytes: bytes, mime_type: str = "audio/webm") -
         return "[No API key configured]"
     
     try:
-        genai.configure(api_key=GOOGLE_API_KEY)
-        model = genai.GenerativeModel(TRANSCRIPTION_MODEL)
-        
-        audio_part = {
-            "inline_data": {
-                "mime_type": mime_type,
-                "data": base64.b64encode(audio_bytes).decode('utf-8')
-            }
-        }
-        
-        response = model.generate_content([
-            "Transcribe this audio accurately. Output only the spoken words.",
-            audio_part
-        ])
+        global genai_client
+        if not genai_client:
+            return "[Client not initialized]"
+            
+        response = genai_client.models.generate_content(
+            model=TRANSCRIPTION_MODEL,
+            contents=[
+                types.Part.from_bytes(data=audio_bytes, mime_type=mime_type),
+                types.Part.from_text(text="Transcribe this audio accurately. Output only the spoken words.")
+            ]
+        )
         
         return response.text if response.text else ""
         
@@ -481,45 +486,14 @@ def analyze_budget_text(text: str) -> Dict[str, Any]:
         return {"error": "No API key configured"}
     
     try:
-        genai.configure(api_key=GOOGLE_API_KEY)
-        model = genai.GenerativeModel(ANALYSIS_MODEL)
-        
-        prompt = f"""Analyze this Union Budget 2026 speech excerpt comprehensively.
-
-BUDGET SPEECH TEXT:
-{text}
-
-Provide a detailed analysis in JSON format with these sections:
-
-1. "summary": A 2-3 sentence executive summary of the key themes
-
-2. "highlights": Array of 5-10 most important announcements, each with:
-   - "category": "tax", "sector", "scheme", "fiscal", or "infrastructure"
-   - "title": Brief descriptive title
-   - "details": Specific details including numbers/amounts
-   - "impact": "positive", "negative", or "neutral" for markets
-   - "sectors_affected": List of affected stock market sectors
-
-3. "tax_changes": Object with:
-   - "income_tax": Any changes to income tax slabs
-   - "corporate_tax": Corporate tax changes
-   - "gst": GST-related announcements
-   - "customs_duty": Import/export duty changes
-   - "other": Any other tax measures
-
-4. "sector_allocations": Object mapping sectors to their budget allocation details
-
-5. "sector_impacts": Object mapping stock market sectors to:
-   - "impact_type": "positive", "negative", "neutral", or "mixed"
-   - "summary": Why this sector is affected
-   - "stocks_to_watch": Types of companies that may benefit/suffer
-
-6. "fiscal_outlook": Object with deficit targets, growth projections, borrowing plans
-"""
-        
-        response = model.generate_content(
-            prompt,
-            generation_config=genai.types.GenerationConfig(
+        global genai_client
+        if not genai_client:
+            return {"error": "Client not initialized"}
+            
+        response = genai_client.models.generate_content(
+            model=ANALYSIS_MODEL,
+            contents=prompt,
+            config=types.GenerateContentConfig(
                 temperature=0.2,
                 response_mime_type="application/json"
             )

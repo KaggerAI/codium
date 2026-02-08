@@ -1,0 +1,275 @@
+﻿<h1>Full Schema of `last_analysis` for Ticker: INOXWIND</h1>
+<pre>
+
+<strong>last_analysis (type: dict)</strong>
+
+  <strong>Key: "ticker"</strong>
+    Type: str
+    Value: "INOXWIND"
+
+  <strong>Key: "company_name"</strong>
+    Type: str
+    Value: "Inox Wind Limited"
+
+  <strong>Key: "summary"</strong>
+    Type: list of 11 summary items (key-value pairs)
+    Content (all items):
+      Item 0: { "key": "Current Price", "value": "106.40" }
+      Item 1: { "key": "Price-Action Trend (based on Close prices)", "value": "Sideways (HH, LL)" }
+      Item 2: { "key": "Price-Action Trend (based on High/Low prices)", "value": "Downtrend (LH, LL)" }
+      Item 3: { "key": "Trend Strength (based on Fibonacci retracement)", "value": "Not Applicable" }
+      Item 4: { "key": "Market Structure (based on EMA Stack)", "value": "Downtrend (EMA13 < EMA55 < EMA144)" }
+      Item 5: { "key": "Market Sentiment (based on RSI)", "value": "Bearish (RSI: 40.21)" }
+      Item 6: { "key": "Hidden Trend Divergence (based on RSI)", "value": "No Divergence" }
+      Item 7: { "key": "Relative Strength vs Nifty", "value": "Negative" }
+      Item 8: { "key": "Accumulating or Distributing (based on Volume)", "value": "Distributing" }
+      Item 9: { "key": "Support Zone", "value": "62.86 – 65.14" }
+      Item 10: { "key": "Resistance Zone", "value": "111.09 – 118.16" }
+
+  <strong>Key: "fundamentals"</strong>
+    Type: dict of 6 fundamental tables
+    Content (all tables, metric names, and period headers):
+
+      <strong>Table: "Quarterly Results"</strong>
+        - Contains 12 rows (metrics).
+        - All Available Period Column Headers in this table: ["Dec 2022", "Dec 2023", "Dec 2024", "Jun 2023", "Jun 2024", "Jun 2025", "Mar 2023", "Mar 2024", "Mar 2025", "Sep 2022", "Sep 2023", "Sep 2024", "Sep 2025"]
+        - Metric Names (from '""' key) and example first period value:
+          - Metric: "Sales" (Example from 'Dec 2022': "226")
+          - Metric: "Expenses" (Example from 'Dec 2022': "402")
+          - Metric: "Operating Profit" (Example from 'Dec 2022': "-175")
+          - Metric: "OPM %" (Example from 'Dec 2022': "-78%")
+          - Metric: "Other Income" (Example from 'Dec 2022': "3")
+          - Metric: "Interest" (Example from 'Dec 2022': "94")
+          - Metric: "Depreciation" (Example from 'Dec 2022': "26")
+          - Metric: "Profit before tax" (Example from 'Dec 2022': "-293")
+          - Metric: "Tax %" (Example from 'Dec 2022': "-2%")
+          - Metric: "Net Profit" (Example from 'Dec 2022': "-288")
+          - Metric: "EPS in Rs" (Example from 'Dec 2022': "-2.43")
+          - Metric: "Raw PDF" (Example from 'Dec 2022': NaN)
+
+      <strong>Table: "Annual Results"</strong>
+        - Contains 12 rows (metrics).
+        - All Available Period Column Headers in this table: ["Mar 2014", "Mar 2015", "Mar 2016", "Mar 2017", "Mar 2018", "Mar 2019", "Mar 2020", "Mar 2021", "Mar 2022", "Mar 2023", "Mar 2024", "Mar 2025", "TTM"]
+        - Metric Names (from '""' key) and example first period value:
+          - Metric: "Sales" (Example from 'Mar 2014': "1567")
+          - Metric: "Expenses" (Example from 'Mar 2014': "1391")
+          - Metric: "Operating Profit" (Example from 'Mar 2014': "176")
+          - Metric: "OPM %" (Example from 'Mar 2014': "11%")
+          - Metric: "Other Income" (Example from 'Mar 2014': "9")
+          - Metric: "Interest" (Example from 'Mar 2014': "46")
+          - Metric: "Depreciation" (Example from 'Mar 2014': "12")
+          - Metric: "Profit before tax" (Example from 'Mar 2014': "128")
+          - Metric: "Tax %" (Example from 'Mar 2014': "-4%")
+          - Metric: "Net Profit" (Example from 'Mar 2014': "132")
+          - Metric: "EPS in Rs" (Example from 'Mar 2014': "1.55")
+          - Metric: "Dividend Payout %" (Example from 'Mar 2014': "0%")
+
+      <strong>Table: "Balance Sheet"</strong>
+        - Contains 10 rows (metrics).
+        - All Available Period Column Headers in this table: ["Mar 2014", "Mar 2015", "Mar 2016", "Mar 2017", "Mar 2018", "Mar 2019", "Mar 2020", "Mar 2021", "Mar 2022", "Mar 2023", "Mar 2024", "Mar 2025", "Sep 2025"]
+        - Metric Names (from '""' key) and example first period value:
+          - Metric: "Equity Capital" (Example from 'Mar 2014': 200)
+          - Metric: "Reserves" (Example from 'Mar 2014': 228)
+          - Metric: "Borrowings" (Example from 'Mar 2014': 557)
+          - Metric: "Other Liabilities" (Example from 'Mar 2014': 495)
+          - Metric: "Total Liabilities" (Example from 'Mar 2014': 1480)
+          - Metric: "Fixed Assets" (Example from 'Mar 2014': 174)
+          - Metric: "CWIP" (Example from 'Mar 2014': 25)
+          - Metric: "Investments" (Example from 'Mar 2014': 45)
+          - Metric: "Other Assets" (Example from 'Mar 2014': 1235)
+          - Metric: "Total Assets" (Example from 'Mar 2014': 1480)
+
+      <strong>Table: "Cash Flow"</strong>
+        - Contains 4 rows (metrics).
+        - All Available Period Column Headers in this table: ["Mar 2014", "Mar 2015", "Mar 2016", "Mar 2017", "Mar 2018", "Mar 2019", "Mar 2020", "Mar 2021", "Mar 2022", "Mar 2023", "Mar 2024", "Mar 2025"]
+        - Metric Names (from '""' key) and example first period value:
+          - Metric: "Cash from Operating Activity" (Example from 'Mar 2014': -76)
+          - Metric: "Cash from Investing Activity" (Example from 'Mar 2014': -44)
+          - Metric: "Cash from Financing Activity" (Example from 'Mar 2014': 120)
+          - Metric: "Net Cash Flow" (Example from 'Mar 2014': 0)
+
+      <strong>Table: "Financial Ratios"</strong>
+        - Contains 6 rows (metrics).
+        - All Available Period Column Headers in this table: ["Mar 2014", "Mar 2015", "Mar 2016", "Mar 2017", "Mar 2018", "Mar 2019", "Mar 2020", "Mar 2021", "Mar 2022", "Mar 2023", "Mar 2024", "Mar 2025"]
+        - Metric Names (from '""' key) and example first period value:
+          - Metric: "Debtor Days" (Example from 'Mar 2014': "165")
+          - Metric: "Inventory Days" (Example from 'Mar 2014': "105")
+          - Metric: "Days Payable" (Example from 'Mar 2014': "164")
+          - Metric: "Cash Conversion Cycle" (Example from 'Mar 2014': "107")
+          - Metric: "Working Capital Days" (Example from 'Mar 2014': "35")
+          - Metric: "ROCE %" (Example from 'Mar 2014': "21%")
+
+      <strong>Table: "Quarterly Shareholding Pattern"</strong>
+        - Contains 5 rows (metrics).
+        - All Available Period Column Headers in this table: ["Dec 2023", "Dec 2024", "Dec 2025", "Jun 2023", "Jun 2024", "Jun 2025", "Mar 2023", "Mar 2024", "Mar 2025", "Sep 2023", "Sep 2024", "Sep 2025"]
+        - Metric Names (from '""' key) and example first period value:
+          - Metric: "Promoters" (Example from 'Dec 2023': "52.87%")
+          - Metric: "FIIs" (Example from 'Dec 2023': "9.49%")
+          - Metric: "DIIs" (Example from 'Dec 2023': "9.88%")
+          - Metric: "Public" (Example from 'Dec 2023': "27.76%")
+          - Metric: "No. of Shareholders" (Example from 'Dec 2023': "87902")
+
+  <strong>Key: "valuation_and_margin_data"</strong>
+    Type: dict of 5 time series
+    Content (all series names and fields of first data point):
+
+      <strong>Series: "PE Ratio"</strong>
+        - Contains 2690 data points.
+        - Fields in first data point: ["index", "PE"]
+        - Example first data point: {"index": "2015-04-10", "PE": 32.3}
+
+      <strong>Series: "PB Ratio"</strong>
+        - Contains 2690 data points.
+        - Fields in first data point: ["index", "Price to BV"]
+        - Example first data point: {"index": "2015-04-10", "Price to BV": 5.4}
+
+      <strong>Series: "EV / EBITDA"</strong>
+        - Contains 2690 data points.
+        - Fields in first data point: ["index", "EV / EBITDA"]
+        - Example first data point: {"index": "2015-04-10", "EV / EBITDA": 22.9}
+
+      <strong>Series: "Market Cap / Sales"</strong>
+        - Contains 2690 data points.
+        - Fields in first data point: ["index", "Market Cap / Sales"]
+        - Example first data point: {"index": "2015-04-10", "Market Cap / Sales": 3.8}
+
+      <strong>Series: "Margins"</strong>
+        - Contains 2845 data points.
+        - Fields in first data point: ["index", "GPM %", "OPM %", "NPM %"]
+        - Example first data point: {"index": "2014-03-31", "GPM %": 47.66, "OPM %": 7.91, "NPM %": 6.67}
+
+  <strong>Key: "documents"</strong>
+    Type: list
+    Value: list of 2 dicts
+
+  <strong>Key: "technical_data_df"</strong>
+    Type: DataFrame
+    Value: object (repr:                   symbol        Open        High  ...           ADL       ADL_EMA  ADL_EMA_Slope
+datetime                                          ...                                           
+2021-02-08  NSE:INOXWIND   16.388725   16.635172  ... -2.200473e+04           NaN            NaN
+2021-02-09  NSE:INOXWIND   16.635172   16.721428  ... -1.256883e+05           NaN            NaN
+2021-02-10  NSE:INOXWIND   16.610528   16.832331  ... -2.488539e+05           NaN            NaN
+2021-02-11  NSE:INOXWIND   16.659817   18.113854  ...  1.522293e+06           NaN            NaN
+2021-02-12  NSE:INOXWIND   18.187789   18.187789  ...  1.736867e+06           NaN            NaN
+...                  ...         ...         ...  ...           ...           ...            ...
+2026-02-02  NSE:INOXWIND  104.300000  105.180000  ... -2.359439e+07  2.649084e+06  -1.047000e+06
+2026-02-03  NSE:INOXWIND  108.980000  110.270000  ... -2.984884e+07  1.488443e+06  -1.084324e+06
+2026-02-04  NSE:INOXWIND  105.950000  110.890000  ... -2.377135e+07  5.863077e+05  -1.011585e+06
+2026-02-05  NSE:INOXWIND  109.820000  110.250000  ... -2.859190e+07 -4.557711e+05  -1.034952e+06
+2026-02-06  NSE:INOXWIND  106.010000  106.760000  ... -2.393767e+07 -1.294411e+06  -9.276179e+05
+
+[1241 rows x 16 columns])
+
+  <strong>Key: "peer_comparison"</strong>
+    Type: list of 8 peers
+    Content (all peers with details):
+\n      <strong>Peer 1: A B B</strong>
+        - name: "A B B"
+        - cmp: "5816.0"
+        - pe_ratio: "69.75"
+        - market_cap: "123245.91"
+        - dividend_yield: "0.76"
+        - np_qtr: "409.04"
+        - sales_qtr: "3310.72"
+        - sales_growth_yoy: "13.69"
+        - roce: "38.65"
+        - npm: "12.36"
+\n      <strong>Peer 2: Siemens</strong>
+        - name: "Siemens"
+        - cmp: "3176.2"
+        - pe_ratio: "69.16"
+        - market_cap: "113110.99"
+        - dividend_yield: "0.38"
+        - np_qtr: "277.8"
+        - sales_qtr: "3830.7"
+        - sales_growth_yoy: "14.01"
+        - roce: "15.83"
+        - npm: "7.25"
+\n      <strong>Peer 3: CG Power & Ind</strong>
+        - name: "CG Power & Ind"
+        - cmp: "674.85"
+        - pe_ratio: "95.51"
+        - market_cap: "106281.63"
+        - dividend_yield: "0.19"
+        - np_qtr: "283.91"
+        - sales_qtr: "3175.35"
+        - sales_growth_yoy: "26.22"
+        - roce: "37.48"
+        - npm: "8.94"
+\n      <strong>Peer 4: Siemens Ener.Ind</strong>
+        - name: "Siemens Ener.Ind"
+        - cmp: "2740.6"
+        - pe_ratio: "88.28"
+        - market_cap: "97598.39"
+        - dividend_yield: "0.15"
+        - np_qtr: "359.6"
+        - sales_qtr: "2645.7"
+        - sales_growth_yoy: "N/A"
+        - roce: "38.99"
+        - npm: "13.59"
+\n      <strong>Peer 5: Hitachi Energy</strong>
+        - name: "Hitachi Energy"
+        - cmp: "21871.0"
+        - pe_ratio: "110.52"
+        - market_cap: "97484.22"
+        - dividend_yield: "0.03"
+        - np_qtr: "261.42"
+        - sales_qtr: "2082.21"
+        - sales_growth_yoy: "28.51"
+        - roce: "19.44"
+        - npm: "12.55"
+\n      <strong>Peer 6: B H E L</strong>
+        - name: "B H E L"
+        - cmp: "266.6"
+        - pe_ratio: "114.01"
+        - market_cap: "92831.81"
+        - dividend_yield: "0.19"
+        - np_qtr: "390.4"
+        - sales_qtr: "8473.1"
+        - sales_growth_yoy: "16.44"
+        - roce: "4.87"
+        - npm: "4.61"
+\n      <strong>Peer 7: GE Vernova T&D</strong>
+        - name: "GE Vernova T&D"
+        - cmp: "3552.2"
+        - pe_ratio: "81.39"
+        - market_cap: "90954.08"
+        - dividend_yield: "0.14"
+        - np_qtr: "290.8"
+        - sales_qtr: "1700.64"
+        - sales_growth_yoy: "58.4"
+        - roce: "54.74"
+        - npm: "17.10"
+\n      <strong>Peer 8: Median: 39 Co.</strong>
+        - name: "Median: 39 Co."
+        - cmp: "497.2"
+        - pe_ratio: "38.08"
+        - market_cap: "6256.69"
+        - dividend_yield: "0.03"
+        - np_qtr: "50.17"
+        - sales_qtr: "471.82"
+        - sales_growth_yoy: "28.51"
+        - roce: "27.97"
+        - npm: "10.63"
+
+  <strong>Key: "key_metrics"</strong>
+    Type: dict with 13 key metrics
+    Content (all key-value pairs):
+      - market_cap: "18,388"
+      - cmp: "106.4"
+      - current_price: "106"
+      - pe_ratio: "36.1"
+      - pb_ratio: "2.09"
+      - dividend_yield: "0.00%"
+      - roce: "11.5%"
+      - roe: "11.7%"
+      - sales_growth_yoy: "+52.7%"
+      - ebitda_growth_yoy: "+37.3%"
+      - npm: "10.81 %"
+      - industry: "Specialty Industrial Machinery"
+      - sector: "Industrials"
+
+  <strong>Key: "is_consolidated"</strong>
+    Type: bool
+    Value: true
+</pre>

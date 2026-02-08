@@ -14,7 +14,8 @@ import traceback
 import re
 import os
 import mimetypes
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 from progress_logger import log_progress
 import httpx
 import asyncio
@@ -25,16 +26,21 @@ from difflib import SequenceMatcher  # For fuzzy name matching in peer compariso
 # import os
 # import openai
 
-# --- Gemini API Configuration ---
-# NOTE: Ensure GOOGLE_API_KEY is set as an environment variable
+# --- Gemini API Configuration (New v1.0 SDK) ---
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+genai_client = None
 if GOOGLE_API_KEY:
-    genai.api_key=GOOGLE_API_KEY
+    try:
+        genai_client = genai.Client(api_key=GOOGLE_API_KEY)
+        print("INFO: (screener_fetcher) Google GenAI client initialized.")
+    except Exception as e:
+        print(f"ERROR: (screener_fetcher) Failed to initialize Google GenAI client: {e}")
 else:
     print("WARN: GOOGLE_API_KEY environment variable not set. AI-powered PDF presentation analysis will be disabled.")
 
 # --- Constants related to Screener.in ---
 BASE_URL = "https://www.screener.in/company/{ticker}/consolidated/"
+
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 LABELS = {
     1: "Quarterly Results",
@@ -95,7 +101,7 @@ def clean_df(df: pd.DataFrame) -> pd.DataFrame:
         df.index = df.index.astype(str).str.strip().str.replace("+", "", regex=False)
     return df
 
-async def fetch_consolidated_async(ticker: str) -> tuple[dict[str, pd.DataFrame], str]:
+async def fetch_consolidated_async(ticker: str) -> tuple[dict[str, pd.DataFrame], str, dict, bool]:
     """
     Fetches financial tables using a robust, two-stage hybrid approach.
     
@@ -113,6 +119,7 @@ async def fetch_consolidated_async(ticker: str) -> tuple[dict[str, pd.DataFrame]
       it finds each table by its specific HTML ID ('#quarters', '#profit-loss'),
       ensuring accuracy.
     """
+    is_consolidated = False
     standalone_url = f"https://www.screener.in/company/{ticker}/"
     consolidated_url = standalone_url + "consolidated/"
     
@@ -126,6 +133,11 @@ async def fetch_consolidated_async(ticker: str) -> tuple[dict[str, pd.DataFrame]
         except httpx.HTTPStatusError:
             log_progress(f"Consolidated URL not found for {ticker}. Proceeding to fallback.")
             text = "" # Ensure text is empty to trigger the fallback logic
+        
+        if text:
+            # Check if this is indeed a consolidated page by looking for the /consolidated/ suffix 
+            # or examining content if needed, but the URL itself is the best indicator if it didn't 404.
+            is_consolidated = True
 
     soup = BeautifulSoup(text, 'html.parser')
 
@@ -147,6 +159,10 @@ async def fetch_consolidated_async(ticker: str) -> tuple[dict[str, pd.DataFrame]
                 await browser.close()
         # Re-parse the soup object with the complete, JS-rendered HTML
         soup = BeautifulSoup(text, 'html.parser')
+        # Even if we used standalone_url as fallback, it might have auto-redirected or 
+        # rendered consolidated tables if that was the last preference.
+        # But usually, reaching STAGE 2 means we are on standalone.
+        is_consolidated = "/consolidated/" in text or False 
 
     # --- NEW ROBUST PARSING LOGIC ---
     tables = {}
@@ -190,7 +206,7 @@ async def fetch_consolidated_async(ticker: str) -> tuple[dict[str, pd.DataFrame]
     # The old "Growth Patterns" came from tables we are no longer using.
     # The primary financial tables are the priority and are now correctly fetched.
 
-    return tables, description, top_ratios
+    return tables, description, top_ratios, is_consolidated
 
 # async def fetch_consolidated_async(ticker: str) -> tuple[dict[str, pd.DataFrame], str]:
 #     """
@@ -254,13 +270,15 @@ async def fetch_consolidated_async(ticker: str) -> tuple[dict[str, pd.DataFrame]
 #         tables["Growth Patterns"] = merged
 #     return tables, description
 
-def fetch_consolidated(ticker: str) -> tuple[dict[str, pd.DataFrame], str, dict]:
+def fetch_consolidated(ticker: str) -> tuple[dict[str, pd.DataFrame], str, dict, bool]:
+    is_consolidated = False
     
     url = BASE_URL.format(ticker=ticker)
     response = requests.get(url, headers=HEADERS)
     response.raise_for_status()
     text = response.text
     soup = BeautifulSoup(text, 'html.parser')
+    is_consolidated = "/consolidated/" in response.url
 
     # --- Description scraping ---
     description = ""
@@ -298,7 +316,7 @@ def fetch_consolidated(ticker: str) -> tuple[dict[str, pd.DataFrame], str, dict]
         merged.index.name = ""
         tables["Growth Patterns"] = merged
 
-    return tables, description, top_ratios
+    return tables, description, top_ratios, is_consolidated
 
 async def get_company_id_async(ticker: str) -> int:
     url = "https://www.screener.in/api/company/search/"
@@ -318,15 +336,21 @@ def get_company_id(ticker: str) -> int:
         raise ValueError(f"No company found for ticker '{ticker}'")
     return data[0]["id"]
 
-async def fetch_chart_data_async(client: httpx.AsyncClient, company_id: int, query: str, days: int = 10000) -> dict:
+async def fetch_chart_data_async(client: httpx.AsyncClient, company_id: int, query: str, days: int = 10000, consolidated: bool = False) -> dict:
     url = f"https://www.screener.in/api/company/{company_id}/chart/"
-    resp = await client.get(url, params={"q": query, "days": days}, timeout=30.0)
+    params = {"q": query, "days": days}
+    if consolidated:
+        params["consolidated"] = 1
+    resp = await client.get(url, params=params, timeout=30.0)
     resp.raise_for_status()
     return resp.json()
 
-def fetch_chart_data(company_id: int, query: str, days: int = 10000) -> dict:
+def fetch_chart_data(company_id: int, query: str, days: int = 10000, consolidated: bool = False) -> dict:
     url = f"https://www.screener.in/api/company/{company_id}/chart/"
-    resp = requests.get(url, params={"q": query, "days": days})
+    params = {"q": query, "days": days}
+    if consolidated:
+        params["consolidated"] = 1
+    resp = requests.get(url, params=params)
     resp.raise_for_status()
     return resp.json()
 
@@ -395,12 +419,20 @@ def parse_chart_json(chart_json: dict) -> pd.DataFrame:
     return interpolated_df
 
 async def get_text_from_pdf_url_async(pdf_url: str, max_pages_to_process=75, max_chars_to_return=20000) -> str:
+    """
+    Downloads a PDF and extracts text. Uses pdfplumber first, then falls back to
+    Gemini Vision for scanned PDFs (images instead of selectable text).
+    """
+    MIN_TEXT_THRESHOLD = 500  # If less than this, assume scanned PDF
+    
     try:
-        async with httpx.AsyncClient(follow_redirects=True) as client:
+        # NOTE: verify=False for corporate IR sites with SSL cert issues
+        async with httpx.AsyncClient(follow_redirects=True, verify=False) as client:
             response = await client.get(pdf_url, headers=HEADERS, timeout=45.0)
             response.raise_for_status()
         
-        pdf_file = BytesIO(response.content)
+        pdf_content = response.content
+        pdf_file = BytesIO(pdf_content)
 
         def blocking_pdf_extraction():
             all_text = []
@@ -420,10 +452,92 @@ async def get_text_from_pdf_url_async(pdf_url: str, max_pages_to_process=75, max
             full_summary = "\n".join(all_text)
             return full_summary[:max_chars_to_return]
 
-        return await asyncio.to_thread(blocking_pdf_extraction)
+        extracted_text = await asyncio.to_thread(blocking_pdf_extraction)
+        
+        # Check if we got enough text - if not, it's likely a scanned PDF
+        if extracted_text and len(extracted_text.strip()) >= MIN_TEXT_THRESHOLD:
+            return extracted_text
+        
+        # =====================================================================
+        # FALLBACK: Use Gemini Vision for OCR on scanned PDFs
+        # =====================================================================
+        print(f"INFO: pdfplumber extracted only {len(extracted_text.strip()) if extracted_text else 0} chars. Falling back to Gemini OCR for {pdf_url}...")
+        
+        if not GOOGLE_API_KEY:
+            print("WARN: Gemini OCR fallback unavailable - no Google API Key configured")
+            return extracted_text  # Return whatever we got
+        
+        gemini_text = await _extract_concall_with_gemini_async(pdf_content, pdf_url)
+        if gemini_text and not gemini_text.startswith("Error:"):
+            return gemini_text[:max_chars_to_return]
+        
+        # If Gemini also failed, return the original pdfplumber result
+        return extracted_text
+        
     except Exception as e:
         print(f"ERROR (async): Failed to get text from PDF URL {pdf_url}. Reason: {e}")
         return None
+
+
+async def _extract_concall_with_gemini_async(pdf_content: bytes, pdf_url: str) -> str:
+    """
+    Uses Gemini Vision to OCR a scanned PDF concall transcript.
+    This is a fallback when pdfplumber can't extract text (image-based PDF).
+    """
+    try:
+        def blocking_gemini_ocr(content):
+            global genai_client
+            if not genai_client:
+                raise ValueError("GenAI client not initialized")
+                
+            log_progress("Using Gemini Vision to OCR scanned concall transcript...")
+            
+            # Use the new SDK file upload
+            pdf_file = genai_client.files.upload(
+                file=BytesIO(content),
+                config=types.UploadFileConfig(
+                    display_name=pdf_url.split('/')[-1],
+                    mime_type='application/pdf'
+                )
+            )
+            print(f"PDF uploaded for OCR as '{pdf_file.name}'.")
+
+            prompt = """You are an OCR and transcription specialist. This PDF contains a scanned earnings call transcript that cannot be read by standard text extraction tools because it's image-based.
+
+Your task:
+1. OCR all the text visible in this document
+2. Extract the full conversation between the moderator, management, and analysts
+3. Focus on the Question & Answer session if present
+4. Preserve the speaker attributions (who said what)
+5. Output the transcript as plain text, maintaining the natural conversation flow
+
+DO NOT summarize or analyze - just extract the raw text/transcript content as accurately as possible.
+If there are multiple pages, extract text from all of them.
+Return ONLY the extracted transcript text, nothing else."""
+
+            # New SDK generation syntax
+            response = genai_client.models.generate_content(
+                model='gemini-3-flash-preview',
+                contents=[
+                    types.Part.from_text(text=prompt),
+                    pdf_file
+                ]
+            )
+            
+            # Clean up uploaded file
+            genai_client.files.delete(name=pdf_file.name)
+            print(f"Cleaned up OCR file {pdf_file.name}.")
+            
+            return response.text
+
+        return await asyncio.to_thread(blocking_gemini_ocr, pdf_content)
+        
+    except Exception as e:
+        print(f"ERROR: Gemini OCR fallback failed for {pdf_url}: {e}")
+        traceback.print_exc()
+        return f"Error: Gemini OCR failed - {e}"
+
+
 
 def get_text_from_pdf_url(pdf_url: str, max_pages_to_process=75, max_chars_to_return=20000) -> str:
     """
@@ -478,7 +592,9 @@ async def summarize_presentation_with_gemini_async(pdf_url: str) -> str:
 
     try:
         # Step 1: Download the PDF content asynchronously (this part is fast and safe)
-        async with httpx.AsyncClient(follow_redirects=True) as client:
+        # NOTE: verify=False bypasses SSL cert verification for corporate IR websites
+        # (e.g., pfcindia.co.in) that may have cert chain issues on Windows
+        async with httpx.AsyncClient(follow_redirects=True, verify=False) as client:
             print(f"Downloading presentation from {pdf_url} for Gemini analysis...")
             response = await client.get(pdf_url, headers=HEADERS, timeout=60.0)
             response.raise_for_status()
@@ -486,14 +602,20 @@ async def summarize_presentation_with_gemini_async(pdf_url: str) -> str:
 
         # Step 2: Define a synchronous function that handles ALL Gemini operations.
         def blocking_gemini_tasks(content):
+            global genai_client
+            if not genai_client:
+                raise ValueError("GenAI client not initialized")
+                
             log_progress("Uploading PDF to Google AI File Service...")
             mime_type = mimetypes.guess_type(pdf_url)[0] or 'application/pdf'
 
-            # This is the correct syntax for the library installed in Step 2
-            pdf_file = genai.upload_file(
-                path=BytesIO(content),
-                display_name=pdf_url.split('/')[-1],
-                mime_type=mime_type
+            # New SDK file upload
+            pdf_file = genai_client.files.upload(
+                file=BytesIO(content),
+                config=types.UploadFileConfig(
+                    display_name=pdf_url.split('/')[-1],
+                    mime_type=mime_type
+                )
             )
 
             print(f"PDF uploaded successfully as '{pdf_file.name}'.")
@@ -525,13 +647,18 @@ async def summarize_presentation_with_gemini_async(pdf_url: str) -> str:
             Do not summarize aggressively. The goal is a comprehensive, data-rich extraction of all relevant information from the document."""
 
             log_progress("Calling Gemini 3 Flash to extract insights from Investor Presentation...")
-            model = genai.GenerativeModel('gemini-3-flash-preview') # Using the latest model
             
-            # Use the SYNCHRONOUS version of the call inside this blocking function
-            response = model.generate_content([prompt, pdf_file])
+            # New SDK generation syntax
+            response = genai_client.models.generate_content(
+                model='gemini-3-flash-preview',
+                contents=[
+                    types.Part.from_text(text=prompt),
+                    pdf_file
+                ]
+            )
 
-            # This is also a synchronous call
-            genai.delete_file(pdf_file.name)
+            # Clean up uploaded file
+            genai_client.files.delete(name=pdf_file.name)
             print(f"Cleaned up uploaded file {pdf_file.name}.")
             
             return response.text

@@ -3695,7 +3695,7 @@
             roce: avg(peers.map(p => parseNum(p.roce))),
             roe: avg(peers.map(p => parseNum(p.roe))),
             sales_growth_yoy: avg(peers.map(p => parseNum(p.sales_growth_yoy))),
-            ebitda_growth_yoy: avg(peers.map(p => parseNum(p.ebitda_growth_yoy))),
+            net_profit_growth: avg(peers.map(p => parseNum(p.net_profit_growth))),
             npm: avg(peers.map(p => parseNum(p.npm)))
           };
         }
@@ -3772,7 +3772,7 @@
                 <td>${formatPercent(row.roce)}</td>
                 <td>${formatPercent(row.roe)}</td>
                 <td>${formatValue(row.sales_growth_yoy, true)}</td>
-                <td>${formatValue(row.ebitda_growth_yoy, true)}</td>
+                <td>${formatValue(row.net_profit_growth, true)}</td>
                 <td>${formatPercent(row.npm)}</td>
                 <td class="text-center">${removeBtn}</td>
               </tr>
@@ -3793,7 +3793,7 @@
               <td>${formatPercent(industryAvg.roce)}</td>
               <td>${formatPercent(industryAvg.roe)}</td>
               <td>${formatValue(industryAvg.sales_growth_yoy, true)}</td>
-              <td>${formatValue(industryAvg.ebitda_growth_yoy, true)}</td>
+              <td>${formatValue(industryAvg.net_profit_growth, true)}</td>
               <td>${formatPercent(industryAvg.npm)}</td>
               <td></td>
             </tr>

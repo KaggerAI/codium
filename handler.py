@@ -88,8 +88,14 @@ from tech_calculations import (
     build_rsi_divergence_figure
 )
 
-# right below your Flask-app initialization:
 # last_analysis: dict = {}
+last_analysis = None
+
+def is_na(val):
+    """Helper for N/A checks across different metric sources."""
+    if val is None: return True
+    v = str(val).strip().lower()
+    return v in ('', 'n/a', 'nan')
 
 # Initialize Flask app and enable CORS
 app = Flask(__name__, static_folder='.', static_url_path='')
@@ -839,17 +845,21 @@ def analyst_texts_status(analysis_key):
 
 import openai
 #from perplexity import Perplexity 
-import google.generativeai as genai
-from google.generativeai.types import Tool 
-
+from google import genai
+from google.genai import types
 # Securely load API keys from environment variables
 openai.api_key = os.getenv("OPENAI_API_KEY")
 PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY")
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 
-# Configure Google Gemini
+# Configure Google Gemini (New v1.0 SDK)
+genai_client = None
 if GOOGLE_API_KEY:
-    genai.api_key=GOOGLE_API_KEY
+    try:
+        genai_client = genai.Client(api_key=GOOGLE_API_KEY)
+        print("INFO: Google GenAI (v1.0+) client initialized.")
+    except Exception as e:
+        print(f"ERROR: Failed to initialize Google GenAI client: {e}")
 
 # Safety check for keys at startup
 if not all([openai.api_key, PERPLEXITY_API_KEY, GOOGLE_API_KEY]):
@@ -1047,38 +1057,65 @@ def call_perplexity_api(messages, model="sonar-pro", temperature=1, timeout=120,
 
 
 
-def call_gemini_api(messages, model="gemini-3-flash-preview", temperature=1, use_google_search=False):
-    if not GOOGLE_API_KEY:
-        raise ValueError("Google Gemini API key is not configured.")
-    try:
-        # Configure tools based on the Latest News parameter
-        tools = [Tool(google_search_retrieval={})] if use_google_search else None # <--- USE THIS LINE INSTEAD
-        # tools = [Tool.from_google_search_retrieval()] if use_google_search else None
-        # Gemini has stricter safety settings; we set them to be permissive for financial analysis.
-        safety_settings = [
-            {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
-            {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
-            {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
-            {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
-        ]
-        gemini_model = genai.GenerativeModel(model)
-        gemini_messages = convert_to_gemini_format(messages)
+def call_gemini_api(messages, model="gemini-3-flash-preview", temperature=1, use_google_search=False, thinking_level=None):
+    """
+    Call the Gemini API with optional thinking mode for deeper reasoning.
+    Using the new google-genai (v1.0+) SDK.
+    """
+    global genai_client
+    if not genai_client:
+        raise ValueError("Google Gemini API client is not initialized (check GOOGLE_API_KEY).")
         
-        response = gemini_model.generate_content(
-            gemini_messages,
-            generation_config=genai.types.GenerationConfig(temperature=temperature),
-            safety_settings=safety_settings,
-            tools=tools
+    try:
+        # Build generation config
+        config_args = {
+            "temperature": temperature,
+            "safety_settings": [
+                types.SafetySetting(category="HARM_CATEGORY_HARASSMENT", threshold="BLOCK_NONE"),
+                types.SafetySetting(category="HARM_CATEGORY_HATE_SPEECH", threshold="BLOCK_NONE"),
+                types.SafetySetting(category="HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold="BLOCK_NONE"),
+                types.SafetySetting(category="HARM_CATEGORY_DANGEROUS_CONTENT", threshold="BLOCK_NONE"),
+            ]
+        }
+        
+        # Tools (Google Search)
+        if use_google_search:
+            config_args["tools"] = [types.Tool(google_search=types.GoogleSearch())]
+            
+        # Thinking Config (Native support in new SDK)
+        if thinking_level:
+            config_args["thinking_config"] = types.ThinkingConfig(thinking_level=thinking_level)
+            print(f"DEBUG: Gemini thinking mode enabled: {thinking_level}", file=sys.stderr)
+
+        # Build final config object
+        gen_config = types.GenerateContentConfig(**config_args)
+        
+        # Format messages for new SDK
+        gemini_contents = []
+        for msg in messages:
+            role = "user" if msg["role"] == "user" else "model"
+            gemini_contents.append(types.Content(role=role, parts=[types.Part.from_text(text=msg["content"])]))
+
+        response = genai_client.models.generate_content(
+            model=model,
+            contents=gemini_contents,
+            config=gen_config
         )
+        
         return response.text
     except Exception as e:
-        print(f"ERROR in call_gemini_api: {e}")
+        print(f"ERROR in call_gemini_api (v1.0): {e}")
+        traceback.print_exc()
         raise
 
-def call_generative_ai_model(model, messages, temperature=1, timeout=180):
+
+def call_generative_ai_model(model, messages, temperature=1, timeout=180, thinking_level=None):
     """
     Dispatcher function to call the appropriate AI model API.
     Default timeout is 180 seconds for Azure compatibility.
+    
+    Args:
+        thinking_level: For Gemini 3 models only - 'HIGH', 'LOW', 'MINIMAL' or None
     """
     log_progress(f"Dispatching request to model: {model}")
     try:
@@ -1087,7 +1124,7 @@ def call_generative_ai_model(model, messages, temperature=1, timeout=180):
         elif model.startswith('pplx-') or model.startswith('llama-') or model.startswith('r1-') or model.startswith('pplx-') or model.startswith('sonar'):
             return call_perplexity_api(messages, model=model, temperature=temperature, timeout=timeout)
         elif model.startswith('gemini-'):
-            return call_gemini_api(messages, model=model, temperature=temperature)
+            return call_gemini_api(messages, model=model, temperature=temperature, thinking_level=thinking_level)
         else:
             # Default to a reliable, cheap model if the selection is unknown
             print(f"WARN: Unknown model '{model}', defaulting to 5-mini'.")
@@ -2371,7 +2408,7 @@ def chat():
                 {"role": "user", "content": merged_user_content}
             ]
             
-            merged_response_str = call_generative_ai_model("gemini-3-flash-preview", merged_messages, temperature=1)
+            merged_response_str = call_generative_ai_model("gemini-3-flash-preview", merged_messages, temperature=1, thinking_level='HIGH')
             
             try:
                 # Try to parse JSON (may or may not have code blocks)
@@ -2620,7 +2657,7 @@ def chat():
 """
                 
                 ara_messages = [{"role": "user", "content": ara_prompt}]
-                result = await asyncio.to_thread(call_gemini_api, ara_messages, "gemini-3-flash-preview", 1)
+                result = await asyncio.to_thread(call_gemini_api, ara_messages, "gemini-3-flash-preview", 1, False, 'HIGH')
                 elapsed = time.time() - stage3_start_time
                 print(f"INFO: ✓ ARA (Analyst) completed in {elapsed:.1f}s ({len(result)} chars)", file=sys.stderr)
                 log_progress(f"✓ Analyst insights ready ({elapsed:.1f}s)")
@@ -2667,7 +2704,7 @@ def chat():
                 eia_messages = [{"role": "user", "content": eia_prompt}]
                 # Use Gemini Flash for best-fast mode, GPT-5-mini otherwise
                 if is_best_fast_mode:
-                    result = await asyncio.to_thread(call_gemini_api, eia_messages, 'gemini-3-flash-preview', 1)
+                    result = await asyncio.to_thread(call_gemini_api, eia_messages, 'gemini-3-flash-preview', 1, False, 'HIGH')
                 else:
                     result = await asyncio.to_thread(call_openai_api, eia_messages, 'gpt-5-mini', False, 1, 180)
                 elapsed = time.time() - stage3_start_time
@@ -2743,7 +2780,8 @@ def chat():
         final_answer = call_generative_ai_model(
             model=answerer_model,
             messages=answering_messages,
-            temperature=1
+            temperature=1,
+            thinking_level='HIGH' if is_best_fast_mode and answerer_model.startswith('gemini-') else None
         )
 
         return jsonify({
@@ -2908,7 +2946,7 @@ def print_full_schema():
                         output_lines.append(f"        - All Available Period Column Headers in this table: {json.dumps(sorted_period_headers)}")
                         
                         output_lines.append("        - Metric Names (from '\"\"' key) and example first period value:")
-                        for i, row_dict in enumerate(table_data[:15]): # Show all metric names, but cap rows to avoid huge output if many metrics
+                        for i, row_dict in enumerate(table_data): # Show all metric names
                             if isinstance(row_dict, dict):
                                 metric_name = row_dict.get("")
                                 example_val = "N/A"
@@ -2917,8 +2955,6 @@ def print_full_schema():
                                 output_lines.append(f"          - Metric: \"{metric_name}\" (Example from '{sorted_period_headers[0] if sorted_period_headers else 'N/A'}': {json.dumps(example_val)})")
                             else:
                                 output_lines.append(f"          - Row {i} is not a dict: {json.dumps(row_dict)}")
-                        if len(table_data) > 15:
-                             output_lines.append("          - ... (more metrics exist)")
                     elif isinstance(table_data, list) and not table_data:
                         output_lines.append("        - Content: Empty list (no metrics).")
                     else:
@@ -2946,6 +2982,24 @@ def print_full_schema():
                         output_lines.append(f"        - Content Type: {type(series_data).__name__}, Value: {json.dumps(series_data)}")
             else:
                 output_lines.append("    Content: Empty dictionary (no series).")
+        
+        elif key == "key_metrics" and isinstance(top_level_value, dict):
+            output_lines.append(f"    Type: dict with {len(top_level_value)} key metrics")
+            output_lines.append("    Content (all key-value pairs):")
+            for metric_key, metric_value in top_level_value.items():
+                output_lines.append(f"      - {metric_key}: {json.dumps(metric_value)}")
+        
+        elif key == "peer_comparison" and isinstance(top_level_value, list):
+            output_lines.append(f"    Type: list of {len(top_level_value)} peers")
+            output_lines.append("    Content (all peers with details):")
+            for i, peer_dict in enumerate(top_level_value):
+                if isinstance(peer_dict, dict):
+                    output_lines.append(f"\\n      <strong>Peer {i+1}: {peer_dict.get('name', peer_dict.get('ticker', 'Unknown'))}</strong>")
+                    for pk, pv in peer_dict.items():
+                        output_lines.append(f"        - {pk}: {json.dumps(pv)}")
+                else:
+                    output_lines.append(f"      Peer {i}: {json.dumps(peer_dict)}")
+        
         else:
             # For other top-level keys like 'ticker'
             top_type, top_rep = get_full_type_and_value_representation(top_level_value)
@@ -3101,16 +3155,37 @@ def extract_key_metrics_from_fundamentals(fundamentals_data, top_ratios=None):
                         pass
         return None
     
-    # Extract from Financial Ratios table (not "Ratios")
-    metrics['pe_ratio'] = get_latest("Financial Ratios", "Stock P/E")
-    metrics['pb_ratio'] = get_latest("Financial Ratios", "Stock P/B")
-    metrics['dividend_yield'] = get_latest("Financial Ratios", "Dividend Yield %")
-    metrics['roce'] = get_latest("Financial Ratios", "ROCE %")
-    metrics['roe'] = get_latest("Financial Ratios", "ROE %")
+    # --- STEP 2: Fallback to Financial Ratios table (Only if not already filled) ---
+    if "Financial Ratios" in fundamentals_data:
+        # Stock P/E -> pe_ratio
+        if is_na(metrics.get('pe_ratio')):
+            metrics['pe_ratio'] = get_latest("Financial Ratios", "Stock P/E")
+        
+        # Stock P/B -> pb_ratio
+        if is_na(metrics.get('pb_ratio')):
+            metrics['pb_ratio'] = get_latest("Financial Ratios", "Stock P/B")
+            
+        # Dividend Yield -> dividend_yield
+        if is_na(metrics.get('dividend_yield')):
+            metrics['dividend_yield'] = get_latest("Financial Ratios", "Dividend Yield %")
+            
+        # ROCE -> roce
+        if is_na(metrics.get('roce')):
+            metrics['roce'] = get_latest("Financial Ratios", "ROCE %")
+            
+        # ROE -> roe
+        if is_na(metrics.get('roe')):
+            metrics['roe'] = get_latest("Financial Ratios", "ROE %")
     
     # Extract from Quarterly Results  
     metrics['sales_growth_yoy'] = calc_quarterly_yoy_growth("Quarterly Results", "Sales")
     metrics['ebitda_growth_yoy'] = calc_quarterly_yoy_growth("Quarterly Results", "Operating Profit")
+    if not metrics['ebitda_growth_yoy']:
+         # Fallback for Banks/NBFCs where Operating Profit might be different or labeled Financing Profit
+         metrics['ebitda_growth_yoy'] = calc_quarterly_yoy_growth("Quarterly Results", "Financing Profit")
+    
+    # Calculate Net Profit Growth
+    metrics['net_profit_growth'] = calc_quarterly_yoy_growth("Quarterly Results", "Net Profit")
     
     # Calculate NPM correctly: Net Profit / Sales
     metrics['npm'] = calc_npm_from_quarterly()
@@ -3660,7 +3735,7 @@ async def get_analysis_for_ticker_async(tick):
 
     company_name = results_dict["yfinance_name"]
     res = results_dict["tech_data"]
-    tables_from_screener, company_description, top_ratios = results_dict["screener_tables"]
+    tables_from_screener, company_description, top_ratios, is_consolidated = results_dict["screener_tables"]
     latest_documents = results_dict["documents"]
     
     # Futures volume is optional - not all stocks have F&O contracts
@@ -3685,12 +3760,8 @@ async def get_analysis_for_ticker_async(tick):
             # get_company_id runs now since it's fast and needed for valuation
             comp_id = await get_company_id_async(tick)
 
-            # ScanX scrape depends on company_name
-            slug = re.sub(r'[^a-z0-9\s-]', '', re.sub(r'\s+', '-', re.sub(r'\blimited\b', 'ltd', company_name.lower()))).strip('-')
-            scanx_task = scrape_scanx_company_async(slug)
-
             # Valuation metrics depend on company_id
-            async def fetch_all_valuation_data():
+            async def fetch_all_valuation_data(is_consolidated_flag=False):
                 metric_queries = {
                     "PE Ratio": "Price to Earning-Median PE-EPS", "PB Ratio": "Price to book value-Median PBV-Book value",
                     "EV / EBITDA": "EV Multiple-Median EV Multiple-EBITDA", "Market Cap / Sales": "Market Cap to Sales-Median Market Cap to Sales-Sales",
@@ -3698,7 +3769,7 @@ async def get_analysis_for_ticker_async(tick):
                 }
                 parsed_data, charts_data = {}, {}
                 async with httpx.AsyncClient() as client:
-                    valuation_tasks = {label: fetch_chart_data_async(client, comp_id, query) for label, query in metric_queries.items()}
+                    valuation_tasks = {label: fetch_chart_data_async(client, comp_id, query, consolidated=is_consolidated_flag) for label, query in metric_queries.items()}
                     valuation_results = await asyncio.gather(*valuation_tasks.values(), return_exceptions=True)
                 
                 results = dict(zip(valuation_tasks.keys(), valuation_results))
@@ -3740,11 +3811,27 @@ async def get_analysis_for_ticker_async(tick):
 
                 return parsed_data, charts_data
 
-            valuation_task = fetch_all_valuation_data()
+            # --- Peer Fetching (Moved below valuation definition) ---
+            from screener_fetcher import fetch_peer_comparison_from_screener_async
+            peer_data_task = fetch_peer_comparison_from_screener_async(tick, company_name)
+            
+            valuation_task = fetch_all_valuation_data(is_consolidated_flag=is_consolidated)
             
             # Run Stage 2 tasks in parallel
-            stage2_results = await asyncio.gather(scanx_task, valuation_task, return_exceptions=True)
-            return stage2_results
+            log_progress(f"Fetching peer comparison and valuation data for {tick} (Consolidated: {is_consolidated})...")
+            # Run Screener Peer Comparison and Valuation in parallel
+            peer_result, valuation_result = await asyncio.gather(peer_data_task, valuation_task, return_exceptions=True)
+            
+            # Handle potential exceptions gracefully
+            if isinstance(peer_result, Exception):
+                print(f"WARN: Screener peer comparison fetch failed: {peer_result}")
+                peer_result = {'company': {}, 'peers': []}
+            
+            if isinstance(valuation_result, Exception):
+                print(f"WARN: Valuation data fetch failed: {valuation_result}")
+                valuation_result = ({}, {})
+
+            return peer_result, valuation_result
         except Exception as e:
             log_progress(f"Error in dependent data fetching stage: {e}")
             return e # Return exception to be handled
@@ -3752,9 +3839,17 @@ async def get_analysis_for_ticker_async(tick):
     stage2_results = await fetch_dependent_data()
     if isinstance(stage2_results, Exception):
         return ({'error': f'Failed during dependent data fetching: {stage2_results}'}, 500)
-        
-    scanx_data = stage2_results[0] if not isinstance(stage2_results[0], Exception) else {}
-    parsed_valuation_data, metric_charts_for_frontend = stage2_results[1] if not isinstance(stage2_results[1], Exception) else ({}, {})
+    
+    # ScanX disabled - set to empty dict
+    scanx_data = {}
+    
+    # Unpack Screener Peer Comparison and Valuation Results
+    if isinstance(stage2_results, tuple) and len(stage2_results) == 2:
+        screener_peer_comparison, valuation_results = stage2_results
+        parsed_valuation_data, metric_charts_for_frontend = valuation_results if isinstance(valuation_results, tuple) else ({}, {})
+    else:
+        screener_peer_comparison = {'company': {}, 'peers': []}
+        parsed_valuation_data, metric_charts_for_frontend = ({}, {})
 
     # --- Stage 3: Process all results (now purely CPU-bound) ---
     log_progress("All data fetched. Processing results...")
@@ -3809,15 +3904,16 @@ async def get_analysis_for_ticker_async(tick):
     task_rs    = loop.run_in_executor(None, make_chart_json, build_rs_figure, df, company_name)
     task_rsi_div = loop.run_in_executor(None, make_chart_json, build_rsi_divergence_figure, df, company_name, 1, '#3b82f6')
     
-    # Run AI Summary (OpenAI) and Metrics Extraction (Perplexity sonar) in parallel
+    # Run AI Summary (OpenAI) and yfinance Metrics in parallel
     task_ai_sum = loop.run_in_executor(None, generate_ai_company_summary, tick, company_description, tables_from_screener, latest_documents)
-    task_ai_metrics = loop.run_in_executor(None, extract_metrics_via_ai, tick)
+    # yfinance fetch is I/O bound, run in thread pool
+    task_yf_metrics = loop.run_in_executor(None, get_yfinance_metrics, tick)
 
     # EXECUTE ALL AT ONCE
-    parallel_results = await asyncio.gather(task_close, task_hl, task_ema, task_rsi, task_adl, task_rs, task_rsi_div, task_ai_sum, task_ai_metrics)
+    parallel_results = await asyncio.gather(task_close, task_hl, task_ema, task_rsi, task_adl, task_rs, task_rsi_div, task_ai_sum, task_yf_metrics)
 
     # Unpack the results
-    close_j, hl_j, ema_j, rsi_j, adl_j, rs_j, rsi_div_j, ai_company_summary_html, ai_extracted_metrics = parallel_results
+    close_j, hl_j, ema_j, rsi_j, adl_j, rs_j, rsi_div_j, ai_company_summary_html, yf_metrics = parallel_results
     
     log_progress("Charts and AI Summary generated successfully.")
 # --- END: OPTIMIZED PARALLEL PROCESSING ---
@@ -3839,31 +3935,41 @@ async def get_analysis_for_ticker_async(tick):
 
     log_progress("Analysis complete. Loading results ...")
 
-    # Extract key metrics for frontend table
-    log_progress("Extracting key metrics...")
+    # Merge Company Metrics with Priority: Screener Top Ratios > yfinance > Screener Peer Table
+    # This ensures "N/A" values are filled from the best available source
+    
+    # Priority 1: Screener Top Ratios
+
+    # Priority 1: Screener Top Ratios
     key_metrics_from_fundamentals = extract_key_metrics_from_fundamentals(fund_data_for_ai_context, top_ratios=top_ratios)
-    key_metrics_from_yfinance = get_yfinance_metrics(tick)
     
-    # Combine metrics: yfinance baseline, then fundamentals, then AI as ultimate fallback
-    key_metrics = {**key_metrics_from_yfinance, **key_metrics_from_fundamentals}
+    # Priority 2: yfinance (already fetched in parallel)
+    # yf_metrics is available from parallel_results
     
-    # Extract metrics from new AI structure: {company: {...}, peers: [...]}
-    ai_company_metrics = ai_extracted_metrics.get('company', {})
-    peer_comparison_data = ai_extracted_metrics.get('peers', [])
+    # Priority 3: Screener Peer Table (the 'company' row)
+    screener_company_row = screener_peer_comparison.get('company', {})
     
-    # Use AI-extracted company metrics as fallback for None values
-    ai_to_key_mapping = {
-        'pe_ratio': 'pe_ratio',
-        'pb_ratio': 'pb_ratio', 
-        'dividend_yield': 'dividend_yield',
-        'roce': 'roce',
-        'roe': 'roe'
-    }
-    for ai_key, metric_key in ai_to_key_mapping.items():
-        if not key_metrics.get(metric_key) or key_metrics.get(metric_key) == 'N/A':
-            if ai_key in ai_company_metrics:
-                key_metrics[metric_key] = ai_company_metrics[ai_key]
-                print(f"DEBUG: Using AI fallback for {metric_key}: {ai_company_metrics[ai_key]}")
+    final_key_metrics = {}
+    metric_keys = ['market_cap', 'cmp', 'current_price', 'pe_ratio', 'pb_ratio', 'dividend_yield', 'roce', 'roe', 'sales_growth_yoy', 'ebitda_growth_yoy', 'npm', 'industry', 'sector']
+    
+    for mk in metric_keys:
+        # Check sources in order
+        val = key_metrics_from_fundamentals.get(mk)
+        if is_na(val):
+            val = yf_metrics.get(mk)
+        if is_na(val):
+            # Special mapping for screener peer table keys
+            peer_key_map = {'cmp': 'cmp', 'current_price': 'cmp'}
+            pk = peer_key_map.get(mk, mk)
+            val = screener_company_row.get(pk)
+        
+        final_key_metrics[mk] = val if not is_na(val) else 'N/A'
+
+    # Peer data from Screener.in
+    peer_comparison_data = screener_peer_comparison.get('peers', [])
+    
+    # Final Result for cache and frontend
+    key_metrics = final_key_metrics
 
 
     # This dictionary is what the AI needs. It uses the Python objects.
@@ -3873,7 +3979,9 @@ async def get_analysis_for_ticker_async(tick):
         "valuation_and_margin_data": parsed_valuation_data, 
         "documents": latest_documents,
         "technical_data_df": df,
-        "peer_comparison": peer_comparison_data  # <-- NEW: For AI chatbot access
+        "peer_comparison": peer_comparison_data,  # <-- For AI chatbot access
+        "key_metrics": key_metrics,  # <-- Key Metrics Snapshot for AI chatbot
+        "is_consolidated": is_consolidated  # NEW: Store consolidation status
     }
     
     # This dictionary is what the frontend needs. It uses the JSON strings.
@@ -3901,11 +4009,13 @@ async def get_analysis_for_ticker_async(tick):
                 'roe': key_metrics.get('roe', 'N/A'),
                 'sales_growth_yoy': key_metrics.get('sales_growth_yoy', 'N/A'),
                 'ebitda_growth_yoy': key_metrics.get('ebitda_growth_yoy', 'N/A'),
+                'net_profit_growth': key_metrics.get('net_profit_growth', 'N/A'),
                 'npm': key_metrics.get('npm', 'N/A')
             },
             'peers': peer_comparison_data  # AI-extracted peer data
         },
-        'analyst_reports': analyst_reports  # NEW: Trendlyne analyst reports
+        'analyst_reports': analyst_reports,  # NEW: Trendlyne analyst reports
+        'is_consolidated': is_consolidated  # NEW: Pass to frontend if needed
     }
 
     # Pass BOTH dictionaries back to the synchronous wrapper
@@ -3929,6 +4039,7 @@ def analyze():
     """
     # 6 hours in seconds
     STOCK_CACHE_TTL = 21600
+    global last_analysis
     
     try:
         data = request.get_json(force=True)
@@ -4075,6 +4186,16 @@ def analyze():
                                 if yf_metrics.get(key) and yf_metrics[key] != 'N/A':
                                     merged_key_metrics[key] = yf_metrics[key]
                             
+                            # Determine if we should use consolidated metrics for charts
+                            # Check cached results first, otherwise detect from table names
+                            is_consolidated_light = cached_result.get('is_consolidated', False)
+                            if not is_consolidated_light and cached_fundamentals:
+                                # Fallback detection for older cache entries
+                                for table_name in cached_fundamentals.keys():
+                                    if "Consolidated" in table_name:
+                                        is_consolidated_light = True
+                                        break
+                            
                             # Get Valuation & Margin charts from Screener.in
                             log_progress("Fetching valuation charts from Screener.in...")
                             metric_charts = {}
@@ -4095,7 +4216,7 @@ def analyze():
                                     
                                     for label, query in metric_queries.items():
                                         try:
-                                            chart_json = fetch_chart_data(comp_id, query)
+                                            chart_json = fetch_chart_data(comp_id, query, consolidated=is_consolidated_light)
                                             if chart_json:
                                                 df_from_parser = parse_chart_json(chart_json)
                                                 if not df_from_parser.empty:
@@ -4103,8 +4224,9 @@ def analyze():
                                                     
                                                     if label == "PE Ratio" and "PE" in df_from_parser.columns:
                                                         df_filtered = df_from_parser[["PE"]]
-                                                    elif label == "PB Ratio" and "Price to BV" in df_from_parser.columns:
-                                                        df_filtered = df_from_parser[["Price to BV"]]
+                                                    elif label == "PB Ratio" and any(c in df_from_parser.columns for c in ["Price to BV", "Price to book value"]):
+                                                        pb_col = "Price to BV" if "Price to BV" in df_from_parser.columns else "Price to book value"
+                                                        df_filtered = df_from_parser[[pb_col]]
                                                     elif label == "EV / EBITDA" and "EV / EBITDA" in df_from_parser.columns:
                                                         df_filtered = df_from_parser[["EV / EBITDA"]]
                                                     elif label == "Market Cap / Sales" and "Market Cap / Sales" in df_from_parser.columns:
@@ -4132,38 +4254,56 @@ def analyze():
                                 print(f"WARN: Valuation charts fetch failed: {e}")
                             
                             # ============================================================
-                            # FETCH PEER COMPARISON DATA VIA AI (runtime, not cached)
+                            # FETCH PEER COMPARISON DATA FROM SCREENER.IN (runtime)
                             # ============================================================
-                            log_progress("Extracting peer comparison data via AI...")
+                            log_progress("Fetching peer comparison data from Screener.in...")
                             try:
-                                ai_extracted_metrics = extract_metrics_via_ai(tick)
-                                peer_comparison_data = ai_extracted_metrics.get('peers', [])
-                                ai_company_metrics = ai_extracted_metrics.get('company', {})
+                                from screener_fetcher import fetch_peer_comparison_from_screener
+                                # Use sync wrapper because analyze() is a sync Flask route
+                                screener_peer_data = fetch_peer_comparison_from_screener(tick, company_name)
+                                peer_comparison_data = screener_peer_data.get('peers', [])
+                                screener_company_row = screener_peer_data.get('company', {})
                                 
+                                # Priority Merge for Company Metrics (Light Cache)
+                                # Priority: Screener Cached > yfinance > Screener Peer Table
+                                final_metrics = {}
+                                metric_keys = ['market_cap', 'cmp', 'current_price', 'pe_ratio', 'pb_ratio', 'dividend_yield', 'roce', 'roe', 'sales_growth_yoy', 'ebitda_growth_yoy', 'npm']
+                                
+                                for mk in metric_keys:
+                                    val = cached_key_metrics.get(mk) # Priority 1: Screener Cached
+                                    if is_na(val):
+                                        val = yf_metrics.get(mk) # Priority 2: yfinance
+                                    if is_na(val):
+                                        # Special mapping for screener peer table keys
+                                        peer_key_map = {'cmp': 'cmp', 'current_price': 'cmp'}
+                                        pk = peer_key_map.get(mk, mk)
+                                        val = screener_company_row.get(pk) # Priority 3: Screener Peer Table
+                                    
+                                    final_metrics[mk] = val if not is_na(val) else 'N/A'
+
                                 # Build peer_comparison structure for frontend
                                 peer_comparison = {
                                     'company': {
                                         'ticker': tick,
                                         'name': company_name,
-                                        'cmp': merged_key_metrics.get('current_price', ai_company_metrics.get('cmp', 'N/A')),
-                                        'market_cap': merged_key_metrics.get('market_cap', ai_company_metrics.get('market_cap', 'N/A')),
-                                        'pe_ratio': merged_key_metrics.get('pe_ratio', ai_company_metrics.get('pe_ratio', 'N/A')),
-                                        'pb_ratio': merged_key_metrics.get('pb_ratio', ai_company_metrics.get('pb_ratio', 'N/A')),
-                                        'dividend_yield': merged_key_metrics.get('dividend_yield', ai_company_metrics.get('dividend_yield', 'N/A')),
-                                        'roce': merged_key_metrics.get('roce', ai_company_metrics.get('roce', 'N/A')),
-                                        'roe': merged_key_metrics.get('roe', ai_company_metrics.get('roe', 'N/A')),
-                                        'sales_growth_yoy': merged_key_metrics.get('sales_growth_yoy', ai_company_metrics.get('sales_growth_yoy', 'N/A')),
-                                        'ebitda_growth_yoy': merged_key_metrics.get('ebitda_growth_yoy', ai_company_metrics.get('ebitda_growth_yoy', 'N/A')),
-                                        'npm': merged_key_metrics.get('npm', ai_company_metrics.get('npm', 'N/A'))
+                                        **final_metrics
                                     },
                                     'peers': peer_comparison_data
                                 }
-                                print(f"INFO: Extracted peer comparison with {len(peer_comparison_data)} peers for {tick}")
+                                print(f"INFO: Fetched peer comparison from Screener.in with {len(peer_comparison_data)} peers for {tick}")
                             except Exception as e:
-                                print(f"WARN: Failed to extract peer comparison via AI: {e}")
+                                print(f"WARN: Failed to fetch peer comparison from Screener.in: {e}")
                                 import traceback
                                 traceback.print_exc()
-                                peer_comparison = {'company': {}, 'peers': []}
+                                # Fallback to yfinance only
+                                peer_comparison = {
+                                    'company': {
+                                        'ticker': tick,
+                                        'name': company_name,
+                                        **yf_metrics
+                                    },
+                                    'peers': []
+                                }
                             
                             # REGENERATE AI SUMMARY if it failed during light cache
                             if summary_needs_regeneration:
@@ -4320,6 +4460,10 @@ def analyze():
                             # =====================================================================
                             
                             log_progress(f"Analysis complete for {tick}!")
+                            
+                            # Save to global for debug/schema viewing
+                            last_analysis = analysis_for_cache
+                            
                             return jsonify(result_for_frontend)
                             
                         except Exception as e:
@@ -4338,6 +4482,9 @@ def analyze():
                         # Save to local memory cache (Redis-free fallback)
                         # Use cached_result which has all the needed fields
                         set_local_cache(tick, cached_result)
+                        
+                        # Save to global for debug/schema viewing
+                        last_analysis = cached_result
                         
                         # =====================================================================
                         # START: Background PDF Text Extraction for Full Cache
@@ -4573,6 +4720,9 @@ def analyze():
         except Exception as e:
             print(f"WARNING: Stock cache write failed: {e}")
         
+        # Save to global for debug/schema viewing
+        last_analysis = analysis_for_cache
+        
         return jsonify(result_for_frontend)
 
 
@@ -4682,12 +4832,7 @@ def refresh_section():
             current_company_metrics = data.get('current_company_metrics', {})
             # print(f"DEBUG: Received current_company_metrics for {ticker}: {current_company_metrics}")
             
-            # Helper to check if value is N/A or empty
-            def is_na(val):
-                if val is None:
-                    return True
-                val_str = str(val).strip().lower()
-                return val_str == '' or val_str == 'n/a' or val_str == 'nan'
+            # Using global is_na helper
 
             # Helper to get first non-empty value from sources (priority order)
             def get_value(metric_name, *sources):
@@ -4923,12 +5068,7 @@ def refresh_section():
             # Get current metrics from frontend (to preserve existing non-N/A values)
             current_metrics = data.get('current_metrics', {})
             
-            # Helper to check for N/A values
-            def is_na(val):
-                if val is None:
-                    return True
-                val_str = str(val).strip().lower()
-                return val_str == '' or val_str == 'n/a' or val_str == 'nan'
+            # Using global is_na helper
             
             # Start with current metrics
             key_metrics = dict(current_metrics)
@@ -4990,7 +5130,7 @@ def refresh_section():
                     print(f"WARN: Screener peer comparison returned no company data for {ticker}")
             except Exception as e:
                 print(f"WARN: Screener peer comparison fetch failed for {ticker}: {e}")
-                import traceback
+                # traceback is imported globally
                 traceback.print_exc()
 
             
@@ -5086,7 +5226,7 @@ def refresh_section():
                     print(f"DEBUG: Financial Ratios table not found or empty")
             except Exception as e:
                 print(f"WARN: Screener.in fundamentals fetch failed for {ticker}: {e}")
-                import traceback
+                # traceback is imported globally
                 traceback.print_exc()
             
             # Update na_fields after Screener fill
