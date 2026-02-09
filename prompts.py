@@ -466,6 +466,20 @@ Your ENTIRE response must be a valid JSON object:
 - Use EXACT metric names from the provided Data Schema Description
 - For EIA/ARA, you MUST include the full custom prompt in the `directive` field
 - For `prompt_for_sonar`, craft a SPECIFIC prompt based on the user's question and peripheral questions
-- For calculations, ONLY use names from the CALCULATION REGISTRY above with EXACT input keys
 - Output ONLY the JSON object - no markdown code blocks, no extra text
 """
+
+def get_unanswerable_expansion_prompt(question: str) -> str:
+    """
+    Prompt for reframing the user's question for deep research with Indian market context.
+    """
+    return f"""You are an expert Indian Equity Research Analyst. 
+The user has asked a question for deep research: "{question}"
+
+Your task is to reframe and expand this question into a comprehensive research objective tailored for the Indian markets and Indian equity investors. 
+
+**Instructions:**
+1 **Reframe for Investors**: Structure the question to focus on investment implications, long-term risks, competitive advantages (moats), and capital allocation.
+2 **Direct Output**: Provide ONLY the final reframed question string. No preamble, no quotes, no explanations.
+
+Expanded Question:"""

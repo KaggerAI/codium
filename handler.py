@@ -23,7 +23,12 @@ except ImportError:
     print("INFO: python-dotenv not installed. Using system environment variables only.")
 
 sys.path.append(os.path.dirname(__file__))
-from prompts import get_central_brain_prompt, get_planning_system_prompt, get_answering_system_prompt
+from prompts import (
+    get_central_brain_prompt, 
+    get_planning_system_prompt, 
+    get_answering_system_prompt,
+    get_unanswerable_expansion_prompt
+)
 
 import traceback
 import time
@@ -87,6 +92,19 @@ from tech_calculations import (
     build_rs_figure,
     build_rsi_divergence_figure
 )
+
+# --- Parallel API Integration ---
+PARALLEL_API_KEY = os.getenv("PARALLEL_API_KEY")
+parallel_client = None
+if PARALLEL_API_KEY:
+    try:
+        from parallel import Parallel
+        parallel_client = Parallel(api_key=PARALLEL_API_KEY)
+        print("INFO: Parallel API client initialized.")
+    except ImportError:
+        print("WARNING: parallel-sdk not installed. Deep research feature will be disabled.")
+else:
+    print("WARNING: PARALLEL_API_KEY environment variable is not set. Deep research feature will be disabled.")
 
 # last_analysis: dict = {}
 last_analysis = None
@@ -509,6 +527,7 @@ def debug_env():
         "GOOGLE_API_KEY",
         "TRENDLYNE_USERNAME",
         "TRENDLYNE_PASSWORD",
+        "PARALLEL_API_KEY",
     ]
     # returns True/False (no secrets leaked)
     return jsonify({k: bool(os.getenv(k)) for k in keys})
@@ -536,6 +555,138 @@ except Exception as e:
 def api_stocks():
     """Return all stocks for client-side autocomplete filtering"""
     return jsonify(STOCKS_LIST)
+
+@app.route('/api/ask-unanswerable', methods=['POST'])
+def api_ask_unanswerable():
+    """Start a Parallel Deep Research task"""
+    if not PARALLEL_API_KEY:
+        return jsonify({"error": "Parallel API key not configured."}), 500
+    
+    data = request.json
+    question = data.get("question")
+    if not question:
+        return jsonify({"error": "Question is required."}), 400
+    
+    try:
+        # STEP 1: Expand Question with GPT-5-Mini
+        print(f"INFO: Expanding question with GPT-5-Mini: {question[:100]}...", file=sys.stderr)
+        expansion_prompt = get_unanswerable_expansion_prompt(question)
+        expanded_question = call_generative_ai_model(
+            model="gpt-5-mini",
+            messages=[{"role": "user", "content": expansion_prompt}],
+            temperature=1
+        )
+        print(f"INFO: Expanded Question: {expanded_question}", file=sys.stderr)
+
+        # Using pure httpx/requests to ensure beta headers are included for SSE
+        headers = {
+            "x-api-key": PARALLEL_API_KEY,
+            "parallel-beta": "events-sse-2025-07-24",
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "input": expanded_question,
+            "processor": "core-fast",
+            "enable_events": True
+        }
+        
+        response = requests.post("https://api.parallel.ai/v1/tasks/runs", headers=headers, json=payload)
+        response.raise_for_status()
+        run_data = response.json()
+        
+        return jsonify({
+            "run_id": run_data.get("run_id"),
+            "status": "started",
+            "expanded_question": expanded_question
+        })
+    except Exception as e:
+        print(f"ERROR starting Parallel task: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/ask-unanswerable/stream/<run_id>')
+def api_ask_unanswerable_stream(run_id):
+    """Stream progress events from Parallel API via httpx for better SSE stability"""
+    if not PARALLEL_API_KEY:
+        return Response("data: {\"error\": \"Parallel API key not configured.\"}\n\n", mimetype='text/event-stream')
+
+    headers = {
+        "x-api-key": PARALLEL_API_KEY,
+        "Accept": "text/event-stream",
+        "parallel-beta": "events-sse-2025-07-24"
+    }
+    
+    def generate():
+        try:
+            print(f"INFO: Connecting to Parallel stream for run_id: {run_id}", file=sys.stderr)
+            current_event = None
+            with httpx.stream(
+                "GET",
+                f"https://api.parallel.ai/v1beta/tasks/runs/{run_id}/events",
+                headers=headers,
+                timeout=None
+            ) as r:
+                if r.status_code != 200:
+                    error_text = r.read().decode()
+                    print(f"ERROR: Parallel API returned status {r.status_code}: {error_text}", file=sys.stderr)
+                    yield f"data: {json.dumps({'error': f'Upstream error {r.status_code}'})}\n\n"
+                    return
+
+                print("INFO: Connected to Parallel Stream. Flattening events...", file=sys.stderr)
+                for line in r.iter_lines():
+                    if line.startswith("event:"):
+                        current_event = line.replace("event:", "").strip()
+                    elif line.startswith("data:"):
+                        data_str = line.replace("data:", "").strip()
+                        try:
+                            # Flattening: Merge the event type into the data JSON
+                            data_json = json.loads(data_str)
+                            if current_event:
+                                data_json["event_type"] = current_event
+                                current_event = None
+                            
+                            # Add status if not present (for robustness)
+                            if "status" not in data_json and "task_run.status" in (data_json.get("event_type", ""), ""):
+                                # If it's a state event, it usually has the status inside
+                                pass
+
+                            yield f"data: {json.dumps(data_json)}\n\n"
+                        except json.JSONDecodeError:
+                            # Fallback if it's not JSON
+                            yield f"{line}\n\n"
+                    elif line == "":
+                        # Standard SSE separator
+                        pass
+        except Exception as e:
+            print(f"ERROR streaming Parallel events: {e}", file=sys.stderr)
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+
+    return Response(stream_with_context(generate()), mimetype='text/event-stream')
+
+@app.route('/api/ask-unanswerable/status/<run_id>')
+def api_ask_unanswerable_status(run_id):
+    """Check status of a research task and return result if completed."""
+    if not PARALLEL_API_KEY:
+        return jsonify({"error": "Parallel API key not configured"}), 401
+
+    try:
+        headers = {
+            "x-api-key": PARALLEL_API_KEY,
+            "parallel-beta": "events-sse-2025-07-24"
+        }
+        response = requests.get(f"https://api.parallel.ai/v1/tasks/runs/{run_id}", headers=headers)
+        response.raise_for_status()
+        data = response.json()
+        
+        # Normalize response for frontend
+        return jsonify({
+            "status": data.get("status"),
+            "completed": data.get("status") == "completed",
+            "output": data.get("output", {}),
+            "error": data.get("error")
+        })
+    except Exception as e:
+        print(f"ERROR checking Parallel status: {e}", file=sys.stderr)
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/debug/cookies-source')
 def debug_cookies_source():
@@ -5166,7 +5317,7 @@ def refresh_section():
             try:
                 from screener_fetcher import fetch_consolidated
                 log_progress(f"Fetching {ticker} fundamentals from Screener.in...")
-                tables, _, top_ratios = fetch_consolidated(ticker)
+                tables, _, top_ratios, is_consolidated_screener = fetch_consolidated(ticker)
                 
                 # Get Financial Ratios table
                 ratios_table = tables.get('Financial Ratios')

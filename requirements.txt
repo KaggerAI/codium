@@ -47,6 +47,7 @@ playwright-stealth==1.0.6  # <--- USE THIS CORRECT, STABLE VERSION
 feedparser
 scikit-learn
 vaderSentiment==3.3.2
+parallel-web
 
 # --- Authentication ---
 resend
