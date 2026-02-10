@@ -586,7 +586,7 @@ def api_ask_unanswerable():
         }
         payload = {
             "input": expanded_question,
-            "processor": "core-fast",
+            "processor": "ultra-fast",
             "enable_events": True
         }
         
