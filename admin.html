@@ -35,6 +35,21 @@
                     <span class="text-slate-500">|</span>
                     <span class="text-slate-300 font-medium">Admin Panel</span>
                 </div>
+                <!-- Tabs Navigation -->
+                <div class="hidden md:flex items-center bg-slate-900/80 rounded-lg p-1 border border-slate-700">
+                    <button onclick="switchTab('users')" id="btn-tab-users"
+                        class="px-4 py-1.5 rounded-md text-sm font-medium transition-all bg-blue-600 text-white">
+                        👥 Users
+                    </button>
+                    <button onclick="switchTab('cache')" id="btn-tab-cache"
+                        class="px-4 py-1.5 rounded-md text-sm font-medium transition-all text-slate-400 hover:text-white">
+                        ⚡ Cache
+                    </button>
+                    <button onclick="switchTab('insights')" id="btn-tab-insights"
+                        class="px-4 py-1.5 rounded-md text-sm font-medium transition-all text-slate-400 hover:text-white border-l border-slate-700 ml-1 pl-5">
+                        📈 Insights
+                    </button>
+                </div>
                 <div class="flex items-center space-x-4">
                     <a href="/app" class="text-slate-400 hover:text-white transition-colors">← Back to App</a>
                     <button onclick="logout()" class="text-red-400 hover:text-red-300 transition-colors">Logout</button>
@@ -43,155 +58,422 @@
         </div>
     </nav>
 
+    <!-- Mobile Tabs Navigation -->
+    <div class="md:hidden bg-slate-900 border-b border-slate-700 flex">
+        <button onclick="switchTab('users')" id="mobile-btn-tab-users"
+            class="flex-1 py-3 text-sm font-medium border-b-2 border-blue-500 text-white">
+            Users
+        </button>
+        <button onclick="switchTab('cache')" id="mobile-btn-tab-cache"
+            class="flex-1 py-3 text-sm font-medium border-b-2 border-transparent text-slate-400">
+            Cache
+        </button>
+        <button onclick="switchTab('insights')" id="mobile-btn-tab-insights"
+            class="flex-1 py-3 text-sm font-medium border-b-2 border-transparent text-slate-400">
+            Insights
+        </button>
+    </div>
+
     <!-- Main Content -->
     <main class="container mx-auto px-6 py-8">
-        <!-- Invite User Section -->
-        <div class="bg-slate-800/50 backdrop-blur-sm rounded-2xl p-6 border border-slate-700 mb-8">
-            <h2 class="text-xl font-bold mb-4">Invite New User</h2>
 
-            <form id="invite-form" class="flex gap-4">
-                <input type="email" id="invite-email" placeholder="user@example.com" required
-                    class="flex-1 px-4 py-3 bg-slate-900/50 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                <button type="submit" id="invite-btn"
-                    class="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-lg font-semibold transition-all flex items-center space-x-2">
-                    <span>Send Invite</span>
-                </button>
-            </form>
+        <!-- Tab 1: User Management -->
+        <div id="tab-content-users">
+            <!-- Invite User Section -->
+            <div class="bg-slate-800/50 backdrop-blur-sm rounded-2xl p-6 border border-slate-700 mb-8">
+                <h2 class="text-xl font-bold mb-4">Invite New User</h2>
 
-            <!-- Invite Result -->
-            <div id="invite-result" class="hidden mt-4 p-4 rounded-lg"></div>
-        </div>
+                <form id="invite-form" class="flex gap-4">
+                    <input type="email" id="invite-email" placeholder="user@example.com" required
+                        class="flex-1 px-4 py-3 bg-slate-900/50 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <button type="submit" id="invite-btn"
+                        class="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-lg font-semibold transition-all flex items-center space-x-2">
+                        <span>Send Invite</span>
+                    </button>
+                </form>
 
-        <!-- Users List -->
-        <div class="bg-slate-800/50 backdrop-blur-sm rounded-2xl p-6 border border-slate-700">
-            <div class="flex items-center justify-between mb-6">
-                <h2 class="text-xl font-bold">All Users</h2>
-                <button onclick="loadUsers()" class="text-slate-400 hover:text-white transition-colors text-sm">
-                    ↻ Refresh
-                </button>
+                <!-- Invite Result -->
+                <div id="invite-result" class="hidden mt-4 p-4 rounded-lg"></div>
             </div>
 
-            <div id="users-loading" class="text-center py-8 text-slate-400">
-                Loading users...
-            </div>
-
-            <div id="users-table" class="hidden overflow-x-auto">
-                <table class="w-full">
-                    <thead>
-                        <tr class="text-left text-slate-400 text-sm border-b border-slate-700">
-                            <th class="pb-3 font-medium">Email</th>
-                            <th class="pb-3 font-medium">Role</th>
-                            <th class="pb-3 font-medium">Status</th>
-                            <th class="pb-3 font-medium">Created</th>
-                            <th class="pb-3 font-medium">Last Login</th>
-                            <th class="pb-3 font-medium">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody id="users-body" class="text-sm">
-                        <!-- Users will be inserted here -->
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-        <!-- Contact Requests Section -->
-        <div class="bg-slate-800/50 backdrop-blur-sm rounded-2xl p-6 border border-slate-700 mt-8">
-            <div class="flex items-center justify-between mb-6">
-                <div class="flex items-center gap-3">
-                    <h2 class="text-xl font-bold">📩 Contact Requests</h2>
-                    <span id="contact-count"
-                        class="px-2 py-1 bg-blue-500/20 text-blue-400 rounded-full text-xs font-medium">0</span>
-                </div>
-                <button onclick="loadContactRequests()"
-                    class="text-slate-400 hover:text-white transition-colors text-sm">
-                    ↻ Refresh
-                </button>
-            </div>
-
-            <p class="text-slate-400 text-sm mb-4">
-                Access requests from the landing page contact form. Use status to track outreach progress.
-            </p>
-
-            <div id="contacts-loading" class="text-center py-8 text-slate-400">
-                Loading contact requests...
-            </div>
-
-            <div id="contacts-empty" class="hidden text-center py-8 text-slate-500">
-                No contact requests yet.
-            </div>
-
-            <div id="contacts-table" class="hidden overflow-x-auto">
-                <table class="w-full">
-                    <thead>
-                        <tr class="text-left text-slate-400 text-sm border-b border-slate-700">
-                            <th class="pb-3 font-medium">Name</th>
-                            <th class="pb-3 font-medium">Email</th>
-                            <th class="pb-3 font-medium">Phone</th>
-                            <th class="pb-3 font-medium">Message</th>
-                            <th class="pb-3 font-medium">Submitted</th>
-                            <th class="pb-3 font-medium">Status</th>
-                            <th class="pb-3 font-medium">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody id="contacts-body" class="text-sm">
-                        <!-- Contact requests will be inserted here -->
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-
-        <!-- Overnight Pre-Caching Section -->
-        <div class="bg-slate-800/50 backdrop-blur-sm rounded-2xl p-6 border border-slate-700 mt-8">
-            <div class="flex items-center justify-between mb-4">
-                <h2 class="text-xl font-bold">🌙 Overnight Pre-Caching</h2>
-                <button onclick="refreshPrecacheJobs()"
-                    class="text-slate-400 hover:text-white transition-colors text-sm">
-                    ↻ Refresh Jobs
-                </button>
-            </div>
-
-            <p class="text-slate-400 text-sm mb-4">
-                <strong>Light Pre-Cache:</strong> Fetches Screener.in fundamentals + AI Summary only.
-                Skips: TradingView charts, AI Scores, Trendlyne data.
-                Each stock takes ~30-45 seconds with 15s delay between stocks.
-            </p>
-
-            <div class="space-y-4">
-                <!-- Ticker Input -->
-                <div>
-                    <label class="block text-sm font-medium text-slate-300 mb-2">Stock Tickers (comma-separated)</label>
-                    <textarea id="precache-tickers" rows="3"
-                        placeholder="RELIANCE, TCS, HDFCBANK, INFY, ICICIBANK, HDFC, BAJFINANCE, SBIN, KOTAKBANK, LT"
-                        class="w-full px-4 py-3 bg-slate-900/50 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"></textarea>
-                    <p class="text-xs text-slate-500 mt-1">Maximum 500 tickers per job</p>
+            <!-- Users List -->
+            <div class="bg-slate-800/50 backdrop-blur-sm rounded-2xl p-6 border border-slate-700">
+                <div class="flex items-center justify-between mb-6">
+                    <h2 class="text-xl font-bold">All Users</h2>
+                    <button onclick="loadUsers()" class="text-slate-400 hover:text-white transition-colors text-sm">
+                        ↻ Refresh
+                    </button>
                 </div>
 
-                <!-- Start Button -->
-                <button onclick="startPrecache()" id="precache-btn"
-                    class="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 px-6 py-3 rounded-lg font-semibold transition-all flex items-center space-x-2">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>
-                    <span>Start Pre-Caching</span>
-                </button>
+                <div id="users-loading" class="text-center py-8 text-slate-400">
+                    Loading users...
+                </div>
 
-                <!-- Job Status -->
-                <div id="precache-status" class="hidden p-4 rounded-lg border"></div>
+                <div id="users-table" class="hidden overflow-x-auto">
+                    <table class="w-full">
+                        <thead>
+                            <tr class="text-left text-slate-400 text-sm border-b border-slate-700">
+                                <th class="pb-3 font-medium">Email</th>
+                                <th class="pb-3 font-medium">Role</th>
+                                <th class="pb-3 font-medium">Status</th>
+                                <th class="pb-3 font-medium">Created</th>
+                                <th class="pb-3 font-medium">Last Login</th>
+                                <th class="pb-3 font-medium">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="users-body" class="text-sm">
+                            <!-- Users will be inserted here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
 
-                <!-- Running Jobs -->
-                <div id="precache-jobs" class="hidden mt-4">
-                    <h3 class="text-sm font-medium text-slate-300 mb-2">Active & Recent Jobs</h3>
-                    <div id="precache-jobs-list" class="space-y-2"></div>
+            <!-- Contact Requests Section -->
+            <div class="bg-slate-800/50 backdrop-blur-sm rounded-2xl p-6 border border-slate-700 mt-8">
+                <div class="flex items-center justify-between mb-6">
+                    <div class="flex items-center gap-3">
+                        <h2 class="text-xl font-bold">📩 Contact Requests</h2>
+                        <span id="contact-count"
+                            class="px-2 py-1 bg-blue-500/20 text-blue-400 rounded-full text-xs font-medium">0</span>
+                    </div>
+                    <button onclick="loadContactRequests()"
+                        class="text-slate-400 hover:text-white transition-colors text-sm">
+                        ↻ Refresh
+                    </button>
+                </div>
+
+                <p class="text-slate-400 text-sm mb-4">
+                    Access requests from the landing page contact form. Use status to track outreach progress.
+                </p>
+
+                <div id="contacts-loading" class="text-center py-8 text-slate-400">
+                    Loading contact requests...
+                </div>
+
+                <div id="contacts-empty" class="hidden text-center py-8 text-slate-500">
+                    No contact requests yet.
+                </div>
+
+                <div id="contacts-table" class="hidden overflow-x-auto">
+                    <table class="w-full">
+                        <thead>
+                            <tr class="text-left text-slate-400 text-sm border-b border-slate-700">
+                                <th class="pb-3 font-medium">Name</th>
+                                <th class="pb-3 font-medium">Email</th>
+                                <th class="pb-3 font-medium">Phone</th>
+                                <th class="pb-3 font-medium">Message</th>
+                                <th class="pb-3 font-medium">Submitted</th>
+                                <th class="pb-3 font-medium">Status</th>
+                                <th class="pb-3 font-medium">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="contacts-body" class="text-sm">
+                            <!-- Contact requests will be inserted here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab 2: Light Cache Management -->
+        <div id="tab-content-cache" class="hidden">
+            <!-- Overnight Pre-Caching Section -->
+            <div class="bg-slate-800/50 backdrop-blur-sm rounded-2xl p-6 border border-slate-700">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-xl font-bold">🌙 Overnight Pre-Caching</h2>
+                    <button onclick="refreshPrecacheJobs()"
+                        class="text-slate-400 hover:text-white transition-colors text-sm">
+                        ↻ Refresh Jobs
+                    </button>
+                </div>
+
+                <p class="text-slate-400 text-sm mb-4">
+                    <strong>Light Pre-Cache:</strong> Fetches Screener.in fundamentals + AI Summary only.
+                    Skips: TradingView charts, AI Scores, Trendlyne data.
+                    Each stock takes ~30-45 seconds with 15s delay between stocks.
+                </p>
+
+                <div class="space-y-4">
+                    <!-- Ticker Input -->
+                    <div>
+                        <label class="block text-sm font-medium text-slate-300 mb-2">Stock Tickers
+                            (comma-separated)</label>
+                        <textarea id="precache-tickers" rows="3"
+                            placeholder="RELIANCE, TCS, HDFCBANK, INFY, ICICIBANK, HDFC, BAJFINANCE, SBIN, KOTAKBANK, LT"
+                            class="w-full px-4 py-3 bg-slate-900/50 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"></textarea>
+                        <p class="text-xs text-slate-500 mt-1">Maximum 500 tickers per job</p>
+                    </div>
+
+                    <!-- Start Button -->
+                    <button onclick="startPrecache()" id="precache-btn"
+                        class="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 px-6 py-3 rounded-lg font-semibold transition-all flex items-center space-x-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        <span>Start Pre-Caching</span>
+                    </button>
+
+                    <!-- Job Status -->
+                    <div id="precache-status" class="hidden p-4 rounded-lg border"></div>
+
+                    <!-- Running Jobs -->
+                    <div id="precache-jobs" class="hidden mt-4">
+                        <h3 class="text-sm font-medium text-slate-300 mb-2">Active & Recent Jobs</h3>
+                        <div id="precache-jobs-list" class="space-y-2"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Light Cache Inventory -->
+            <div class="bg-slate-800/50 backdrop-blur-sm rounded-2xl p-6 border border-slate-700 mt-8">
+                <div class="flex items-center justify-between mb-6">
+                    <div class="flex items-center gap-3">
+                        <h2 class="text-xl font-bold">🗄️ Light Cache Inventory</h2>
+                        <span id="cache-count"
+                            class="px-2 py-1 bg-blue-500/20 text-blue-400 rounded-full text-xs font-medium">0</span>
+                    </div>
+                    <div class="flex items-center gap-4">
+                        <button onclick="clearAllLightCache()"
+                            class="text-red-400 hover:text-red-300 transition-colors text-sm font-medium border border-red-500/30 px-3 py-1.5 rounded-lg hover:bg-red-500/10">
+                            🗑️ Clear All
+                        </button>
+                        <button onclick="loadLightCache()"
+                            class="bg-slate-700 hover:bg-slate-600 text-white transition-colors text-sm px-3 py-1.5 rounded-lg">
+                            ↻ Refresh List
+                        </button>
+                    </div>
+                </div>
+
+                <div class="mb-6">
+                    <input type="text" id="cache-search" placeholder="Search tickers..." oninput="filterCacheTable()"
+                        class="w-full max-w-xs px-4 py-2 bg-slate-900/50 border border-slate-600 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+
+                <div id="cache-loading" class="text-center py-8 text-slate-400">
+                    Scanning cache...
+                </div>
+
+                <div id="cache-empty" class="hidden text-center py-12 text-slate-500">
+                    <div class="text-4xl mb-3">👻</div>
+                    <p>No light cache entries found.</p>
+                </div>
+
+                <div id="cache-table-wrapper" class="hidden overflow-x-auto">
+                    <table class="w-full">
+                        <thead>
+                            <tr class="text-left text-slate-400 text-sm border-b border-slate-700">
+                                <th class="pb-3 font-medium">Ticker</th>
+                                <th class="pb-3 font-medium">Cached At</th>
+                                <th class="pb-3 font-medium text-right">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="cache-body" class="text-sm">
+                            <!-- Cache entries will be inserted here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <!-- Tab 3: User Insights & Analytics -->
+        <div id="tab-content-insights" class="hidden animate-fadeIn">
+            <!-- Stats Overview -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                <div class="bg-slate-800/50 backdrop-blur-sm rounded-2xl p-6 border border-slate-700">
+                    <p class="text-slate-400 text-sm font-medium mb-1">Total Active Users (7d)</p>
+                    <h3 id="stat-total-users" class="text-3xl font-bold">0</h3>
+                </div>
+                <div class="bg-slate-800/50 backdrop-blur-sm rounded-2xl p-6 border border-slate-700">
+                    <p class="text-slate-400 text-sm font-medium mb-1">Recent Interactions</p>
+                    <h3 id="stat-total-events" class="text-3xl font-bold">0</h3>
+                </div>
+                <div class="bg-slate-800/50 backdrop-blur-sm rounded-2xl p-6 border border-slate-700">
+                    <p class="text-slate-400 text-sm font-medium mb-1">Avg. Session Time</p>
+                    <h3 id="stat-avg-time" class="text-3xl font-bold">Live</h3>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <!-- Section Popularity -->
+                <div class="bg-slate-800/50 backdrop-blur-sm rounded-2xl p-6 border border-slate-700">
+                    <h2 class="text-xl font-bold mb-6">🎯 Top Sections</h2>
+                    <div id="top-sections-list" class="space-y-4">
+                        <div class="text-center py-8 text-slate-500">Loading popularity data...</div>
+                    </div>
+                </div>
+
+                <!-- Recent Activity Feed -->
+                <div class="bg-slate-800/50 backdrop-blur-sm rounded-2xl p-6 border border-slate-700">
+                    <div class="flex items-center justify-between mb-6">
+                        <h2 class="text-xl font-bold">⚡ Live Activity Feed</h2>
+                        <div class="flex items-center gap-4">
+                            <label class="flex items-center gap-2 text-sm text-slate-400 cursor-pointer">
+                                <input type="checkbox" id="insights-include-admins" checked onchange="loadInsights()"
+                                    class="w-4 h-4 rounded border-slate-700 bg-slate-900 text-blue-600 focus:ring-blue-500">
+                                <span>Show Admins</span>
+                            </label>
+                            <button onclick="loadInsights()" class="text-blue-400 hover:text-blue-300 text-sm">↻
+                                Refresh</button>
+                        </div>
+                    </div>
+                    <div class="overflow-y-auto max-h-[400px] pr-2 custom-scrollbar">
+                        <div id="recent-activity-feed" class="space-y-3">
+                            <div class="text-center py-8 text-slate-500">Loading activity...</div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
     </main>
 
     <script>
-        // Load users on page load
-        document.addEventListener('DOMContentLoaded', loadUsers);
+        // Tab Management
+        function switchTab(tab) {
+            const tabs = ['users', 'cache', 'insights'];
+            tabs.forEach(t => {
+                const content = document.getElementById(`tab-content-${t}`);
+                const btn = document.getElementById(`btn-tab-${t}`);
+                const mobileBtn = document.getElementById(`mobile-btn-tab-${t}`);
+
+                if (t === tab) {
+                    content.classList.remove('hidden');
+                    btn.className = 'px-4 py-1.5 rounded-md text-sm font-medium transition-all bg-blue-600 text-white';
+                    mobileBtn.className = 'flex-1 py-3 text-sm font-medium border-b-2 border-blue-500 text-white';
+                } else {
+                    content.classList.add('hidden');
+                    btn.className = 'px-4 py-1.5 rounded-md text-sm font-medium transition-all text-slate-400 hover:text-white';
+                    mobileBtn.className = 'flex-1 py-3 text-sm font-medium border-b-2 border-transparent text-slate-400';
+                }
+            });
+
+            // Refresh content if needed
+            if (tab === 'cache') {
+                loadLightCache();
+                refreshPrecacheJobs();
+            } else if (tab === 'insights') {
+                loadInsights();
+            } else {
+                loadUsers();
+                loadContactRequests();
+            }
+        }
+
+        // Initialize state
+        document.addEventListener('DOMContentLoaded', () => {
+            loadUsers();
+            loadContactRequests();
+        });
+
+        // =====================================================================
+        // Cache Management Functions
+        // =====================================================================
+        let allCacheEntries = [];
+
+        async function loadLightCache() {
+            const loading = document.getElementById('cache-loading');
+            const wrapper = document.getElementById('cache-table-wrapper');
+            const empty = document.getElementById('cache-empty');
+            const tbody = document.getElementById('cache-body');
+            const countBadge = document.getElementById('cache-count');
+
+            loading.classList.remove('hidden');
+            wrapper.classList.add('hidden');
+            empty.classList.add('hidden');
+
+            try {
+                const response = await fetch('/api/admin/light-cache-tickers');
+                const data = await response.json();
+
+                if (!data.success) {
+                    loading.textContent = 'Error: ' + data.error;
+                    return;
+                }
+
+                allCacheEntries = data.tickers || [];
+                countBadge.textContent = allCacheEntries.length;
+
+                if (allCacheEntries.length === 0) {
+                    loading.classList.add('hidden');
+                    empty.classList.remove('hidden');
+                    return;
+                }
+
+                renderCacheTable(allCacheEntries);
+                loading.classList.add('hidden');
+                wrapper.classList.remove('hidden');
+            } catch (error) {
+                loading.textContent = 'Failed to load cache inventory';
+                console.error(error);
+            }
+        }
+
+        function renderCacheTable(entries) {
+            const tbody = document.getElementById('cache-body');
+            tbody.innerHTML = entries.map(entry => `
+                <tr class="border-b border-slate-700/50 hover:bg-slate-700/10 transition-colors">
+                    <td class="py-4 font-semibold text-blue-400 uppercase tracking-wider">${entry.ticker}</td>
+                    <td class="py-4 text-slate-400">${entry.cached_at}</td>
+                    <td class="py-4 text-right">
+                        <button onclick="clearTickerCache('${entry.ticker}')" 
+                            class="text-slate-500 hover:text-red-400 transition-colors" title="Delete entry">
+                            <svg class="w-5 h-5 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function filterCacheTable() {
+            const query = document.getElementById('cache-search').value.toLowerCase();
+            const filtered = allCacheEntries.filter(e => e.ticker.toLowerCase().includes(query));
+            renderCacheTable(filtered);
+        }
+
+        async function clearTickerCache(ticker) {
+            if (!confirm(`Clear cache for ${ticker}?`)) return;
+
+            try {
+                const response = await fetch('/api/admin/clear-cache', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ target: ticker })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    loadLightCache(); // Refresh
+                } else {
+                    alert('Error: ' + data.error);
+                }
+            } catch (error) {
+                alert('Connection failed');
+            }
+        }
+
+        async function clearAllLightCache() {
+            if (!confirm('EXTREME DANGER: This will delete ALL light cache entries. Are you absolutely sure?')) return;
+
+            try {
+                const response = await fetch('/api/admin/clear-cache', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ target: 'all_light' })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    loadLightCache();
+                } else {
+                    alert('Error: ' + data.error);
+                }
+            } catch (error) {
+                alert('Connection failed');
+            }
+        }
+
+        // =====================================================================
+        // Legacy Admin Functions
+        // =====================================================================
 
         async function loadUsers() {
             const loading = document.getElementById('users-loading');
@@ -329,10 +611,6 @@
             window.location.href = '/login';
         }
 
-        // =====================================================================
-        // Contact Requests Functions
-        // =====================================================================
-
         async function loadContactRequests() {
             const loading = document.getElementById('contacts-loading');
             const table = document.getElementById('contacts-table');
@@ -468,10 +746,7 @@
             }
         }
 
-        // =====================================================================
-        // Pre-Caching Functions
-        // =====================================================================
-
+        // Pre-Caching
         let precachePollingInterval = null;
 
         async function startPrecache() {
@@ -522,62 +797,25 @@
                 status.innerHTML = `❌ Network error: ${error.message}`;
             } finally {
                 btn.disabled = false;
-                btn.innerHTML = `
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-                    </svg>
-                    <span>Start Pre-Caching</span>
-                `;
+                btn.innerHTML = '<span>Start Pre-Caching</span>';
             }
         }
 
         function startPolling(jobId) {
-            // Clear existing polling
-            if (precachePollingInterval) {
-                clearInterval(precachePollingInterval);
-            }
-
-            // Poll every 5 seconds
+            if (precachePollingInterval) clearInterval(precachePollingInterval);
             precachePollingInterval = setInterval(async () => {
                 try {
                     const res = await fetch(`/admin/batch-precache/status/${jobId}`);
                     const data = await res.json();
-
                     const progressDiv = document.getElementById('job-progress');
                     if (!progressDiv) return;
-
                     if (data.status === 'running') {
-                        const elapsedText = data.elapsed_seconds !== null && data.elapsed_seconds !== undefined
-                            ? ` - ${data.elapsed_seconds}s elapsed`
-                            : '';
-                        progressDiv.innerHTML = `
-                            <div class="flex items-center gap-2">
-                                <div class="animate-spin w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full"></div>
-                                <span>Processing: <strong>${data.current}</strong> (${data.completed}/${data.total})${elapsedText}</span>
-                            </div>
-                        `;
+                        progressDiv.innerHTML = `<span>Processing: <strong>${data.current}</strong> (${data.completed}/${data.total})</span>`;
                     } else if (data.status === 'complete') {
                         clearInterval(precachePollingInterval);
-                        const successCount = data.results.filter(r => r.status === 'success').length;
-                        progressDiv.innerHTML = `
-                            <div class="text-green-300">
-                                <p class="font-medium">✅ Complete! ${successCount}/${data.total} stocks cached successfully.</p>
-                                <div class="text-sm mt-2 max-h-32 overflow-y-auto">
-                                    ${data.results.map(r => {
-                            const duration = r.duration_seconds ? ` (${r.duration_seconds}s)` : '';
-                            return `
-                                            <div class="${r.status === 'success' ? 'text-green-400' : 'text-red-400'}">
-                                                ${r.ticker}: ${r.status === 'success' ? '✓' : '✗ ' + (r.error || 'Failed')}${duration}
-                                            </div>
-                                        `;
-                        }).join('')}
-                                </div>
-                            </div>
-                        `;
+                        progressDiv.innerHTML = `<p class="text-green-300">✅ Complete! ${data.total} stocks processed.</p>`;
                     }
-                } catch (e) {
-                    console.warn('Polling error:', e);
-                }
+                } catch (e) { }
             }, 5000);
         }
 
@@ -587,11 +825,6 @@
 
             try {
                 const response = await fetch('/admin/batch-precache/jobs');
-
-                if (response.status === 401) {
-                    return; // Not logged in
-                }
-
                 const data = await response.json();
 
                 if (data.jobs && data.jobs.length > 0) {
@@ -600,33 +833,84 @@
                         <div class="p-3 bg-slate-900/50 rounded-lg flex items-center justify-between">
                             <div>
                                 <span class="font-mono text-sm">${job.job_id}</span>
-                                <span class="ml-2 px-2 py-0.5 rounded text-xs ${job.status === 'running' ? 'bg-blue-500/20 text-blue-400' :
-                            job.status === 'complete' ? 'bg-green-500/20 text-green-400' :
-                                'bg-slate-500/20 text-slate-400'
-                        }">
-                                    ${job.status}
-                                </span>
+                                <span class="ml-2 px-2 py-0.5 rounded text-xs ${job.status === 'running' ? 'bg-blue-500/20 text-blue-400' : 'bg-green-500/20 text-green-400'}">${job.status}</span>
                             </div>
-                            <div class="text-sm text-slate-400">
-                                ${job.completed}/${job.total} stocks
-                                ${job.current ? ` (current: ${job.current})` : ''}
-                            </div>
+                            <div class="text-sm text-slate-400">${job.completed}/${job.total} stocks</div>
                         </div>
                     `).join('');
                 } else {
                     jobsContainer.classList.add('hidden');
                 }
+            } catch (e) { }
+        }
+        async function loadInsights() {
+            const feed = document.getElementById('recent-activity-feed');
+            const sectionsList = document.getElementById('top-sections-list');
+            const includeAdmins = document.getElementById('insights-include-admins')?.checked ?? true;
+
+            try {
+                const response = await fetch(`/api/admin/insights/summary?include_admins=${includeAdmins}`);
+                const data = await response.json();
+
+                if (!data.success) return;
+
+                const s = data.summary;
+
+                // Update stats (DAU - last entry in daily_active is the most recent)
+                document.getElementById('stat-total-users').textContent = s.daily_active.length > 0 ? s.daily_active[0].dau : 0;
+                document.getElementById('stat-total-events').textContent = s.recent_activity.length;
+
+                // Render Top Sections
+                if (s.top_sections.length === 0) {
+                    sectionsList.innerHTML = '<div class="text-center py-8 text-slate-500">No data collected yet</div>';
+                } else {
+                    const maxCount = Math.max(...s.top_sections.map(x => x.count));
+                    sectionsList.innerHTML = s.top_sections.map(item => `
+                        <div>
+                            <div class="flex justify-between text-sm mb-1">
+                                <span class="capitalize font-medium text-slate-300">${item.section || 'Unknown'}</span>
+                                <span class="text-slate-500">${item.count} views</span>
+                            </div>
+                            <div class="w-full bg-slate-900 rounded-full h-1.5">
+                                <div class="bg-blue-500 h-1.5 rounded-full" style="width: ${(item.count / maxCount) * 100}%"></div>
+                            </div>
+                        </div>
+                    `).join('');
+                }
+
+                // Render Activity Feed
+                if (s.recent_activity.length === 0) {
+                    feed.innerHTML = '<div class="text-center py-8 text-slate-500">No recent activity</div>';
+                } else {
+                    feed.innerHTML = s.recent_activity.map(a => {
+                        let icon = '🖱️';
+                        if (a.event_type === 'session_start') icon = '🚀';
+                        if (a.event_type === 'session_ping') icon = '💓';
+                        if (a.event_type === 'section_view') icon = '👁️';
+
+                        const time = new Date(a.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+                        return `
+                            <div class="flex items-start gap-3 p-3 bg-slate-900/40 rounded-xl border border-slate-700/50">
+                                <div class="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center text-sm">${icon}</div>
+                                <div class="flex-1 min-w-0">
+                                    <div class="flex justify-between items-center">
+                                        <p class="text-xs font-medium text-slate-400 truncate">${a.email}</p>
+                                        <span class="text-[10px] text-slate-500">${time}</span>
+                                    </div>
+                                    <p class="text-sm text-white font-medium">
+                                        ${a.event_type.replace('_', ' ')}: <span class="text-blue-400">${a.event_data || '-'}</span>
+                                    </p>
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+                }
+
             } catch (e) {
-                console.warn('Failed to load jobs:', e);
+                console.error("Failed to load insights", e);
             }
         }
-
-        // Load jobs on page load
-        document.addEventListener('DOMContentLoaded', () => {
-            loadUsers();
-            loadContactRequests();
-            refreshPrecacheJobs();
-        });
     </script>
 </body>
 

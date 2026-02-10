@@ -7,7 +7,7 @@ import os
 from flask import Blueprint, request, jsonify, redirect, url_for, session, render_template_string
 from functools import wraps
 
-from .database import User, InviteToken, init_db, seed_admin
+from .database import User, InviteToken, UserEvent, init_db, seed_admin
 from .utils import hash_password, verify_password, generate_invite_token, get_token_expiry
 from .email_service import send_invite_email, send_welcome_email
 
@@ -195,6 +195,25 @@ def api_logout():
     return jsonify({'success': True})
 
 
+@auth_bp.route('/api/insights/log', methods=['POST'])
+def api_log_event():
+    """Log a user interaction event (non-admin)."""
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({'error': 'Unauthorized'}), 401
+    
+    data = request.get_json()
+    event_type = data.get('event_type')
+    event_data = data.get('event_data')
+    session_id = data.get('session_id')
+    
+    if not event_type:
+        return jsonify({'error': 'Event type required'}), 400
+    
+    UserEvent.log(user_id, event_type, event_data, session_id)
+    return jsonify({'success': True})
+
+
 @auth_bp.route('/api/me')
 @login_required
 def api_me():
@@ -321,6 +340,18 @@ def api_delete_user(user_id):
     
     User.delete(user_id)
     return jsonify({'success': True})
+
+
+@auth_bp.route('/api/admin/insights/summary')
+@admin_required
+def api_insights_summary():
+    """Get aggregated insights for admin dashboard."""
+    include_admins = request.args.get('include_admins', 'true').lower() == 'true'
+    summary = UserEvent.get_summary(include_admins=include_admins)
+    return jsonify({
+        'success': True,
+        'summary': summary
+    })
 
 
 # ============== Initialize ==============

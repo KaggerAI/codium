@@ -564,6 +564,12 @@ def api_ask_unanswerable():
     
     data = request.json
     question = data.get("question")
+    processor = data.get("processor", "ultra-fast")
+    
+    # Sanity check for processor
+    if processor not in ["pro-fast", "ultra-fast", "ultra"]:
+        processor = "ultra-fast"
+
     if not question:
         return jsonify({"error": "Question is required."}), 400
     
@@ -586,7 +592,7 @@ def api_ask_unanswerable():
         }
         payload = {
             "input": expanded_question,
-            "processor": "ultra-fast",
+            "processor": processor,
             "enable_events": True
         }
         
@@ -6056,6 +6062,140 @@ def list_precache_jobs():
 
 # =====================================================================
 # END: Admin Batch Pre-Caching System
+# =====================================================================
+
+# =====================================================================
+# START: Admin Cache Management API
+# =====================================================================
+
+@app.route('/api/admin/light-cache-tickers', methods=['GET'])
+@admin_required
+def api_light_cache_tickers():
+    """
+    List all tickers currently in the light cache.
+    Scans Redis (if available) or local memory.
+    """
+    light_tickers = []
+    try:
+        # 1. Check Redis if available
+        if DIRECT_REDIS_CLIENT:
+            # Use SCAN for better performance on large datasets
+            cursor = 0
+            while True:
+                cursor, keys = DIRECT_REDIS_CLIENT.scan(cursor, match="*stock_analysis_*", count=100)
+                for key in keys:
+                    try:
+                        # Direct Redis keys don't include the prefix used by flask_caching
+                        # but we need to check if it's a light cache
+                        raw_data = DIRECT_REDIS_CLIENT.get(key)
+                        if raw_data:
+                            # Note: Flask-Caching might use a different prefix like 'flask_cache_'
+                            # Our manual set uses 'stock_analysis_{ticker}'
+                            data = pickle.loads(zlib.decompress(raw_data))
+                            if isinstance(data, dict) and data.get('light_cache'):
+                                light_tickers.append({
+                                    'ticker': data.get('ticker', key.decode('utf-8').replace('stock_analysis_', '')),
+                                    'cached_at': data.get('cached_at', 'Unknown')
+                                })
+                    except Exception as e:
+                        print(f"DEBUG: Failed to parse Redis key {key}: {e}", file=sys.stderr)
+                if cursor == 0:
+                    break
+        
+        # 2. Check Local Cache (Fallback or dual-mode)
+        for ticker, entry in LOCAL_ANALYSIS_CACHE.items():
+            data = entry.get('data')
+            if isinstance(data, dict) and data.get('light_cache'):
+                # Avoid duplicates if also in Redis
+                if not any(t['ticker'] == ticker for t in light_tickers):
+                    light_tickers.append({
+                        'ticker': ticker,
+                        'cached_at': data.get('cached_at', 'Unknown')
+                    })
+                    
+        # Sort by ticker
+        light_tickers.sort(key=lambda x: x['ticker'])
+        
+        return jsonify({
+            'success': True,
+            'count': len(light_tickers),
+            'tickers': light_tickers
+        })
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/clear-cache', methods=['POST'])
+@admin_required
+def api_clear_cache():
+    """
+    Clear cache for a specific ticker or all light cache entries.
+    """
+    try:
+        data = request.get_json(force=True)
+        target = data.get('target', '') # ticker or 'all_light'
+        
+        if not target:
+            return jsonify({'error': 'No target specified'}), 400
+            
+        cleared_count = 0
+        
+        if target == 'all_light':
+            # Clear all light caches
+            # Redis
+            if DIRECT_REDIS_CLIENT:
+                cursor = 0
+                while True:
+                    cursor, keys = DIRECT_REDIS_CLIENT.scan(cursor, match="*stock_analysis_*", count=100)
+                    for key in keys:
+                        try:
+                            raw_data = DIRECT_REDIS_CLIENT.get(key)
+                            if raw_data:
+                                data = pickle.loads(zlib.decompress(raw_data))
+                                if isinstance(data, dict) and data.get('light_cache'):
+                                    DIRECT_REDIS_CLIENT.delete(key)
+                                    cleared_count += 1
+                        except:
+                            pass
+                    if cursor == 0:
+                        break
+            
+            # Local
+            to_delete = [t for t, e in LOCAL_ANALYSIS_CACHE.items() if e.get('data', {}).get('light_cache')]
+            for t in to_delete:
+                del LOCAL_ANALYSIS_CACHE[t]
+                cleared_count += 1
+                
+            return jsonify({'success': True, 'message': f'Cleared {cleared_count} light cache entries.'})
+            
+        else:
+            # Clear specific ticker
+            ticker_upper = target.upper()
+            key = f"stock_analysis_{ticker_upper}"
+            
+            # Redis
+            if DIRECT_REDIS_CLIENT:
+                # Try both prefixed and non-prefixed
+                DIRECT_REDIS_CLIENT.delete(key)
+                DIRECT_REDIS_CLIENT.delete(f"flask_cache_{key}")
+                cleared_count += 1
+            
+            # Local
+            if ticker_upper in LOCAL_ANALYSIS_CACHE:
+                del LOCAL_ANALYSIS_CACHE[ticker_upper]
+                cleared_count += 1
+                
+            if cleared_count > 0:
+                return jsonify({'success': True, 'message': f'Cleared cache for {ticker_upper}'})
+            else:
+                return jsonify({'error': f'No cache found for {ticker_upper}'}), 404
+                
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+# =====================================================================
+# END: Admin Cache Management API
 # =====================================================================
 
 # =====================================================================

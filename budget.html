@@ -619,7 +619,7 @@
         // Initialize Socket.IO connection
         function initSocket() {
             socket = io({
-                transports: ['websocket', 'polling'],
+                transports: ['polling', 'websocket'],
                 reconnection: true,
                 reconnectionAttempts: 20,
                 reconnectionDelay: 1000,
@@ -1078,6 +1078,45 @@
             }
         });
         window.addEventListener('beforeunload', () => { if (isSessionActive && isAdmin) stopSession(); });
+
+        // =====================================================================
+        // Kagger User Insights Tracking (Non-Invasive)
+        // =====================================================================
+        const KaggerInsights = {
+            sessionId: Math.random().toString(36).substring(2, 15) + Date.now().toString(36),
+
+            logEvent(eventType, eventData = null) {
+                try {
+                    const payload = {
+                        event_type: eventType,
+                        event_data: eventData ? String(eventData) : null,
+                        session_id: this.sessionId
+                    };
+
+                    if (navigator.sendBeacon) {
+                        const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+                        navigator.sendBeacon('/api/insights/log', blob);
+                    } else {
+                        fetch('/api/insights/log', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(payload),
+                            keepalive: true
+                        }).catch(() => { });
+                    }
+                } catch (e) { }
+            },
+
+            init() {
+                // Log session start on budget page
+                this.logEvent('session_start', 'budget_page');
+                this.logEvent('section_view', 'budget');
+
+                // Periodic ping every 1 minute to track duration
+                setInterval(() => this.logEvent('session_ping'), 60000);
+            }
+        };
+        KaggerInsights.init();
     </script>
 </body>
 

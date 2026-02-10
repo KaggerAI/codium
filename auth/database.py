@@ -69,6 +69,19 @@ def init_db():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
+
+        # User events table for insights
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS user_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                event_type TEXT NOT NULL,
+                event_data TEXT,
+                session_id TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users (id)
+            )
+        ''')
         
         print(f"INFO: Database initialized at {DB_PATH}")
 
@@ -228,6 +241,78 @@ class InviteToken:
                 UPDATE invite_tokens SET used = 1
                 WHERE id = ?
             ''', (self.id,))
+
+
+# User Event model for Insights
+class UserEvent:
+    def __init__(self, id, user_id, event_type, event_data, session_id, created_at):
+        self.id = id
+        self.user_id = user_id
+        self.event_type = event_type
+        self.event_data = event_data
+        self.session_id = session_id
+        self.created_at = created_at
+
+    @classmethod
+    def log(cls, user_id, event_type, event_data=None, session_id=None):
+        """Log a new user event."""
+        with get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT INTO user_events (user_id, event_type, event_data, session_id)
+                VALUES (?, ?, ?, ?)
+            ''', (user_id, event_type, event_data, session_id))
+            return cursor.lastrowid
+
+    @classmethod
+    def get_summary(cls, include_admins=True):
+        """Get aggregated analytics for the admin dashboard."""
+        with get_db() as conn:
+            cursor = conn.cursor()
+            
+            # Base clauses for filtering
+            join_clause = "JOIN users u ON e.user_id = u.id" if not include_admins else ""
+            where_condition = "AND u.role != 'admin'" if not include_admins else ""
+
+            # Daily Active Users (Last 7 days)
+            cursor.execute(f'''
+                SELECT date(e.created_at) as date, count(DISTINCT e.user_id) as dau
+                FROM user_events e
+                {join_clause}
+                WHERE e.created_at > date('now', '-7 days') {where_condition}
+                GROUP BY date(e.created_at)
+                ORDER BY date DESC
+            ''')
+            daily_active = [dict(row) for row in cursor.fetchall()]
+
+            # Top Sections (Last 30 days)
+            cursor.execute(f'''
+                SELECT e.event_data as section, count(*) as count
+                FROM user_events e
+                {join_clause}
+                WHERE e.event_type = 'section_view' AND e.created_at > date('now', '-30 days') {where_condition}
+                GROUP BY e.event_data
+                ORDER BY count DESC
+                LIMIT 10
+            ''')
+            top_sections = [dict(row) for row in cursor.fetchall()]
+
+            # Recent Activity
+            cursor.execute(f'''
+                SELECT u.email, e.event_type, e.event_data, e.created_at
+                FROM user_events e
+                JOIN users u ON e.user_id = u.id
+                WHERE 1=1 {"AND u.role != 'admin'" if not include_admins else ""}
+                ORDER BY e.created_at DESC
+                LIMIT 20
+            ''')
+            recent_activity = [dict(row) for row in cursor.fetchall()]
+
+            return {
+                'daily_active': daily_active,
+                'top_sections': top_sections,
+                'recent_activity': recent_activity
+            }
 
 
 # Initialize database on module import
