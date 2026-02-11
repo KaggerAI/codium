@@ -5900,14 +5900,20 @@ def run_batch_precache(job_id, tickers):
                 'analyst_reports': []
             }
             
-            # Cache for stock-based instant access (1 week = 604800 seconds)
+            # Cache for stock-based instant access (4 months = 10368000 seconds)
             stock_cache_key = f"stock_analysis_{ticker}"
             # Calculate total duration for this stock
             duration_seconds = int(time.time() - stock_start_time)
             
             try:
                 frontend_compressed = zlib.compress(pickle.dumps(light_cache_data))
-                cache.set(stock_cache_key, frontend_compressed, timeout=604800)
+                cache.set(stock_cache_key, frontend_compressed, timeout=10368000)
+                # Also write via Direct Redis for reliable admin scanning
+                if DIRECT_REDIS_CLIENT:
+                    try:
+                        DIRECT_REDIS_CLIENT.setex(stock_cache_key, 10368000, frontend_compressed)
+                    except Exception as e:
+                        print(f"WARN: Direct Redis write failed for light cache {ticker}: {e}", file=sys.stderr)
                 print(f"LIGHT PRE-CACHE: [{i+1}/{total}] {ticker} ✓ Cached successfully ({duration_seconds}s)")
                 results.append({'ticker': ticker, 'status': 'success', 'duration_seconds': duration_seconds})
             except Exception as e:
