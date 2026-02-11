@@ -6089,12 +6089,20 @@ def api_light_cache_tickers():
                         # but we need to check if it's a light cache
                         raw_data = DIRECT_REDIS_CLIENT.get(key)
                         if raw_data:
-                            # Note: Flask-Caching might use a different prefix like 'flask_cache_'
-                            # Our manual set uses 'stock_analysis_{ticker}'
-                            data = pickle.loads(zlib.decompress(raw_data))
+                            # Try zlib+pickle first (our manual compression format),
+                            # then plain pickle (Flask-Caching's internal format)
+                            data = None
+                            try:
+                                data = pickle.loads(zlib.decompress(raw_data))
+                            except zlib.error:
+                                try:
+                                    data = pickle.loads(raw_data)
+                                except Exception:
+                                    pass
+                            
                             if isinstance(data, dict) and data.get('light_cache'):
                                 light_tickers.append({
-                                    'ticker': data.get('ticker', key.decode('utf-8').replace('stock_analysis_', '')),
+                                    'ticker': data.get('ticker', key.decode('utf-8').replace('flask_cache_stock_analysis_', '').replace('stock_analysis_', '')),
                                     'cached_at': data.get('cached_at', 'Unknown')
                                 })
                     except Exception as e:
@@ -6151,7 +6159,14 @@ def api_clear_cache():
                         try:
                             raw_data = DIRECT_REDIS_CLIENT.get(key)
                             if raw_data:
-                                data = pickle.loads(zlib.decompress(raw_data))
+                                data = None
+                                try:
+                                    data = pickle.loads(zlib.decompress(raw_data))
+                                except zlib.error:
+                                    try:
+                                        data = pickle.loads(raw_data)
+                                    except Exception:
+                                        pass
                                 if isinstance(data, dict) and data.get('light_cache'):
                                     DIRECT_REDIS_CLIENT.delete(key)
                                     cleared_count += 1

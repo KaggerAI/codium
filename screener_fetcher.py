@@ -1018,14 +1018,14 @@ async def fetch_peer_comparison_from_screener_async(ticker: str, company_name: s
                         # Wait for the peers section table
                         try:
                             await page.wait_for_selector('#peers table', timeout=5000)
-                            log_progress(f"Browser found peer table at {url}")
+                            log_progress(f"Populated peer table")
                             html = await page.content()
                             break  # Found table, stop trying
                         except:
-                            log_progress(f"Peer table not found at {url}, trying next...")
+                            log_progress(f"Peer table not found, trying next...")
                             continue
                     except Exception as e:
-                        print(f"WARN: Browser failed to load {url}: {e}")
+                        print(f"WARN: Peer Table failed to load: {e}")
                         continue
                 
                 if not html:
