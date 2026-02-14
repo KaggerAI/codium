@@ -6516,6 +6516,27 @@ def serve_budget_page():
 # END: Budget Live Transcription
 # =====================================================================
 
+# =====================================================================
+# START: Agent Marketplace
+# =====================================================================
+
+# Serve the Agent Marketplace page
+@app.route('/agents')
+def serve_agents_page():
+    """Serve the Agent Marketplace page"""
+    return send_from_directory('.', 'agents.html')
+
+# Register Concall Agent routes
+from agents.concall_agent import register_concall_routes
+from screener_fetcher import fetch_latest_documents_async, get_text_from_pdf_url_async
+register_concall_routes(app, call_gemini_api, fetch_latest_documents_async, get_text_from_pdf_url_async)
+
+print("INFO: Agent Marketplace routes registered (Concall Agent)", file=sys.stderr)
+
+# =====================================================================
+# END: Agent Marketplace
+# =====================================================================
+
 if __name__ == '__main__':
     # Use socketio.run for WebSocket support
     socketio.run(app, host='0.0.0.0', port=8000, debug=True)
