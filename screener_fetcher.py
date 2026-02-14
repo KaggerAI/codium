@@ -853,6 +853,108 @@ async def fetch_latest_documents_async(ticker: str) -> list[dict]:
         print(f"ERROR (async): Could not fetch documents for {ticker}. Reason: {e}")
         return []
 
+
+# =====================================================================
+# Forensic Agent: Credit Rating + Annual Report Fetcher
+# =====================================================================
+
+async def fetch_forensic_documents_async(ticker: str) -> dict:
+    """
+    Fetches credit rating PDFs (latest 2) and annual report PDF (latest 1)
+    from the Screener.in documents section for forensic analysis.
+    
+    Returns:
+        dict: {
+            'credit_ratings': [{'label': str, 'link': str, 'text': str}, ...],  # up to 2
+            'annual_report': {'label': str, 'link': str, 'text': str} or None
+        }
+    """
+    result = {'credit_ratings': [], 'annual_report': None}
+    
+    try:
+        url = BASE_URL.format(ticker=ticker)
+        async with httpx.AsyncClient(follow_redirects=True) as client:
+            response = await client.get(url, headers=HEADERS, timeout=45.0)
+            response.raise_for_status()
+        
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        # --- Find Credit Rating links (latest 2) ---
+        credit_links = soup.select('a[class*="Credit+Rating"]')
+        credit_tasks = []
+        credit_infos = []
+        
+        for link in credit_links[:2]:  # Latest 2 credit ratings
+            href = link.get('href', '')
+            if not href:
+                continue
+            # Extract label: "Rating update" + date/agency from child div
+            label_parts = [link.get_text(separator=' ', strip=True)]
+            date_div = link.find('div')
+            date_text = date_div.text.strip() if date_div else ''
+            label = f"Credit Rating - {date_text}" if date_text else "Credit Rating"
+            
+            info = {'label': label, 'link': href, 'text': ''}
+            credit_infos.append(info)
+            credit_tasks.append(get_text_from_pdf_url_async(href, max_pages_to_process=20, max_chars_to_return=15000))
+        
+        # --- Find Annual Report link (latest 1) ---
+        annual_links = soup.select('a[class*="Annual+Report"]')
+        annual_task = None
+        annual_info = None
+        
+        if annual_links:
+            link = annual_links[0]  # Latest annual report only
+            href = link.get('href', '')
+            if href:
+                label_text = link.get_text(separator=' ', strip=True)
+                annual_info = {'label': label_text or 'Annual Report', 'link': href, 'text': ''}
+                # Annual reports can be large, limit extraction
+                annual_task = get_text_from_pdf_url_async(href, max_pages_to_process=30, max_chars_to_return=20000)
+        
+        # --- Run all PDF extractions in parallel ---
+        all_tasks = credit_tasks.copy()
+        if annual_task:
+            all_tasks.append(annual_task)
+        
+        if not all_tasks:
+            print(f"FORENSIC_DOCS: No credit rating or annual report documents found for {ticker}")
+            return result
+        
+        print(f"FORENSIC_DOCS: Fetching {len(credit_tasks)} credit rating(s) + {'1 annual report' if annual_task else '0 annual reports'} for {ticker}")
+        
+        extracted = await asyncio.gather(*all_tasks, return_exceptions=True)
+        
+        # --- Map results back ---
+        for i, text_result in enumerate(extracted):
+            if i < len(credit_infos):
+                # Credit rating result
+                if isinstance(text_result, Exception):
+                    print(f"FORENSIC_DOCS: Failed to extract credit rating PDF: {text_result}")
+                    credit_infos[i]['text'] = f"Error extracting PDF: {text_result}"
+                else:
+                    credit_infos[i]['text'] = text_result or "No text extracted from PDF"
+            else:
+                # Annual report result
+                if annual_info:
+                    if isinstance(text_result, Exception):
+                        print(f"FORENSIC_DOCS: Failed to extract annual report PDF: {text_result}")
+                        annual_info['text'] = f"Error extracting PDF: {text_result}"
+                    else:
+                        annual_info['text'] = text_result or "No text extracted from PDF"
+        
+        result['credit_ratings'] = credit_infos
+        result['annual_report'] = annual_info
+        
+        print(f"FORENSIC_DOCS: Successfully fetched {len(credit_infos)} credit ratings + {'1 annual report' if annual_info else '0'} for {ticker}")
+        return result
+        
+    except Exception as e:
+        print(f"FORENSIC_DOCS ERROR: Could not fetch forensic documents for {ticker}. Reason: {e}")
+        traceback.print_exc()
+        return result
+
+
 def fetch_latest_documents(ticker: str) -> list[dict]:
     """
     MODIFIED: Now uses Gemini to summarize Results Presentations (PPT) and

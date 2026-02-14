@@ -43,6 +43,20 @@ def _safe_float(value, default=None):
             return default
     return default
 
+def _safe_div(a, b, default=None):
+    """Safe division that handles None, NaN, zero, and non-numeric types."""
+    try:
+        a_val = float(a) if a is not None else None
+        b_val = float(b) if b is not None else None
+        if a_val is None or b_val is None or b_val == 0 or math.isnan(a_val) or math.isnan(b_val):
+            return default
+        result = a_val / b_val
+        if math.isnan(result) or math.isinf(result):
+            return default
+        return result
+    except (TypeError, ValueError):
+        return default
+
 def _get_metric_from_table(data_table, metric_name, period_identifier):
     """
     Helper to extract a specific metric for a given period from a table.
@@ -814,5 +828,169 @@ def calculate_net_profit_yoy_growth(retrieved_data, calculation_spec):
     growth = ((current_profit / previous_profit) - 1) * 100
     return {"value": round(growth, 2), "unit": "%"}
 
-# QoQ and CAGR calculations would require the AI planner to specify multiple data points
 # and the calculation function to iterate/process them. For MVP, focusing on YoY.
+
+# --- III. Forensic Ratios & Scores ---
+
+@register_calculation("calculate_altman_zscore")
+def calculate_altman_zscore(retrieved_data, calculation_spec):
+    """
+    Altman Z-Score (Manufacturing): Z = 1.2*X1 + 1.4*X2 + 3.3*X3 + 0.6*X4 + 1.0*X5
+    X1 = Working Capital / Total Assets
+    X2 = Retained Earnings (Reserves) / Total Assets
+    X3 = Operating Profit (EBIT) / Total Assets
+    X4 = Market Cap / Total Liabilities
+    X5 = Sales / Total Assets
+    """
+    inputs = calculation_spec.get('inputs', {})
+    period = inputs.get('period', -1)
+    
+    total_assets = _get_input_value(retrieved_data, {"table": "Balance Sheet", "metric": "Total Assets", "period": period}, allow_zero=False)
+    if total_assets is None: return {"error": "Total Assets not found/parseable."}
+
+    # X1: Working Capital / Total Assets
+    # Fallback: Working Capital = Other Assets - Other Liabilities
+    other_assets = _get_input_value(retrieved_data, {"table": "Balance Sheet", "metric": "Other Assets", "period": period})
+    other_liabilities = _get_input_value(retrieved_data, {"table": "Balance Sheet", "metric": "Other Liabilities", "period": period})
+    
+    working_cap = None
+    if other_assets is not None and other_liabilities is not None:
+        working_cap = other_assets - other_liabilities
+    
+    x1 = _safe_div(working_cap, total_assets) if working_cap is not None else None
+
+    # X2: Retained Earnings / Total Assets
+    # In Screener, Reserves is a proxy for Retained Earnings
+    reserves = _get_input_value(retrieved_data, {"table": "Balance Sheet", "metric": "Reserves", "period": period})
+    x2 = _safe_div(reserves, total_assets)
+
+    # X3: Operating Profit / Total Assets
+    op_profit = _get_input_value(retrieved_data, {"table": "Annual Results", "metric": "Operating Profit", "period": period})
+    x3 = _safe_div(op_profit, total_assets)
+
+    # X4: Market Cap / Total Liabilities
+    # Market Cap is usually passed by the orchestrator in calculation_spec inputs
+    market_cap = _safe_float(inputs.get("market_cap"))
+    total_liabilities = _get_input_value(retrieved_data, {"table": "Balance Sheet", "metric": "Total Liabilities", "period": period}, allow_zero=False)
+    
+    # Fallback for Total Liabilities: Borrowings + Other Liabilities (approx) or Total Assets - Equity
+    if total_liabilities is None:
+        equity_cap = _get_input_value(retrieved_data, {"table": "Balance Sheet", "metric": "Equity Capital", "period": period})
+        if equity_cap is not None and reserves is not None:
+            # Total Liabilities (External) = Total Assets - Total Equity
+            total_liabilities = total_assets - (equity_cap + reserves)
+            
+    x4 = _safe_div(market_cap, total_liabilities)
+
+    # X5: Sales / Total Assets
+    sales = _get_input_value(retrieved_data, {"table": "Annual Results", "metric": "Sales", "period": period})
+    x5 = _safe_div(sales, total_assets)
+
+    variables = {
+        "X1 (WC/TA)": round(x1, 3) if x1 is not None else "N/A",
+        "X2 (Reserves/TA)": round(x2, 3) if x2 is not None else "N/A",
+        "X3 (EBIT/TA)": round(x3, 3) if x3 is not None else "N/A",
+        "X4 (MCap/Liab)": round(x4, 3) if x4 is not None else "N/A",
+        "X5 (Sales/TA)": round(x5, 3) if x5 is not None else "N/A"
+    }
+
+    # Calculate final score if at least 4 variables are present
+    valid_vars = [v for v in [x1, x2, x3, x4, x5] if v is not None]
+    if len(valid_vars) < 4:
+        return {"value": None, "variables": variables, "note": "Insufficient base metrics for Z-Score calculation."}
+
+    # Use defaults for missing
+    z_score = 1.2*(x1 or 0) + 1.4*(x2 or 0) + 3.3*(x3 or 0) + 0.6*(x4 or 0) + 1.0*(x5 or 0)
+    
+    flag = "🟢" if z_score > 2.99 else ("🔴" if z_score < 1.81 else "🟡")
+    interpretation = "Safe" if z_score > 2.99 else ("Distress" if z_score < 1.81 else "Grey Zone")
+
+    return {
+        "value": round(z_score, 2),
+        "flag": flag,
+        "interpretation": interpretation,
+        "variables": variables,
+        "unit": "indices"
+    }
+
+
+@register_calculation("calculate_beneish_mscore")
+def calculate_beneish_mscore(retrieved_data, calculation_spec):
+    """
+    Beneish M-Score (5-Variable Model): 
+    M = -6.065 + 0.823*DSRI + 0.906*GMI + 0.593*AQI + 0.717*SGI + 0.107*LVGI
+    """
+    inputs = calculation_spec.get('inputs', {})
+    p0 = inputs.get('period', -1)   # Current period
+    p1 = p0 - 1                     # Prior period
+
+    def get_annual(metric, period):
+        return _get_input_value(retrieved_data, {"table": "Annual Results", "metric": metric, "period": period})
+    
+    def get_bs(metric, period):
+        return _get_input_value(retrieved_data, {"table": "Balance Sheet", "metric": metric, "period": period})
+
+    # DSRI: Days Sales in Receivables Index
+    dd0 = _get_input_value(retrieved_data, {"table": "Financial Ratios", "metric": "Debtor Days", "period": p0})
+    dd1 = _get_input_value(retrieved_data, {"table": "Financial Ratios", "metric": "Debtor Days", "period": p1})
+    dsri = _safe_div(dd0, dd1)
+
+    # GMI: Gross Margin Index
+    s0, s1 = get_annual("Sales", p0), get_annual("Sales", p1)
+    e0, e1 = get_annual("Expenses", p0), get_annual("Expenses", p1)
+    
+    gmi = None
+    if all(v is not None for v in [s0, s1, e0, e1]) and s0 > 0 and s1 > 0:
+        m0 = (s0 - e0) / s0
+        m1 = (s1 - e1) / s1
+        gmi = _safe_div(m1, m0)
+
+    # AQI: Asset Quality Index
+    fixed0, fixed1 = get_bs("Fixed Assets", p0), get_bs("Fixed Assets", p1)
+    ta0, ta1 = get_bs("Total Assets", p0), get_bs("Total Assets", p1)
+    
+    aqi = None
+    if all(v is not None for v in [fixed0, fixed1, ta0, ta1]) and ta0 > 0 and ta1 > 0:
+        q0 = 1 - (fixed0 / ta0)
+        q1 = 1 - (fixed1 / ta1)
+        aqi = _safe_div(q0, q1)
+
+    # SGI: Sales Growth Index
+    sgi = _safe_div(s0, s1)
+
+    # LVGI: Leverage Index
+    debt0, debt1 = get_bs("Borrowings", p0), get_bs("Borrowings", p1)
+    liab0, liab1 = get_bs("Other Liabilities", p0), get_bs("Other Liabilities", p1)
+    
+    lvgi = None
+    if all(v is not None for v in [debt0, debt1, liab0, liab1, ta0, ta1]) and ta0 > 0 and ta1 > 0:
+        l0 = (debt0 + liab0) / ta0
+        l1 = (debt1 + liab1) / ta1
+        lvgi = _safe_div(l0, l1)
+
+    variables = {
+        "DSRI": round(dsri, 3) if dsri is not None else "N/A",
+        "GMI": round(gmi, 3) if gmi is not None else "N/A",
+        "AQI": round(aqi, 3) if aqi is not None else "N/A",
+        "SGI": round(sgi, 3) if sgi is not None else "N/A",
+        "LVGI": round(lvgi, 3) if lvgi is not None else "N/A"
+    }
+
+    # Calculate M-Score if at least 3 variables are present
+    valid_vars = [v for v in [dsri, gmi, aqi, sgi, lvgi] if v is not None]
+    if len(valid_vars) < 3:
+        return {"value": None, "variables": variables, "note": "Insufficient data (multi-period) for M-Score."}
+
+    # Use 1.0 as neutral for missing variables
+    m = -6.065 + 0.823*(dsri or 1.0) + 0.906*(gmi or 1.0) + 0.593*(aqi or 1.0) + 0.717*(sgi or 1.0) + 0.107*(lvgi or 1.0)
+    
+    flag = "🟢" if m < -2.22 else ("🔴" if m > -1.78 else "🟡")
+    interpretation = "Unlikely Manipulation" if m < -2.22 else ("Likely Manipulation" if m > -1.78 else "Warning")
+
+    return {
+        "value": round(m, 2),
+        "flag": flag,
+        "interpretation": interpretation,
+        "variables": variables,
+        "unit": "indices"
+    }

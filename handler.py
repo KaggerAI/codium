@@ -115,6 +115,31 @@ def is_na(val):
     v = str(val).strip().lower()
     return v in ('', 'n/a', 'nan')
 
+def sanitize_for_json(obj):
+    """Recursively replace NaN and Infinity float values with None for valid JSON serialization."""
+    import math
+    if isinstance(obj, dict):
+        return {k: sanitize_for_json(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [sanitize_for_json(item) for item in obj]
+    elif isinstance(obj, float):
+        if math.isnan(obj) or math.isinf(obj):
+            return None
+        return obj
+    elif isinstance(obj, (np.floating,)):
+        if np.isnan(obj) or np.isinf(obj):
+            return None
+        return float(obj)
+    elif isinstance(obj, (np.integer,)):
+        return int(obj)
+    elif isinstance(obj, np.ndarray):
+        return sanitize_for_json(obj.tolist())
+    elif isinstance(obj, pd.DataFrame):
+        return sanitize_for_json(obj.to_dict(orient='records'))
+    elif isinstance(obj, pd.Series):
+        return sanitize_for_json(obj.to_dict())
+    return obj
+
 # Initialize Flask app and enable CORS
 app = Flask(__name__, static_folder='.', static_url_path='')
 CORS(app)
@@ -4647,7 +4672,7 @@ def analyze():
                             # Save to global for debug/schema viewing
                             last_analysis = analysis_for_cache
                             
-                            return jsonify(result_for_frontend)
+                            return jsonify(sanitize_for_json(result_for_frontend))
                             
                         except Exception as e:
                             print(f"ERROR: Light cache completion failed for {tick}: {e}")
@@ -4734,7 +4759,7 @@ def analyze():
                         # END: Background PDF Text Extraction for Full Cache
                         # =====================================================================
                         
-                        return jsonify(cached_result)
+                        return jsonify(sanitize_for_json(cached_result))
                         
             except Exception as cache_err:
                 print(f"WARN: Cache read failed for {tick}: {cache_err}")
@@ -4906,7 +4931,7 @@ def analyze():
         # Save to global for debug/schema viewing
         last_analysis = analysis_for_cache
         
-        return jsonify(result_for_frontend)
+        return jsonify(sanitize_for_json(result_for_frontend))
 
 
         # --- END OF NEW LOGIC ---
@@ -6528,10 +6553,14 @@ def serve_agents_page():
 
 # Register Concall Agent routes
 from agents.concall_agent import register_concall_routes
-from screener_fetcher import fetch_latest_documents_async, get_text_from_pdf_url_async
+from screener_fetcher import fetch_latest_documents_async, get_text_from_pdf_url_async, fetch_forensic_documents_async
 register_concall_routes(app, call_gemini_api, fetch_latest_documents_async, get_text_from_pdf_url_async)
 
-print("INFO: Agent Marketplace routes registered (Concall Agent)", file=sys.stderr)
+# Register Forensic Agent routes
+from agents.forensic_agent import register_forensic_routes
+register_forensic_routes(app, call_gemini_api, call_perplexity_api, get_local_cache, fetch_forensic_documents_async)
+
+print("INFO: Agent Marketplace routes registered (Concall Agent, Forensic Agent)", file=sys.stderr)
 
 # =====================================================================
 # END: Agent Marketplace

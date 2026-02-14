@@ -961,7 +961,7 @@
                     <div class="agent-tab-name">Forensic Agent</div>
                     <div class="agent-tab-desc">Accounting red flags & governance</div>
                 </div>
-                <span class="agent-badge badge-soon">Soon</span>
+                <span class="agent-badge badge-live">Live</span>
             </button>
             <button class="agent-tab" onclick="switchAgent('forecasting')" role="tab" aria-selected="false"
                 id="tab-forecasting">
@@ -982,8 +982,7 @@
             <!-- Ticker Input -->
             <div class="ticker-card">
                 <h2>📞 Concall Analysis Agent</h2>
-                <p class="subtitle">Enter a stock ticker to analyze the latest conference call transcript from
-                    Screener.in.</p>
+                <p class="subtitle">Enter a stock ticker to analyze the latest conference call transcript</p>
                 <div class="ticker-input-row">
                     <div class="ticker-input-wrapper">
                         <input type="text" class="ticker-input" id="concallTickerInput"
@@ -1058,10 +1057,77 @@
         <!-- FORENSIC AGENT WORKSPACE         -->
         <!-- =============================== -->
         <div class="agent-workspace" id="workspace-forensic">
-            <div class="coming-soon">
-                <div class="coming-soon-icon">🔍</div>
-                <h3>Forensic Agent — Coming Soon</h3>
-                <p>Deep forensic analysis of financial statements, governance patterns, and accounting red flags.</p>
+
+            <!-- Ticker Input -->
+            <div class="ticker-card">
+                <h2>🔍 Forensic Analysis Agent</h2>
+                <p class="subtitle">Run a deep forensic scan — M-Score, Z-Score, shareholding anomalies, credit ratings,
+                    news & more</p>
+                <div class="ticker-input-row">
+                    <div class="ticker-input-wrapper">
+                        <input type="text" class="ticker-input" id="forensicTickerInput"
+                            placeholder="Type a stock name or ticker... (e.g. Adani Enterprises, YESBANK)"
+                            autocomplete="off" />
+                        <div class="ticker-dropdown" id="forensicTickerDropdown"></div>
+                    </div>
+                    <button class="analyze-btn" id="forensicAnalyzeBtn" onclick="startForensicAnalysis()">
+                        <span id="forensicBtnText">Run Forensic Scan</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Error -->
+            <div class="error-card" id="forensicError">
+                <h4>⚠️ Analysis Error</h4>
+                <p id="forensicErrorText"></p>
+            </div>
+
+            <!-- Progress -->
+            <div class="progress-card" id="forensicProgress">
+                <div class="progress-status">
+                    <div class="progress-dot"></div>
+                    <span id="forensicProgressText">Starting forensic scan...</span>
+                </div>
+                <div class="progress-timer" id="forensicProgressTimer">Elapsed: 0s</div>
+                <div class="progress-bar-container">
+                    <div class="progress-bar"></div>
+                </div>
+            </div>
+
+            <!-- Analysis Results -->
+            <div class="analysis-card" id="forensicAnalysis">
+                <div class="analysis-header">
+                    <div class="analysis-header-left">
+                        <span style="font-size: 1.25rem;">🔍</span>
+                        <div>
+                            <h3 id="forensicAnalysisTitle">Forensic Health Report</h3>
+                            <div class="analysis-meta" id="forensicAnalysisMeta"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="analysis-body" id="forensicAnalysisBody"></div>
+            </div>
+
+            <!-- Chat -->
+            <div class="chat-card" id="forensicChat">
+                <div class="chat-header">
+                    <h3>💬 Ask about this Forensic Report</h3>
+                </div>
+                <div class="chat-messages" id="forensicChatMessages">
+                    <div class="chat-message assistant">
+                        <div class="chat-bubble">
+                            I've completed the forensic analysis. Ask me anything — drill into specific scores,
+                            red flags, shareholding changes, credit rating implications, or request deeper research
+                            on any area of concern.
+                        </div>
+                    </div>
+                </div>
+                <div class="chat-input-row">
+                    <input type="text" class="chat-input" id="forensicChatInput"
+                        placeholder="Ask about the forensic report..." autocomplete="off" />
+                    <button class="chat-send-btn" id="forensicChatSendBtn"
+                        onclick="sendForensicChatMessage()">Send</button>
+                </div>
             </div>
         </div>
 
@@ -1169,6 +1235,7 @@
         document.addEventListener('click', (e) => {
             if (!e.target.closest('.ticker-input-wrapper')) {
                 concallDropdown.classList.remove('show');
+                if (forensicDropdown) forensicDropdown.classList.remove('show');
             }
         });
 
@@ -1418,6 +1485,288 @@
                 .finally(() => {
                     concallChatLoading = false;
                     document.getElementById('concallChatSendBtn').disabled = false;
+                });
+        }
+
+        // =====================================================
+        // FORENSIC AGENT: TICKER AUTOCOMPLETE
+        // =====================================================
+        const forensicInput = document.getElementById('forensicTickerInput');
+        const forensicDropdown = document.getElementById('forensicTickerDropdown');
+        let forensicSelectedTicker = '';
+        let forensicSelectedName = '';
+        let forensicSelectedIndex = -1;
+
+        forensicInput.addEventListener('input', () => {
+            const val = forensicInput.value.trim();
+            if (val.length < 1) { forensicDropdown.classList.remove('show'); return; }
+            const matches = filterAgentStocks(val);
+            if (!matches.length) { forensicDropdown.classList.remove('show'); return; }
+            forensicSelectedIndex = -1;
+            forensicDropdown.innerHTML = matches.map((s, i) => `
+        <div class="ticker-option ${i === forensicSelectedIndex ? 'highlighted' : ''}"
+             data-ticker="${s.ticker}" data-name="${s.name}"
+             onclick="selectForensicTicker('${s.ticker}', '${s.name.replace(/'/g, "\\\'")}')">
+          <span class="ticker-option-name">${s.name}</span>
+          <span class="ticker-option-ticker">${s.ticker}</span>
+        </div>
+      `).join('');
+            forensicDropdown.classList.add('show');
+        });
+
+        forensicInput.addEventListener('keydown', (e) => {
+            const items = forensicDropdown.querySelectorAll('.ticker-option');
+            if (!items.length) {
+                if (e.key === 'Enter') { e.preventDefault(); startForensicAnalysis(); }
+                return;
+            }
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                forensicSelectedIndex = Math.min(forensicSelectedIndex + 1, items.length - 1);
+                items.forEach((el, i) => el.classList.toggle('highlighted', i === forensicSelectedIndex));
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                forensicSelectedIndex = Math.max(forensicSelectedIndex - 1, 0);
+                items.forEach((el, i) => el.classList.toggle('highlighted', i === forensicSelectedIndex));
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                if (forensicSelectedIndex >= 0 && items[forensicSelectedIndex]) {
+                    items[forensicSelectedIndex].click();
+                } else {
+                    startForensicAnalysis();
+                }
+            } else if (e.key === 'Escape') {
+                forensicDropdown.classList.remove('show');
+            }
+        });
+
+        function selectForensicTicker(ticker, name) {
+            forensicSelectedTicker = ticker;
+            forensicSelectedName = name;
+            forensicInput.value = `${name} (${ticker})`;
+            forensicDropdown.classList.remove('show');
+        }
+
+        // =====================================================
+        // FORENSIC AGENT: ANALYSIS
+        // =====================================================
+        let forensicJobId = null;
+        let forensicPollTimer = null;
+        let forensicStartTime = null;
+        let forensicTimerInterval = null;
+        let currentForensicData = null;  // Persisted analysis data
+
+        function startForensicAnalysis() {
+            const ticker = forensicSelectedTicker || forensicInput.value.replace(/\s*\(.*\)\s*$/, '').trim().toUpperCase();
+            if (!ticker) return;
+
+            // Reset UI
+            hideEl('forensicError');
+            hideEl('forensicAnalysis');
+            hideEl('forensicChat');
+            showEl('forensicProgress');
+            document.getElementById('forensicProgressText').textContent = 'Starting forensic scan...';
+            document.getElementById('forensicAnalyzeBtn').disabled = true;
+            document.getElementById('forensicBtnText').innerHTML = '<span class="spinner"></span> Scanning...';
+
+            // Start timer
+            forensicStartTime = Date.now();
+            if (forensicTimerInterval) clearInterval(forensicTimerInterval);
+            forensicTimerInterval = setInterval(() => {
+                const elapsed = Math.floor((Date.now() - forensicStartTime) / 1000);
+                document.getElementById('forensicProgressTimer').textContent = `Elapsed: ${elapsed}s`;
+            }, 1000);
+
+            // Start analysis
+            fetch('/agent/forensic/analyze', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ticker })
+            })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.status === 'complete') {
+                        onForensicComplete(data.result);
+                    } else if (data.job_id) {
+                        forensicJobId = data.job_id;
+                        pollForensicStatus();
+                    } else if (data.error) {
+                        onForensicError(data.message || data.error);
+                    }
+                })
+                .catch(err => {
+                    onForensicError(`Network error: ${err.message}`);
+                });
+        }
+
+        function pollForensicStatus() {
+            if (!forensicJobId) return;
+
+            fetch(`/agent/forensic/${forensicJobId}/status`)
+                .then(r => r.json())
+                .then(data => {
+                    if (data.status === 'processing') {
+                        document.getElementById('forensicProgressText').textContent = data.progress || 'Analyzing...';
+                        forensicPollTimer = setTimeout(pollForensicStatus, 2500);
+                    } else if (data.status === 'complete') {
+                        onForensicComplete(data.result);
+                    } else if (data.status === 'error') {
+                        onForensicError(data.error);
+                    }
+                })
+                .catch(err => {
+                    onForensicError(`Polling error: ${err.message}`);
+                });
+        }
+
+        function onForensicComplete(result) {
+            if (forensicTimerInterval) clearInterval(forensicTimerInterval);
+            if (forensicPollTimer) clearTimeout(forensicPollTimer);
+
+            currentForensicData = result;
+
+            const btn = document.getElementById('forensicAnalyzeBtn');
+            btn.disabled = false;
+            document.getElementById('forensicBtnText').textContent = 'Run Forensic Scan';
+
+            hideEl('forensicProgress');
+            showEl('forensicAnalysis');
+            showEl('forensicChat');
+
+            const ticker = result.ticker || forensicSelectedTicker;
+            const companyName = result.company_name || ticker;
+            document.getElementById('forensicAnalysisTitle').textContent = `Forensic Health Report — ${companyName} (${ticker})`;
+
+            const meta = [];
+            if (result.analysis_time_seconds) meta.push(`Analyzed in ${result.analysis_time_seconds}s`);
+            if (result.scores?.mscore?.score) meta.push(`M-Score: ${result.scores.mscore.score} ${result.scores.mscore.flag}`);
+            if (result.scores?.zscore?.score) meta.push(`Z-Score: ${result.scores.zscore.score} ${result.scores.zscore.flag}`);
+            document.getElementById('forensicAnalysisMeta').textContent = meta.join(' · ');
+
+            const analysisHtml = marked.parse(result.analysis || 'No analysis available.');
+            document.getElementById('forensicAnalysisBody').innerHTML = analysisHtml;
+
+            // Reset chat
+            const chatMessages = document.getElementById('forensicChatMessages');
+            chatMessages.innerHTML = `
+        <div class="chat-message assistant">
+          <div class="chat-bubble">
+            I've completed the forensic scan for <strong>${companyName} (${ticker})</strong>. You can ask me to:
+            <ul>
+              <li>Explain any specific red flag or score in detail</li>
+              <li>Dig deeper into shareholding patterns</li>
+              <li>Analyze credit rating implications</li>
+              <li>Compare signals against industry benchmarks</li>
+              <li>Suggest what to monitor going forward</li>
+            </ul>
+          </div>
+        </div>
+      `;
+        }
+
+        function onForensicError(errorMsg) {
+            if (forensicTimerInterval) clearInterval(forensicTimerInterval);
+            if (forensicPollTimer) clearTimeout(forensicPollTimer);
+
+            hideEl('forensicProgress');
+            showEl('forensicError');
+            document.getElementById('forensicErrorText').textContent = errorMsg;
+
+            const btn = document.getElementById('forensicAnalyzeBtn');
+            btn.disabled = false;
+            document.getElementById('forensicBtnText').textContent = 'Run Forensic Scan';
+        }
+
+        // =====================================================
+        // FORENSIC AGENT: CHAT
+        // =====================================================
+        let forensicChatLoading = false;
+
+        document.getElementById('forensicChatInput').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendForensicChatMessage();
+            }
+        });
+
+        function sendForensicChatMessage() {
+            if (forensicChatLoading) return;
+            const input = document.getElementById('forensicChatInput');
+            const question = input.value.trim();
+            if (!question || !currentForensicData) return;
+
+            forensicChatLoading = true;
+            document.getElementById('forensicChatSendBtn').disabled = true;
+
+            const chatMessages = document.getElementById('forensicChatMessages');
+            chatMessages.innerHTML += `
+        <div class="chat-message user">
+          <div class="chat-bubble">${escapeHtml(question)}</div>
+        </div>
+      `;
+            input.value = '';
+
+            const loadingId = 'forensic-chat-loading-' + Date.now();
+            chatMessages.innerHTML += `
+        <div class="chat-message assistant" id="${loadingId}">
+          <div class="chat-bubble" style="display: flex; align-items: center; gap: 0.5rem;">
+            <span class="spinner" style="width: 14px; height: 14px; border-width: 2px;"></span>
+            Thinking...
+          </div>
+        </div>
+      `;
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+
+            // Build data context string for chat
+            let dataContext = '';
+            if (currentForensicData.scores) {
+                dataContext = JSON.stringify(currentForensicData.scores, null, 2);
+            }
+
+            fetch('/agent/forensic/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    ticker: currentForensicData.ticker,
+                    question: question,
+                    company_name: forensicSelectedName || currentForensicData.company_name || currentForensicData.ticker,
+                    analysis_context: currentForensicData.analysis,
+                    data_context: dataContext
+                })
+            })
+                .then(r => r.json())
+                .then(data => {
+                    const loadingEl = document.getElementById(loadingId);
+                    if (loadingEl) loadingEl.remove();
+
+                    if (data.answer) {
+                        const answerHtml = marked.parse(data.answer);
+                        chatMessages.innerHTML += `
+            <div class="chat-message assistant">
+              <div class="chat-bubble">${answerHtml}</div>
+            </div>
+          `;
+                    } else if (data.error) {
+                        chatMessages.innerHTML += `
+            <div class="chat-message assistant">
+              <div class="chat-bubble" style="color: #f87171;">Error: ${escapeHtml(data.error)}</div>
+            </div>
+          `;
+                    }
+                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                })
+                .catch(err => {
+                    const loadingEl = document.getElementById(loadingId);
+                    if (loadingEl) loadingEl.remove();
+                    chatMessages.innerHTML += `
+          <div class="chat-message assistant">
+            <div class="chat-bubble" style="color: #f87171;">Network error: ${escapeHtml(err.message)}</div>
+          </div>
+        `;
+                })
+                .finally(() => {
+                    forensicChatLoading = false;
+                    document.getElementById('forensicChatSendBtn').disabled = false;
                 });
         }
 

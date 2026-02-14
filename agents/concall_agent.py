@@ -154,7 +154,7 @@ def register_concall_routes(app, call_gemini_api_fn, fetch_documents_fn, get_pdf
                 messages,
                 model="gemini-3-flash-preview",
                 temperature=1,
-                thinking_level='LOW'
+                thinking_level='HIGH'
             )
 
             return jsonify({
