@@ -1,0 +1,131 @@
+
+
+=== RATING REPORT 1 ===
+Label: Credit Rating - 27 Nov 2025 from icra
+Link: https://www.icra.in/Rationale/ShowRationaleReport/?Id=139291
+Text Length: 8213
+--------------------
+start in Q4 FY2026. The company further plans adding incremental 2,048 GPU clusters by Q1 FY2027, funded by a mix of debt
+and internal accruals. Hence, its ability to maintain optimum utilisation of the incremental GPU capacities will be key for
+sustaining profitability metrics and credit metrics, given the backdrop of the debt-funded capacity addition.
+Exposed to inherent competition and technology obsolescence risks in the industry – While the industry is in a growth phase,
+competition is also increasing and therefore the ability to maintain profitability for a mid-sized player like E2E would be
+challenging. The company faces competition from hyperscalers in the cloud computing space. Operating in a rapidly evolving
+technological landscape, the company remains exposed to the risk of technological obsolescence. However, this risk is partially
+mitigated by the continued demand for a diverse range of GPU applications, including that for legacy technologies.
+Environmental and social risks
+Environmental considerations: Given the service-oriented nature of its business, E2E’s direct exposure to environmental risks,
+as well as those emanating from regulations or policy changes, is not material.
+Social considerations: E2E’s social risks, as a cloud computing service provider stem from issues related to data security,
+privacy, and responsible use of its platform which can impact its reputation and customer trust.
+Liquidity position: Adequate
+E2E’s liquidity position is adequate with free cash and bank balance and liquid investments of Rs. 420.5 crore as on September
+30, 2025. Against this, E2E has sizeable capex plans of about Rs. 1,500 crore over the near term, which will be funded through
+a mix of debt and surplus funds. Moreover, the company has debt repayment obligations of Rs. 32 crore in FY2026 and Rs. 64
+crore in FY2027, which could be adequately funded from the surplus funds and cash flow from operations.
+Rating sensitivities
+Positive factors – The rating could be upgraded if the company demonstrates a significant improvement in revenue and
+earnings, aided by healthy utilisation of the newly added GPU capacities, while reporting an improvement in credit metrics
+and maintaining adequate liquidity position.
+Negative factors – The rating could be downgraded in case of a considerable decline in revenues and profits, or higher-than-
+expected debt-funded capex, or if a stretched working capital cycle exerts pressure on the company’s credit metrics and
+liquidity position.
+Analytical approach
+Analytical approach Comments
+Applicable rating methodologies Corporate Credit Rating Methodology
+Parent/Group support Not Applicable
+Consolidation/Standalone The rating is based on the standalone financial profile of the company.
+About the company
+Founded in 2009, E2E provides accelerated cloud infrastructure/ IaaS solutions including cloud GPUs such as NVIDIA A100,
+H100, H200 GPUs, among others on the cloud. Its facilities are located in Noida, Chennai and Mumbai. As of September 2025,
+the company has a capacity of 3,932 GPUs across its units. Promoted by Mr. Tarun Dua and family, the company was listed on
+the National Stock Exchange of India in May 2018. The company also entered into a strategic partnership with L&T, wherein
+L&T holds a 19% stake in the company as on September 30, 2025.
+Sensitivity Label : Public
+Key financial indicators (audited)
+FY2024 FY2025
+Operating income 94.5 164.0
+PAT 21.9 47.5
+OPBDIT/OI 50.9% 59.1%
+PAT/OI 23.1% 29.0%
+Total outside liabilities/Tangible net worth (times) 2.7 0.6
+Total debt/OPBDIT (times) 3.0 0.8
+Interest coverage (times) 13.3 7.3
+Source: Company, ICRA Research; All ratios as per ICRA’s calculations; Amount in Rs. crore, PAT: Profit after tax; OPBDIT: Operating profit before depreciation,
+interest, taxes and amortisation
+Status of non-cooperation with previous CRA: Not applicable
+Any other information: None
+Rating history for past three years
+Current rating (FY2026) Chronology of rating history for the past 3 years
+Instrument Amount FY2025 FY2024 FY2023
+Type rated Nov 27, 2025
+Date Rating Date Rating Date Rating
+(Rs. crore)
+Term loan Long-term 450.00 [ICRA]A- (Stable) - - - - - -
+Proposed Limits Long-term 550.00 [ICRA]A- (Stable) - - - - - -
+Complexity level of the rated instruments
+Instrument Complexity indicator
+Long-term – Fund-based – Term Loans Simple
+Long-term – Fund-based – Proposed Limits Simple
+The Complexity Indicator refers to the ease with which the returns associated with the rated instrument could be estimated.
+It does not indicate the risk related to the timely payments on the instrument, which is rather indicated by the instrument’s
+credit rating. It also does not indicate the complexity associated with analysing an entity’s financial, business, industry risks or
+complexity related to the structural, transactional or legal aspects. Details on the complexity levels of the instruments are
+available on ICRA’s website: Click here
+Sensitivity Label : Public
+Annexure I: Instrument details
+Amount
+Date of
+ISIN Instrument name Coupon rate Maturity rated Current rating and outlook
+issuance
+(Rs. crore)
+NA Term Loans FY2025 8.0 – 8.5% FY2029 450.00 [ICRA]A- (Stable)
+NA Proposed Limits - - - 550.00 [ICRA]A- (Stable)
+Source: Company
+Please click here to view details of lender-wise facilities rated by ICRA
+Annexure II: List of entities considered for consolidated analysis – Not Applicable
+Sensitivity Label : Public
+ANALYST CONTACTS
+Jitin Makkar Kinjal Shah
++91 124 4545 368 +91 022 6114 3442
+jitinm@icraindia.com kinjal.shah@icraindia.com
+Deepak Jotwani Charvi Sagar
++91 124 4545 870 +91 022 6114 3441
+deepak.jotwani@icraindia.com charvi.sagar@icraindia.com
+RELATIONSHIP CONTACT
+L. Shivakumar
++91 22 6114 3406
+shivakumar@icraindia.com
+MEDIA AND PUBLIC RELATIONS CONTACT
+Ms. Naznin Prodhani
+Tel: +91 124 4545 860
+communications@icraindia.com
+HELPLINE FOR BUSINESS QUERIES
++91-9354738909 (open Monday to Friday, from 9:30 am to 6 pm)
+info@icraindia.com
+ABOUT ICRA LIMITED
+ICRA Limited was set up in 1991 by leading financial/investment institutions, commercial banks and financial services
+companies as an independent and professional investment Information and Credit Rating Agency.
+Today, ICRA and its subsidiaries together form the ICRA Group of Companies (Group ICRA). ICRA is a Public Limited Company,
+with its shares listed on the Bombay Stock Exchange and the National Stock Exchange. The international Credit Rating Agency
+Moody’s Investors Service is ICRA’s largest shareholder.
+For more information, visit www.icra.in
+Sensitivity Label : Public
+ICRA Limited
+Registered Office
+B-710, Statesman House, 148 Barakhamba Road, New Delhi-110001
+Tel: +91 11 23357940-45
+Branches
+© Copyright, 2025 ICRA Limited. All Rights Reserved.
+Contents may be used freely with due acknowledgement to ICRA.
+ICRA ratings should not be treated as recommendation to buy, sell or hold the rated debt instruments. ICRA ratings are subject to a process of surveillance,
+which may lead to revision in ratings. An ICRA rating is a symbolic indicator of ICRA’s current opinion on the relative capability of the issuer concerned to
+timely service debts and obligations, with reference to the instrument rated. Please visit our website www.icra.in or contact any ICRA office for the latest
+information on ICRA ratings outstanding. All information contained herein has been obtained by ICRA from sources believed by it to be accurate and reliable,
+including the rated issuer. ICRA however has not conducted any audit of the rated issuer or of the information provided by it. While reasonable care has been
+taken to ensure that the information herein is true, such information is provided ‘as is’ without any warranty of any kind, and ICRA in particular, makes no
+representation or warranty, express or implied, as to the accuracy, timeliness or completeness of any such information. Also, ICRA or any of its group
+companies may have provided services other than rating to the issuer rated. All information contained herein must be construed solely as statements of
+opinion, and ICRA shall not be liable for any losses incurred by users from any use of this publication or its contents.
+Sensitivity Label : Public
+--------------------

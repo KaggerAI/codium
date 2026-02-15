@@ -1,0 +1,62 @@
+[
+    {
+        "ticker": "E2E",
+        "tables_count": 11,
+        "mappings": {
+            "quarters": {
+                "label": "Quarterly Results",
+                "index": 1
+            },
+            "profit-loss": {
+                "label": "Annual Results",
+                "index": 2
+            },
+            "balance-sheet": {
+                "label": "Balance Sheet",
+                "index": 2
+            },
+            "cash-flow": {
+                "label": "Cash Flow",
+                "index": 2
+            },
+            "ratios": {
+                "label": "Financial Ratios",
+                "index": 2
+            },
+            "shareholding": {
+                "label": "Shareholding Pattern",
+                "index": 1
+            }
+        }
+    },
+    {
+        "ticker": "RELIANCE",
+        "tables_count": 11,
+        "mappings": {
+            "quarters": {
+                "label": "Quarterly Results",
+                "index": 1
+            },
+            "profit-loss": {
+                "label": "Annual Results",
+                "index": 2
+            },
+            "balance-sheet": {
+                "label": "Balance Sheet",
+                "index": 2
+            },
+            "cash-flow": {
+                "label": "Cash Flow",
+                "index": 2
+            },
+            "ratios": {
+                "label": "Financial Ratios",
+                "index": 2
+            },
+            "shareholding": {
+                "label": "Shareholding Pattern",
+                "index": 1
+            }
+        }
+    }
+]

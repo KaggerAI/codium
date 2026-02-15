@@ -124,45 +124,97 @@ async def fetch_consolidated_async(ticker: str) -> tuple[dict[str, pd.DataFrame]
     consolidated_url = standalone_url + "consolidated/"
     
     # --- STAGE 1: FAST FETCH ---
-    log_progress(f"Attempting fast fetch for {ticker} consolidated report...")
-    async with httpx.AsyncClient() as client:
+    log_progress(f"Attempting fast fetch for {ticker} (Checking Consolidated vs Standalone)...")
+    # Use follow_redirects=True to handle cases like E2E where /consolidated/ might redirect
+    async with httpx.AsyncClient(follow_redirects=True) as client:
         try:
             response = await client.get(consolidated_url, headers=HEADERS, timeout=30.0)
             response.raise_for_status()
             text = response.text
+            final_url = str(response.url)
+            
+            # 1. URL-based detection: If we wanted /consolidated/ but ended up somewhere else
+            if "/consolidated/" in final_url:
+                is_consolidated = True
+            else:
+                is_consolidated = False
+                log_progress(f"Redirected from consolidated to standalone for {ticker}")
+
         except httpx.HTTPStatusError:
-            log_progress(f"Consolidated URL not found for {ticker}. Proceeding to fallback.")
-            text = "" # Ensure text is empty to trigger the fallback logic
-        
-        if text:
-            # Check if this is indeed a consolidated page by looking for the /consolidated/ suffix 
-            # or examining content if needed, but the URL itself is the best indicator if it didn't 404.
-            is_consolidated = True
+            log_progress(f"Consolidated URL not found (404) for {ticker}. Fetching standalone...")
+            # Fallback to standalone if consolidated 404s
+            try:
+                response = await client.get(standalone_url, headers=HEADERS, timeout=30.0)
+                response.raise_for_status()
+                text = response.text
+                is_consolidated = False
+            except Exception as e:
+                log_progress(f"Error fetching standalone for {ticker}: {e}")
+                text = ""
+        except Exception as e:
+            log_progress(f"Error during fast fetch for {ticker}: {e}")
+            text = ""
 
     soup = BeautifulSoup(text, 'html.parser')
 
-    # --- STAGE 2: ROBUST FALLBACK ---
-    # FIX: Changed selector from "#quarters > .data-table" to "#quarters .data-table"
-    # The '>' implied a direct child, but the table is nested in divs.
-    # We check if we successfully scraped the Consolidated Quarterly Results.
+    # 2. Toggle button detection (Most reliable indicator)
+    # Toggles confirm if the current page is Consolidated or Standalone.
+    # - "View Standalone" button present -> Current view is CONSOLIDATED.
+    # - "View Consolidated" button present -> Current view is STANDALONE.
+    # - NEITHER present -> Company is Standalone-only.
+    links = soup.find_all("a", href=True)
+    has_view_standalone = any("View Standalone" in l.get_text() for l in links)
+    has_view_consolidated = any("View Consolidated" in l.get_text() for l in links)
+
+    if has_view_standalone:
+        is_consolidated = True
+    elif has_view_consolidated:
+        is_consolidated = False
+    else:
+        # Neither toggle found. This usually means it's a standalone-only company.
+        # We also check the URL for a final sanity check, but toggles take precedence.
+        if is_consolidated: # Was set to True if URL matched /consolidated/
+             log_progress(f"No toggles found for {ticker} at {final_url}. Defaulting to is_consolidated=False.")
+        is_consolidated = False
+
+    # --- CRITICAL FIX ---
+    # If we determined this is a Standalone company (is_consolidated=False), but we are currently
+    # holding the HTML from the 'consolidated_url', we MUST re-fetch the 'standalone_url'.
+    # Why? Because the consolidated page for standalone-only companies (like E2E) might exist (200 OK)
+    # but contain a different table structure (or fewer tables) than the main standalone page.
+    # To guarantee we get the correct data tables (Quarterly Results, etc.), we switch to the source.
+    if not is_consolidated and "/consolidated/" in final_url:
+        log_progress(f"Correcting source: Detected standalone for {ticker} but on consolidated URL. Fetching standalone URL for data...")
+        try:
+            async with httpx.AsyncClient(follow_redirects=True) as client:
+                response = await client.get(standalone_url, headers=HEADERS, timeout=30.0)
+                response.raise_for_status()
+                text = response.text
+                final_url = str(response.url)
+                soup = BeautifulSoup(text, 'html.parser') # Re-parse with new content
+        except Exception as e:
+             log_progress(f"Error re-fetching standalone for {ticker}: {e}")
+             # Proceed with what we have, better than nothing
+
+    # --- STAGE 2: ROBUST FALLBACK (Browser Fetch) ---
+    # If we still don't have the critical quarterly results table, try Playwright as a last resort.
     if not soup.select_one("#quarters .data-table"):
-        log_progress(f"Fast method insufficient. Escalating to browser fetch for {ticker} standalone report...")
+        log_progress(f"Tables not found for {ticker} via fast method. Escalating to browser fetch...")
         
         async with async_playwright() as p:
             browser = await p.chromium.launch()
             page = await browser.new_page()
             try:
+                # Use standalone_url as the safest root
                 await page.goto(standalone_url, wait_until='networkidle', timeout=45000)
-                # We wait for the network to be idle, a more reliable signal that JS has finished.
                 text = await page.content()
             finally:
                 await browser.close()
-        # Re-parse the soup object with the complete, JS-rendered HTML
+        # Re-parse the soup object
         soup = BeautifulSoup(text, 'html.parser')
-        # Even if we used standalone_url as fallback, it might have auto-redirected or 
-        # rendered consolidated tables if that was the last preference.
-        # But usually, reaching STAGE 2 means we are on standalone.
-        is_consolidated = "/consolidated/" in text or False 
+        # Re-check toggle buttons on the final rendered page
+        links = soup.find_all("a", href=True)
+        is_consolidated = any("/company/" in l.get('href', '') and "/consolidated/" not in l.get('href', '') for l in links if "View Standalone" in l.get_text())
 
     # --- NEW ROBUST PARSING LOGIC ---
     tables = {}
@@ -306,13 +358,59 @@ async def fetch_latest_quarter_header_async(ticker: str) -> str:
 
 def fetch_consolidated(ticker: str) -> tuple[dict[str, pd.DataFrame], str, dict, bool]:
     is_consolidated = False
+    standalone_url = f"https://www.screener.in/company/{ticker}/"
+    consolidated_url = standalone_url + "consolidated/"
     
-    url = BASE_URL.format(ticker=ticker)
-    response = requests.get(url, headers=HEADERS)
-    response.raise_for_status()
-    text = response.text
+    log_progress(f"Attempting sync fetch for {ticker} (Checking Consolidated vs Standalone)...")
+    try:
+        response = requests.get(consolidated_url, headers=HEADERS, allow_redirects=True, timeout=30.0)
+        response.raise_for_status()
+        text = response.text
+        final_url = response.url
+        
+        if "/consolidated/" in final_url:
+            is_consolidated = True
+        else:
+            is_consolidated = False
+    except Exception as e:
+        log_progress(f"Error fetching consolidated URL for {ticker}: {e}. Trying standalone...")
+        try:
+            response = requests.get(standalone_url, headers=HEADERS, timeout=30.0)
+            response.raise_for_status()
+            text = response.text
+            is_consolidated = False
+        except Exception as e2:
+            log_progress(f"Error fetching standalone for {ticker}: {e2}")
+            raise e2
+
     soup = BeautifulSoup(text, 'html.parser')
-    is_consolidated = "/consolidated/" in response.url
+    
+    # Toggle button detection
+    links = soup.find_all("a", href=True)
+    has_view_standalone = any("View Standalone" in l.get_text() for l in links)
+    has_view_consolidated = any("View Consolidated" in l.get_text() for l in links)
+
+    if has_view_standalone:
+        is_consolidated = True
+    elif has_view_consolidated:
+        is_consolidated = False
+    else:
+        # Standalone-only company (like E2E)
+        is_consolidated = False
+
+    # --- CRITICAL FIX (Sync) ---
+    if not is_consolidated and "/consolidated/" in final_url:
+        log_progress(f"Correcting source (sync): Detected standalone for {ticker} but on consolidated URL. Fetching standalone URL...")
+        try:
+            # Re-fetch using standalone URL to ensure we get the full tables
+            response = requests.get(standalone_url, headers=HEADERS, timeout=30.0)
+            response.raise_for_status()
+            text = response.text
+            # Re-parse soup
+            soup = BeautifulSoup(text, 'html.parser')
+        except Exception as e:
+             log_progress(f"Error re-fetching standalone for {ticker}: {e}")
+             # Proceed with what we have
 
     # --- Description scraping ---
     description = ""
@@ -466,6 +564,51 @@ async def get_text_from_pdf_url_async(pdf_url: str, max_pages_to_process=75, max
             response.raise_for_status()
         
         pdf_content = response.content
+        
+        # --- FIX: Check if it's actually HTML (CRISIL often returns HTML pages for ratings) ---
+        # 1. Check Content-Type header
+        content_type = response.headers.get('content-type', '').lower()
+        # 2. Check Magic Bytes (%PDF)
+        is_pdf_signature = pdf_content.strip().startswith(b'%PDF')
+        
+        if 'html' in content_type or not is_pdf_signature:
+            # It's likely an HTML page, not a PDF
+            print(f"INFO: URL {pdf_url} appears to be HTML (Type: {content_type}). Parsing with BeautifulSoup...")
+            try:
+                soup = BeautifulSoup(response.text, 'html.parser')
+                
+                # --- SPECIAL CASE: ICRA Wrapper Page ---
+                # ICRA often embeds the PDF in an iframe with id="iframeRationaleReport"
+                # or has a script for DownloadRatingReport
+                icra_iframe = soup.find('iframe', id='iframeRationaleReport')
+                if icra_iframe:
+                    # src example: /web/viewer.html?file=/Rating/ShowRationalReportFilePdf/139291
+                    # We want to extract the ID: 139291
+                    src = icra_iframe.get('src', '')
+                    import re
+                    match = re.search(r'ShowRationalReportFilePdf/(\d+)', src)
+                    if match:
+                        report_id = match.group(1)
+                        # Construct the direct download URL which is usually more reliable
+                        # https://www.icra.in/Rating/GetRationalReportFilePdf?Id=139291
+                        direct_pdf_url = f"https://www.icra.in/Rating/GetRationalReportFilePdf?Id={report_id}"
+                        print(f"INFO: Detected ICRA Wrapper. Redirecting to real PDF: {direct_pdf_url}")
+                        # Recursively fetch the real PDF
+                        return await get_text_from_pdf_url_async(direct_pdf_url)
+
+                # Extract text using space separator
+                text = soup.get_text(separator=' ', strip=True)
+                
+                # --- CLEANING: Remove excessive whitespace ---
+                # HTML often results in many multiple spaces/newlines
+                import re
+                text = re.sub(r'\s+', ' ', text).strip()
+                
+                return text[:max_chars_to_return]
+            except Exception as e:
+                print(f"WARN: HTML parsing failed for {pdf_url}: {e}")
+                # Fallthrough to try PDF parsing just in case, or return error
+        
         pdf_file = BytesIO(pdf_content)
 
         def blocking_pdf_extraction():
@@ -888,6 +1031,10 @@ async def fetch_forensic_documents_async(ticker: str) -> dict:
             href = link.get('href', '')
             if not href:
                 continue
+            
+            # --- FIX: URL Encode the link to handle spaces ---
+            # Example: .../June 20_ 2025... -> .../June%2020_%202025...
+            href = href.strip().replace(' ', '%20')
             # Extract label: "Rating update" + date/agency from child div
             label_parts = [link.get_text(separator=' ', strip=True)]
             date_div = link.find('div')

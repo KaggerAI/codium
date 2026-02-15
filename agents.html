@@ -269,7 +269,7 @@
             padding: 2rem;
             margin-bottom: 1.5rem;
             position: relative;
-            overflow: hidden;
+            /* overflow: hidden; Removed to allow dropdown to show */
         }
 
         .ticker-card::before {
@@ -280,6 +280,8 @@
             right: 0;
             height: 2px;
             background: var(--gradient-primary);
+            border-top-left-radius: 1rem;
+            border-top-right-radius: 1rem;
         }
 
         .ticker-card h2 {

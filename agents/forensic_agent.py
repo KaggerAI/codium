@@ -62,15 +62,22 @@ def _safe_float(val, default=None):
 def _get_table_values(fundamentals, table_name, row_name, num_years=3):
     """
     Extract values for a specific row from a fundamentals table.
-    Handles both dict-of-lists and DataFrame formats.
+    Handles both dict-of-lists, list-of-dicts (records), and DataFrame formats.
     Returns a list of floats (most recent first).
     """
     table = fundamentals.get(table_name)
     if table is None:
         return []
     
+    # Handle JSON string
+    if isinstance(table, str):
+        try:
+            table = json.loads(table)
+        except:
+            return []
+    
     # Handle DataFrame
-    if hasattr(table, 'to_dict'):
+    if hasattr(table, 'to_dict') and not isinstance(table, (dict, list)):
         try:
             df = table
             # Find the row matching row_name (case-insensitive partial match)
@@ -83,17 +90,35 @@ def _get_table_values(fundamentals, table_name, row_name, num_years=3):
             return [_safe_float(v) for v in reversed(values)]  # Most recent first
         except Exception:
             return []
-    
-    # Handle dict format (JSON parsed)
+
+    # Handle list of records (records format: [{'': 'RowName', '2021': 10, '2022': 20}, ...])
+    if isinstance(table, list):
+        for row in table:
+            if not isinstance(row, dict):
+                continue
+            # The first value in the dict is usually the row name (index column)
+            row_label = next(iter(row.values()), "")
+            if row_name.lower() in str(row_label).lower():
+                # Extract values from the row, skipping the label (first column)
+                val_keys = list(row.keys())[1:]
+                values = [row[k] for k in val_keys if row[k] is not None]
+                recent = values[-num_years:] if len(values) >= num_years else values
+                return [_safe_float(v) for v in reversed(recent)]
+
+    # Handle dict format (JSON parsed: {'RowName': [10, 20], ...})
     if isinstance(table, dict):
         for key, values in table.items():
             if row_name.lower() in key.lower():
                 if isinstance(values, list):
-                    recent = values[-num_years:] if len(values) >= num_years else values
+                    # Filter out None values
+                    cleaned_vals = [v for v in values if v is not None]
+                    recent = cleaned_vals[-num_years:] if len(cleaned_vals) >= num_years else cleaned_vals
                     return [_safe_float(v) for v in reversed(recent)]
                 elif isinstance(values, dict):
                     # Sorted by column header (date), most recent first
-                    sorted_vals = sorted(values.items(), reverse=True)[:num_years]
+                    # Filter out None values
+                    cleaned_items = [(k, v) for k, v in values.items() if v is not None]
+                    sorted_vals = sorted(cleaned_items, reverse=True)[:num_years]
                     return [_safe_float(v) for _, v in sorted_vals]
     
     return []
@@ -443,7 +468,7 @@ def _get_shareholding_row(shareholding, row_name):
 # =====================================================================
 
 def register_forensic_routes(app, call_gemini_api_fn, call_perplexity_api_fn,
-                              get_local_cache_fn, fetch_forensic_docs_fn):
+                              get_cache_fn, fetch_forensic_docs_fn, get_full_analysis_fn=None):
     """
     Register all Forensic Agent API routes with the Flask app.
     
@@ -451,8 +476,9 @@ def register_forensic_routes(app, call_gemini_api_fn, call_perplexity_api_fn,
         app: Flask app instance
         call_gemini_api_fn: Reference to call_gemini_api from handler.py
         call_perplexity_api_fn: Reference to call_perplexity_api from handler.py
-        get_local_cache_fn: Reference to get_local_cache from handler.py
+        get_cache_fn: Reference to get_any_cache from handler.py (checks local + Redis)
         fetch_forensic_docs_fn: Reference to fetch_forensic_documents_async from screener_fetcher
+        get_full_analysis_fn: Reference to get_analysis_for_ticker from handler.py (for fallback)
     """
 
     @app.route('/agent/forensic/analyze', methods=['POST'])
@@ -484,10 +510,35 @@ def register_forensic_routes(app, call_gemini_api_fn, call_perplexity_api_fn,
                         'age_minutes': round(age_minutes)
                     })
 
-            # Check that we have base data to work with
-            cached_data = get_local_cache_fn(ticker)
+            # Check that we have base data to work with (checks Local + Redis)
+            cached_data = get_cache_fn(ticker)
+            
+            # --- NEW: FALLBACK TO FULL ANALYSIS IF NO CACHE FOUND ---
+            if not cached_data and get_full_analysis_fn:
+                print(f"FORENSIC_AGENT: No cached data found for {ticker}. Running full analysis fallback...", file=sys.stderr)
+                try:
+                    # Run full analysis synchronously (this might take 40-60s)
+                    # We do this here because the background pipeline needs the data
+                    # --- MODIFIED: Skip AI Summary for Forensic Agent to save cost/time ---
+                    _, cached_data = get_full_analysis_fn(ticker, skip_ai_summary=True)
+                    
+                    if not cached_data:
+                        print(f"FORENSIC_AGENT: Full analysis fallback failed for {ticker}", file=sys.stderr)
+                        return jsonify({
+                            'error': 'no_base_data',
+                            'message': FORENSIC_NO_DATA_MSG
+                        }), 400
+                    
+                    print(f"FORENSIC_AGENT: Full analysis fallback successful for {ticker}", file=sys.stderr)
+                except Exception as fe:
+                    print(f"FORENSIC_AGENT ERROR during fallback for {ticker}: {fe}", file=sys.stderr)
+                    return jsonify({
+                        'error': 'fallback_failed',
+                        'message': f"Could not pull financial data for {ticker}. Error: {str(fe)}"
+                    }), 500
+
             if not cached_data:
-                print(f"FORENSIC_AGENT: No cached data found for {ticker}", file=sys.stderr)
+                print(f"FORENSIC_AGENT: No cached data found for {ticker} and no fallback available", file=sys.stderr)
                 return jsonify({
                     'error': 'no_base_data',
                     'message': FORENSIC_NO_DATA_MSG

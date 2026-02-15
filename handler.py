@@ -220,6 +220,57 @@ def set_local_cache(ticker, data):
     }
     print(f"DEBUG: Saved to local cache: {ticker_upper}", file=sys.stderr)
 
+def get_any_cache(ticker):
+    """
+    Get analysis data from cache, checking both local memory and Redis.
+    This is used by Forensic Agent to ensure data access in distributed environments.
+    """
+    if not ticker:
+        return None
+    
+    ticker_upper = ticker.upper().strip()
+    
+    # 1. Try Local Cache first
+    local_data = get_local_cache(ticker_upper)
+    if local_data:
+        # print(f"CACHE_DEBUG: Local memory HIT for {ticker_upper}", file=sys.stderr)
+        return local_data
+    
+    # 2. Try Redis Cache (if available)
+    if DIRECT_REDIS_CLIENT:
+        try:
+            # Custom stock analysis key format
+            stock_cache_key = f"stock_analysis_{ticker_upper}"
+            raw_data = DIRECT_REDIS_CLIENT.get(stock_cache_key)
+            
+            if not raw_data:
+                # Also try the standard Flask-Caching key format just in case
+                flask_key = f"flask_cache_stock_analysis_{ticker_upper}"
+                raw_data = DIRECT_REDIS_CLIENT.get(flask_key)
+            
+            if raw_data:
+                # Decompress and deserialize
+                try:
+                    data = pickle.loads(zlib.decompress(raw_data))
+                    # print(f"CACHE_DEBUG: Redis HIT for {ticker_upper}", file=sys.stderr)
+                    
+                    # Optional: back-fill local cache for faster subsequent access
+                    set_local_cache(ticker_upper, data)
+                    
+                    return data
+                except (zlib.error, pickle.UnpicklingError) as e:
+                    # Try plain pickle if zlib fails (some older keys might not be compressed)
+                    try:
+                        data = pickle.loads(raw_data)
+                        set_local_cache(ticker_upper, data)
+                        return data
+                    except:
+                        print(f"CACHE_DEBUG: Multi-stage deserialization failed for {ticker_upper}: {e}", file=sys.stderr)
+        except Exception as e:
+            print(f"CACHE_DEBUG: Redis access error for {ticker_upper}: {e}", file=sys.stderr)
+            
+    return None
+
 
 def get_industry_job(job_id):
     """Get industry research job status using Direct Redis with local fallback."""
@@ -3286,7 +3337,18 @@ def extract_key_metrics_from_fundamentals(fundamentals_data, top_ratios=None):
     # Helper: Calculate YoY growth from quarterly data
     def calc_quarterly_yoy_growth(table_name, metric_name):
         if table_name in fundamentals_data:
-            table = fundamentals_data[table_name]
+            table = fundamentals_data.get(table_name)
+            if table is None:
+                return []
+            
+            # Handle JSON string
+            if isinstance(table, str):
+                try:
+                    table = json.loads(table)
+                except:
+                    return []
+            
+            # Handle DataFrame
             for row in table:
                 if row.get("") == metric_name:
                     periods = [k for k in row.keys() if k and k != ""]
@@ -3839,7 +3901,7 @@ def progress_stream():
 # START: New ASYNC and Caching Implementation for Analysis
 # =====================================================================
 
-async def get_analysis_for_ticker_async(tick):
+async def get_analysis_for_ticker_async(tick, skip_ai_summary=False):
     """
     This is the new async core logic function. It runs all I/O-bound
     operations in parallel to significantly speed up data gathering.
@@ -4088,7 +4150,13 @@ async def get_analysis_for_ticker_async(tick):
     task_rsi_div = loop.run_in_executor(None, make_chart_json, build_rsi_divergence_figure, df, company_name, 1, '#3b82f6')
     
     # Run AI Summary (OpenAI) and yfinance Metrics in parallel
-    task_ai_sum = loop.run_in_executor(None, generate_ai_company_summary, tick, company_description, tables_from_screener, latest_documents)
+    if not skip_ai_summary:
+        task_ai_sum = loop.run_in_executor(None, generate_ai_company_summary, tick, company_description, tables_from_screener, latest_documents)
+    else:
+        # Return a placeholder if skipped
+        async def dummy_summary(): return "<p>Investor presentation summary skipped for forensic analysis.</p>"
+        task_ai_sum = dummy_summary()
+
     # yfinance fetch is I/O bound, run in thread pool
     task_yf_metrics = loop.run_in_executor(None, get_yfinance_metrics, tick)
 
@@ -4205,12 +4273,44 @@ async def get_analysis_for_ticker_async(tick):
     return result_for_frontend, analysis_for_cache
 
 # @cache.memoize(timeout=21600)
-def get_analysis_for_ticker(tick):
+def get_analysis_for_ticker(tick, skip_ai_summary=False):
     """
     Synchronous wrapper that runs the async logic. The cache stores the final result.
     This is the bridge between the synchronous Flask world and our async code.
     """
-    return asyncio.run(get_analysis_for_ticker_async(tick))
+    if not tick:
+        return None, None
+        
+    print(f"DEBUG: Running full analysis for {tick} via get_analysis_for_ticker (skip_ai_summary={skip_ai_summary})", file=sys.stderr)
+    result_for_frontend, analysis_for_cache = asyncio.run(get_analysis_for_ticker_async(tick, skip_ai_summary=skip_ai_summary))
+    
+    # SAVE TO CACHE (Match behavior in /analyze)
+    try:
+        # Save to local memory cache (primary source for Forensic Agent)
+        set_local_cache(tick, analysis_for_cache)
+        
+        # Also save the frontend result (compressed) to Redis for subsequent searches
+        # This prevents redundant heavy calculations if the user goes to Company Research next
+        if DIRECT_REDIS_CLIENT:
+            stock_cache_key = f"stock_analysis_{tick.upper().strip()}"
+            # Prepare result for permanent storage
+            result_for_frontend['from_cache'] = True
+            result_for_frontend['light_cache'] = False
+            from datetime import datetime
+            result_for_frontend['cached_at'] = datetime.now().isoformat()
+            
+            try:
+                frontend_compressed = zlib.compress(pickle.dumps(result_for_frontend))
+                # 3 months TTL
+                cache.set(stock_cache_key, frontend_compressed, timeout=7776000)
+                DIRECT_REDIS_CLIENT.setex(stock_cache_key, 7776000, frontend_compressed)
+                print(f"INFO: Successfully cached fallthrough data for {tick} in Redis", file=sys.stderr)
+            except Exception as e:
+                print(f"WARN: Failed to cache fallthrough data for {tick} in Redis: {e}", file=sys.stderr)
+    except Exception as e:
+        print(f"WARN: Failed to cache results in get_analysis_for_ticker for {tick}: {e}", file=sys.stderr)
+        
+    return result_for_frontend, analysis_for_cache
 
 @app.route('/analyze', methods=['POST'])
 def analyze():
@@ -6558,7 +6658,7 @@ register_concall_routes(app, call_gemini_api, fetch_latest_documents_async, get_
 
 # Register Forensic Agent routes
 from agents.forensic_agent import register_forensic_routes
-register_forensic_routes(app, call_gemini_api, call_perplexity_api, get_local_cache, fetch_forensic_documents_async)
+register_forensic_routes(app, call_gemini_api, call_perplexity_api, get_any_cache, fetch_forensic_documents_async, get_analysis_for_ticker)
 
 print("INFO: Agent Marketplace routes registered (Concall Agent, Forensic Agent)", file=sys.stderr)
 
