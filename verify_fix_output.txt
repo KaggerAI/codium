@@ -1,0 +1,10 @@
+Starting verification script...
+Verifying for RELIANCE...
+[RELIANCE] Standalone Latest Quarter: 'Dec 2025'
+[RELIANCE] Consolidated Latest Quarter: 'Dec 2025'
+SUCCESS: Successfully fetched both. Standalone='Dec 2025', Consolidated='Dec 2025'
+Verifying for TCS...
+[TCS] Standalone Latest Quarter: 'Dec 2025'
+[TCS] Consolidated Latest Quarter: 'Dec 2025'
+SUCCESS: Successfully fetched both. Standalone='Dec 2025', Consolidated='Dec 2025'
+Verification finished.

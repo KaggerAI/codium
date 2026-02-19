@@ -260,19 +260,26 @@ async def fetch_consolidated_async(ticker: str) -> tuple[dict[str, pd.DataFrame]
 
     return tables, description, top_ratios, is_consolidated
 
-async def fetch_latest_quarter_header_async(ticker: str) -> str:
+async def fetch_latest_quarter_header_async(ticker: str, consolidated: bool = False) -> str:
     """
     Fast fetch of the latest quarterly result column header (e.g., 'Dec 2023').
     Used for cache validity checking.
     """
-    standalone_url = f"https://www.screener.in/company/{ticker}/"
-    async with httpx.AsyncClient() as client:
+    # Consolidated aware URL
+    if consolidated:
+        target_url = f"https://www.screener.in/company/{ticker}/consolidated/"
+    else:
+        target_url = f"https://www.screener.in/company/{ticker}/"
+        
+    async with httpx.AsyncClient(follow_redirects=True) as client:
         try:
-            response = await client.get(standalone_url, headers=HEADERS, timeout=15.0)
+            response = await client.get(target_url, headers=HEADERS, timeout=15.0)
             if response.status_code != 200:
+                print(f"DEBUG: fetch_latest_quarter failed for {ticker} (Consolidated: {consolidated}) - Status: {response.status_code}")
                 return ""
             text = response.text
-        except Exception:
+        except Exception as e:
+            print(f"DEBUG: fetch_latest_quarter exception for {ticker}: {e}")
             return ""
 
     soup = BeautifulSoup(text, 'html.parser')

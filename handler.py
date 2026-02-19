@@ -4349,6 +4349,9 @@ def analyze():
                     try:
                         # 1. Get current latest quarter from cache
                         cached_fund = cached_result.get('fundamentals', {})
+                        # Also check if the cached analysis was Consolidated
+                        cached_is_consolidated = cached_result.get('is_consolidated', False)
+                        
                         q_results_json = cached_fund.get('Quarterly Results')
                         if q_results_json:
                             # Parse JSON (stored with orient='split' and transposed)
@@ -4357,9 +4360,11 @@ def analyze():
                             if q_headers:
                                 cached_latest_q = q_headers[-1]
                                 
-                                # 2. Fetch latest quarter from Screener.in live
-                                log_progress(f"Checking for new quarterly results for {tick}...")
-                                live_latest_q = asyncio.run(fetch_latest_quarter_header_async(tick))
+                                # 2. Fetch latest quarter from Screener.in live (matching consolidation status)
+                                log_progress(f"Checking for new quarterly results for {tick} (Consolidated: {cached_is_consolidated})...")
+                                live_latest_q = asyncio.run(fetch_latest_quarter_header_async(tick, consolidated=cached_is_consolidated))
+                                
+                                print(f"DEBUG: Smart Refresh Check for {tick}: Cached='{cached_latest_q}' vs Live='{live_latest_q}' (Consolidated={cached_is_consolidated})")
                                 
                                 if live_latest_q and live_latest_q != cached_latest_q:
                                     print(f"INFO: NEW RESULTS FOUND: {cached_latest_q} -> {live_latest_q}. Forcing refresh for {tick}.")
