@@ -4454,7 +4454,6 @@ def analyze():
                             # Get Trendlyne analyst reports (RUNTIME ONLY - not fetched during pre-caching)
                             log_progress("Fetching Trendlyne analyst reports...")
                             try:
-                                import asyncio
                                 from analyst_reports.trendlyne_fetcher import fetch_analyst_reports_async
                                 analyst_reports = asyncio.run(fetch_analyst_reports_async(tick))
                                 print(f"INFO: Fetched {len(analyst_reports)} analyst reports for {tick}")
