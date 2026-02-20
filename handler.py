@@ -3257,7 +3257,8 @@ from screener_fetcher import (
     fetch_chart_data_async,
     parse_chart_json,
     fetch_latest_documents_async,
-    fetch_latest_quarter_header_async
+    fetch_latest_quarter_header_async,
+    fetch_latest_document_dates_async
 )
 
 from scanx_fetcher import scrape_scanx_company_async
@@ -3564,17 +3565,39 @@ def generate_ai_company_summary(ticker, description, fundamentals, documents):
         context_parts.append("### Business Description\n")
         context_parts.append(description)
 
-    # --- Financials Context (Unchanged) ---
+    # --- Financials Context ---
     if fundamentals:
         annual_results = fundamentals.get("Annual Results")
-        if annual_results is not None and not annual_results.empty:
-            context_parts.append("\n### Key Annual Financials (for overall trend analysis)\n")
-            annual_df = annual_results.set_index(annual_results.columns[0])
-            key_metrics = ["Sales", "Net Profit"]
-            for metric in key_metrics:
-                if metric in annual_df.index:
-                    metric_data = annual_df.loc[metric].iloc[-3:]
-                    context_parts.append(f"- {metric} (last 3 years): {', '.join(metric_data.astype(str).tolist())}")
+        if annual_results is not None:
+            try:
+                if not annual_results.empty:
+                    context_parts.append("\n### Key Annual Financials (for overall trend analysis)\n")
+                    annual_df = annual_results.set_index(annual_results.columns[0])
+                    key_metrics = ["Sales", "Net Profit"]
+                    for metric in key_metrics:
+                        if metric in annual_df.index:
+                            metric_data = annual_df.loc[metric].iloc[-3:]
+                            context_parts.append(f"- {metric} (last 3 years): {', '.join(metric_data.astype(str).tolist())}")
+            except Exception as e:
+                print(f"DEBUG: Error processing Annual Results for AI summary: {e}")
+
+        # --- NEW: Include latest Quarterly Results for up-to-date summary ---
+        quarterly_results = fundamentals.get("Quarterly Results")
+        if quarterly_results is not None:
+            try:
+                if not quarterly_results.empty:
+                    context_parts.append("\n### Latest Quarterly Results (most recent 4 quarters)\n")
+                    q_df = quarterly_results.set_index(quarterly_results.columns[0])
+                    # Get last 4 quarter columns
+                    q_cols = q_df.columns[-4:] if len(q_df.columns) >= 4 else q_df.columns
+                    q_metrics = ["Sales", "Operating Profit", "OPM %", "Net Profit", "EPS in Rs"]
+                    for metric in q_metrics:
+                        if metric in q_df.index:
+                            metric_data = q_df.loc[metric, q_cols]
+                            quarters_str = ", ".join([f"{col}: {val}" for col, val in zip(q_cols, metric_data.astype(str))])
+                            context_parts.append(f"- {metric}: {quarters_str}")
+            except Exception as e:
+                print(f"DEBUG: Error processing Quarterly Results for AI summary: {e}")
 
 
     # --- MODIFIED: Document Context (Checks for both Concall and Presentation) ---
@@ -3619,7 +3642,7 @@ Be concise: limit the overall response to maximum 800 words.
     <p>Write one short paragraph describing the company's main business.</p>
 
     <h4>How it Generates Revenue</h4>
-    <p>Start with a single sentence about how the company makes money. Then, describe the company's overall sales trend using the '### Key Annual Financials (for overall trend analysis)'.</p>
+    <p>Start with a single sentence about how the company makes money. Then, describe the company's overall sales trend using the '### Key Annual Financials (for overall trend analysis)'. Also analyze the '### Latest Quarterly Results' to highlight the most recent quarter's Sales, Profit, and Margin performance. Compare the latest quarter's numbers with the previous quarters to identify trends.</p>
     <p>Next, carefully read the 'Full Text from Latest Results Presentation'. Find revenue breakdowns by business segment, geography, or any other category the company provides. Extract only Sales/Revenue figures and Profit breakdowns (like EBITDA or Net Profit).</p>
     <p>If you find this data, put it in bulleted lists. For each item, show its revenue contribution and its year-over-year (YoY) growth. Be factual and use the numbers exactly as they are presented.</p>
     <ul>
@@ -4224,6 +4247,15 @@ async def get_analysis_for_ticker_async(tick, skip_ai_summary=False):
 
 
     # This dictionary is what the AI needs. It uses the Python objects.
+    # Extract document dates for cache freshness checks
+    _cached_concall_date = ""
+    _cached_pres_date = ""
+    for _doc in latest_documents:
+        if _doc.get('type') == 'Concall' and not _cached_concall_date:
+            _cached_concall_date = _doc.get('date', '')
+        elif _doc.get('type') == 'Presentation' and not _cached_pres_date:
+            _cached_pres_date = _doc.get('date', '')
+
     analysis_for_cache = {
         "ticker": tick, "company_name": company_name, "summary": cleaned_technical_summary, 
         "fundamentals": fund_data_for_ai_context,  # <-- The AI-friendly version
@@ -4232,7 +4264,10 @@ async def get_analysis_for_ticker_async(tick, skip_ai_summary=False):
         "technical_data_df": df,
         "peer_comparison": peer_comparison_data,  # <-- For AI chatbot access
         "key_metrics": key_metrics,  # <-- Key Metrics Snapshot for AI chatbot
-        "is_consolidated": is_consolidated  # NEW: Store consolidation status
+        "is_consolidated": is_consolidated,  # Store consolidation status
+        "company_description": company_description,  # For document-only refresh
+        "cached_concall_date": _cached_concall_date,  # For document freshness check
+        "cached_presentation_date": _cached_pres_date  # For document freshness check
     }
     
     # This dictionary is what the frontend needs. It uses the JSON strings.
@@ -4265,8 +4300,11 @@ async def get_analysis_for_ticker_async(tick, skip_ai_summary=False):
             },
             'peers': peer_comparison_data  # AI-extracted peer data
         },
-        'analyst_reports': analyst_reports,  # NEW: Trendlyne analyst reports
-        'is_consolidated': is_consolidated  # NEW: Pass to frontend if needed
+        'analyst_reports': analyst_reports,  # Trendlyne analyst reports
+        'is_consolidated': is_consolidated,  # Pass to frontend if needed
+        'company_description': company_description,  # For document-only refresh
+        'cached_concall_date': _cached_concall_date,  # For document freshness check
+        'cached_presentation_date': _cached_pres_date  # For document freshness check
     }
 
     # Pass BOTH dictionaries back to the synchronous wrapper
@@ -4784,8 +4822,94 @@ def analyze():
                             # Fall through to full analysis below
                     
                     elif not force_refresh:
-                        # FULL CACHE HIT: Return immediately
-                        print(f"FULL CACHE HIT: Returning cached analysis for {tick}")
+                        # ============================================================
+                        # SECONDARY CHECK: Are there newer documents on Screener.in?
+                        # (This handles the 1-2 day lag between results and concall upload)
+                        # ============================================================
+                        try:
+                            cached_cc_date = cached_result.get('cached_concall_date', '')
+                            cached_pres_date = cached_result.get('cached_presentation_date', '')
+                            
+                            # Only check if we have at least one cached date to compare
+                            if cached_cc_date or cached_pres_date:
+                                log_progress(f"Checking for new documents for {tick}...")
+                                live_doc_dates = asyncio.run(fetch_latest_document_dates_async(tick))
+                                live_cc_date = live_doc_dates.get('concall_date', '')
+                                live_pres_date = live_doc_dates.get('presentation_date', '')
+                                
+                                print(f"DEBUG: Document check for {tick}: "
+                                      f"Cached concall='{cached_cc_date}' vs Live='{live_cc_date}', "
+                                      f"Cached pres='{cached_pres_date}' vs Live='{live_pres_date}'")
+                                
+                                new_concall = live_cc_date and live_cc_date != cached_cc_date
+                                new_pres = live_pres_date and live_pres_date != cached_pres_date
+                                
+                                if new_concall or new_pres:
+                                    doc_type = "concall" if new_concall else "presentation"
+                                    print(f"INFO: NEW DOCUMENTS FOUND for {tick}! New {doc_type} detected. Refreshing documents + AI Summary...")
+                                    log_progress(f"New {doc_type} found. Refreshing AI Summary...")
+                                    
+                                    try:
+                                        # 1. Fetch fresh documents (downloads + summarizes PDFs)
+                                        fresh_documents = asyncio.run(fetch_latest_documents_async(tick))
+                                        
+                                        if fresh_documents:
+                                            # 2. Reconstruct DataFrames from cached JSON for AI summary
+                                            import pandas as _pd  # Local import (pandas not imported globally in handler.py)
+                                            cached_fund_json = cached_result.get('fundamentals', {})
+                                            reconstructed_tables = {}
+                                            for table_name, json_str in cached_fund_json.items():
+                                                try:
+                                                    # Reverse: df.reset_index().T.to_json(orient='split')
+                                                    reconstructed_tables[table_name] = _pd.read_json(json_str, orient='split').T
+                                                except Exception:
+                                                    pass  # Skip tables that can't be reconstructed
+                                            
+                                            # 3. Regenerate AI Summary with new documents + existing financials
+                                            cached_description = cached_result.get('company_description', '')
+                                            new_ai_summary = generate_ai_company_summary(
+                                                tick, cached_description, reconstructed_tables, fresh_documents
+                                            )
+                                            
+                                            # 4. Extract new document dates
+                                            new_cc_date = ""
+                                            new_pres_date = ""
+                                            for _doc in fresh_documents:
+                                                if _doc.get('type') == 'Concall' and not new_cc_date:
+                                                    new_cc_date = _doc.get('date', '')
+                                                elif _doc.get('type') == 'Presentation' and not new_pres_date:
+                                                    new_pres_date = _doc.get('date', '')
+                                            
+                                            # 5. Update cached result with new data
+                                            cached_result['documents'] = fresh_documents
+                                            cached_result['company_summary_html'] = new_ai_summary
+                                            cached_result['cached_concall_date'] = new_cc_date
+                                            cached_result['cached_presentation_date'] = new_pres_date
+                                            
+                                            # 6. Re-save to Redis
+                                            try:
+                                                frontend_compressed = zlib.compress(pickle.dumps(cached_result))
+                                                cache.set(stock_cache_key, frontend_compressed, timeout=STOCK_CACHE_TTL)
+                                                if DIRECT_REDIS_CLIENT:
+                                                    DIRECT_REDIS_CLIENT.setex(stock_cache_key, STOCK_CACHE_TTL, frontend_compressed)
+                                                print(f"INFO: Updated cache with new documents + AI Summary for {tick}")
+                                            except Exception as cache_save_err:
+                                                print(f"WARN: Failed to save updated cache for {tick}: {cache_save_err}")
+                                            
+                                            log_progress(f"AI Summary refreshed with new documents for {tick}!")
+                                        else:
+                                            print(f"WARN: fetch_latest_documents_async returned empty for {tick}, keeping cached version")
+                                    except Exception as doc_refresh_err:
+                                        print(f"WARN: Document refresh failed for {tick}: {doc_refresh_err}")
+                                        traceback.print_exc()
+                                        # Continue with cached result as-is
+                                else:
+                                    print(f"INFO: No new documents for {tick} (dates unchanged).")
+                        except Exception as doc_check_err:
+                            print(f"WARN: Document freshness check failed for {tick}: {doc_check_err}")
+                        
+                        # FULL CACHE HIT: Return result (possibly updated with new documents)
+                        print(f"FULL CACHE HIT: Returning analysis for {tick}")
                         log_progress(f"Cache hit for {tick} - returning instantly!")
                         
                         cached_result['from_cache'] = True

@@ -947,6 +947,48 @@ def summarize_presentation_with_gemini(pdf_url: str) -> str:
 
 # In screener_fetcher.py
 
+async def fetch_latest_document_dates_async(ticker: str) -> dict:
+    """
+    Lightweight fetch of ONLY the dates of the latest concall & presentation
+    from Screener.in. Does NOT download or process any PDFs.
+    Returns: {"concall_date": "Nov 14, 2025", "presentation_date": "Nov 14, 2025"}
+    """
+    result = {"concall_date": "", "presentation_date": ""}
+    try:
+        url = BASE_URL.format(ticker=ticker)
+        async with httpx.AsyncClient(follow_redirects=True) as client:
+            response = await client.get(url, headers=HEADERS, timeout=15.0)
+            if response.status_code != 200:
+                return result
+
+        soup = BeautifulSoup(response.text, 'html.parser')
+        concalls_section = soup.find('div', class_='concalls')
+        if not concalls_section:
+            return result
+
+        for item in concalls_section.find_all('li', limit=4):
+            if result["concall_date"] and result["presentation_date"]:
+                break
+
+            date_element = item.find('div', class_='nowrap')
+            date_text = date_element.text.strip() if date_element else ""
+
+            if not result["concall_date"]:
+                transcript_link = item.find('a', string='Transcript', href=True)
+                if transcript_link:
+                    result["concall_date"] = date_text
+
+            if not result["presentation_date"]:
+                ppt_link = item.find('a', string='PPT', href=True)
+                if ppt_link:
+                    result["presentation_date"] = date_text
+
+        return result
+    except Exception as e:
+        print(f"DEBUG: fetch_latest_document_dates failed for {ticker}: {e}")
+        return result
+
+
 async def fetch_latest_documents_async(ticker: str) -> list[dict]:
     try:
         url = BASE_URL.format(ticker=ticker)
@@ -965,12 +1007,13 @@ async def fetch_latest_documents_async(ticker: str) -> list[dict]:
         for item in concalls_section.find_all('li', limit=4): # Limit search to recent items
             if len(found_types) == 2: break
             date_element = item.find('div', class_='nowrap')
-            date_text = f"({date_element.text.strip()})" if date_element else ""
+            raw_date = date_element.text.strip() if date_element else ""
+            date_text = f"({raw_date})" if raw_date else ""
 
             if 'Concall' not in found_types:
                 transcript_link = item.find('a', string='Transcript', href=True)
                 if transcript_link:
-                    doc_info = {"type": "Concall", "text": f"Concall Transcript {date_text}", "link": transcript_link['href']}
+                    doc_info = {"type": "Concall", "text": f"Concall Transcript {date_text}", "link": transcript_link['href'], "date": raw_date}
                     tasks_to_run.append(get_text_from_pdf_url_async(doc_info['link']))
                     doc_infos.append(doc_info)
                     found_types.add('Concall')
@@ -978,7 +1021,7 @@ async def fetch_latest_documents_async(ticker: str) -> list[dict]:
             if 'Presentation' not in found_types:
                 ppt_link = item.find('a', string='PPT', href=True)
                 if ppt_link:
-                    doc_info = {"type": "Presentation", "text": f"Results Presentation {date_text}", "link": ppt_link['href']}
+                    doc_info = {"type": "Presentation", "text": f"Results Presentation {date_text}", "link": ppt_link['href'], "date": raw_date}
                     tasks_to_run.append(summarize_presentation_with_gemini_async(doc_info['link']))
                     doc_infos.append(doc_info)
                     found_types.add('Presentation')
