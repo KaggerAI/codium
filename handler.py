@@ -1530,10 +1530,10 @@ def retrieve_data_based_on_plan(plan_retrieve_data_section, full_context):
                 requested_metrics = spec.get("metrics")
 
                 if requested_metrics == "all":
-                    selected_rows_for_table = table_data
+                    selected_rows_for_table = [row for row in table_data if isinstance(row, dict)]
                 elif isinstance(requested_metrics, list) and table_data:
                     selected_rows_for_table = [
-                        row for row in table_data if row.get("") in requested_metrics
+                        row for row in table_data if isinstance(row, dict) and row.get("") in requested_metrics
                     ]
                 
                 if not selected_rows_for_table:
@@ -1546,6 +1546,8 @@ def retrieve_data_based_on_plan(plan_retrieve_data_section, full_context):
                     final_rows_for_table = selected_rows_for_table
                 elif isinstance(requested_periods, list) and selected_rows_for_table:
                     for row in selected_rows_for_table:
+                        if not isinstance(row, dict):
+                            continue
                         filtered_row = { "": row.get("") } 
                         if "index" in row: filtered_row["index"] = row["index"]
                         
@@ -2603,6 +2605,46 @@ def chat():
         # Log success size
         size_kb = sys.getsizeof(str(last_analysis)) / 1024
         print(f"INFO: Chat Data Loaded. Size: {size_kb:.2f} KB. Keys: {list(last_analysis.keys())}", file=sys.stderr)
+        
+        # =====================================================
+        # PART 2B: RECONSTRUCT FUNDAMENTALS IF FROM FRONTEND CACHE
+        # =====================================================
+        # When loaded from Redis stock cache (FALLBACK 1), fundamentals is in frontend
+        # format: dict of JSON strings from df.reset_index().T.to_json(orient='split').
+        # The AI chatbot needs list-of-dicts format. Detect and convert if needed.
+        cached_fundamentals = last_analysis.get("fundamentals", {})
+        if cached_fundamentals and isinstance(cached_fundamentals, dict):
+            first_table_value = next(iter(cached_fundamentals.values()), None)
+            if isinstance(first_table_value, str):
+                # Frontend format detected — reconstruct to list-of-dicts
+                print("DEBUG: Fundamentals in frontend JSON format. Reconstructing for AI...", file=sys.stderr)
+                import pandas as _pd
+                reconstructed_fundamentals = {}
+                for table_name, json_str in cached_fundamentals.items():
+                    try:
+                        # Reverse the encoding: pd.read_json(orient='split').T gives back the original df
+                        df_table = _pd.read_json(json_str, orient='split').T
+                        # reset_index() moves the metric names from index to a column named "index"
+                        df_reset = df_table.reset_index()
+                        # Rename "index" column to "" to match the AI context format
+                        # (Screener clean_df renames "Unnamed: 0" to "", so metric key is always "")
+                        df_reset.columns = ["" if c == "index" else c for c in df_reset.columns]
+                        # Convert to list-of-dicts (same as fund_data_for_ai_context)
+                        rows = df_reset.to_dict(orient='records')
+                        # Clean up: strip whitespace from string keys and values
+                        cleaned_rows = []
+                        for row_dict in rows:
+                            cleaned = {}
+                            for k, v in row_dict.items():
+                                clean_key = str(k).strip() if isinstance(k, str) else k
+                                clean_val = str(v).strip() if isinstance(v, str) else v
+                                cleaned[clean_key] = clean_val
+                            cleaned_rows.append(cleaned)
+                        reconstructed_fundamentals[table_name] = cleaned_rows
+                    except Exception as recon_err:
+                        print(f"WARN: Could not reconstruct table '{table_name}': {recon_err}", file=sys.stderr)
+                last_analysis["fundamentals"] = reconstructed_fundamentals
+                print(f"DEBUG: Reconstructed {len(reconstructed_fundamentals)} fundamental tables for AI.", file=sys.stderr)
         
         print(f"AI chatbot received question with selected model: {selected_model}", file=sys.stderr)
 
@@ -4547,7 +4589,7 @@ def analyze():
                                         break
                             
                             # Get Valuation & Margin charts from Screener.in
-                            log_progress("Fetching valuation charts from Screener.in...")
+                            log_progress("Fetching valuation charts...")
                             metric_charts = {}
                             parsed_valuation_data = {}
                             try:
@@ -4606,7 +4648,7 @@ def analyze():
                             # ============================================================
                             # FETCH PEER COMPARISON DATA FROM SCREENER.IN (runtime)
                             # ============================================================
-                            log_progress("Fetching peer comparison data from Screener.in...")
+                            log_progress("Fetching peer comparison data...")
                             try:
                                 from screener_fetcher import fetch_peer_comparison_from_screener
                                 # Use sync wrapper because analyze() is a sync Flask route
@@ -5229,7 +5271,7 @@ def refresh_section():
             # =====================================================
             from screener_fetcher import fetch_peer_comparison_from_screener
             
-            log_progress(f"Fetching peer data from Screener.in...")
+            log_progress(f"Fetching peer data...")
             screener_data = fetch_peer_comparison_from_screener(ticker, company_name)
             screener_company = screener_data.get('company', {})
             screener_peers = screener_data.get('peers', [])
@@ -5531,7 +5573,7 @@ def refresh_section():
                 except:
                     pass
                 
-                log_progress(f"Fetching {ticker} peer data from Screener.in...")
+                log_progress(f"Fetching {ticker} peer data...")
                 screener_data = fetch_peer_comparison_from_screener(ticker, company_name)
                 screener_company = screener_data.get('company', {})
                 
@@ -5575,7 +5617,7 @@ def refresh_section():
             # =====================================================
             try:
                 from screener_fetcher import fetch_consolidated
-                log_progress(f"Fetching {ticker} fundamentals from Screener.in...")
+                log_progress(f"Fetching {ticker} fundamentals...")
                 tables, _, top_ratios, is_consolidated_screener = fetch_consolidated(ticker)
                 
                 # Get Financial Ratios table
@@ -5824,7 +5866,7 @@ def add_peer():
         
         peer_data = {}
         try:
-            log_progress(f"Fetching {ticker} from Screener.in...")
+            log_progress(f"Fetching {ticker}...")
             screener_result = fetch_peer_comparison_from_screener(ticker)
             screener_company = screener_result.get('company', {})
             

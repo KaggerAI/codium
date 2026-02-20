@@ -513,6 +513,43 @@ def register_forensic_routes(app, call_gemini_api_fn, call_perplexity_api_fn,
             # Check that we have base data to work with (checks Local + Redis)
             cached_data = get_cache_fn(ticker)
             
+            # --- QUARTERLY FRESHNESS CHECK ---
+            # If cache exists, verify it has the latest quarterly results.
+            # If stale, invalidate cache to trigger the full analysis fallback below.
+            if cached_data and get_full_analysis_fn:
+                try:
+                    from screener_fetcher import fetch_latest_quarter_header_async
+                    cached_fund = cached_data.get('fundamentals', {})
+                    cached_is_consolidated = cached_data.get('is_consolidated', False)
+                    
+                    # Extract latest quarter from cached data
+                    q_results_json = cached_fund.get('Quarterly Results')
+                    if q_results_json:
+                        if isinstance(q_results_json, str):
+                            q_data = json.loads(q_results_json)
+                            q_headers = [str(h).strip() for h in q_data.get('index', []) if h and str(h).strip()]
+                        elif isinstance(q_results_json, list):
+                            # Records format — extract column headers
+                            if q_results_json:
+                                q_headers = [str(k).strip() for k in q_results_json[0].keys() if k and str(k).strip()]
+                                q_headers = q_headers[1:]  # Skip label column
+                        else:
+                            q_headers = []
+                        
+                        if q_headers:
+                            cached_latest_q = q_headers[-1]
+                            live_latest_q = asyncio.run(fetch_latest_quarter_header_async(ticker, consolidated=cached_is_consolidated))
+                            
+                            print(f"FORENSIC_AGENT: Quarter check for {ticker}: Cached='{cached_latest_q}' vs Live='{live_latest_q}' (Consolidated={cached_is_consolidated})", file=sys.stderr)
+                            
+                            if live_latest_q and live_latest_q != cached_latest_q:
+                                print(f"FORENSIC_AGENT: STALE DATA — new quarter {live_latest_q} detected. Invalidating cache for {ticker}.", file=sys.stderr)
+                                cached_data = None  # Trigger full analysis fallback
+                            else:
+                                print(f"FORENSIC_AGENT: Cache is fresh for {ticker} (latest: {cached_latest_q}).", file=sys.stderr)
+                except Exception as qcheck_err:
+                    print(f"FORENSIC_AGENT: Quarter check failed for {ticker} (using cached data): {qcheck_err}", file=sys.stderr)
+            
             # --- NEW: FALLBACK TO FULL ANALYSIS IF NO CACHE FOUND ---
             if not cached_data and get_full_analysis_fn:
                 print(f"FORENSIC_AGENT: No cached data found for {ticker}. Running full analysis fallback...", file=sys.stderr)
