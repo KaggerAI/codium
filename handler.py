@@ -2646,6 +2646,27 @@ def chat():
                 last_analysis["fundamentals"] = reconstructed_fundamentals
                 print(f"DEBUG: Reconstructed {len(reconstructed_fundamentals)} fundamental tables for AI.", file=sys.stderr)
         
+        # =====================================================
+        # PART 2C: NORMALIZE PEER COMPARISON FORMAT
+        # =====================================================
+        # Frontend cache stores peer_comparison as {company: {...}, peers: [...]}
+        # The AI schema and retrieval functions expect a flat list of peer dicts.
+        peer_data = last_analysis.get("peer_comparison")
+        if isinstance(peer_data, dict) and "peers" in peer_data:
+            last_analysis["peer_comparison"] = peer_data.get("peers", [])
+            print(f"DEBUG: Normalized peer_comparison from nested dict to flat list ({len(last_analysis['peer_comparison'])} peers).", file=sys.stderr)
+        
+        # =====================================================
+        # PART 2D: ENSURE VALUATION DATA IS ACCESSIBLE
+        # =====================================================
+        # If valuation_and_margin_data is missing but scanx_data exists (legacy light cache key),
+        # copy it over so the AI schema and retrieval functions can find it.
+        if not last_analysis.get("valuation_and_margin_data") and last_analysis.get("scanx_data"):
+            scanx = last_analysis["scanx_data"]
+            if isinstance(scanx, dict) and scanx:
+                last_analysis["valuation_and_margin_data"] = scanx
+                print(f"DEBUG: Copied scanx_data to valuation_and_margin_data ({len(scanx)} series).", file=sys.stderr)
+        
         print(f"AI chatbot received question with selected model: {selected_model}", file=sys.stderr)
 
         # =====================================================
@@ -4321,6 +4342,7 @@ async def get_analysis_for_ticker_async(tick, skip_ai_summary=False):
         'chart_rsi_divergence_json': rsi_div_j,
         'fundamentals': fund_data_for_frontend, # <-- The frontend-friendly version
         'metric_charts': metric_charts_for_frontend,
+        'valuation_and_margin_data': parsed_valuation_data,  # For AI chatbot access
         'documents': latest_documents, 'scanx_data': scanx_data,
         'key_metrics': key_metrics,  # <-- Key metrics table data
         'peer_comparison': {  # <-- NEW: Peer comparison data
@@ -4740,7 +4762,8 @@ def analyze():
                                 'fundamentals': cached_fundamentals,  # FROM CACHE
                                 'metric_charts': metric_charts,  # Valuation charts from Screener.in
                                 'documents': cached_documents,  # FROM CACHE
-                                'scanx_data': parsed_valuation_data,  # Valuation data for AI
+                                'scanx_data': parsed_valuation_data,  # Valuation data for AI (legacy key)
+                                'valuation_and_margin_data': parsed_valuation_data,  # For AI chatbot access
                                 'key_metrics': merged_key_metrics,  # MERGED: yfinance + cached
                                 'peer_comparison': peer_comparison,  # FETCHED AT RUNTIME via AI
                                 'analyst_reports': analyst_reports
