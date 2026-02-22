@@ -42,6 +42,8 @@ pdfplumber
 python-docx
 playwright
 playwright-stealth==1.0.6  # <--- USE THIS CORRECT, STABLE VERSION
+yt-dlp
+youtube-transcript-api
 
 # --- Other utilities ---
 feedparser

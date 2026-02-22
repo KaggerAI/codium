@@ -6743,6 +6743,22 @@ from prompts import get_budget_chat_prompt
 # Store a single global budget session for 2026
 GLOBAL_BUDGET_SESSION = BudgetLiveSession("global_2026")
 
+# Auto-load the default budget transcript so it's preloaded on every deployment
+try:
+    _transcript_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'budget_transcript.txt')
+    if os.path.exists(_transcript_path):
+        with open(_transcript_path, 'r', encoding='utf-8') as _f:
+            _default_transcript = _f.read()
+        if _default_transcript.strip():
+            GLOBAL_BUDGET_SESSION.ingest_full_transcript(_default_transcript)
+            print("INFO: Budget 2026 transcript preloaded successfully from budget_transcript.txt", file=sys.stderr)
+        else:
+            print("WARN: budget_transcript.txt is empty. Budget section will start empty.", file=sys.stderr)
+    else:
+        print("WARN: budget_transcript.txt not found. Budget section will start empty.", file=sys.stderr)
+except Exception as _e:
+    print(f"WARN: Failed to preload budget transcript: {_e}", file=sys.stderr)
+
 @app.route('/api/budget/chat', methods=['POST'])
 def api_budget_chat():
     """AI Chatbot for the Budget section using gpt-5-mini"""

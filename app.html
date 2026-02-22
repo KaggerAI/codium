@@ -2243,7 +2243,7 @@
       </a>
       <div class="flex items-center gap-4">
         <!-- Agents -->
-        <a href="/agents" class="nav-link-slim nav-btn-agents">🤖 Advanced Agents</a>
+        <a href="/agents" class="nav-link-slim nav-btn-agents" onclick="saveAppState()">🤖 Advanced Agents</a>
         <!-- AI News -->
         <button onclick="showSection('news')" id="news-tab-btn" class="nav-link-slim nav-btn-news">📰 AI-Enhanced
           News</button>
@@ -5969,6 +5969,42 @@
   </div>
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script>
+    // === STATE PERSISTENCE HELPERS ===
+    function saveAppState() {
+      try {
+        const cr = document.getElementById('companyResults');
+        const ir = document.getElementById('industryResults');
+        if (cr && cr.children.length > 0) sessionStorage.setItem('kagger_company_results', cr.innerHTML);
+        if (ir && ir.children.length > 0) sessionStorage.setItem('kagger_industry_results', ir.innerHTML);
+        if (typeof currentMode !== 'undefined') sessionStorage.setItem('kagger_search_mode', currentMode);
+        const ti = document.getElementById('tickerInput');
+        const ii = document.getElementById('industryInput');
+        if (ti && ti.value) sessionStorage.setItem('kagger_ticker_value', ti.value);
+        if (ii && ii.value) sessionStorage.setItem('kagger_industry_value', ii.value);
+        console.log('[STATE] Saved app state:', { companyChildren: cr ? cr.children.length : 0, industryChildren: ir ? ir.children.length : 0, mode: typeof currentMode !== 'undefined' ? currentMode : 'N/A' });
+      } catch (e) { console.error('[STATE] Save error:', e); }
+    }
+
+    function restoreAppState() {
+      try {
+        const cr = document.getElementById('companyResults');
+        const ir = document.getElementById('industryResults');
+        const savedCompany = sessionStorage.getItem('kagger_company_results');
+        const savedIndustry = sessionStorage.getItem('kagger_industry_results');
+        const savedMode = sessionStorage.getItem('kagger_search_mode');
+        const savedTicker = sessionStorage.getItem('kagger_ticker_value');
+        const savedIndustryVal = sessionStorage.getItem('kagger_industry_value');
+
+        console.log('[STATE] Restoring app state:', { hasCompany: !!savedCompany, hasIndustry: !!savedIndustry, mode: savedMode });
+
+        if (savedCompany && cr) cr.innerHTML = savedCompany;
+        if (savedIndustry && ir) ir.innerHTML = savedIndustry;
+        if (savedTicker) { const ti = document.getElementById('tickerInput'); if (ti) ti.value = savedTicker; }
+        if (savedIndustryVal) { const ii = document.getElementById('industryInput'); if (ii) ii.value = savedIndustryVal; }
+        if (savedMode && savedMode === 'industry' && typeof setMode === 'function') setMode('industry');
+      } catch (e) { console.error('[STATE] Restore error:', e); }
+    }
+
     function showSection(s) {
       const newsSection = document.getElementById('news-section');
       const chartSection = document.getElementById('chart-section');
@@ -6545,18 +6581,6 @@
             <p class="text-emerald-400 text-lg">${data.ticker}</p>
           </div>
           
-          <!-- AI Chart Analysis Summary Table -->
-          <div class="glass-card rounded-2xl p-6">
-            <h3 class="text-xl font-bold text-white mb-4 flex items-center gap-2">
-              <span class="text-2xl">📊</span> AI Chart Analysis
-            </h3>
-            <table class="chart-summary-table w-full">
-              <tbody>
-                ${summaryRows}
-              </tbody>
-            </table>
-          </div>
-          
           <!-- Charts Section -->
           <div class="glass-card rounded-2xl p-6">
             <div class="flex justify-between items-center mb-4">
@@ -6590,6 +6614,18 @@
             <div id="chartTabAdl" class="chart-panel hidden" style="height:500px;"></div>
             <div id="chartTabRs" class="chart-panel hidden" style="height:500px;"></div>
             <div id="chartTabRsiDiv" class="chart-panel hidden" style="height:800px;"></div>
+          </div>
+
+          <!-- AI Chart Analysis Summary Table -->
+          <div class="glass-card rounded-2xl p-6">
+            <h3 class="text-xl font-bold text-white mb-4 flex items-center gap-2">
+              <span class="text-2xl">📊</span> AI Chart Analysis
+            </h3>
+            <table class="chart-summary-table w-full">
+              <tbody>
+                ${summaryRows}
+              </tbody>
+            </table>
           </div>
         </div>
       `;
@@ -7126,6 +7162,21 @@
     } else {
       initUnanswerable();
     }
+
+    // === RESTORE STATE ON PAGE LOAD ===
+    (function initPageState() {
+      try {
+        // Handle kagger_goto from agents.html navigation
+        const goto = localStorage.getItem('kagger_goto');
+        if (goto) {
+          localStorage.removeItem('kagger_goto');
+          // Delay to let DOM fully initialize
+          setTimeout(() => showSection(goto), 150);
+        }
+        // Restore saved company/industry results from sessionStorage
+        restoreAppState();
+      } catch (e) { /* storage unavailable */ }
+    })();
 
     // =====================================================================
     // Kagger User Insights Tracking (Non-Invasive)

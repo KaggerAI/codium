@@ -873,6 +873,97 @@
             background: var(--accent-purple);
         }
 
+        /* === CONCALL MISMATCH NOTICE === */
+        .mismatch-notice {
+            background: rgba(245, 158, 11, 0.08);
+            border: 1px solid rgba(245, 158, 11, 0.3);
+            border-radius: 1rem;
+            padding: 1.25rem 1.5rem;
+            margin-bottom: 1.25rem;
+            display: none;
+        }
+
+        .mismatch-notice.show {
+            display: block;
+        }
+
+        .mismatch-notice-header {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .mismatch-notice-header span.icon {
+            font-size: 1.2rem;
+        }
+
+        .mismatch-notice-header h4 {
+            font-weight: 600;
+            color: #fbbf24;
+            margin: 0;
+            font-size: 0.95rem;
+        }
+
+        .mismatch-notice p {
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+            margin: 0 0 1rem 0;
+            line-height: 1.5;
+        }
+
+        .mismatch-notice p strong {
+            color: #fbbf24;
+        }
+
+        .mismatch-url-row {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+
+        .mismatch-url-input {
+            flex: 1;
+            padding: 0.6rem 1rem;
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 0.75rem;
+            color: var(--text-primary);
+            font-size: 0.85rem;
+            outline: none;
+            transition: border-color 0.2s ease;
+        }
+
+        .mismatch-url-input:focus {
+            border-color: var(--accent-purple);
+        }
+
+        .mismatch-url-input::placeholder {
+            color: var(--text-muted);
+        }
+
+        .mismatch-analyze-btn {
+            padding: 0.6rem 1.25rem;
+            background: linear-gradient(135deg, var(--accent-purple), var(--accent-blue));
+            color: white;
+            border: none;
+            border-radius: 0.75rem;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all 0.2s ease;
+        }
+
+        .mismatch-analyze-btn:hover {
+            opacity: 0.9;
+        }
+
+        .mismatch-analyze-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
         /* === RESPONSIVE === */
         @media (max-width: 768px) {
             .nav-links {
@@ -924,10 +1015,12 @@
                     style="height:28px;object-fit:contain;filter:invert(1) hue-rotate(-40deg) saturate(3) brightness(1.1);mix-blend-mode:screen;" />
             </a>
             <div class="nav-links">
-                <a href="/app" class="nav-link">🏠 Home</a>
+                <a href="/app" class="nav-link" onclick="saveAgentsState()">🏠 Home</a>
                 <a href="/agents" class="nav-link active">🤖 Agents</a>
-                <a href="/app" class="nav-link" onclick="localStorage.setItem('kagger_goto','news')">📰 News</a>
-                <a href="/app" class="nav-link" onclick="localStorage.setItem('kagger_goto','chart')">📈 Charts</a>
+                <a href="/app" class="nav-link"
+                    onclick="saveAgentsState(); localStorage.setItem('kagger_goto','news')">📰 News</a>
+                <a href="/app" class="nav-link"
+                    onclick="saveAgentsState(); localStorage.setItem('kagger_goto','chart')">📈 Charts</a>
                 <a href="/admin" class="nav-btn-admin" id="admin-link" title="Admin Panel">⚙️</a>
                 <button class="nav-btn-logout" onclick="logout()">Logout</button>
             </div>
@@ -1013,6 +1106,21 @@
                 <div class="progress-timer" id="concallProgressTimer">Elapsed: 0s</div>
                 <div class="progress-bar-container">
                     <div class="progress-bar"></div>
+                </div>
+            </div>
+
+            <!-- Quarter Mismatch Notice -->
+            <div class="mismatch-notice" id="concallMismatchNotice">
+                <div class="mismatch-notice-header">
+                    <span class="icon">⚠️</span>
+                    <h4 id="concallMismatchTitle">Older Concall Quarter</h4>
+                </div>
+                <p id="concallMismatchText"></p>
+                <div class="mismatch-url-row">
+                    <input type="text" class="mismatch-url-input" id="concallMismatchUrlInput"
+                        placeholder="Paste URL (PDF, webpage, YouTube, audio, or video)..." autocomplete="off" />
+                    <button class="mismatch-analyze-btn" id="concallMismatchAnalyzeBtn"
+                        onclick="analyzeConcallFromUrl()">Analyze Latest Concall</button>
                 </div>
             </div>
 
@@ -1286,6 +1394,7 @@
             hideEl('concallError');
             hideEl('concallAnalysis');
             hideEl('concallChat');
+            hideEl('concallMismatchNotice');
             showEl('concallProgress');
             document.getElementById('concallProgressText').textContent = 'Starting concall analysis...';
             document.getElementById('concallAnalyzeBtn').disabled = true;
@@ -1363,8 +1472,13 @@
             // Render analysis
             const ticker = result.ticker || concallSelectedTicker;
             document.getElementById('concallAnalysisTitle').textContent = `Concall Analysis — ${ticker}`;
-            document.getElementById('concallAnalysisMeta').textContent =
-                `${result.concall_label || 'Latest Concall'} · Analyzed in ${result.analysis_time_seconds || '?'}s`;
+
+            // Build meta text with quarter info
+            let metaText = `${result.concall_label || 'Latest Concall'} · Analyzed in ${result.analysis_time_seconds || '?'}s`;
+            if (result.concall_quarter) {
+                metaText = `Quarter: ${result.concall_quarter} · ${metaText}`;
+            }
+            document.getElementById('concallAnalysisMeta').textContent = metaText;
 
             if (result.concall_link) {
                 const sourceLink = document.getElementById('concallSourceLink');
@@ -1375,6 +1489,22 @@
             // Render markdown
             const analysisHtml = marked.parse(result.analysis || 'No analysis available.');
             document.getElementById('concallAnalysisBody').innerHTML = analysisHtml;
+
+            // Check for quarter mismatch
+            const mismatchNotice = document.getElementById('concallMismatchNotice');
+            if (result.quarter_mismatch && result.concall_quarter && result.results_quarter) {
+                document.getElementById('concallMismatchTitle').textContent = `Older Concall Quarter Detected`;
+                document.getElementById('concallMismatchText').innerHTML =
+                    `This analysis is based on the <strong>${result.concall_quarter}</strong> quarter concall, ` +
+                    `but the latest financial results are for <strong>${result.results_quarter}</strong>. ` +
+                    `If you have a link to the latest concall transcript, paste it below to get an updated analysis.`;
+                document.getElementById('concallMismatchUrlInput').value = '';
+                document.getElementById('concallMismatchAnalyzeBtn').disabled = false;
+                document.getElementById('concallMismatchAnalyzeBtn').textContent = 'Analyze Latest Concall';
+                mismatchNotice.classList.add('show');
+            } else {
+                mismatchNotice.classList.remove('show');
+            }
 
             // Reset chat
             const chatMessages = document.getElementById('concallChatMessages');
@@ -1398,6 +1528,104 @@
             const btn = document.getElementById('concallAnalyzeBtn');
             btn.disabled = false;
             document.getElementById('concallBtnText').textContent = 'Analyze Concall';
+        }
+
+        // =====================================================
+        // CONCALL AGENT: ANALYZE FROM USER-PROVIDED URL
+        // =====================================================
+        let concallUrlJobId = null;
+        let concallUrlPollTimer = null;
+
+        function analyzeConcallFromUrl() {
+            const urlInput = document.getElementById('concallMismatchUrlInput');
+            const url = urlInput.value.trim();
+            if (!url) {
+                urlInput.focus();
+                return;
+            }
+
+            // Basic URL validation
+            if (!url.startsWith('http://') && !url.startsWith('https://')) {
+                alert('Please enter a valid URL starting with http:// or https://');
+                return;
+            }
+
+            const ticker = currentConcallData?.ticker || concallSelectedTicker;
+            const resultsQuarter = currentConcallData?.results_quarter || '';
+            if (!ticker) return;
+
+            // Update UI
+            const analyzeBtn = document.getElementById('concallMismatchAnalyzeBtn');
+            analyzeBtn.disabled = true;
+            analyzeBtn.innerHTML = '<span class="spinner" style="width:14px;height:14px;border-width:2px;"></span> Analyzing...';
+
+            // Show progress
+            showEl('concallProgress');
+            document.getElementById('concallProgressText').textContent = 'Analyzing concall from provided URL...';
+
+            // Restart timer
+            concallStartTime = Date.now();
+            if (concallTimerInterval) clearInterval(concallTimerInterval);
+            concallTimerInterval = setInterval(() => {
+                const elapsed = Math.floor((Date.now() - concallStartTime) / 1000);
+                document.getElementById('concallProgressTimer').textContent = `Elapsed: ${elapsed}s`;
+            }, 1000);
+
+            // Hide old analysis while new one loads
+            hideEl('concallAnalysis');
+            hideEl('concallChat');
+            hideEl('concallMismatchNotice');
+
+            fetch('/agent/concall/analyze-url', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ticker, url, results_quarter: resultsQuarter })
+            })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.status === 'complete') {
+                        onConcallComplete(data.result);
+                    } else if (data.job_id) {
+                        concallUrlJobId = data.job_id;
+                        pollConcallUrlStatus();
+                    } else if (data.error) {
+                        onConcallError(data.error);
+                        // Re-show the mismatch notice so user can try again
+                        document.getElementById('concallMismatchAnalyzeBtn').disabled = false;
+                        document.getElementById('concallMismatchAnalyzeBtn').textContent = 'Analyze Latest Concall';
+                        showEl('concallMismatchNotice');
+                    }
+                })
+                .catch(err => {
+                    onConcallError(`Network error: ${err.message}`);
+                    document.getElementById('concallMismatchAnalyzeBtn').disabled = false;
+                    document.getElementById('concallMismatchAnalyzeBtn').textContent = 'Analyze Latest Concall';
+                    showEl('concallMismatchNotice');
+                });
+        }
+
+        function pollConcallUrlStatus() {
+            if (!concallUrlJobId) return;
+
+            fetch(`/agent/concall/${concallUrlJobId}/status`)
+                .then(r => r.json())
+                .then(data => {
+                    if (data.status === 'processing') {
+                        document.getElementById('concallProgressText').textContent = data.progress || 'Analyzing...';
+                        concallUrlPollTimer = setTimeout(pollConcallUrlStatus, 2000);
+                    } else if (data.status === 'complete') {
+                        onConcallComplete(data.result);
+                    } else if (data.status === 'error') {
+                        onConcallError(data.error);
+                        // Re-show mismatch notice so user can try a different URL
+                        document.getElementById('concallMismatchAnalyzeBtn').disabled = false;
+                        document.getElementById('concallMismatchAnalyzeBtn').textContent = 'Analyze Latest Concall';
+                        showEl('concallMismatchNotice');
+                    }
+                })
+                .catch(err => {
+                    onConcallError(`Polling error: ${err.message}`);
+                });
         }
 
         // =====================================================
@@ -1783,6 +2011,108 @@
             p.textContent = str;
             return p.innerHTML;
         }
+
+        // === AGENTS STATE PERSISTENCE ===
+        function saveAgentsState() {
+            try {
+                // Save active tab
+                const activeTab = document.querySelector('.agent-tab.active');
+                if (activeTab) sessionStorage.setItem('kagger_agents_tab', activeTab.id.replace('tab-', ''));
+
+                // Save concall analysis body + visibility + chat + meta
+                const concallBody = document.getElementById('concallAnalysisBody');
+                const concallCard = document.getElementById('concallAnalysis');
+                const concallChatMsgs = document.getElementById('concallChatMessages');
+                const concallChatCard = document.getElementById('concallChat');
+                const concallTitle = document.getElementById('concallAnalysisTitle');
+                const concallMeta = document.getElementById('concallAnalysisMeta');
+
+                if (concallBody && concallBody.innerHTML.trim()) {
+                    sessionStorage.setItem('kagger_agents_concall_body', concallBody.innerHTML);
+                    sessionStorage.setItem('kagger_agents_concall_visible', concallCard && concallCard.classList.contains('show') ? '1' : '0');
+                    if (concallTitle) sessionStorage.setItem('kagger_agents_concall_title', concallTitle.textContent);
+                    if (concallMeta) sessionStorage.setItem('kagger_agents_concall_meta', concallMeta.innerHTML);
+                }
+                if (concallChatMsgs && concallChatMsgs.innerHTML.trim() && concallChatCard && concallChatCard.classList.contains('show')) {
+                    sessionStorage.setItem('kagger_agents_concall_chat', concallChatMsgs.innerHTML);
+                    sessionStorage.setItem('kagger_agents_concall_chat_visible', '1');
+                }
+
+                // Save forensic analysis body + visibility + chat + meta
+                const forensicBody = document.getElementById('forensicAnalysisBody');
+                const forensicCard = document.getElementById('forensicAnalysis');
+                const forensicChatMsgs = document.getElementById('forensicChatMessages');
+                const forensicChatCard = document.getElementById('forensicChat');
+                const forensicTitle = document.getElementById('forensicAnalysisTitle');
+                const forensicMeta = document.getElementById('forensicAnalysisMeta');
+
+                if (forensicBody && forensicBody.innerHTML.trim()) {
+                    sessionStorage.setItem('kagger_agents_forensic_body', forensicBody.innerHTML);
+                    sessionStorage.setItem('kagger_agents_forensic_visible', forensicCard && forensicCard.classList.contains('show') ? '1' : '0');
+                    if (forensicTitle) sessionStorage.setItem('kagger_agents_forensic_title', forensicTitle.textContent);
+                    if (forensicMeta) sessionStorage.setItem('kagger_agents_forensic_meta', forensicMeta.innerHTML);
+                }
+                if (forensicChatMsgs && forensicChatMsgs.innerHTML.trim() && forensicChatCard && forensicChatCard.classList.contains('show')) {
+                    sessionStorage.setItem('kagger_agents_forensic_chat', forensicChatMsgs.innerHTML);
+                    sessionStorage.setItem('kagger_agents_forensic_chat_visible', '1');
+                }
+                console.log('[AGENTS STATE] Saved:', { concallBody: !!(concallBody && concallBody.innerHTML.trim()), concallShow: !!(concallCard && concallCard.classList.contains('show')), forensicBody: !!(forensicBody && forensicBody.innerHTML.trim()), forensicShow: !!(forensicCard && forensicCard.classList.contains('show')) });
+            } catch (e) { console.error('[AGENTS STATE] Save error:', e); }
+        }
+
+        function restoreAgentsState() {
+            try {
+                const savedTab = sessionStorage.getItem('kagger_agents_tab');
+
+                // Restore concall analysis
+                const cBody = sessionStorage.getItem('kagger_agents_concall_body');
+                if (cBody) {
+                    const el = document.getElementById('concallAnalysisBody');
+                    if (el) el.innerHTML = cBody;
+                    if (sessionStorage.getItem('kagger_agents_concall_visible') === '1') showEl('concallAnalysis');
+                    const cTitle = sessionStorage.getItem('kagger_agents_concall_title');
+                    const cMeta = sessionStorage.getItem('kagger_agents_concall_meta');
+                    if (cTitle) { const t = document.getElementById('concallAnalysisTitle'); if (t) t.textContent = cTitle; }
+                    if (cMeta) { const m = document.getElementById('concallAnalysisMeta'); if (m) m.innerHTML = cMeta; }
+                }
+                if (sessionStorage.getItem('kagger_agents_concall_chat_visible') === '1') {
+                    const cChat = sessionStorage.getItem('kagger_agents_concall_chat');
+                    if (cChat) { const el = document.getElementById('concallChatMessages'); if (el) el.innerHTML = cChat; }
+                    showEl('concallChat');
+                }
+
+                // Restore forensic analysis
+                const fBody = sessionStorage.getItem('kagger_agents_forensic_body');
+                if (fBody) {
+                    const el = document.getElementById('forensicAnalysisBody');
+                    if (el) el.innerHTML = fBody;
+                    if (sessionStorage.getItem('kagger_agents_forensic_visible') === '1') showEl('forensicAnalysis');
+                    const fTitle = sessionStorage.getItem('kagger_agents_forensic_title');
+                    const fMeta = sessionStorage.getItem('kagger_agents_forensic_meta');
+                    if (fTitle) { const t = document.getElementById('forensicAnalysisTitle'); if (t) t.textContent = fTitle; }
+                    if (fMeta) { const m = document.getElementById('forensicAnalysisMeta'); if (m) m.innerHTML = fMeta; }
+                }
+                if (sessionStorage.getItem('kagger_agents_forensic_chat_visible') === '1') {
+                    const fChat = sessionStorage.getItem('kagger_agents_forensic_chat');
+                    if (fChat) { const el = document.getElementById('forensicChatMessages'); if (el) el.innerHTML = fChat; }
+                    showEl('forensicChat');
+                }
+
+                // Restore active tab
+                if (savedTab) {
+                    switchAgent(savedTab);
+                }
+                console.log('[AGENTS STATE] Restored:', { tab: savedTab, concall: !!cBody, forensic: !!fBody });
+            } catch (e) { console.error('[AGENTS STATE] Restore error:', e); }
+        }
+
+        // Restore state on page load
+        (function initAgentsState() {
+            // Only restore if there's saved state (means user navigated back)
+            if (sessionStorage.getItem('kagger_agents_tab')) {
+                restoreAgentsState();
+            }
+        })();
 
         // Configure marked.js
         if (typeof marked !== 'undefined') {
