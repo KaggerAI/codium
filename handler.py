@@ -3646,6 +3646,7 @@ def generate_ai_company_summary(ticker, description, fundamentals, documents):
 
         # --- NEW: Include latest Quarterly Results for up-to-date summary ---
         quarterly_results = fundamentals.get("Quarterly Results")
+        latest_results_quarter = None  # e.g., "Dec 2025"
         if quarterly_results is not None:
             try:
                 if not quarterly_results.empty:
@@ -3659,6 +3660,8 @@ def generate_ai_company_summary(ticker, description, fundamentals, documents):
                             metric_data = q_df.loc[metric, q_cols]
                             quarters_str = ", ".join([f"{col}: {val}" for col, val in zip(q_cols, metric_data.astype(str))])
                             context_parts.append(f"- {metric}: {quarters_str}")
+                    # Store the latest quarter header for mismatch detection
+                    latest_results_quarter = str(q_df.columns[-1]).strip() if len(q_df.columns) > 0 else None
             except Exception as e:
                 print(f"DEBUG: Error processing Quarterly Results for AI summary: {e}")
 
@@ -3675,6 +3678,192 @@ def generate_ai_company_summary(ticker, description, fundamentals, documents):
         if concall_doc and concall_doc['content_summary']:
             context_parts.append("\n### Key Points from Latest Concall Transcript\n")
             context_parts.append(concall_doc['content_summary'])
+
+    # --- NEW: Detect document-quarter mismatch ---
+    # If the latest quarterly results are newer than the available documents,
+    # inject a note telling the AI to callout the mismatch.
+    doc_quarter_mismatch = False
+    mismatch_note = ""
+    if latest_results_quarter and documents:
+        try:
+            # Parse latest results quarter header: "Dec 2025" -> (2025, 12)
+            _month_map = {'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4, 'may': 5, 'jun': 6,
+                          'jul': 7, 'aug': 8, 'sep': 9, 'oct': 10, 'nov': 11, 'dec': 12}
+            _rq_parts = latest_results_quarter.lower().split()
+            if len(_rq_parts) == 2 and _rq_parts[0][:3] in _month_map:
+                results_month = _month_map[_rq_parts[0][:3]]
+                results_year = int(_rq_parts[1])
+
+                # Get the latest document date from documents list
+                # Screener.in document dates are typically "Nov 2025" (month + year, no day)
+                doc_quarter_month = None
+                doc_quarter_year = None
+                for doc in documents:
+                    raw_date = doc.get('date', '').strip()
+                    if not raw_date:
+                        continue
+                    try:
+                        # Try parsing common Screener.in date formats
+                        # Primary format: "Nov 2025" (month + year, no day)
+                        from datetime import datetime as _dt
+                        for fmt in ["%b %Y", "%B %Y", "%d %b %Y", "%b %d, %Y", "%d %B %Y", "%B %d, %Y"]:
+                            try:
+                                parsed_date = _dt.strptime(raw_date, fmt)
+                                doc_month = parsed_date.month
+                                doc_year = parsed_date.year
+                                # Map document publication month to the quarter it belongs to:
+                                # Jan-Mar publication → Dec quarter (previous year)
+                                # Apr-Jun publication → Mar quarter
+                                # Jul-Sep publication → Jun quarter
+                                # Oct-Dec publication → Sep quarter
+                                _pub_to_quarter = {
+                                    1: (12, -1), 2: (12, -1), 3: (12, -1),  # Jan-Mar → Dec (prev year)
+                                    4: (3, 0), 5: (3, 0), 6: (3, 0),       # Apr-Jun → Mar
+                                    7: (6, 0), 8: (6, 0), 9: (6, 0),       # Jul-Sep → Jun
+                                    10: (9, 0), 11: (9, 0), 12: (9, 0)     # Oct-Dec → Sep
+                                }
+                                q_month, year_offset = _pub_to_quarter[doc_month]
+                                q_year = doc_year + year_offset
+                                # Take the most recent document quarter
+                                if doc_quarter_year is None or (q_year, q_month) > (doc_quarter_year, doc_quarter_month):
+                                    doc_quarter_month = q_month
+                                    doc_quarter_year = q_year
+                                break
+                            except ValueError:
+                                continue
+                    except Exception:
+                        continue
+
+                # Compare: is the results quarter newer than the document quarter?
+                if doc_quarter_month is not None and doc_quarter_year is not None:
+                    if (results_year, results_month) > (doc_quarter_year, doc_quarter_month):
+                        doc_quarter_mismatch = True
+                        # Build the doc quarter label (e.g., "Sep 2025")
+                        _reverse_month = {v: k.capitalize() for k, v in _month_map.items()}
+                        doc_quarter_label = f"{_reverse_month.get(doc_quarter_month, 'Unknown')} {doc_quarter_year}"
+
+                        # Extract latest quarter metrics for the note
+                        _latest_q_summary_parts = []
+                        # Extract latest quarter metrics for the note
+                        _latest_q_summary_parts = []
+                        try:
+                            q_df_for_note = quarterly_results.copy()
+                            # Ensure the first column is the index (row headers)
+                            q_df_for_note = q_df_for_note.set_index(q_df_for_note.columns[0])
+                            # Robustly clean the index labels (handle &nbsp;, +, and whitespace)
+                            q_df_for_note.index = [str(idx).replace(u'\xa0', u' ').replace('+', '').strip() for idx in q_df_for_note.index]
+                            
+                            latest_col_idx = -1
+                            prev_col_idx = -5 if len(q_df_for_note.columns) >= 5 else None
+
+                            # Use fallback chains with fuzzy matching
+                            _metric_chains = [
+                                ("Sales", ["Sales", "Revenue", "Interest Income", "Total Income"]),
+                                ("EBITDA", ["Operating Profit", "Financing Profit", "EBITDA"]),
+                                ("Net Profit", ["Net Profit", "Profit after Tax", "PAT"]),
+                            ]
+
+                            _found_revenue_val = None
+                            _found_profit_val = None
+                            _found_prev_revenue = None
+                            _found_prev_profit = None
+
+                            for display_name, aliases in _metric_chains:
+                                matched_metric = None
+                                for alias in aliases:
+                                    # Case-insensitive partial match
+                                    matched_metric = next((idx for idx in q_df_for_note.index if alias.lower() == idx.lower()), None)
+                                    if not matched_metric:
+                                        # Also try partial match for flexibility
+                                        matched_metric = next((idx for idx in q_df_for_note.index if alias.lower() in idx.lower()), None)
+                                    if matched_metric:
+                                        break
+
+                                if matched_metric:
+                                    curr_val = q_df_for_note.iloc[:, latest_col_idx].loc[matched_metric]
+                                    line = f"{display_name}: Rs. {curr_val} Cr"
+                                    
+                                    # Track for NPM calculation
+                                    try:
+                                        curr_num = float(str(curr_val).replace(',', '').replace('%', ''))
+                                        if display_name == "Sales": _found_revenue_val = curr_num
+                                        elif display_name == "Net Profit": _found_profit_val = curr_num
+                                    except: pass
+
+                                    if prev_col_idx is not None:
+                                        try:
+                                            prev_val = q_df_for_note.iloc[:, prev_col_idx].loc[matched_metric]
+                                            prev_num = float(str(prev_val).replace(',', '').replace('%', ''))
+                                            if display_name == "Revenue": _found_prev_revenue = prev_num
+                                            elif display_name == "Net Profit": _found_prev_profit = prev_num
+                                            
+                                            if prev_num != 0:
+                                                yoy_pct = ((curr_num - prev_num) / abs(prev_num)) * 100
+                                                yoy_str = f"+{yoy_pct:.1f}%" if yoy_pct >= 0 else f"{yoy_pct:.1f}%"
+                                                line += f" (YoY: {yoy_str})"
+                                        except: pass
+                                    _latest_q_summary_parts.append(line)
+
+                            # Handle Margin (Direct row or calculated NPM)
+                            _margin_line = None
+                            _margin_matched = next((idx for idx in q_df_for_note.index if any(m.lower() in idx.lower() for m in ["OPM %", "Financing Margin %", "Margin %"])), None)
+                            
+                            if _margin_matched:
+                                try:
+                                    curr_m_val = q_df_for_note.iloc[:, latest_col_idx].loc[_margin_matched]
+                                    m_clean = str(curr_m_val).replace('%', '').strip()
+                                    _margin_line = f"Margin: {m_clean}%"
+                                    if prev_col_idx is not None:
+                                        try:
+                                            prev_m_val = q_df_for_note.iloc[:, prev_col_idx].loc[_margin_matched]
+                                            prev_m = float(str(prev_m_val).replace('%', '').replace(',', '').strip())
+                                            curr_m = float(m_clean)
+                                            diff = curr_m - prev_m
+                                            diff_str = f"+{diff:.1f}pp" if diff >= 0 else f"{diff:.1f}pp"
+                                            _margin_line += f" (YoY: {diff_str})"
+                                        except: pass
+                                except: pass
+                            elif _found_revenue_val and _found_profit_val and _found_revenue_val != 0:
+                                # Fallback: calculate NPM
+                                npm = (_found_profit_val / _found_revenue_val) * 100
+                                _margin_line = f"Margin: {npm:.1f}%"
+                                if _found_prev_revenue and _found_prev_profit and _found_prev_revenue != 0:
+                                    prev_npm = (_found_prev_profit / _found_prev_revenue) * 100
+                                    diff = npm - prev_npm
+                                    diff_str = f"+{diff:.1f}pp" if diff >= 0 else f"{diff:.1f}pp"
+                                    _margin_line += f" (YoY: {diff_str})"
+                            
+                            if _margin_line:
+                                _latest_q_summary_parts.append(_margin_line)
+
+                        except Exception as note_err:
+                            print(f"DEBUG: Error building mismatch note metrics: {note_err}")
+
+                        metrics_summary = "; ".join(_latest_q_summary_parts) if _latest_q_summary_parts else "(metrics not available)"
+
+                        mismatch_note = (
+                            f"\n### ⚠️ IMPORTANT: Document-Results Quarter Mismatch\n"
+                            f"The latest quarterly results are for \"{latest_results_quarter}\", but the latest available "
+                            f"concall transcript and investor presentation documents are from the \"{doc_quarter_label}\" quarter.\n"
+                            f"The concall and investor presentation for {latest_results_quarter} quarter have NOT been published yet.\n"
+                            f"\nQuick snapshot of {latest_results_quarter} quarter results: {metrics_summary}\n"
+                            f"\nYou MUST include a prominent note at the VERY START of your summary (before 'What the Company Does') "
+                            f"calling this out. Use this exact HTML format:\n"
+                            f'<div style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 12px 16px; '
+                            f'margin-bottom: 16px; border-radius: 4px;">'
+                            f"<strong>⚠️ Note:</strong> The investor presentation and concall transcript for the "
+                            f"{latest_results_quarter} quarter have not been published yet. The detailed analysis below "
+                            f"is based on {doc_quarter_label} quarter documents. Here is a quick snapshot of "
+                            f"{latest_results_quarter} results: {metrics_summary}."
+                            f"</div>\n"
+                        )
+                        context_parts.append(mismatch_note)
+                        print(f"INFO: Document-quarter mismatch detected for {ticker}: Results={latest_results_quarter}, Docs={doc_quarter_label}")
+
+        except Exception as mismatch_err:
+            print(f"DEBUG: Error in document-quarter mismatch detection: {mismatch_err}")
+            import traceback
+            traceback.print_exc()
 
     full_context = "\n".join(context_parts)
     
@@ -3727,6 +3916,8 @@ Be concise: limit the overall response to maximum 800 words.
         <li>Topics they avoided or deflected</li>
     </ul>
     <p>If no Concall Transcript was provided, state: "Management bias analysis requires concall transcript data which was not available."</p>
+
+5.  **Document-Results Quarter Mismatch:** If the context contains a section titled '### ⚠️ IMPORTANT: Document-Results Quarter Mismatch', you MUST include the provided HTML `<div>` callout at the VERY START of your output (before the 'What the Company Does' section). Copy the HTML div exactly as provided. The rest of your analysis should clearly note which quarter the presentation/concall data is from.
 
 
 ---
