@@ -481,7 +481,7 @@ def build_rsi_divergence_figure(df, ticker, years=1, line_color='#ffffff'):
 # 2) Chart Generation Functions
 # -------------------------------------------------------------------
 
-def find_trendlines(df, swing_points, trendline_type='support', min_touches=3, tolerance=0.005):
+def find_trendlines(df, swing_points, trendline_type='support', min_touches=3, tolerance=0.005, atr_values=None, atr_multiplier=0.5):
     """
     Find valid trendlines that connect 3+ swing points without crossing price.
     
@@ -490,7 +490,9 @@ def find_trendlines(df, swing_points, trendline_type='support', min_touches=3, t
         swing_points: DataFrame with 'Index', 'Value', 'Type' columns
         trendline_type: 'support' (connects lows) or 'resistance' (connects highs)
         min_touches: Minimum number of swing points the line must touch (default 3)
-        tolerance: Tolerance for "touching" the line (default 0.005 = 0.5%, use 0.01 = 1% for weekly)
+        tolerance: Fallback percentage tolerance (used when atr_values not provided or NaN)
+        atr_values: Optional numpy array of ATR-14 values (same length as df)
+        atr_multiplier: Multiplier for ATR tolerance (default 0.5)
     
     Returns:
         List of trendlines, each as dict with 'start_idx', 'end_idx', 'start_val', 'end_val', 'touches'
@@ -533,7 +535,14 @@ def find_trendlines(df, swing_points, trendline_type='support', min_touches=3, t
                 line_val = val1 + slope * (idx_k - idx1)
                 
                 # Check if point is on the line (within tolerance)
-                if abs(val_k - line_val) / line_val < tolerance:
+                # Use ATR-based tolerance if available, else fall back to percentage
+                if atr_values is not None and idx_k < len(atr_values) and not np.isnan(atr_values[idx_k]):
+                    tol_abs = atr_values[idx_k] * atr_multiplier
+                    is_touch = abs(val_k - line_val) < tol_abs
+                else:
+                    is_touch = abs(val_k - line_val) / line_val < tolerance
+                
+                if is_touch:
                     touches.append((idx_k, val_k))
             
             if len(touches) < min_touches:
@@ -550,12 +559,14 @@ def find_trendlines(df, swing_points, trendline_type='support', min_touches=3, t
                 
                 if trendline_type == 'support':
                     # Support line should be below or at price (with small tolerance)
-                    if line_val > price * 1.001:  # Line crosses above price
+                    cross_tol = atr_values[idx] * 0.1 if (atr_values is not None and idx < len(atr_values) and not np.isnan(atr_values[idx])) else price * 0.001
+                    if line_val > price + cross_tol:  # Line crosses above price
                         is_valid = False
                         break
                 else:
                     # Resistance line should be above or at price (with small tolerance)
-                    if line_val < price * 0.999:  # Line crosses below price
+                    cross_tol = atr_values[idx] * 0.1 if (atr_values is not None and idx < len(atr_values) and not np.isnan(atr_values[idx])) else price * 0.001
+                    if line_val < price - cross_tol:  # Line crosses below price
                         is_valid = False
                         break
             
@@ -610,8 +621,8 @@ def build_close_figure(df, ticker, years=1, line_color='#ffffff'):
     d_original_index = d.set_index(d.columns[0])  # Preserve datetime index for plotting
     d_reset = d.reset_index(drop=True)  # Numeric index for trendline calculation
     
-    # Tolerance: 1% for weekly (5Y), 0.5% for daily (1Y/3Y)
-    trendline_tolerance = 0.01 if years == 5 else 0.005
+    # ATR-14 values for tolerance
+    atr_vals = d_reset['ATR14'].values if 'ATR14' in d_reset.columns else None
     
     # Pivot ranges: 5,2 for weekly (5Y), 6,4 for daily (1Y/3Y)
     pivot_left = 5 if years == 5 else 6
@@ -634,7 +645,7 @@ def build_close_figure(df, ticker, years=1, line_color='#ffffff'):
         fig.add_trace(go.Scatter(x=d_original_index.index[lows['Index']], y=[float(v) for v in lows['Value']], mode='markers', name='Swing Low', marker=dict(symbol='triangle-down', size=12, color='green')))
     
     # Find and draw support trendlines (green, dashed)
-    support_lines = find_trendlines(d_reset, sp, trendline_type='support', min_touches=3, tolerance=trendline_tolerance)
+    support_lines = find_trendlines(d_reset, sp, trendline_type='support', min_touches=3, atr_values=atr_vals, atr_multiplier=0.5)
     for i, line in enumerate(support_lines):
         # Extend line to current date
         start_idx = line['start_idx']
@@ -651,7 +662,7 @@ def build_close_figure(df, ticker, years=1, line_color='#ffffff'):
         ))
     
     # Find and draw resistance trendlines (red, dashed)
-    resistance_lines = find_trendlines(d_reset, sp, trendline_type='resistance', min_touches=3, tolerance=trendline_tolerance)
+    resistance_lines = find_trendlines(d_reset, sp, trendline_type='resistance', min_touches=3, atr_values=atr_vals, atr_multiplier=0.5)
     for i, line in enumerate(resistance_lines):
         # Extend line to current date
         start_idx = line['start_idx']
@@ -682,8 +693,8 @@ def build_hl_figure(df, ticker, years=1, line_color='#ffffff'):
     d_original_index = d.set_index(d.columns[0])  # Preserve datetime index for plotting
     d_reset = d.reset_index(drop=True)  # Numeric index for trendline calculation
     
-    # Tolerance: 1% for weekly (5Y), 0.5% for daily (1Y/3Y)
-    trendline_tolerance = 0.01 if years == 5 else 0.005
+    # ATR-14 values for tolerance
+    atr_vals = d_reset['ATR14'].values if 'ATR14' in d_reset.columns else None
     
     # Pivot ranges: 5,2 for weekly (5Y), 6,4 for daily (1Y/3Y)
     pivot_left = 5 if years == 5 else 6
@@ -709,7 +720,7 @@ def build_hl_figure(df, ticker, years=1, line_color='#ffffff'):
         fig.add_trace(go.Scatter(x=d_original_index.index[sl['Index']], y=[float(v) for v in sl['Value']], mode='markers', name='Swing Low', marker=dict(symbol='triangle-down', size=12, color='green')))
     
     # Find and draw support trendlines (green, dashed)
-    support_lines = find_trendlines(d_reset, sp, trendline_type='support', min_touches=3, tolerance=trendline_tolerance)
+    support_lines = find_trendlines(d_reset, sp, trendline_type='support', min_touches=3, atr_values=atr_vals, atr_multiplier=0.5)
     for i, line in enumerate(support_lines):
         start_idx = line['start_idx']
         end_idx = min(line['end_idx'] + 20, len(d_reset) - 1)
@@ -725,7 +736,7 @@ def build_hl_figure(df, ticker, years=1, line_color='#ffffff'):
         ))
     
     # Find and draw resistance trendlines (red, dashed)
-    resistance_lines = find_trendlines(d_reset, sp, trendline_type='resistance', min_touches=3, tolerance=trendline_tolerance)
+    resistance_lines = find_trendlines(d_reset, sp, trendline_type='resistance', min_touches=3, atr_values=atr_vals, atr_multiplier=0.5)
     for i, line in enumerate(resistance_lines):
         start_idx = line['start_idx']
         end_idx = min(line['end_idx'] + 20, len(d_reset) - 1)
@@ -1004,8 +1015,9 @@ def generate_per_chart_summaries(result):
         # Trendline context
         d_reset = df.reset_index(drop=True)
         sp_for_tl = identify_swing_points(d_reset, 6, 4, 'Close')
-        sup_lines = find_trendlines(d_reset, sp_for_tl, 'support', 3, 0.005)
-        res_lines = find_trendlines(d_reset, sp_for_tl, 'resistance', 3, 0.005)
+        atr_vals_summary = d_reset['ATR14'].values if 'ATR14' in d_reset.columns else None
+        sup_lines = find_trendlines(d_reset, sp_for_tl, 'support', 3, atr_values=atr_vals_summary, atr_multiplier=0.5)
+        res_lines = find_trendlines(d_reset, sp_for_tl, 'resistance', 3, atr_values=atr_vals_summary, atr_multiplier=0.5)
 
         # Build sentence 1: Trend
         if pt_close == 'Uptrend':
