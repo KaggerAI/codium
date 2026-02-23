@@ -84,6 +84,7 @@ from analyst_reports.pdf_summarizer_cookies import summarize_analyst_pdf_async, 
 from tech_calculations import (
     evaluate_ticker_signal,
     generate_summary,
+    generate_per_chart_summaries,
     build_close_figure,
     build_hl_figure,
     build_ema_figure,
@@ -6274,6 +6275,44 @@ def analyze_chart():
 
 # =====================================================================
 # END: Lightweight Chart-Only Analysis Endpoint
+# =====================================================================
+
+
+# =====================================================================
+# START: Async Per-Chart Summaries Endpoint
+# =====================================================================
+
+@app.route('/chart-summaries', methods=['POST'])
+def chart_summaries():
+    """
+    Generate per-chart natural-language summaries.
+    Called asynchronously by the frontend after charts have rendered.
+    """
+    try:
+        data = request.get_json(force=True)
+        tick = data.get('ticker', '').strip().upper()
+        years = data.get('years', 1)
+        if years not in [1, 3, 5]:
+            years = 1
+        if not tick:
+            return jsonify({'error': 'No ticker provided'}), 400
+
+        interval = 'weekly' if years == 5 else 'daily'
+        res = evaluate_ticker_signal(tick, interval=interval)
+
+        if not res or res.get('Signal') in ['NO DATA', 'INSUFFICIENT DATA']:
+            return jsonify({'error': f'No data for {tick}'}), 404
+
+        summaries = generate_per_chart_summaries(res)
+        return jsonify({'chart_summaries': summaries})
+
+    except Exception as e:
+        print(f"ERROR in /chart-summaries: {e}")
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+# =====================================================================
+# END: Async Per-Chart Summaries Endpoint
 # =====================================================================
 
 
