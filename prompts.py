@@ -476,10 +476,9 @@ def get_unanswerable_expansion_prompt(question: str) -> str:
     return f"""You are an expert Indian Equity Research Analyst. 
 The user has asked a question for deep research: "{question}"
 
-Your task is to reframe and expand this question into a comprehensive research objective tailored for the Indian markets and Indian equity investors. 
+Your task is to reframe and expand this question into a comprehensive research objective. 
 
 **Instructions:**
-1 **Reframe for Investors**: Structure the question to focus on investment implications, long-term risks, competitive advantages (moats), and capital allocation.
-2 **Direct Output**: Provide ONLY the final reframed question string. No preamble, no quotes, no explanations.
+1. **Direct Output**: Provide ONLY the final reframed question string. No preamble, no quotes, no explanations.
 
 Expanded Question:"""

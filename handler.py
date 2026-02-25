@@ -651,15 +651,16 @@ def api_ask_unanswerable():
         return jsonify({"error": "Question is required."}), 400
     
     try:
-        # STEP 1: Expand Question with GPT-5-Mini
-        print(f"INFO: Expanding question with GPT-5-Mini: {question[:100]}...", file=sys.stderr)
-        expansion_prompt = get_unanswerable_expansion_prompt(question)
-        expanded_question = call_generative_ai_model(
-            model="gpt-5-mini",
-            messages=[{"role": "user", "content": expansion_prompt}],
-            temperature=1
-        )
-        print(f"INFO: Expanded Question: {expanded_question}", file=sys.stderr)
+        # STEP 1: Skip Expansion - use original question
+        print(f"INFO: Using original question for Parallel: {question[:100]}...", file=sys.stderr)
+        # expansion_prompt = get_unanswerable_expansion_prompt(question)
+        # expanded_question = call_generative_ai_model(
+        #     model="gpt-5-mini",
+        #     messages=[{"role": "user", "content": expansion_prompt}],
+        #     temperature=1
+        # )
+        expanded_question = question
+        print(f"INFO: Research Question: {expanded_question}", file=sys.stderr)
 
         # Using pure httpx/requests to ensure beta headers are included for SSE
         headers = {
@@ -668,7 +669,7 @@ def api_ask_unanswerable():
             "Content-Type": "application/json"
         }
         payload = {
-            "input": expanded_question,
+            "input": question,  # Send original question to Parallel
             "processor": processor,
             "enable_events": True
         }

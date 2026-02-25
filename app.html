@@ -2256,7 +2256,8 @@
             </div>
             <div>
               <h3 class="text-2xl font-bold text-white">Autonomous Research in Progress</h3>
-              <p id="unanswerableStatus" class="text-indigo-400 text-lg animate-pulse">Initializing engine...</p>
+              <p id="unanswerableStatus" class="text-indigo-400 text-lg animate-pulse">Running multi-agent orchestration
+                to fetch answer...</p>
             </div>
             <button id="unanswerableCancel"
               class="ml-auto px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg text-sm font-medium transition-all border border-red-500/20">
@@ -2267,7 +2268,7 @@
           <!-- Expanded Question Display -->
           <div id="expandedQuestionContainer"
             class="mb-10 p-5 bg-indigo-500/10 border border-indigo-500/20 rounded-2xl hidden">
-            <h4 class="text-xs font-bold uppercase tracking-widest text-indigo-400 mb-2">Research Objective (Expanded)
+            <h4 class="text-xs font-bold uppercase tracking-widest text-indigo-400 mb-2">Research Objective
             </h4>
             <p id="expandedQuestionText" class="text-slate-300 italic text-sm leading-relaxed"></p>
           </div>
@@ -2311,7 +2312,7 @@
             <!-- Table of Contents -->
             <div class="lg:col-span-1">
               <div
-                class="sticky top-28 cosmic-card rounded-2xl p-6 border border-indigo-500/20 shadow-sm overflow-hidden">
+                class="sticky top-28 cosmic-card rounded-2xl p-6 border border-indigo-500/20 shadow-sm overflow-y-auto max-h-[calc(100vh-160px)] custom-scrollbar">
                 <div class="absolute top-0 left-0 w-1 h-full bg-indigo-500"></div>
                 <h4 class="text-xs font-bold uppercase tracking-widest text-indigo-400 mb-5">Contents</h4>
                 <nav id="unanswerableTOC" class="space-y-2">
@@ -7132,6 +7133,11 @@
           const data = JSON.parse(event.data);
           const eventType = data.event_type || '';
 
+          // 1. Filter out stats events entirely
+          if (eventType.toLowerCase().includes('progress_stats')) {
+            return;
+          }
+
           if (data.error) {
             statusText.textContent = `Error: ${data.error}`;
             unanswerableEventSource.close();
@@ -7147,7 +7153,8 @@
           // Handle progress messages
           if (eventType.includes('progress_msg')) {
             const msg = data.message || '';
-            if (msg) {
+            // Double check: skip if message itself mentions progress_stats (though eventType filter should catch most)
+            if (msg && !msg.toLowerCase().includes('progress_stats')) {
               const item = document.createElement('div');
               item.className = 'event-item running animate-fadeIn';
               item.innerHTML = `<span class="mr-2">🔍</span> <span class="text-white font-medium">${msg}</span>`;
@@ -7169,7 +7176,7 @@
           }
 
           // Legacy event handling for specific Parallel event types
-          if (eventType) {
+          if (eventType && !eventType.includes('progress_stats')) {
             const item = document.createElement('div');
             item.className = 'event-item running animate-fadeIn';
             let icon = '🔍', label = eventType.replace('task_run.', '');
