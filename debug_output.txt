@@ -97,3 +97,6 @@
 2026-02-22 22:44:13.361347 - Failed to extract text from https://trendlyne.com/get-document/report/pdf/94572/: Cookies expired - please re-export cookies from browser
 2026-02-28 21:30:04.520820 - Failed to extract text from https://trendlyne.com/get-document/report/pdf/49796/: Cookies expired - please re-export cookies from browser
 2026-02-28 21:30:05.071169 - Failed to extract text from https://trendlyne.com/get-document/report/pdf/14904/: Cookies expired - please re-export cookies from browser
+2026-02-28 22:05:47.520913 - Failed to extract text from https://trendlyne.com/get-document/report/pdf/92396/: Cookies expired - please re-export cookies from browser
+2026-02-28 22:05:47.971325 - Failed to extract text from https://trendlyne.com/get-document/report/pdf/45501/: Cookies expired - please re-export cookies from browser
+2026-02-28 22:05:48.410397 - Failed to extract text from https://trendlyne.com/get-document/report/pdf/32691/: Cookies expired - please re-export cookies from browser

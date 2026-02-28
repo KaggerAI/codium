@@ -1127,12 +1127,20 @@
             }
 
             btn.disabled = true;
-            btn.innerHTML = '<span class="animate-spin inline-block w-5 h-5 border-2 border-white border-t-transparent rounded-full mr-2"></span> Generating with GPT-5.2...';
+            btn.innerHTML = '<span class="animate-spin inline-block w-5 h-5 border-2 border-white border-t-transparent rounded-full mr-2"></span> Generating...';
             status.classList.remove('hidden');
             status.className = 'p-4 rounded-lg border bg-blue-500/20 border-blue-500/50 text-blue-300';
-            status.innerHTML = '⏳ Generating blog with AI + live web search... This may take 30-60 seconds.';
+            status.innerHTML = '⏳ Starting blog generation...';
+
+            const phaseLabels = {
+                'starting': '🚀 Starting blog generation...',
+                'reporter': '📝 Reporter is drafting the article with live web research... (3-5 min)',
+                'editor': '✏️ Editor is fact-checking and polishing the draft... (1-2 min)',
+                'saving': '💾 Saving the final article...'
+            };
 
             try {
+                // Step 1: Fire the initial request to get a job_id
                 const response = await fetch('/api/admin/blogs/generate', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -1140,22 +1148,59 @@
                 });
                 const data = await response.json();
 
-                if (response.ok && data.success) {
-                    status.className = 'p-4 rounded-lg border bg-green-500/20 border-green-500/50 text-green-300';
-                    status.innerHTML = `✅ Blog generated: <strong>${escapeHtml(data.blog.title)}</strong><br><small>Status: Draft — review and publish when ready.</small>`;
-                    document.getElementById('blog-topic').value = '';
-                    loadBlogs();
-                } else if (data.declined) {
-                    status.className = 'p-4 rounded-lg border bg-amber-500/20 border-amber-500/50 text-amber-300';
-                    status.innerHTML = `${data.error}<br><small>Try a different or more specific topic.</small>`;
-                } else {
+                if (!response.ok || !data.job_id) {
                     status.className = 'p-4 rounded-lg border bg-red-500/20 border-red-500/50 text-red-300';
-                    status.innerHTML = `❌ Error: ${data.error || 'Unknown error'}`;
+                    status.innerHTML = `❌ Error: ${data.error || 'Failed to start generation'}`;
+                    btn.disabled = false;
+                    btn.innerHTML = `<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg><span>Generate with AI</span>`;
+                    return;
                 }
+
+                const jobId = data.job_id;
+                status.innerHTML = phaseLabels['reporter'];
+
+                // Step 2: Poll for status every 3 seconds
+                const pollInterval = setInterval(async () => {
+                    try {
+                        const pollRes = await fetch(`/api/admin/blogs/generate/status/${jobId}`);
+                        const pollData = await pollRes.json();
+
+                        // Update phase label
+                        if (pollData.phase && phaseLabels[pollData.phase]) {
+                            status.innerHTML = phaseLabels[pollData.phase];
+                        }
+
+                        if (pollData.status === 'complete') {
+                            clearInterval(pollInterval);
+                            const result = pollData.result;
+                            status.className = 'p-4 rounded-lg border bg-green-500/20 border-green-500/50 text-green-300';
+                            status.innerHTML = `✅ Blog generated: <strong>${escapeHtml(result.blog.title)}</strong><br><small>Status: Draft — review and publish when ready.</small>`;
+                            document.getElementById('blog-topic').value = '';
+                            loadBlogs();
+                            btn.disabled = false;
+                            btn.innerHTML = `<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg><span>Generate with AI</span>`;
+                        } else if (pollData.status === 'declined') {
+                            clearInterval(pollInterval);
+                            status.className = 'p-4 rounded-lg border bg-amber-500/20 border-amber-500/50 text-amber-300';
+                            status.innerHTML = `${pollData.result?.error || 'AI declined the topic'}<br><small>Try a different or more specific topic.</small>`;
+                            btn.disabled = false;
+                            btn.innerHTML = `<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg><span>Generate with AI</span>`;
+                        } else if (pollData.status === 'error') {
+                            clearInterval(pollInterval);
+                            status.className = 'p-4 rounded-lg border bg-red-500/20 border-red-500/50 text-red-300';
+                            status.innerHTML = `❌ Error: ${pollData.error || 'Generation failed'}`;
+                            btn.disabled = false;
+                            btn.innerHTML = `<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg><span>Generate with AI</span>`;
+                        }
+                    } catch (pollErr) {
+                        // Polling failed — skip this tick, keep trying
+                        console.warn('Poll tick failed:', pollErr.message);
+                    }
+                }, 3000);
+
             } catch (error) {
                 status.className = 'p-4 rounded-lg border bg-red-500/20 border-red-500/50 text-red-300';
                 status.innerHTML = `❌ Network error: ${error.message}`;
-            } finally {
                 btn.disabled = false;
                 btn.innerHTML = `<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg><span>Generate with AI</span>`;
             }

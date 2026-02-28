@@ -82,6 +82,23 @@ def init_db():
                 FOREIGN KEY (user_id) REFERENCES users (id)
             )
         ''')
+
+        # Portfolio holdings table for personalization
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS portfolio_holdings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                ticker TEXT NOT NULL,
+                stock_name TEXT NOT NULL,
+                quantity REAL NOT NULL,
+                avg_buy_price REAL NOT NULL,
+                sector TEXT DEFAULT '',
+                industry TEXT DEFAULT '',
+                added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users (id),
+                UNIQUE(user_id, ticker)
+            )
+        ''')
         
         print(f"INFO: Database initialized at {DB_PATH}")
 
@@ -313,6 +330,95 @@ class UserEvent:
                 'top_sections': top_sections,
                 'recent_activity': recent_activity
             }
+
+
+# Portfolio holding model
+class Portfolio:
+    def __init__(self, id, user_id, ticker, stock_name, quantity, avg_buy_price, sector, industry, added_at):
+        self.id = id
+        self.user_id = user_id
+        self.ticker = ticker
+        self.stock_name = stock_name
+        self.quantity = quantity
+        self.avg_buy_price = avg_buy_price
+        self.sector = sector or ''
+        self.industry = industry or ''
+        self.added_at = added_at
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'ticker': self.ticker,
+            'stock_name': self.stock_name,
+            'quantity': self.quantity,
+            'avg_buy_price': self.avg_buy_price,
+            'sector': self.sector,
+            'industry': self.industry,
+            'added_at': str(self.added_at)
+        }
+
+    @classmethod
+    def get_by_user(cls, user_id):
+        """Get all portfolio holdings for a user."""
+        with get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                'SELECT * FROM portfolio_holdings WHERE user_id = ? ORDER BY added_at DESC',
+                (user_id,)
+            )
+            rows = cursor.fetchall()
+            return [cls(*row) for row in rows]
+
+    @classmethod
+    def add_holding(cls, user_id, ticker, stock_name, quantity, avg_buy_price, sector='', industry=''):
+        """Add or update a holding (UPSERT)."""
+        with get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT INTO portfolio_holdings (user_id, ticker, stock_name, quantity, avg_buy_price, sector, industry)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(user_id, ticker) DO UPDATE SET
+                    stock_name = excluded.stock_name,
+                    quantity = excluded.quantity,
+                    avg_buy_price = excluded.avg_buy_price,
+                    sector = excluded.sector,
+                    industry = excluded.industry
+            ''', (user_id, ticker.upper(), stock_name, quantity, avg_buy_price, sector, industry))
+            return cursor.lastrowid
+
+    @classmethod
+    def update_holding(cls, user_id, ticker, quantity, avg_buy_price):
+        """Update quantity and avg price for an existing holding."""
+        with get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                UPDATE portfolio_holdings
+                SET quantity = ?, avg_buy_price = ?
+                WHERE user_id = ? AND ticker = ?
+            ''', (quantity, avg_buy_price, user_id, ticker.upper()))
+            return cursor.rowcount > 0
+
+    @classmethod
+    def delete_holding(cls, user_id, ticker):
+        """Delete a single holding."""
+        with get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                'DELETE FROM portfolio_holdings WHERE user_id = ? AND ticker = ?',
+                (user_id, ticker.upper())
+            )
+            return cursor.rowcount > 0
+
+    @classmethod
+    def delete_all(cls, user_id):
+        """Clear all holdings for a user."""
+        with get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                'DELETE FROM portfolio_holdings WHERE user_id = ?',
+                (user_id,)
+            )
+            return cursor.rowcount
 
 
 # Initialize database on module import

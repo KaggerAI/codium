@@ -1,0 +1,1090 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Portfolio — Kagger.AI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        * {
+            font-family: 'Inter', sans-serif;
+        }
+
+        body {
+            background: #0f172a;
+            color: #e2e8f0;
+            min-height: 100vh;
+        }
+
+        /* Nav */
+        .nav-bar {
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .nav-link {
+            color: #94a3b8;
+            transition: color 0.2s;
+        }
+
+        .nav-link:hover,
+        .nav-link.active {
+            color: #22c55e;
+        }
+
+        /* Cards */
+        .glass-card {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 16px;
+        }
+
+        .glass-card-bright {
+            background: rgba(30, 41, 59, 0.9);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+        }
+
+        /* Summary Cards */
+        .stat-card {
+            background: linear-gradient(135deg, rgba(34, 197, 94, 0.08) 0%, rgba(30, 41, 59, 0.9) 100%);
+            border: 1px solid rgba(34, 197, 94, 0.15);
+            border-radius: 16px;
+            padding: 1.25rem 1.5rem;
+        }
+
+        .stat-card.loss {
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.08) 0%, rgba(30, 41, 59, 0.9) 100%);
+            border-color: rgba(239, 68, 68, 0.15);
+        }
+
+        /* Table */
+        .holdings-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+        }
+
+        .holdings-table thead th {
+            background: rgba(15, 23, 42, 0.8);
+            color: #94a3b8;
+            font-weight: 600;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            padding: 0.75rem 1rem;
+            text-align: left;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+            position: sticky;
+            top: 0;
+            z-index: 2;
+        }
+
+        .holdings-table tbody tr {
+            transition: background 0.15s;
+        }
+
+        .holdings-table tbody tr:hover {
+            background: rgba(34, 197, 94, 0.04);
+        }
+
+        .holdings-table tbody td {
+            padding: 0.75rem 1rem;
+            font-size: 0.875rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+        }
+
+        /* Inputs */
+        .input-field {
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            color: #e2e8f0;
+            padding: 0.6rem 1rem;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        .input-field:focus {
+            outline: none;
+            border-color: #22c55e;
+            box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.15);
+        }
+
+        .input-field::placeholder {
+            color: #64748b;
+        }
+
+        /* Buttons */
+        .btn-primary {
+            background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+            color: white;
+            font-weight: 600;
+            border-radius: 10px;
+            padding: 0.6rem 1.5rem;
+            transition: transform 0.15s, box-shadow 0.15s;
+            cursor: pointer;
+            border: none;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 20px rgba(34, 197, 94, 0.3);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.06);
+            color: #94a3b8;
+            font-weight: 500;
+            border-radius: 10px;
+            padding: 0.6rem 1.5rem;
+            transition: all 0.15s;
+            cursor: pointer;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: #e2e8f0;
+        }
+
+        .btn-danger {
+            background: rgba(239, 68, 68, 0.1);
+            color: #f87171;
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            border-radius: 8px;
+            padding: 0.35rem 0.75rem;
+            font-size: 0.75rem;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .btn-danger:hover {
+            background: rgba(239, 68, 68, 0.2);
+        }
+
+        /* Dropzone */
+        .dropzone {
+            border: 2px dashed rgba(255, 255, 255, 0.12);
+            border-radius: 14px;
+            padding: 2rem;
+            text-align: center;
+            transition: all 0.25s;
+            cursor: pointer;
+        }
+
+        .dropzone:hover,
+        .dropzone.dragover {
+            border-color: #22c55e;
+            background: rgba(34, 197, 94, 0.04);
+        }
+
+        /* Autocomplete dropdown */
+        .autocomplete-dropdown {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: #1e293b;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 0 0 10px 10px;
+            max-height: 200px;
+            overflow-y: auto;
+            z-index: 100;
+            display: none;
+        }
+
+        .autocomplete-dropdown.show {
+            display: block;
+        }
+
+        .autocomplete-item {
+            padding: 0.6rem 1rem;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.85rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+        }
+
+        .autocomplete-item:hover {
+            background: rgba(34, 197, 94, 0.1);
+        }
+
+        /* Badges */
+        .badge {
+            display: inline-block;
+            padding: 0.2rem 0.6rem;
+            border-radius: 6px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            letter-spacing: 0.03em;
+        }
+
+        .badge-green {
+            background: rgba(34, 197, 94, 0.15);
+            color: #4ade80;
+        }
+
+        .badge-red {
+            background: rgba(239, 68, 68, 0.15);
+            color: #f87171;
+        }
+
+        .badge-yellow {
+            background: rgba(234, 179, 8, 0.15);
+            color: #facc15;
+        }
+
+        .badge-blue {
+            background: rgba(59, 130, 246, 0.15);
+            color: #60a5fa;
+        }
+
+        /* Concentration bar */
+        .concentration-bar {
+            height: 8px;
+            border-radius: 4px;
+            background: rgba(255, 255, 255, 0.06);
+            overflow: hidden;
+        }
+
+        .concentration-fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.6s ease;
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 3px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        /* Loading spinner */
+        .spinner {
+            border: 3px solid rgba(255, 255, 255, 0.1);
+            border-top: 3px solid #22c55e;
+            border-radius: 50%;
+            width: 32px;
+            height: 32px;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* Fade in animation */
+        .fade-in {
+            animation: fadeIn 0.4s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(8px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* Toast */
+        .toast {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            padding: 0.8rem 1.5rem;
+            border-radius: 10px;
+            font-size: 0.875rem;
+            font-weight: 500;
+            z-index: 9999;
+            transform: translateY(100px);
+            opacity: 0;
+            transition: all 0.3s ease;
+        }
+
+        .toast.show {
+            transform: translateY(0);
+            opacity: 1;
+        }
+
+        .toast-success {
+            background: rgba(34, 197, 94, 0.9);
+            color: white;
+        }
+
+        .toast-error {
+            background: rgba(239, 68, 68, 0.9);
+            color: white;
+        }
+
+        /* Edit modal */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(4px);
+            z-index: 1000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- ==================== NAV BAR ==================== -->
+    <nav class="nav-bar px-6 py-3.5 flex items-center justify-between sticky top-0 z-50">
+        <div class="flex items-center gap-8">
+            <a href="/app" class="flex items-center gap-2">
+                <img src="/kagger_logo_icon.png" alt="Kagger" class="w-8 h-8 rounded-lg">
+                <span class="text-lg font-bold text-white">Kagger<span class="text-green-400">.AI</span></span>
+            </a>
+            <div class="hidden md:flex items-center gap-6 text-sm font-medium">
+                <a href="/app" class="nav-link">Research</a>
+                <a href="/portfolio" class="nav-link active">Portfolio</a>
+                <a href="/news" class="nav-link">News</a>
+                <a href="/blog" class="nav-link">Blog</a>
+            </div>
+        </div>
+        <div class="flex items-center gap-4">
+            <span id="userEmailDisplay" class="text-xs text-slate-400"></span>
+            <button onclick="logout()" class="btn-secondary text-xs py-1.5 px-3">Logout</button>
+        </div>
+    </nav>
+
+    <!-- ==================== MAIN CONTENT ==================== -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 py-8">
+
+        <!-- Header -->
+        <div class="mb-8 fade-in">
+            <h1 class="text-3xl font-extrabold text-white mb-1">My Portfolio</h1>
+            <p class="text-slate-400 text-sm">Track your holdings, monitor performance, and analyze your portfolio
+                health.</p>
+        </div>
+
+        <!-- ==================== SUMMARY CARDS ==================== -->
+        <div id="summarySection" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8" style="display:none;">
+            <div id="cardInvested" class="stat-card fade-in">
+                <p class="text-xs text-slate-400 mb-1 uppercase tracking-wider">Total Invested</p>
+                <p id="totalInvested" class="text-xl font-bold text-white">—</p>
+            </div>
+            <div id="cardCurrent" class="stat-card fade-in">
+                <p class="text-xs text-slate-400 mb-1 uppercase tracking-wider">Current Value</p>
+                <p id="totalCurrent" class="text-xl font-bold text-white">—</p>
+            </div>
+            <div id="cardPnl" class="stat-card fade-in">
+                <p class="text-xs text-slate-400 mb-1 uppercase tracking-wider">Total P&L</p>
+                <p id="totalPnl" class="text-xl font-bold">—</p>
+                <p id="totalPnlPct" class="text-xs mt-0.5">—</p>
+            </div>
+            <div id="cardHoldings" class="stat-card fade-in">
+                <p class="text-xs text-slate-400 mb-1 uppercase tracking-wider">Holdings</p>
+                <p id="holdingCount" class="text-xl font-bold text-white">—</p>
+            </div>
+        </div>
+
+        <!-- ==================== ADD HOLDING + CSV UPLOAD ==================== -->
+        <div class="grid md:grid-cols-3 gap-6 mb-8">
+            <!-- Manual Add Section -->
+            <div class="md:col-span-2 glass-card p-6 fade-in">
+                <h2 class="text-base font-semibold text-white mb-4 flex items-center gap-2">
+                    <svg class="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                    </svg>
+                    Add Holding
+                </h2>
+                <div class="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                    <div class="relative sm:col-span-2">
+                        <input type="text" id="stockSearchInput" class="input-field w-full"
+                            placeholder="Search stock..." autocomplete="off">
+                        <input type="hidden" id="selectedTicker" value="">
+                        <input type="hidden" id="selectedStockName" value="">
+                        <div id="stockDropdown" class="autocomplete-dropdown"></div>
+                    </div>
+                    <input type="number" id="quantityInput" class="input-field" placeholder="Quantity" min="0.01"
+                        step="any">
+                    <input type="number" id="avgPriceInput" class="input-field" placeholder="Avg Buy Price (₹)"
+                        min="0.01" step="any">
+                </div>
+                <div class="mt-4 flex gap-3">
+                    <button id="addHoldingBtn" onclick="addHolding()" class="btn-primary text-sm" disabled>Add to
+                        Portfolio</button>
+                    <span id="addStatus" class="text-xs text-slate-400 self-center"></span>
+                </div>
+            </div>
+
+            <!-- CSV Upload -->
+            <div class="glass-card p-6 fade-in">
+                <h2 class="text-base font-semibold text-white mb-4 flex items-center gap-2">
+                    <svg class="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                    </svg>
+                    Upload CSV
+                </h2>
+                <div id="csvDropzone" class="dropzone" onclick="document.getElementById('csvFileInput').click()">
+                    <svg class="w-8 h-8 mx-auto text-slate-500 mb-2" fill="none" stroke="currentColor"
+                        viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                            d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <p class="text-sm text-slate-400">Drop CSV here or click to browse</p>
+                    <p class="text-xs text-slate-500 mt-1">Columns: Ticker, Quantity, Avg Buy Price</p>
+                </div>
+                <input type="file" id="csvFileInput" accept=".csv" style="display:none" onchange="uploadCSV(this)">
+                <p id="csvStatus" class="text-xs text-slate-400 mt-3"></p>
+            </div>
+        </div>
+
+        <!-- ==================== HOLDINGS TABLE ==================== -->
+        <div id="holdingsTableContainer" class="glass-card-bright overflow-hidden mb-8 fade-in" style="display:none;">
+            <div class="px-6 py-4 flex items-center justify-between border-b border-white/5">
+                <h2 class="text-base font-semibold text-white flex items-center gap-2">
+                    <svg class="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                    </svg>
+                    Holdings
+                </h2>
+                <button onclick="refreshDashboard()" class="btn-secondary text-xs py-1.5 px-3">↻ Refresh
+                    Dashboard</button>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="holdings-table">
+                    <thead>
+                        <tr>
+                            <th>Stock</th>
+                            <th>Qty</th>
+                            <th>Avg Price</th>
+                            <th>CMP</th>
+                            <th>Invested</th>
+                            <th>Current</th>
+                            <th>P&L</th>
+                            <th>P&L %</th>
+                            <th>Day %</th>
+                            <th>Sector</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="holdingsTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- ==================== DASHBOARD GRID ==================== -->
+        <div id="dashboardSection" class="grid md:grid-cols-2 gap-6 mb-8" style="display:none;">
+
+            <!-- Industry Allocation Treemap -->
+            <div class="glass-card p-6 fade-in">
+                <h2 class="text-base font-semibold text-white mb-4 flex items-center gap-2">
+                    <svg class="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z" />
+                    </svg>
+                    Industry Allocation
+                </h2>
+                <div id="industryChart" style="height: 320px;"></div>
+            </div>
+
+            <!-- Concentration Risk -->
+            <div class="glass-card p-6 fade-in">
+                <h2 class="text-base font-semibold text-white mb-4 flex items-center gap-2">
+                    <svg class="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                    </svg>
+                    Concentration Risk
+                </h2>
+                <div id="concentrationContainer">
+                    <div class="flex items-center gap-4 mb-6">
+                        <div class="flex-1">
+                            <div class="flex items-baseline justify-between mb-2">
+                                <span class="text-sm text-slate-400">Diversification Score</span>
+                                <span id="divScore" class="text-2xl font-bold text-white">—</span>
+                            </div>
+                            <div class="concentration-bar">
+                                <div id="divBar" class="concentration-fill" style="width:0%;"></div>
+                            </div>
+                        </div>
+                        <div id="concentrationBadge" class="badge text-sm">—</div>
+                    </div>
+                    <div id="topHoldingsConc" class="space-y-2"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Technical Health Grid -->
+        <div id="techHealthSection" class="glass-card-bright overflow-hidden mb-8 fade-in" style="display:none;">
+            <div class="px-6 py-4 border-b border-white/5">
+                <h2 class="text-base font-semibold text-white flex items-center gap-2">
+                    <svg class="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                    </svg>
+                    Technical Health Grid
+                </h2>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="holdings-table">
+                    <thead>
+                        <tr>
+                            <th>Stock</th>
+                            <th>Signal</th>
+                            <th>RSI (14)</th>
+                            <th>RSI Zone</th>
+                            <th>Trend</th>
+                        </tr>
+                    </thead>
+                    <tbody id="techHealthTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Loading state -->
+        <div id="dashboardLoading" class="flex flex-col items-center justify-center py-16" style="display:none;">
+            <div class="spinner mb-4"></div>
+            <p class="text-sm text-slate-400">Loading dashboard data...</p>
+        </div>
+
+        <!-- Empty state -->
+        <div id="emptyState" class="glass-card p-12 text-center fade-in" style="display:none;">
+            <svg class="w-16 h-16 mx-auto text-slate-600 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1"
+                    d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+            </svg>
+            <h3 class="text-lg font-semibold text-white mb-2">Your portfolio is empty</h3>
+            <p class="text-sm text-slate-400 max-w-md mx-auto">Add your first stock above — search by name or ticker,
+                enter quantity and average buy price, then click "Add to Portfolio". You can also upload a CSV.</p>
+        </div>
+
+    </main>
+
+    <!-- ==================== EDIT MODAL ==================== -->
+    <div id="editModal" class="modal-overlay">
+        <div class="glass-card p-6 w-full max-w-sm mx-4">
+            <h3 class="text-lg font-semibold text-white mb-4">Edit Holding</h3>
+            <input type="hidden" id="editTicker">
+            <p id="editStockLabel" class="text-sm text-slate-400 mb-4"></p>
+            <div class="space-y-3">
+                <div>
+                    <label class="text-xs text-slate-400 mb-1 block">Quantity</label>
+                    <input type="number" id="editQuantity" class="input-field w-full" min="0.01" step="any">
+                </div>
+                <div>
+                    <label class="text-xs text-slate-400 mb-1 block">Avg Buy Price (₹)</label>
+                    <input type="number" id="editAvgPrice" class="input-field w-full" min="0.01" step="any">
+                </div>
+            </div>
+            <div class="flex gap-3 mt-5">
+                <button onclick="saveEdit()" class="btn-primary text-sm flex-1">Save</button>
+                <button onclick="closeEditModal()" class="btn-secondary text-sm flex-1">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== TOAST ==================== -->
+    <div id="toast" class="toast"></div>
+
+    <script>
+        // ================================================================
+        // STATE
+        // ================================================================
+        let allStocks = [];
+        let dashboardData = null;
+
+        // ================================================================
+        // INIT
+        // ================================================================
+        document.addEventListener('DOMContentLoaded', async () => {
+            // Check auth
+            try {
+                const res = await fetch('/api/me');
+                if (!res.ok) { window.location.href = '/login'; return; }
+                const me = await res.json();
+                document.getElementById('userEmailDisplay').textContent = me.email;
+            } catch { window.location.href = '/login'; return; }
+
+            // Load stock list for autocomplete
+            try {
+                const res = await fetch('/api/stocks');
+                allStocks = await res.json();
+            } catch (e) { console.warn('Could not load stocks list', e); }
+
+            // Setup stock search autocomplete
+            setupAutocomplete();
+
+            // Setup CSV drag-and-drop
+            setupDragDrop();
+
+            // Load portfolio
+            loadPortfolio();
+        });
+
+        // ================================================================
+        // AUTOCOMPLETE
+        // ================================================================
+        function setupAutocomplete() {
+            const input = document.getElementById('stockSearchInput');
+            const dropdown = document.getElementById('stockDropdown');
+            let debounceTimer;
+
+            input.addEventListener('input', () => {
+                clearTimeout(debounceTimer);
+                debounceTimer = setTimeout(() => {
+                    const q = input.value.trim().toLowerCase();
+                    if (q.length < 1) { dropdown.classList.remove('show'); return; }
+
+                    const matches = allStocks.filter(s =>
+                        s.name.toLowerCase().includes(q) || s.ticker.toLowerCase().includes(q)
+                    ).slice(0, 10);
+
+                    if (matches.length === 0) { dropdown.classList.remove('show'); return; }
+
+                    dropdown.innerHTML = matches.map(s => `
+            <div class="autocomplete-item" onclick="selectStock('${s.ticker}', '${s.name.replace(/'/g, "\\'")}')">
+              <span class="text-slate-200">${s.name}</span>
+              <span class="badge badge-green">${s.ticker}</span>
+            </div>
+          `).join('');
+                    dropdown.classList.add('show');
+                }, 150);
+            });
+
+            // Close dropdown when clicking outside
+            document.addEventListener('click', (e) => {
+                if (!e.target.closest('#stockSearchInput') && !e.target.closest('#stockDropdown')) {
+                    dropdown.classList.remove('show');
+                }
+            });
+
+            // Enable/disable add button
+            ['quantityInput', 'avgPriceInput'].forEach(id => {
+                document.getElementById(id).addEventListener('input', checkAddButtonState);
+            });
+        }
+
+        function selectStock(ticker, name) {
+            document.getElementById('stockSearchInput').value = `${name} (${ticker})`;
+            document.getElementById('selectedTicker').value = ticker;
+            document.getElementById('selectedStockName').value = name;
+            document.getElementById('stockDropdown').classList.remove('show');
+            checkAddButtonState();
+        }
+
+        function checkAddButtonState() {
+            const ticker = document.getElementById('selectedTicker').value;
+            const qty = document.getElementById('quantityInput').value;
+            const price = document.getElementById('avgPriceInput').value;
+            document.getElementById('addHoldingBtn').disabled = !(ticker && qty > 0 && price > 0);
+        }
+
+        // ================================================================
+        // CSV DRAG & DROP
+        // ================================================================
+        function setupDragDrop() {
+            const zone = document.getElementById('csvDropzone');
+            ['dragenter', 'dragover'].forEach(e => zone.addEventListener(e, (ev) => { ev.preventDefault(); zone.classList.add('dragover'); }));
+            ['dragleave', 'drop'].forEach(e => zone.addEventListener(e, (ev) => { ev.preventDefault(); zone.classList.remove('dragover'); }));
+            zone.addEventListener('drop', (ev) => {
+                const file = ev.dataTransfer.files[0];
+                if (file && file.name.endsWith('.csv')) { doCSVUpload(file); }
+                else { showToast('Please upload a .csv file', 'error'); }
+            });
+        }
+
+        // ================================================================
+        // ADD HOLDING
+        // ================================================================
+        async function addHolding() {
+            const ticker = document.getElementById('selectedTicker').value;
+            const stock_name = document.getElementById('selectedStockName').value;
+            const quantity = parseFloat(document.getElementById('quantityInput').value);
+            const avg_buy_price = parseFloat(document.getElementById('avgPriceInput').value);
+
+            if (!ticker || !quantity || !avg_buy_price) return;
+
+            const btn = document.getElementById('addHoldingBtn');
+            const status = document.getElementById('addStatus');
+            btn.disabled = true;
+            status.textContent = 'Adding...';
+
+            try {
+                const res = await fetch('/api/portfolio/add', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ticker, stock_name, quantity, avg_buy_price })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast(`${ticker} added to portfolio`, 'success');
+                    // Clear inputs
+                    document.getElementById('stockSearchInput').value = '';
+                    document.getElementById('selectedTicker').value = '';
+                    document.getElementById('selectedStockName').value = '';
+                    document.getElementById('quantityInput').value = '';
+                    document.getElementById('avgPriceInput').value = '';
+                    status.textContent = '';
+                    loadPortfolio();
+                } else {
+                    showToast(data.error || 'Failed to add', 'error');
+                    status.textContent = '';
+                }
+            } catch (e) {
+                showToast('Network error', 'error');
+                status.textContent = '';
+            }
+            btn.disabled = false;
+        }
+
+        // ================================================================
+        // CSV UPLOAD
+        // ================================================================
+        function uploadCSV(input) {
+            if (input.files[0]) doCSVUpload(input.files[0]);
+        }
+
+        async function doCSVUpload(file) {
+            const status = document.getElementById('csvStatus');
+            status.textContent = 'Uploading and processing...';
+            status.className = 'text-xs text-blue-400 mt-3';
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const res = await fetch('/api/portfolio/upload-csv', { method: 'POST', body: formData });
+                const data = await res.json();
+                if (data.success) {
+                    let msg = `✓ Added ${data.added_count} holding(s)`;
+                    if (data.errors && data.errors.length > 0) {
+                        msg += ` · ${data.errors.length} error(s)`;
+                    }
+                    status.textContent = msg;
+                    status.className = 'text-xs text-green-400 mt-3';
+                    showToast(msg, 'success');
+                    loadPortfolio();
+                } else {
+                    status.textContent = data.error || 'Upload failed';
+                    status.className = 'text-xs text-red-400 mt-3';
+                    showToast(data.error || 'Upload failed', 'error');
+                }
+            } catch (e) {
+                status.textContent = 'Network error';
+                status.className = 'text-xs text-red-400 mt-3';
+            }
+            // Reset file input
+            document.getElementById('csvFileInput').value = '';
+        }
+
+        // ================================================================
+        // LOAD PORTFOLIO
+        // ================================================================
+        async function loadPortfolio() {
+            // First check if user has any holdings
+            try {
+                const res = await fetch('/api/portfolio');
+                const data = await res.json();
+                if (!data.holdings || data.holdings.length === 0) {
+                    document.getElementById('emptyState').style.display = '';
+                    document.getElementById('summarySection').style.display = 'none';
+                    document.getElementById('holdingsTableContainer').style.display = 'none';
+                    document.getElementById('dashboardSection').style.display = 'none';
+                    document.getElementById('techHealthSection').style.display = 'none';
+                    return;
+                }
+            } catch { return; }
+
+            // Has holdings — load full dashboard
+            document.getElementById('emptyState').style.display = 'none';
+            document.getElementById('dashboardLoading').style.display = 'flex';
+
+            try {
+                const res = await fetch('/api/portfolio/dashboard');
+                dashboardData = await res.json();
+                renderDashboard(dashboardData);
+            } catch (e) {
+                showToast('Failed to load dashboard', 'error');
+                console.error(e);
+            }
+
+            document.getElementById('dashboardLoading').style.display = 'none';
+        }
+
+        async function refreshDashboard() {
+            document.getElementById('dashboardLoading').style.display = 'flex';
+            document.getElementById('holdingsTableContainer').style.display = 'none';
+            document.getElementById('summarySection').style.display = 'none';
+            document.getElementById('dashboardSection').style.display = 'none';
+            document.getElementById('techHealthSection').style.display = 'none';
+
+            try {
+                const res = await fetch('/api/portfolio/dashboard');
+                dashboardData = await res.json();
+                renderDashboard(dashboardData);
+                showToast('Dashboard refreshed', 'success');
+            } catch (e) {
+                showToast('Failed to refresh', 'error');
+            }
+            document.getElementById('dashboardLoading').style.display = 'none';
+        }
+
+        // ================================================================
+        // RENDER DASHBOARD
+        // ================================================================
+        function renderDashboard(data) {
+            if (!data || !data.holdings || data.holdings.length === 0) {
+                document.getElementById('emptyState').style.display = '';
+                return;
+            }
+
+            const { holdings, summary, industry_data, technical_health, concentration } = data;
+
+            // --- Summary Cards ---
+            document.getElementById('summarySection').style.display = '';
+            document.getElementById('totalInvested').textContent = formatCurrency(summary.total_invested);
+            document.getElementById('totalCurrent').textContent = formatCurrency(summary.total_current);
+
+            const pnlEl = document.getElementById('totalPnl');
+            const pnlPctEl = document.getElementById('totalPnlPct');
+            const pnlCard = document.getElementById('cardPnl');
+            pnlEl.textContent = `${summary.total_pnl >= 0 ? '+' : ''}${formatCurrency(summary.total_pnl)}`;
+            pnlPctEl.textContent = `${summary.total_pnl_pct >= 0 ? '+' : ''}${summary.total_pnl_pct.toFixed(2)}%`;
+            pnlEl.className = `text-xl font-bold ${summary.total_pnl >= 0 ? 'text-green-400' : 'text-red-400'}`;
+            pnlPctEl.className = `text-xs mt-0.5 ${summary.total_pnl >= 0 ? 'text-green-400' : 'text-red-400'}`;
+            pnlCard.className = `stat-card fade-in ${summary.total_pnl < 0 ? 'loss' : ''}`;
+            document.getElementById('holdingCount').textContent = summary.holding_count;
+
+            // --- Holdings Table ---
+            document.getElementById('holdingsTableContainer').style.display = '';
+            const tbody = document.getElementById('holdingsTableBody');
+            tbody.innerHTML = holdings.map(h => `
+        <tr>
+          <td>
+            <div class="font-medium text-white text-sm">${h.stock_name}</div>
+            <div class="text-xs text-slate-500">${h.ticker}</div>
+          </td>
+          <td class="text-slate-300">${h.quantity}</td>
+          <td class="text-slate-300">₹${h.avg_buy_price.toLocaleString('en-IN')}</td>
+          <td class="text-white font-medium">${h.current_price ? '₹' + h.current_price.toLocaleString('en-IN') : '—'}</td>
+          <td class="text-slate-300">${formatCurrency(h.invested)}</td>
+          <td class="text-white">${formatCurrency(h.current_value)}</td>
+          <td class="${h.pnl >= 0 ? 'text-green-400' : 'text-red-400'} font-medium">${h.pnl >= 0 ? '+' : ''}${formatCurrency(h.pnl)}</td>
+          <td><span class="badge ${h.pnl_pct >= 0 ? 'badge-green' : 'badge-red'}">${h.pnl_pct >= 0 ? '+' : ''}${h.pnl_pct.toFixed(2)}%</span></td>
+          <td><span class="badge ${h.day_change_pct >= 0 ? 'badge-green' : 'badge-red'}">${h.day_change_pct >= 0 ? '+' : ''}${h.day_change_pct}%</span></td>
+          <td class="text-xs text-slate-500">${h.industry || '—'}</td>
+          <td>
+            <div class="flex gap-1.5">
+              <button onclick="openEditModal('${h.ticker}', '${h.stock_name.replace(/'/g, "\\'")}', ${h.quantity}, ${h.avg_buy_price})" class="btn-secondary text-xs py-1 px-2">✏️</button>
+              <button onclick="deleteHolding('${h.ticker}')" class="btn-danger">✕</button>
+            </div>
+          </td>
+        </tr>
+      `).join('');
+
+            // --- Industry Chart ---
+            document.getElementById('dashboardSection').style.display = '';
+            if (industry_data && industry_data.length > 0) {
+                const colors = ['#22c55e', '#3b82f6', '#a855f7', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899', '#84cc16', '#f97316', '#6366f1'];
+                Plotly.newPlot('industryChart', [{
+                    type: 'treemap',
+                    labels: industry_data.map(i => i.industry),
+                    parents: industry_data.map(() => ''),
+                    values: industry_data.map(i => i.value),
+                    textinfo: 'label+percent parent',
+                    textfont: { size: 14, color: '#fff' },
+                    marker: { colors: colors.slice(0, industry_data.length), line: { width: 1, color: '#0f172a' } },
+                    hovertemplate: '<b>%{label}</b><br>₹%{value:,.0f}<br>%{percentParent:.1%}<extra></extra>'
+                }], {
+                    paper_bgcolor: 'transparent',
+                    plot_bgcolor: 'transparent',
+                    margin: { t: 5, b: 5, l: 5, r: 5 },
+                    font: { family: 'Inter' }
+                }, { responsive: true, displayModeBar: false });
+            }
+
+            // --- Concentration Risk ---
+            if (concentration) {
+                const scoreEl = document.getElementById('divScore');
+                const barEl = document.getElementById('divBar');
+                const badgeEl = document.getElementById('concentrationBadge');
+                const score = concentration.diversification_score;
+
+                scoreEl.textContent = `${score}/10`;
+                barEl.style.width = `${score * 10}%`;
+
+                if (concentration.level === 'Low') {
+                    barEl.style.background = 'linear-gradient(90deg, #22c55e, #4ade80)';
+                    badgeEl.textContent = '✓ Well Diversified';
+                    badgeEl.className = 'badge badge-green text-sm';
+                } else if (concentration.level === 'Moderate') {
+                    barEl.style.background = 'linear-gradient(90deg, #f59e0b, #fbbf24)';
+                    badgeEl.textContent = '⚠ Moderate Risk';
+                    badgeEl.className = 'badge badge-yellow text-sm';
+                } else {
+                    barEl.style.background = 'linear-gradient(90deg, #ef4444, #f87171)';
+                    badgeEl.textContent = '⚠ Concentrated';
+                    badgeEl.className = 'badge badge-red text-sm';
+                }
+
+                // Top holdings by weight
+                const topContainer = document.getElementById('topHoldingsConc');
+                const totalVal = holdings.reduce((a, b) => a + b.current_value, 0);
+                const sorted = [...holdings].sort((a, b) => b.current_value - a.current_value).slice(0, 5);
+                topContainer.innerHTML = sorted.map(h => {
+                    const pct = totalVal > 0 ? (h.current_value / totalVal * 100) : 0;
+                    return `<div class="flex items-center gap-3">
+            <span class="text-xs text-slate-400 w-20 truncate">${h.ticker}</span>
+            <div class="flex-1 concentration-bar"><div class="concentration-fill" style="width:${pct}%; background: linear-gradient(90deg, #3b82f6, #60a5fa);"></div></div>
+            <span class="text-xs text-slate-300 w-12 text-right">${pct.toFixed(1)}%</span>
+          </div>`;
+                }).join('');
+            }
+
+            // --- Technical Health Grid ---
+            if (technical_health && technical_health.length > 0) {
+                document.getElementById('techHealthSection').style.display = '';
+                const techTbody = document.getElementById('techHealthTableBody');
+                techTbody.innerHTML = technical_health.map(t => {
+                    let rsiZone = '—';
+                    let rsiClass = 'badge-blue';
+                    if (t.rsi !== null && t.rsi !== undefined) {
+                        if (t.rsi < 30) { rsiZone = 'Oversold'; rsiClass = 'badge-green'; }
+                        else if (t.rsi > 70) { rsiZone = 'Overbought'; rsiClass = 'badge-red'; }
+                        else if (t.rsi > 50) { rsiZone = 'Bullish'; rsiClass = 'badge-green'; }
+                        else { rsiZone = 'Bearish'; rsiClass = 'badge-yellow'; }
+                    }
+
+                    let trendIcon = '➡️';
+                    let trendClass = 'text-slate-400';
+                    if (t.trend === 'Uptrend') { trendIcon = '⬆️'; trendClass = 'text-green-400'; }
+                    else if (t.trend === 'Downtrend') { trendIcon = '⬇️'; trendClass = 'text-red-400'; }
+
+                    return `<tr>
+            <td>
+              <div class="font-medium text-white text-sm">${t.stock_name}</div>
+              <div class="text-xs text-slate-500">${t.ticker}</div>
+            </td>
+            <td><span class="badge badge-blue">${t.signal}</span></td>
+            <td class="text-white font-medium">${t.rsi !== null ? t.rsi : '—'}</td>
+            <td><span class="badge ${rsiClass}">${rsiZone}</span></td>
+            <td class="${trendClass} font-medium">${trendIcon} ${t.trend}</td>
+          </tr>`;
+                }).join('');
+            }
+        }
+
+        // ================================================================
+        // EDIT / DELETE
+        // ================================================================
+        function openEditModal(ticker, name, qty, price) {
+            document.getElementById('editTicker').value = ticker;
+            document.getElementById('editStockLabel').textContent = `${name} (${ticker})`;
+            document.getElementById('editQuantity').value = qty;
+            document.getElementById('editAvgPrice').value = price;
+            document.getElementById('editModal').classList.add('active');
+        }
+
+        function closeEditModal() {
+            document.getElementById('editModal').classList.remove('active');
+        }
+
+        async function saveEdit() {
+            const ticker = document.getElementById('editTicker').value;
+            const quantity = parseFloat(document.getElementById('editQuantity').value);
+            const avg_buy_price = parseFloat(document.getElementById('editAvgPrice').value);
+
+            if (!quantity || !avg_buy_price || quantity <= 0 || avg_buy_price <= 0) {
+                showToast('Enter valid quantity and price', 'error');
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/portfolio/update', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ticker, quantity, avg_buy_price })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    closeEditModal();
+                    showToast(`${ticker} updated`, 'success');
+                    loadPortfolio();
+                } else {
+                    showToast(data.error || 'Update failed', 'error');
+                }
+            } catch { showToast('Network error', 'error'); }
+        }
+
+        async function deleteHolding(ticker) {
+            if (!confirm(`Remove ${ticker} from portfolio?`)) return;
+            try {
+                const res = await fetch(`/api/portfolio/${ticker}`, { method: 'DELETE' });
+                const data = await res.json();
+                if (data.success) {
+                    showToast(`${ticker} removed`, 'success');
+                    loadPortfolio();
+                } else {
+                    showToast(data.error || 'Delete failed', 'error');
+                }
+            } catch { showToast('Network error', 'error'); }
+        }
+
+        // ================================================================
+        // HELPERS
+        // ================================================================
+        function formatCurrency(val) {
+            if (val === null || val === undefined) return '—';
+            const abs = Math.abs(val);
+            if (abs >= 10000000) return `₹${(val / 10000000).toFixed(2)} Cr`;
+            if (abs >= 100000) return `₹${(val / 100000).toFixed(2)} L`;
+            return '₹' + val.toLocaleString('en-IN', { maximumFractionDigits: 0 });
+        }
+
+        function showToast(msg, type = 'success') {
+            const toast = document.getElementById('toast');
+            toast.textContent = msg;
+            toast.className = `toast toast-${type} show`;
+            setTimeout(() => toast.classList.remove('show'), 3000);
+        }
+
+        async function logout() {
+            await fetch('/api/logout', { method: 'POST' });
+            window.location.href = '/login';
+        }
+    </script>
+
+</body>
+
+</html>
