@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Blog - Kagger AI</title>
+    <meta name="description"
+        content="Expert insights on Indian stock markets, investment strategies, and financial analysis powered by AI research.">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+
+        .gradient-bg {
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+        }
+
+        .blog-content h2 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #e2e8f0;
+            margin-top: 2rem;
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid rgba(100, 116, 139, 0.3);
+        }
+
+        .blog-content h3 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #cbd5e1;
+            margin-top: 1.5rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .blog-content p {
+            color: #94a3b8;
+            line-height: 1.8;
+            margin-bottom: 1rem;
+        }
+
+        .blog-content ul,
+        .blog-content ol {
+            color: #94a3b8;
+            margin-bottom: 1rem;
+            padding-left: 1.5rem;
+        }
+
+        .blog-content li {
+            margin-bottom: 0.5rem;
+            line-height: 1.7;
+        }
+
+        .blog-content strong {
+            color: #e2e8f0;
+        }
+
+        .blog-content em {
+            color: #a5b4fc;
+        }
+
+        .blog-content blockquote {
+            border-left: 4px solid #3b82f6;
+            background: rgba(59, 130, 246, 0.08);
+            padding: 1rem 1.5rem;
+            margin: 1.5rem 0;
+            border-radius: 0 0.75rem 0.75rem 0;
+            color: #94a3b8;
+        }
+
+        .blog-content blockquote strong {
+            color: #93c5fd;
+        }
+
+        .blog-content a {
+            color: #60a5fa;
+            text-decoration: underline;
+        }
+
+        .blog-content a:hover {
+            color: #93c5fd;
+        }
+
+        .card-hover:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .animate-fadeIn {
+            animation: fadeIn 0.4s ease-out;
+        }
+    </style>
+</head>
+
+<body class="gradient-bg min-h-screen text-white">
+    <!-- Navigation -->
+    <nav class="container mx-auto px-6 py-6">
+        <div class="flex items-center justify-between">
+            <a href="/" class="flex items-center space-x-2">
+                <img src="/kagger_logo_full.jpg" alt="Kagger AI" class="h-8 object-contain"
+                    style="filter:invert(1) hue-rotate(-80deg) saturate(3) brightness(1.1);mix-blend-mode:screen;" />
+            </a>
+            <div class="flex items-center space-x-4">
+                <a href="/blog" class="text-blue-400 hover:text-blue-300 font-medium transition-colors">Blog</a>
+                <div id="nav-auth-container" class="flex items-center gap-4">
+                    <!-- Loading state -->
+                    <div class="w-20 h-8 bg-slate-800 animate-pulse rounded-lg"></div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Blog Listing View -->
+    <div id="blog-listing" class="container mx-auto px-6 py-8">
+        <div class="text-center mb-12">
+            <h1 class="text-4xl md:text-5xl font-extrabold mb-4">
+                Kagger AI
+                <span class="bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">Blog</span>
+            </h1>
+            <p class="text-slate-400 max-w-2xl mx-auto text-lg">
+                Expert insights on Indian markets, investment strategies, and financial analysis — powered by AI
+                research.
+            </p>
+        </div>
+
+        <div id="listing-loading" class="text-center py-16 text-slate-400">
+            <div
+                class="animate-spin inline-block w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full mb-4">
+            </div>
+            <p>Loading articles...</p>
+        </div>
+
+        <div id="listing-empty" class="hidden text-center py-20">
+            <div class="text-6xl mb-4">📝</div>
+            <h2 class="text-2xl font-bold text-slate-300 mb-2">Coming Soon</h2>
+            <p class="text-slate-500">We're working on our first articles. Check back soon!</p>
+        </div>
+
+        <div id="listing-grid" class="hidden grid md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl mx-auto"></div>
+    </div>
+
+    <!-- Blog Detail View -->
+    <div id="blog-detail" class="hidden container mx-auto px-6 py-8 animate-fadeIn">
+        <div class="max-w-3xl mx-auto">
+            <!-- Back Link -->
+            <a href="/blog"
+                class="inline-flex items-center text-slate-400 hover:text-blue-400 transition-colors mb-8 text-sm">
+                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+                </svg>
+                Back to all articles
+            </a>
+
+            <!-- Article Header -->
+            <div class="mb-8">
+                <h1 id="detail-title" class="text-3xl md:text-4xl font-extrabold text-white mb-4 leading-tight"></h1>
+                <div class="flex items-center gap-4 text-sm text-slate-400">
+                    <span id="detail-date"></span>
+                </div>
+            </div>
+
+            <!-- Article Content -->
+            <article id="detail-content" class="blog-content"></article>
+
+            <!-- Sources Section (collapsible, hidden by default) -->
+            <div id="sources-section" class="hidden mt-8">
+                <details class="bg-slate-800/50 rounded-xl border border-slate-700 overflow-hidden">
+                    <summary
+                        class="px-6 py-4 cursor-pointer text-slate-300 font-semibold hover:text-white transition-colors select-none flex items-center gap-2">
+                        <svg class="w-4 h-4 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                        </svg>
+                        📚 Sources
+                        <span id="sources-count" class="text-xs text-slate-500 font-normal"></span>
+                    </summary>
+                    <div id="sources-list" class="px-6 pb-5 pt-2 space-y-2 border-t border-slate-700/50"></div>
+                </details>
+            </div>
+
+            <!-- Divider -->
+            <div class="border-t border-slate-700 my-12"></div>
+
+            <!-- Suggest Changes Form -->
+            <div class="bg-slate-800/50 backdrop-blur-sm rounded-2xl p-6 border border-slate-700">
+                <h3 class="text-lg font-bold mb-2">💡 Have feedback on this article?</h3>
+                <p class="text-slate-400 text-sm mb-4">
+                    Suggest improvements, corrections, or topics you'd like to see covered. Your feedback helps us
+                    create better content.
+                </p>
+                <textarea id="suggestion-text" rows="3" placeholder="Share your thoughts or suggestions..."
+                    class="w-full px-4 py-3 bg-slate-900/50 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none mb-4"></textarea>
+                <button onclick="submitSuggestion()" id="suggest-btn"
+                    class="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 px-6 py-3 rounded-lg font-semibold transition-all flex items-center gap-2">
+                    <span>Submit Suggestion</span>
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                    </svg>
+                </button>
+                <div id="suggestion-result" class="hidden mt-4 p-4 rounded-lg text-center"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="container mx-auto px-6 py-12 border-t border-slate-800 mt-8">
+        <div class="flex flex-col md:flex-row items-center justify-between">
+            <a href="/" class="flex items-center space-x-2 mb-4 md:mb-0">
+                <img src="/kagger_logo_full.jpg" alt="Kagger AI" class="h-6 object-contain"
+                    style="filter:invert(1) hue-rotate(-80deg) saturate(3) brightness(1.1);mix-blend-mode:screen;" />
+            </a>
+            <p class="text-slate-500 text-sm">
+                © 2026 Kagger AI. Institutional-Grade AI Stock Research for Indian Markets.
+            </p>
+        </div>
+    </footer>
+
+    <script>
+        // Check authentication status to update navigation
+        fetch('/api/me')
+            .then(res => res.json())
+            .then(data => {
+                const container = document.getElementById('nav-auth-container');
+                if (data.id) {
+                    // User is logged in - show Home (App)
+                    container.innerHTML = `
+                        <a href="/app" class="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg transition-all shadow-lg hover:shadow-blue-500/10">
+                            <svg class="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
+                            </svg>
+                            Home
+                        </a>
+                    `;
+                } else {
+                    // Not logged in - show Home (Landing) and Login
+                    container.innerHTML = `
+                        <a href="/" class="text-slate-300 hover:text-white transition-colors text-sm font-medium mr-2">Home</a>
+                        <a href="/login" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg font-semibold transition-all text-sm shadow-lg shadow-blue-500/20">
+                            Login
+                        </a>
+                    `;
+                }
+            })
+            .catch(() => {
+                const container = document.getElementById('nav-auth-container');
+                container.innerHTML = `<a href="/login" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg font-semibold transition-all text-sm">Login</a>`;
+            });
+
+        // Determine if we're on a detail page or listing
+        const pathParts = window.location.pathname.split('/').filter(Boolean);
+        const blogSlug = pathParts.length > 1 ? pathParts[1] : null;
+
+        if (blogSlug) {
+            loadBlogDetail(blogSlug);
+        } else {
+            loadBlogListing();
+        }
+
+        async function loadBlogListing() {
+            const loading = document.getElementById('listing-loading');
+            const empty = document.getElementById('listing-empty');
+            const grid = document.getElementById('listing-grid');
+
+            try {
+                const response = await fetch('/api/blogs');
+                const data = await response.json();
+
+                const blogs = data.blogs || [];
+
+                if (blogs.length === 0) {
+                    loading.classList.add('hidden');
+                    empty.classList.remove('hidden');
+                    return;
+                }
+
+                grid.innerHTML = blogs.map(blog => {
+                    const date = new Date(blog.published_at).toLocaleDateString('en-IN', {
+                        day: 'numeric', month: 'short', year: 'numeric'
+                    });
+                    return `
+                        <a href="/blog/${blog.slug}" class="block">
+                            <div class="bg-slate-800/50 backdrop-blur-sm rounded-2xl p-6 border border-slate-700/50 card-hover transition-all duration-300 h-full flex flex-col">
+                                <div class="flex-1">
+                                    <div class="flex items-center gap-2 mb-3">
+                                        <span class="text-xs font-medium px-2 py-0.5 rounded-full ${blog.article_type === 'needle' ? 'bg-amber-500/15 text-amber-400' : blog.article_type === 'informative' ? 'bg-emerald-500/15 text-emerald-400' : 'bg-blue-500/15 text-blue-400'}">${blog.article_type === 'needle' ? '🔍 Needle' : blog.article_type === 'informative' ? '📚 Informative' : '📰 Investigative'}</span>
+                                    </div>
+                                    <div class="text-xs text-blue-400 font-medium mb-3 uppercase tracking-wider">${escapeHtml(blog.short_topic || blog.topic)}</div>
+                                    <h2 class="text-xl font-bold text-white mb-3 leading-tight">${escapeHtml(blog.title)}</h2>
+                                    <p class="text-slate-400 text-sm leading-relaxed mb-4">${escapeHtml(blog.excerpt)}</p>
+                                </div>
+                                <div class="flex items-center justify-between mt-auto pt-4 border-t border-slate-700/50">
+                                    <span class="text-xs text-slate-500">${date}</span>
+                                    <span class="text-blue-400 text-sm font-medium">Read →</span>
+                                </div>
+                            </div>
+                        </a>
+                    `;
+                }).join('');
+
+                loading.classList.add('hidden');
+                grid.classList.remove('hidden');
+
+                // Update page title
+                document.title = 'Blog - Kagger AI | Indian Market Insights';
+
+            } catch (error) {
+                loading.textContent = 'Failed to load articles. Please try again later.';
+                console.error(error);
+            }
+        }
+
+        async function loadBlogDetail(slug) {
+            const listing = document.getElementById('blog-listing');
+            const detail = document.getElementById('blog-detail');
+            const loading = document.getElementById('listing-loading');
+
+            try {
+                const response = await fetch(`/api/blogs/${slug}`);
+
+                if (response.status === 404) {
+                    loading.innerHTML = `
+                        <div class="text-center py-20">
+                            <div class="text-6xl mb-4">🔍</div>
+                            <h2 class="text-2xl font-bold text-slate-300 mb-2">Article Not Found</h2>
+                            <p class="text-slate-500 mb-6">The article you're looking for doesn't exist or has been removed.</p>
+                            <a href="/blog" class="text-blue-400 hover:text-blue-300">← Back to Blog</a>
+                        </div>
+                    `;
+                    return;
+                }
+
+                const data = await response.json();
+                const blog = data.blog;
+
+                // Process content: extract sources and clean inline links
+                const { cleanedHtml, sources } = extractAndCleanSources(blog.content_html);
+
+                // Set content
+                document.getElementById('detail-title').textContent = blog.title;
+                document.getElementById('detail-content').innerHTML = cleanedHtml;
+
+                // Populate sources section
+                if (sources.length > 0) {
+                    const sourcesSection = document.getElementById('sources-section');
+                    const sourcesList = document.getElementById('sources-list');
+                    const sourcesCount = document.getElementById('sources-count');
+                    sourcesCount.textContent = `(${sources.length})`;
+                    sourcesList.innerHTML = sources.map((src, i) => `
+                        <div class="flex items-start gap-3 py-2">
+                            <span class="text-xs text-slate-500 font-mono mt-0.5">${i + 1}.</span>
+                            <div class="min-w-0">
+                                ${src.title ? `<span class="text-sm text-slate-300">${escapeHtml(src.title)}</span><br>` : ''}
+                                <a href="${escapeHtml(src.url)}" target="_blank" rel="noopener noreferrer"
+                                    class="text-xs text-blue-400 hover:text-blue-300 break-all">${escapeHtml(src.url)}</a>
+                            </div>
+                        </div>
+                    `).join('');
+                    sourcesSection.classList.remove('hidden');
+                }
+
+                const date = new Date(blog.published_at).toLocaleDateString('en-IN', {
+                    day: 'numeric', month: 'long', year: 'numeric'
+                });
+                document.getElementById('detail-date').textContent = date;
+
+                // Update page title & meta
+                document.title = `${blog.title} - Kagger AI Blog`;
+
+                // Store slug for suggestion
+                detail.dataset.slug = slug;
+
+                // Switch views
+                listing.classList.add('hidden');
+                detail.classList.remove('hidden');
+
+            } catch (error) {
+                loading.textContent = 'Failed to load article.';
+                console.error(error);
+            }
+        }
+
+        async function submitSuggestion() {
+            const text = document.getElementById('suggestion-text').value.trim();
+            const btn = document.getElementById('suggest-btn');
+            const result = document.getElementById('suggestion-result');
+            const slug = document.getElementById('blog-detail').dataset.slug;
+
+            if (!text) {
+                result.className = 'mt-4 p-4 rounded-lg text-center bg-red-500/20 border border-red-500/50 text-red-400';
+                result.textContent = 'Please enter a suggestion.';
+                result.classList.remove('hidden');
+                return;
+            }
+
+            btn.disabled = true;
+            btn.innerHTML = '<span class="animate-spin inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full mr-2"></span> Submitting...';
+
+            try {
+                const response = await fetch(`/api/blogs/${slug}/suggest`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ suggestion: text })
+                });
+                const data = await response.json();
+
+                if (response.ok && data.success) {
+                    result.className = 'mt-4 p-4 rounded-lg text-center bg-green-500/20 border border-green-500/50 text-green-400';
+                    result.innerHTML = '✅ Thank you for your feedback! We\'ll review it and may update the article.';
+                    document.getElementById('suggestion-text').value = '';
+                } else {
+                    result.className = 'mt-4 p-4 rounded-lg text-center bg-red-500/20 border border-red-500/50 text-red-400';
+                    result.textContent = data.error || 'Failed to submit. Please try again.';
+                }
+                result.classList.remove('hidden');
+            } catch (error) {
+                result.className = 'mt-4 p-4 rounded-lg text-center bg-red-500/20 border border-red-500/50 text-red-400';
+                result.textContent = 'Network error. Please try again.';
+                result.classList.remove('hidden');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<span>Submit Suggestion</span><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>';
+            }
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        /**
+         * Extract all source links from blog HTML content and remove them from inline display.
+         * Handles: <a> tags, [n] reference markers, "Sources:" sections, footnote patterns.
+         */
+        function extractAndCleanSources(html) {
+            const sources = [];
+            const seenUrls = new Set();
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = html;
+
+            // 1. Extract all <a> links with external URLs
+            const allLinks = tempDiv.querySelectorAll('a[href]');
+            allLinks.forEach(link => {
+                const url = link.getAttribute('href');
+                if (url && (url.startsWith('http://') || url.startsWith('https://')) && !seenUrls.has(url)) {
+                    seenUrls.add(url);
+                    const title = link.textContent.trim();
+                    sources.push({ url, title: (title && title !== url && title.length > 3) ? title : '' });
+                }
+            });
+
+            // 2. Remove inline <a> tags but keep their text content (for non-source links)
+            allLinks.forEach(link => {
+                const url = link.getAttribute('href');
+                if (url && (url.startsWith('http://') || url.startsWith('https://'))) {
+                    // Replace link with just its text (no clickable link in body)
+                    const textNode = document.createTextNode(link.textContent);
+                    link.parentNode.replaceChild(textNode, link);
+                }
+            });
+
+            // 3. Remove "Sources" or "References" sections at the end
+            const headings = tempDiv.querySelectorAll('h2, h3, h4');
+            headings.forEach(heading => {
+                const text = heading.textContent.toLowerCase().trim();
+                if (text.includes('source') || text.includes('reference') || text.includes('further reading') || text.includes('bibliography')) {
+                    // Remove this heading and all following siblings until next heading or end
+                    let el = heading;
+                    while (el) {
+                        const next = el.nextElementSibling;
+                        el.remove();
+                        el = next;
+                        if (el && (el.tagName === 'H2' || el.tagName === 'H3')) break; // Stop at next heading
+                    }
+                }
+            });
+
+            // 4. Remove inline citation markers like [1], [2], (Source: ...), etc.
+            let cleanedHtml = tempDiv.innerHTML;
+            // Remove [n] style references
+            cleanedHtml = cleanedHtml.replace(/\[\d+\]/g, '');
+            // Remove (Source: ...) patterns
+            cleanedHtml = cleanedHtml.replace(/\(Source:?[^)]*\)/gi, '');
+            // Remove standalone "Source: URL" lines
+            cleanedHtml = cleanedHtml.replace(/<p>\s*Sources?\s*:.*?<\/p>/gi, '');
+
+            return { cleanedHtml, sources };
+        }
+    </script>
+</body>
+
+</html>

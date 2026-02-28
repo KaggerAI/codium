@@ -957,6 +957,754 @@ def delete_contact_request(request_id):
     return jsonify({'success': True})
 
 
+# =====================================================================
+# BLOG SECTION - AI-Generated Blog Posts
+# =====================================================================
+
+# Blog data persistence (same pattern as contact requests)
+if os.path.exists('/home'):
+    BLOGS_FILE = '/home/blogs.json'
+else:
+    BLOGS_FILE = os.path.join(os.path.dirname(__file__), 'blogs.json')
+
+def load_blogs():
+    """Load blog posts from JSON file"""
+    try:
+        if os.path.exists(BLOGS_FILE):
+            with open(BLOGS_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+    except Exception as e:
+        print(f"WARN: Failed to load blogs: {e}")
+    return []
+
+def save_blogs(blogs):
+    """Save blog posts to JSON file"""
+    try:
+        with open(BLOGS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(blogs, f, indent=2, ensure_ascii=False)
+    except Exception as e:
+        print(f"ERROR: Failed to save blogs: {e}")
+        raise
+
+def generate_slug(title):
+    """Generate a URL-friendly slug from a title"""
+    import re
+    slug = title.lower().strip()
+    slug = re.sub(r'[^\w\s-]', '', slug)
+    slug = re.sub(r'[\s_]+', '-', slug)
+    slug = re.sub(r'-+', '-', slug)
+    slug = slug.strip('-')
+    return slug[:80]  # Limit length
+
+def call_openai_responses_api(instructions, user_input, use_web_search=True, model="gpt-5.2-pro"):
+    """
+    Call OpenAI Responses API with optional web search.
+    This uses the newer Responses API (not Chat Completions) which supports
+    built-in web search via the web_search_preview tool.
+    
+    Args:
+        instructions: System-level instructions (like system prompt)
+        user_input: The user's input/question
+        use_web_search: Whether to enable live web search
+        model: Model to use (default: gpt-5.2)
+    
+    Returns:
+        The output text from the model
+    """
+    if not openai.api_key:
+        raise ValueError("OpenAI API key is not configured.")
+    
+    try:
+        client = openai.OpenAI()
+        
+        tools = []
+        if use_web_search:
+            tools.append({"type": "web_search_preview"})
+        
+        create_params = {
+            "model": model,
+            "instructions": instructions,
+            "input": user_input,
+            "reasoning": {"effort": "high"}
+        }
+        if tools:
+            create_params["tools"] = tools
+        
+        print(f"INFO: Calling OpenAI Responses API with model={model}, web_search={use_web_search}", file=sys.stderr)
+        response = client.responses.create(**create_params)
+        
+        return response.output_text
+    except Exception as e:
+        print(f"ERROR in call_openai_responses_api: {e}", file=sys.stderr)
+        traceback.print_exc()
+        raise
+
+# --- Admin Blog API Endpoints ---
+
+def check_admin_auth():
+    """Helper to check admin authentication. Returns (user, error_response) tuple."""
+    from flask import session
+    if 'user_id' not in session:
+        return None, (jsonify({'error': 'Not authenticated'}), 401)
+    from auth.database import User
+    user = User.get_by_id(session['user_id'])
+    if not user or not user.is_admin:
+        return None, (jsonify({'error': 'Admin access required'}), 403)
+    return user, None
+
+@app.route('/api/admin/blogs', methods=['GET'])
+def admin_list_blogs():
+    """Admin endpoint to list all blog posts (drafts + published)"""
+    user, err = check_admin_auth()
+    if err:
+        return err
+    
+    blogs = load_blogs()
+    return jsonify({'blogs': blogs, 'count': len(blogs)})
+
+@app.route('/api/admin/blogs/generate', methods=['POST'])
+def admin_generate_blog():
+    """Admin endpoint to generate a blog post using GPT-5.2-pro with web search"""
+    user, err = check_admin_auth()
+    if err:
+        return err
+    
+    try:
+        data = request.get_json(force=True)
+        topic = data.get('topic', '').strip()
+        article_type = data.get('article_type', 'general').strip()
+        
+        if not topic:
+            return jsonify({'error': 'Topic is required'}), 400
+        
+        # --- SHARED EDITORIAL DNA ---
+        shared_style = """Act as a seasoned, witty, and investigative senior feature writer for a premium, new-age business publication (think a blend of 'The Ken', 'Bloomberg Businessweek', and 'YourStory'). You also have access to real-time web search capabilities.
+1. NARRATIVE STYLE & TONE:
+- Write like a witty, sharp-eyed reporter who has just unearthed an incredible inside story. The tone should be conversational but deeply authoritative, occasionally using dry humor or subtle irony.
+- Start with a compelling narrative hook: a counter-intuitive observation, a vivid anecdote, or a seemingly unrelated but brilliant metaphor that perfectly captures the current situation. 
+- Avoid sounding like an academic paper, a PR press release, or a generic AI. Be punchy. """
+
+        shared_data = """DATA & QUANTIFICATION:
+- Anchor your narrative in the hard numbers you researched. Do not just say "they experienced massive growth." Say "revenue didn't just grow; it ballooned from $2M to $15M in a punishing 18-month window." 
+- Use percentages, timelines, valuation multiples, or market sizes to bolster your arguments. Make the numbers tell a story of their own."""
+
+        shared_sourcing = """SOURCING RULES:
+- DO NOT use in-text citations, footnotes, [1], or hyperlink placeholders anywhere in the main body. 
+- Write facts as absolute truths within the narrative flow (e.g., "Profits plummeted by 40% last quarter" instead of "According to a report by Bloomberg, profits plummeted...").
+- At the very bottom of the article, create a distinct section titled "Sources & References:" where you list the URLs and names of the real-world articles, reports, or data sources you fetched during your web search. Ensure the piece is entirely truthful."""
+
+        shared_anti_ai = """ANTI-AI DIRECTIVES (CRITICAL):
+- DO NOT use the overused AI words and phrases such as: delve, tapestry, testament, bustling, landscape, navigating the complexities, a symphony of, beacon, robust, dynamic, paramount, revolutionize, foster, or "in conclusion."
+- Vary your sentence lengths dramatically. Use very short sentences for impact. Follow them with longer, flowing, narrative sentences. Use em-dashes (—) for dramatic effect or asides.
+- Write with active voice, strong verbs, and highly specific nouns."""
+
+        shared_output = """OUTPUT FORMAT:
+- Start your response with a JSON line containing the article title: {"title": "Your Article Title Here"}
+- Then a line with just ---
+- Then the full article as clean HTML using <h2>, <h3>, <p>, <ul>/<li>, <strong>, <em>, <blockquote> tags.
+- Do NOT include <html>, <head>, <body>, or <h1> tags — just the article body content.
+- Place the "Sources & References:" section at the very end as an <h2> with a list of source URLs.
+
+Now, execute your search and write the article."""
+
+        # --- ARTICLE TYPE SPECIFIC PROMPTS ---
+        if article_type == 'needle':
+            instructions = f"""Act as a seasoned, witty, and investigative senior feature writer AND stock-picking analyst for a premium, new-age business publication (think a blend of 'The Ken', 'Bloomberg Businessweek', and 'YourStory'). You also have access to real-time web search capabilities.
+
+Your task is to write a highly engaging, long-form "Needle in a Haystack" article. The admin has provided a topic describing a regulatory, economic, demographic, or structural change. Your job is to:
+1. Research the change/event/trend deeply using web search.
+2. Identify the RARE company (or rare few companies) — the "needle" — that stands to benefit the MOST from this change. These should NOT be the obvious large-cap names everyone already knows. Dig deeper. Find the under-the-radar, mid-cap, or small-cap plays that have a structural edge.
+3. Build a compelling narrative around WHY these specific companies are uniquely positioned.
+
+THINK DEEPLY: Use the highest level of reasoning effort to analyze your research before writing.
+
+STEP 1: AUTONOMOUS RESEARCH
+Before you begin writing, use your web search capabilities to fetch the most recent and relevant news, financial data, policy documents, and deep-dive analyses on this topic. Research which companies (especially lesser-known ones) have the most exposure to this change.
+
+STEP 2: DRAFT THE ARTICLE
+Using the real-world data you just fetched, write the article following these strict editorial guidelines:
+
+{shared_style}
+
+2. STRUCTURE & PACING:
+- The Hook: Pull the reader in with a cinematic/relatable opening that frames the structural change.
+- The Thesis: Establish the big change and why it creates an asymmetric opportunity.
+- The Haystack: Briefly paint the landscape of the sector/industry affected.
+- The Needle(s): Reveal the specific company/companies that are uniquely positioned. This is the CORE of the article. Explain exactly WHY — moats, supply chain position, regulatory advantage, capacity, management vision, financial metrics.
+- The Data: Back up the thesis with hard numbers — revenue exposure, capacity utilization, order books, margin profiles, valuations.
+- The Kicker: End on a sharp, thought-provoking note. Do NOT give buy/sell recommendations. Frame it as "this is where the smart money should be looking."
+
+{shared_data}
+
+{shared_sourcing}
+
+{shared_anti_ai}
+
+{shared_output}"""
+
+        elif article_type == 'informative':
+            instructions = f"""Act as a seasoned, authoritative, and deeply knowledgeable senior feature writer for a premium, new-age business publication (think a blend of 'The Ken', 'Bloomberg Businessweek', and 'YourStory'). You also have access to real-time web search capabilities.
+
+Your task is to write a highly informative, comprehensive, and data-dense long-form article about the topic provided. This is an INFORMATIVE article — no fluff, no flights of fantasy, no speculative scenarios. Every paragraph must add tangible information or insight.
+
+THINK DEEPLY: Use the highest level of reasoning effort to analyze your research before writing.
+
+STEP 1: AUTONOMOUS RESEARCH
+Before you begin writing, use your web search capabilities to fetch the most recent and relevant news, financial data, regulatory filings, expert opinions, and deep-dive analyses on this topic. Be exhaustive.
+
+STEP 2: DRAFT THE ARTICLE
+Using the real-world data you just fetched, write the article following these strict editorial guidelines:
+
+{shared_style}
+
+2. STRUCTURE & PACING:
+- The Hook: Pull the reader in with a sharp, relevant opening — a surprising statistic, a recent event, or a key question.
+- The Context: Provide the full background — history, stakeholders, regulatory framework, market dynamics. Assume the reader is intelligent but may not know the domain.
+- The Deep Dive: Break down the mechanics, the data, the key players, and the implications. Cover every important dimension: financial, regulatory, competitive, and strategic.
+- The "So What": Explain the real-world implications clearly. What does this mean for businesses, investors, or the industry?
+- The Kicker: End with a crisp conclusion that crystallizes the key takeaway — no generic summaries, just the sharpest insight.
+
+IMPORTANT: Do NOT include "flights of fantasy" or hypothetical scenarios. Keep everything grounded in verified facts and real data. Be dense with information, not prose.
+
+{shared_data}
+
+{shared_sourcing}
+
+{shared_anti_ai}
+
+{shared_output}"""
+
+        else:  # 'general' — the original investigative blog
+            instructions = f"""Act as a seasoned, witty, and investigative senior feature writer for a premium, new-age business publication (think a blend of the analytical, slightly cynical, and deep-dive style of 'The Ken' and the founder-centric, narrative-driven storytelling of 'YourStory'). You also have access to real-time web search capabilities.
+
+Your task is to write a highly engaging, long-form business/tech blog post about the topic provided by the user.
+THINK DEEPLY: You must use the highest level of reasoning effort to critically analyze the topic and web search results before drafting.
+
+STEP 1: AUTONOMOUS RESEARCH
+Before you begin writing, use your web search capabilities to fetch the most recent and relevant news, financial data, and deep-dive analyses on this topic. You do not need to print out your research notes—simply use the data you find to construct the narrative. 
+
+STEP 2: DRAFT THE ARTICLE
+Using the real-world data you just fetched, write the article following these strict editorial guidelines:
+
+{shared_style}
+
+2. STRUCTURE & PACING:
+- The Hook: Pull the reader in with a cinematic or relatable opening.
+- The Thesis (The "Why Should I Care"): Establish the core conflict or the big revelation early on.
+- The Deep Dive: Break down the business model, the strategy, or the history. Explain complex mechanics simply but smartly.
+- The Flight of Imagination: Include at least one vivid, creative analogy or a hypothetical future scenario (a "flight of fantasy") to explain a hard data point or a complex business strategy. Make it imaginative but firmly tethered to the underlying reality you researched.
+- The Kicker (Conclusion): End on a sharp, thought-provoking note—not a neat, summarizing bow. Leave the reader pondering the future.
+
+{shared_data}
+
+{shared_sourcing}
+
+{shared_anti_ai}
+
+{shared_output}"""
+
+        user_input = f"{topic}"
+        
+        print(f"INFO: Generating blog [{article_type}] for topic: {topic}", file=sys.stderr)
+        raw_response = call_openai_responses_api(instructions, user_input, use_web_search=True)
+        
+        # Check if the AI declined the topic
+        first_line = raw_response.strip().split('\n')[0].strip()
+        if first_line.startswith('{') and '"decline"' in first_line:
+            try:
+                decline_data = json.loads(first_line)
+                if decline_data.get('decline'):
+                    reason = decline_data.get('reason', 'This topic does not have enough depth for a quality blog post.')
+                    return jsonify({
+                        'success': False,
+                        'declined': True,
+                        'error': f"🤔 The AI chose not to write this blog: {reason}"
+                    }), 200  # 200 because it's not an error — it's a deliberate choice
+            except json.JSONDecodeError:
+                pass
+        
+        # Parse the response — extract title from first JSON line
+        title = f"Blog: {topic}"  # fallback title
+        content_html = raw_response
+        short_topic = ''  # will be set by checker
+        
+        # --- MAKER-CHECKER: CHECKER PHASE ---
+        print(f"INFO: [Checker Phase] Sending draft to Gemini 3.1 Pro for editorial review...", file=sys.stderr)
+        
+        checker_prompt = f"""You are the sharp, rigorous, and brilliant Investigative Head Editor for our premium business publication (think the absolute best editors at 'The Ken' or 'Bloomberg Businessweek'). 
+You have Google Search grounding enabled.
+
+One of your senior reporters has just submitted a draft blog post on the topic: "{topic}".
+
+Here are the exact editorial guidelines the reporter was given to write this piece. You must understand the spirit, tone, narrative styling, and structure of what we want, and enforce it:
+---
+{instructions}
+---
+
+YOUR JOB:
+1. Act as the checker/editor. You have the total power to edit, update, append, rewrite, or change any part of this blog.
+2. Use your search grounding to VERIFY the facts, timeline, and data points in the draft. If anything is wrong, outdated, or weak, FIX IT.
+3. Enhance the prose. If the draft sounds a bit "flat" or lacks that premium, punchy voice, rewrite those sections. Make the hook hit harder. Make the kicker more thought-provoking.
+4. Final Word Count: Limit the total word count of the final article to a maximum of 2000 words. Be concise and impactful.
+5. Ensure the structural rules from the guidelines are followed perfectly:
+   - NO in-text citations or footnotes (no [1] or hyperlink placeholders).
+   - "Sources & References:" section at the very bottom with a list of URLs used for fact-checking/research.
+   - Absolutely NONE of the banned AI words: delve, tapestry, testament, bustling, landscape, navigating the complexities, a symphony of, beacon, robust, dynamic, paramount, revolutionize, foster, "in conclusion".
+
+OUTPUT FORMAT:
+- First line MUST be a JSON object containing the finalized title AND a short topic label (max 10 words, tactical, concise, highlighting the key theme — NOT the full topic): {{"title": "The Final Masterpiece Title", "short_topic": "India's IT Services Crisis"}}
+- Second line MUST be exactly three dashes: ---
+- Then provide the incredibly clean, polished HTML (<h2>, <h3>, <p>, <ul>/<li>, <strong>, <em>, <blockquote>).
+- DO NOT wrap the output in ```html blocks or include <html>, <head>, or <body> tags. Just the raw HTML content.
+
+Here is the reporter's draft:
+=========================================
+{raw_response}
+=========================================
+
+Now, do your job as the Head Editor and output the finalized, publication-ready piece (under 2000 words)."""
+
+        try:
+            checker_response = call_gemini_api(
+                messages=[{"role": "user", "content": checker_prompt}],
+                model="gemini-3.1-pro-preview",
+                temperature=1.0,
+                use_google_search=True,
+                thinking_level="HIGH"
+            )
+            print(f"INFO: [Checker Phase] Editorial review complete.", file=sys.stderr)
+            
+            # Clean potential markdown wrapping from Gemini
+            if checker_response.startswith("```html"):
+                checker_response = checker_response[7:]
+            if checker_response.startswith("```"):
+                checker_response = checker_response[3:]
+            if checker_response.endswith("```"):
+                checker_response = checker_response[:-3]
+            
+            checker_response = checker_response.strip()
+            
+            lines = checker_response.split('\n')
+            for i, line in enumerate(lines):
+                line_stripped = line.strip()
+                if line_stripped.startswith('{') and '"title"' in line_stripped:
+                    try:
+                        title_data = json.loads(line_stripped)
+                        title = title_data.get('title', title)
+                        short_topic = title_data.get('short_topic', short_topic)
+                        # Find the separator and get content after it
+                        remaining = '\n'.join(lines[i+1:])
+                        if '---' in remaining:
+                            content_html = remaining.split('---', 1)[1].strip()
+                        else:
+                            content_html = remaining.strip()
+                        break
+                    except json.JSONDecodeError:
+                        pass
+        except Exception as e:
+            print(f"ERROR: Checker phase failed: {e}. Falling back to Maker draft.", file=sys.stderr)
+            lines = raw_response.split('\n')
+            for i, line in enumerate(lines):
+                line_stripped = line.strip()
+                if line_stripped.startswith('{') and '"title"' in line_stripped:
+                    try:
+                        title_data = json.loads(line_stripped)
+                        title = title_data.get('title', title)
+                        short_topic = title_data.get('short_topic', short_topic)
+                        # Find the separator and get content after it
+                        remaining = '\n'.join(lines[i+1:])
+                        if '---' in remaining:
+                            content_html = remaining.split('---', 1)[1].strip()
+                        else:
+                            content_html = remaining.strip()
+                        break
+                    except json.JSONDecodeError:
+                        pass
+        
+        # If no JSON header found, use full response as content
+        if content_html == raw_response:
+            # Try to extract a title from the first heading
+            import re
+            h_match = re.search(r'<h[12][^>]*>(.*?)</h[12]>', content_html)
+            if h_match:
+                title = re.sub(r'<[^>]+>', '', h_match.group(1)).strip()
+        
+        from datetime import datetime
+        blog_id = str(uuid.uuid4())[:8]
+        slug = generate_slug(title)
+        
+        # Ensure short_topic is set
+        if not short_topic:
+            # Fallback: truncate topic to max 10 words
+            words = topic.split()
+            short_topic = ' '.join(words[:10])
+        
+        # Ensure slug is unique
+        blogs = load_blogs()
+        existing_slugs = {b['slug'] for b in blogs}
+        original_slug = slug
+        counter = 1
+        while slug in existing_slugs:
+            slug = f"{original_slug}-{counter}"
+            counter += 1
+        
+        blog = {
+            'id': blog_id,
+            'title': title,
+            'slug': slug,
+            'topic': topic,
+            'article_type': article_type,
+            'short_topic': short_topic,
+            'content_html': content_html,
+            'status': 'draft',
+            'created_at': datetime.now().isoformat(),
+            'published_at': None,
+            'updated_at': datetime.now().isoformat(),
+            'suggestions': []
+        }
+        
+        blogs.insert(0, blog)
+        save_blogs(blogs)
+        
+        print(f"INFO: Blog generated — id={blog_id}, title={title}", file=sys.stderr)
+        
+        return jsonify({'success': True, 'blog': blog})
+    
+    except Exception as e:
+        print(f"ERROR: Blog generation failed: {e}", file=sys.stderr)
+        traceback.print_exc()
+        return jsonify({'error': f'Blog generation failed: {str(e)}'}), 500
+
+@app.route('/api/admin/blogs/<blog_id>', methods=['PUT'])
+def admin_update_blog(blog_id):
+    """Admin endpoint to update a blog post"""
+    user, err = check_admin_auth()
+    if err:
+        return err
+    
+    try:
+        data = request.get_json(force=True)
+        blogs = load_blogs()
+        
+        for blog in blogs:
+            if blog['id'] == blog_id:
+                if 'title' in data:
+                    blog['title'] = data['title'].strip()
+                    blog['slug'] = generate_slug(blog['title'])
+                if 'content_html' in data:
+                    blog['content_html'] = data['content_html']
+                from datetime import datetime
+                blog['updated_at'] = datetime.now().isoformat()
+                save_blogs(blogs)
+                return jsonify({'success': True, 'blog': blog})
+        
+        return jsonify({'error': 'Blog not found'}), 404
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/blogs/<blog_id>/publish', methods=['POST'])
+def admin_publish_blog(blog_id):
+    """Admin endpoint to publish a blog post"""
+    user, err = check_admin_auth()
+    if err:
+        return err
+    
+    blogs = load_blogs()
+    for blog in blogs:
+        if blog['id'] == blog_id:
+            from datetime import datetime
+            blog['status'] = 'published'
+            blog['published_at'] = datetime.now().isoformat()
+            blog['updated_at'] = datetime.now().isoformat()
+            save_blogs(blogs)
+            return jsonify({'success': True, 'blog': blog})
+    
+    return jsonify({'error': 'Blog not found'}), 404
+
+@app.route('/api/admin/blogs/<blog_id>/unpublish', methods=['POST'])
+def admin_unpublish_blog(blog_id):
+    """Admin endpoint to unpublish a blog post (revert to draft)"""
+    user, err = check_admin_auth()
+    if err:
+        return err
+    
+    blogs = load_blogs()
+    for blog in blogs:
+        if blog['id'] == blog_id:
+            from datetime import datetime
+            blog['status'] = 'draft'
+            blog['published_at'] = None
+            blog['updated_at'] = datetime.now().isoformat()
+            save_blogs(blogs)
+            return jsonify({'success': True, 'blog': blog})
+    
+    return jsonify({'error': 'Blog not found'}), 404
+
+@app.route('/api/admin/blogs/<blog_id>', methods=['DELETE'])
+def admin_delete_blog(blog_id):
+    """Admin endpoint to delete a blog post"""
+    user, err = check_admin_auth()
+    if err:
+        return err
+    
+    blogs = load_blogs()
+    original_count = len(blogs)
+    blogs = [b for b in blogs if b['id'] != blog_id]
+    
+    if len(blogs) == original_count:
+        return jsonify({'error': 'Blog not found'}), 404
+    
+    save_blogs(blogs)
+    return jsonify({'success': True})
+
+@app.route('/api/admin/blogs/<blog_id>/regenerate', methods=['POST'])
+def admin_regenerate_blog(blog_id):
+    """Admin endpoint to regenerate a blog with optional suggestion context"""
+    user, err = check_admin_auth()
+    if err:
+        return err
+    
+    try:
+        data = request.get_json(force=True)
+        suggestion = data.get('suggestion', '').strip()
+        
+        blogs = load_blogs()
+        target_blog = None
+        for blog in blogs:
+            if blog['id'] == blog_id:
+                target_blog = blog
+                break
+        
+        if not target_blog:
+            return jsonify({'error': 'Blog not found'}), 404
+        
+        instructions = """Act as a seasoned, witty, and investigative senior feature writer for a premium, new-age business publication (blend of 'The Ken' and 'YourStory'). You have access to real-time web search.
+
+You previously wrote a blog post on the topic below. The reader has provided feedback. Your job is to REWRITE and IMPROVE the article, incorporating the feedback while maintaining the same sharp, narrative-driven, data-anchored editorial style.
+
+Follow the same editorial guidelines:
+- Compelling narrative hook, conversational but authoritative tone, dry humor, punchy writing
+- Hard numbers anchored in real data (use web search for the latest)  
+- NO in-text citations or [1] markers — facts as truths in the narrative flow
+- "Sources & References:" section at the very bottom with URLs
+- ANTI-AI: No delve, tapestry, testament, landscape, beacon, robust, paramount, revolutionize, foster, "in conclusion"
+- Vary sentence lengths. Use em-dashes. Active voice. Strong verbs.
+
+OUTPUT FORMAT:
+- Start with: {"title": "Updated Article Title"}
+- Then ---
+- Then clean HTML (h2, h3, p, ul/li, strong, em, blockquote — no html/head/body/h1)
+- Sources & References section at the end."""
+
+        user_input = f"Original topic: {target_blog['topic']}\n"
+        if suggestion:
+            user_input += f"\nReader feedback to incorporate: {suggestion}\n"
+        user_input += f"\nPrevious article (first 800 chars for context): {target_blog['content_html'][:800]}..."
+        user_input += "\n\nRewrite the article with these improvements."
+        
+        print(f"INFO: [Maker Phase] Regenerating blog draft for topic: {target_blog['topic']}", file=sys.stderr)
+        raw_response = call_openai_responses_api(instructions, user_input, use_web_search=True)
+        
+        # --- MAKER-CHECKER: CHECKER PHASE ---
+        print(f"INFO: [Checker Phase] Sending regenerated draft to Gemini 3.1 Pro for editorial review...", file=sys.stderr)
+        
+        checker_prompt = f"""You are the sharp, rigorous, and brilliant Investigative Head Editor for our premium business publication (think the absolute best editors at 'The Ken' or 'Bloomberg Businessweek'). 
+You have Google Search grounding enabled.
+
+One of your senior reporters has just submitted a REWRITTEN draft blog post on the topic: "{target_blog['topic']}".
+The reader provided this specific feedback for the rewrite: "{suggestion}"
+
+Here are the exact editorial guidelines the reporter was given to write this piece. You must understand the spirit, tone, narrative styling, and structure of what we want, and enforce it:
+---
+{instructions}
+---
+
+YOUR JOB:
+1. Act as the checker/editor. You have the total power to edit, update, append, rewrite, or change any part of this blog.
+2. Ensure the reader's feedback has been adequately addressed.
+3. Use your search grounding to VERIFY the facts, timeline, and data points in the draft. If anything is wrong, outdated, or weak, FIX IT.
+4. Enhance the prose. If the draft sounds a bit "flat" or lacks that premium, punchy voice, rewrite those sections. Make the hook hit harder. Make the kicker more thought-provoking.
+5. Final Word Count: Limit the total word count of the final article to a maximum of 2000 words. Be concise and impactful.
+6. Ensure the structural rules from the guidelines are followed perfectly:
+   - NO in-text citations or footnotes (no [1] or hyperlink placeholders).
+   - "Sources & References:" section at the very bottom with a list of URLs used for fact-checking/research.
+   - Absolutely NONE of the banned AI words: delve, tapestry, testament, bustling, landscape, navigating the complexities, a symphony of, beacon, robust, dynamic, paramount, revolutionize, foster, "in conclusion".
+
+OUTPUT FORMAT:
+- First line MUST be a JSON object containing the finalized title AND a short topic label (max 10 words, tactical, concise, highlighting the key theme — NOT the full topic): {{"title": "The Final Masterpiece Title", "short_topic": "India's IT Services Crisis"}}
+- Second line MUST be exactly three dashes: ---
+- Then provide the incredibly clean, polished HTML (<h2>, <h3>, <p>, <ul>/<li>, <strong>, <em>, <blockquote>).
+- DO NOT wrap the output in ```html blocks or include <html>, <head>, or <body> tags. Just the raw HTML content.
+
+Here is the reporter's rewritten draft:
+=========================================
+{raw_response}
+=========================================
+
+Now, do your job as the Head Editor and output the finalized, publication-ready piece (under 2000 words)."""
+
+        title = target_blog['title']
+        content_html = raw_response
+        short_topic = target_blog.get('short_topic', '')
+
+        try:
+            checker_response = call_gemini_api(
+                messages=[{"role": "user", "content": checker_prompt}],
+                model="gemini-3.1-pro-preview",
+                temperature=1.0,
+                use_google_search=True,
+                thinking_level="HIGH"
+            )
+            print(f"INFO: [Checker Phase] Editorial review complete.", file=sys.stderr)
+            
+            # Clean potential markdown wrapping from Gemini
+            if checker_response.startswith("```html"):
+                checker_response = checker_response[7:]
+            if checker_response.startswith("```"):
+                checker_response = checker_response[3:]
+            if checker_response.endswith("```"):
+                checker_response = checker_response[:-3]
+            
+            checker_response = checker_response.strip()
+            
+            lines = checker_response.split('\n')
+            for i, line in enumerate(lines):
+                line_stripped = line.strip()
+                if line_stripped.startswith('{') and '"title"' in line_stripped:
+                    try:
+                        title_data = json.loads(line_stripped)
+                        title = title_data.get('title', title)
+                        short_topic = title_data.get('short_topic', short_topic)
+                        # Find the separator and get content after it
+                        remaining = '\n'.join(lines[i+1:])
+                        if '---' in remaining:
+                            content_html = remaining.split('---', 1)[1].strip()
+                        else:
+                            content_html = remaining.strip()
+                        break
+                    except json.JSONDecodeError:
+                        pass
+        except Exception as e:
+            print(f"ERROR: Checker phase failed: {e}. Falling back to Maker draft.", file=sys.stderr)
+            lines = raw_response.split('\n')
+            for i, line in enumerate(lines):
+                line_stripped = line.strip()
+                if line_stripped.startswith('{') and '"title"' in line_stripped:
+                    try:
+                        title_data = json.loads(line_stripped)
+                        title = title_data.get('title', title)
+                        short_topic = title_data.get('short_topic', short_topic)
+                        # Find the separator and get content after it
+                        remaining = '\n'.join(lines[i+1:])
+                        if '---' in remaining:
+                            content_html = remaining.split('---', 1)[1].strip()
+                        else:
+                            content_html = remaining.strip()
+                        break
+                    except json.JSONDecodeError:
+                        pass
+                        
+        if content_html == raw_response:
+            # Try to extract a title from the first heading if JSON parsing failed
+            import re
+            h_match = re.search(r'<h[12][^>]*>(.*?)</h[12]>', content_html)
+            if h_match:
+                title = re.sub(r'<[^>]+>', '', h_match.group(1)).strip()
+                content_html = content_html.replace(h_match.group(0), '', 1).strip()
+        
+        from datetime import datetime
+        target_blog['title'] = title
+        target_blog['content_html'] = content_html
+        target_blog['short_topic'] = short_topic
+        target_blog['updated_at'] = datetime.now().isoformat()
+        
+        save_blogs(blogs)
+        return jsonify({'success': True, 'blog': target_blog})
+    
+    except Exception as e:
+        print(f"ERROR: Blog regeneration failed: {e}", file=sys.stderr)
+        traceback.print_exc()
+        return jsonify({'error': f'Regeneration failed: {str(e)}'}), 500
+
+# --- Public Blog API Endpoints ---
+
+@app.route('/api/blogs', methods=['GET'])
+def public_list_blogs():
+    """Public endpoint to list published blog posts"""
+    blogs = load_blogs()
+    published = [
+        {
+            'id': b['id'],
+            'title': b['title'],
+            'slug': b['slug'],
+            'topic': b['topic'],
+            'article_type': b.get('article_type', 'general'),
+            'short_topic': b.get('short_topic', ''),
+            'excerpt': b['content_html'][:300].replace('<', ' ').replace('>', ' ').strip()[:200] + '...',
+            'published_at': b['published_at'],
+        }
+        for b in blogs if b.get('status') == 'published'
+    ]
+    return jsonify({'blogs': published, 'count': len(published)})
+
+@app.route('/api/blogs/<slug>', methods=['GET'])
+def public_get_blog(slug):
+    """Public endpoint to get a single published blog post"""
+    blogs = load_blogs()
+    for blog in blogs:
+        if blog['slug'] == slug and blog.get('status') == 'published':
+            return jsonify({
+                'blog': {
+                    'id': blog['id'],
+                    'title': blog['title'],
+                    'slug': blog['slug'],
+                    'topic': blog['topic'],
+                    'content_html': blog['content_html'],
+                    'published_at': blog['published_at'],
+                    'suggestions_count': len(blog.get('suggestions', []))
+                }
+            })
+    return jsonify({'error': 'Blog not found'}), 404
+
+@app.route('/api/blogs/<slug>/suggest', methods=['POST'])
+def public_suggest_blog(slug):
+    """Public endpoint to submit a suggestion for a blog post"""
+    try:
+        data = request.get_json(force=True)
+        suggestion_text = data.get('suggestion', '').strip()
+        
+        if not suggestion_text:
+            return jsonify({'error': 'Suggestion text is required'}), 400
+        
+        if len(suggestion_text) > 2000:
+            return jsonify({'error': 'Suggestion too long (max 2000 characters)'}), 400
+        
+        blogs = load_blogs()
+        for blog in blogs:
+            if blog['slug'] == slug and blog.get('status') == 'published':
+                from datetime import datetime
+                if 'suggestions' not in blog:
+                    blog['suggestions'] = []
+                blog['suggestions'].append({
+                    'text': suggestion_text,
+                    'submitted_at': datetime.now().isoformat()
+                })
+                save_blogs(blogs)
+                return jsonify({'success': True, 'message': 'Thank you for your suggestion!'})
+        
+        return jsonify({'error': 'Blog not found'}), 404
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# Blog page routes (public - no auth required)
+@app.route('/blog')
+def blog_listing_page():
+    return send_from_directory('.', 'blog.html')
+
+@app.route('/blog/<slug>')
+def blog_detail_page(slug):
+    return send_from_directory('.', 'blog.html')
+
 # Login page (public)
 @app.route('/login')
 def login_page():

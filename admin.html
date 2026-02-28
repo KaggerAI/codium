@@ -46,6 +46,10 @@
                         class="px-4 py-1.5 rounded-md text-sm font-medium transition-all text-slate-400 hover:text-white border-l border-slate-700 ml-1 pl-5">
                         📈 Insights
                     </button>
+                    <button onclick="switchTab('blog')" id="btn-tab-blog"
+                        class="px-4 py-1.5 rounded-md text-sm font-medium transition-all text-slate-400 hover:text-white border-l border-slate-700 ml-1 pl-5">
+                        📝 Blog
+                    </button>
                 </div>
                 <div class="flex items-center space-x-4">
                     <a href="/app" class="text-slate-400 hover:text-white transition-colors">← Back to App</a>
@@ -68,6 +72,10 @@
         <button onclick="switchTab('insights')" id="mobile-btn-tab-insights"
             class="flex-1 py-3 text-sm font-medium border-b-2 border-transparent text-slate-400">
             Insights
+        </button>
+        <button onclick="switchTab('blog')" id="mobile-btn-tab-blog"
+            class="flex-1 py-3 text-sm font-medium border-b-2 border-transparent text-slate-400">
+            Blog
         </button>
     </div>
 
@@ -321,12 +329,112 @@
                 </div>
             </div>
         </div>
+
+        <!-- Tab 4: Blog Management -->
+        <div id="tab-content-blog" class="hidden">
+            <!-- Generate New Blog -->
+            <div class="bg-slate-800/50 backdrop-blur-sm rounded-2xl p-6 border border-slate-700 mb-8">
+                <h2 class="text-xl font-bold mb-4">✍️ Generate New Blog Post</h2>
+                <p class="text-slate-400 text-sm mb-4">
+                    Enter a topic and GPT-5.2-pro with live web search will write a comprehensive, research-backed blog
+                    post.
+                </p>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-300 mb-2">Article Type</label>
+                        <select id="blog-article-type"
+                            class="w-full px-4 py-3 bg-slate-900/50 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value="general">📰 General Investigative Blog</option>
+                            <option value="needle">🔍 Needle in a Haystack</option>
+                            <option value="informative">📚 Informative Blog</option>
+                        </select>
+                        <p id="article-type-desc" class="text-xs text-slate-500 mt-1">Ken-style, Bloomberg-style
+                            investigative deep-dive on any topic.</p>
+                    </div>
+                    <textarea id="blog-topic" rows="3"
+                        placeholder="e.g., Impact of RBI's latest monetary policy on banking stocks in India"
+                        class="w-full px-4 py-3 bg-slate-900/50 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"></textarea>
+                    <button onclick="generateBlog()" id="generate-blog-btn"
+                        class="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 px-6 py-3 rounded-lg font-semibold transition-all flex items-center space-x-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M13 10V3L4 14h7v7l9-11h-7z" />
+                        </svg>
+                        <span>Generate with AI</span>
+                    </button>
+                    <div id="blog-generate-status" class="hidden p-4 rounded-lg border"></div>
+                </div>
+            </div>
+
+            <!-- Blog Posts List -->
+            <div class="bg-slate-800/50 backdrop-blur-sm rounded-2xl p-6 border border-slate-700">
+                <div class="flex items-center justify-between mb-6">
+                    <div class="flex items-center gap-3">
+                        <h2 class="text-xl font-bold">📄 All Blog Posts</h2>
+                        <span id="blog-count"
+                            class="px-2 py-1 bg-emerald-500/20 text-emerald-400 rounded-full text-xs font-medium">0</span>
+                    </div>
+                    <button onclick="loadBlogs()" class="text-slate-400 hover:text-white transition-colors text-sm">↻
+                        Refresh</button>
+                </div>
+
+                <div id="blogs-loading" class="text-center py-8 text-slate-400">Loading blogs...</div>
+                <div id="blogs-empty" class="hidden text-center py-12 text-slate-500">
+                    <div class="text-4xl mb-3">📝</div>
+                    <p>No blog posts yet. Generate your first one above!</p>
+                </div>
+                <div id="blogs-list" class="hidden space-y-4"></div>
+            </div>
+
+            <!-- Edit Blog Modal -->
+            <div id="blog-edit-modal"
+                class="hidden fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                <div
+                    class="bg-slate-800 rounded-2xl border border-slate-700 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+                    <div class="p-6">
+                        <div class="flex items-center justify-between mb-6">
+                            <h2 class="text-xl font-bold">Edit Blog Post</h2>
+                            <button onclick="closeEditModal()"
+                                class="text-slate-400 hover:text-white text-2xl">&times;</button>
+                        </div>
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-slate-300 mb-2">Title</label>
+                                <input type="text" id="edit-blog-title"
+                                    class="w-full px-4 py-3 bg-slate-900/50 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-300 mb-2">Content (HTML)</label>
+                                <textarea id="edit-blog-content" rows="20"
+                                    class="w-full px-4 py-3 bg-slate-900/50 border border-slate-600 rounded-lg text-white font-mono text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"></textarea>
+                            </div>
+                            <div class="flex gap-3">
+                                <button onclick="saveBlogEdits()"
+                                    class="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-lg font-semibold transition-all">
+                                    💾 Save Changes
+                                </button>
+                                <button onclick="closeEditModal()"
+                                    class="bg-slate-700 hover:bg-slate-600 px-6 py-3 rounded-lg font-semibold transition-all">
+                                    Cancel
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Suggestions Section -->
+                        <div id="edit-blog-suggestions" class="mt-6 hidden">
+                            <h3 class="text-lg font-bold mb-3">💬 Reader Suggestions</h3>
+                            <div id="suggestions-list" class="space-y-3"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </main>
 
     <script>
         // Tab Management
         function switchTab(tab) {
-            const tabs = ['users', 'cache', 'insights'];
+            const tabs = ['users', 'cache', 'insights', 'blog'];
             tabs.forEach(t => {
                 const content = document.getElementById(`tab-content-${t}`);
                 const btn = document.getElementById(`btn-tab-${t}`);
@@ -349,6 +457,8 @@
                 refreshPrecacheJobs();
             } else if (tab === 'insights') {
                 loadInsights();
+            } else if (tab === 'blog') {
+                loadBlogs();
             } else {
                 loadUsers();
                 loadContactRequests();
@@ -906,6 +1016,280 @@
 
             } catch (e) {
                 console.error("Failed to load insights", e);
+            }
+        }
+
+        // =====================================================================
+        // Blog Management Functions
+        // =====================================================================
+        let currentEditBlogId = null;
+
+        // Article type description updater
+        document.getElementById('blog-article-type')?.addEventListener('change', function () {
+            const desc = document.getElementById('article-type-desc');
+            const descs = {
+                'general': 'Ken-style, Bloomberg-style investigative deep-dive on any topic.',
+                'needle': 'Finds the rare company/companies that benefit most from a structural change.',
+                'informative': 'Pure information, no fluff — but still premium investigative narrative style.'
+            };
+            desc.textContent = descs[this.value] || '';
+        });
+
+        async function loadBlogs() {
+            const loading = document.getElementById('blogs-loading');
+            const empty = document.getElementById('blogs-empty');
+            const list = document.getElementById('blogs-list');
+            const countBadge = document.getElementById('blog-count');
+
+            loading.classList.remove('hidden');
+            list.classList.add('hidden');
+            empty.classList.add('hidden');
+
+            try {
+                const response = await fetch('/api/admin/blogs');
+                const data = await response.json();
+
+                if (response.status === 401) { window.location.href = '/login'; return; }
+                if (response.status === 403) { loading.textContent = 'Admin access required'; return; }
+
+                const blogs = data.blogs || [];
+                countBadge.textContent = blogs.length;
+
+                if (blogs.length === 0) {
+                    loading.classList.add('hidden');
+                    empty.classList.remove('hidden');
+                    return;
+                }
+
+                list.innerHTML = blogs.map(blog => {
+                    const statusBadge = blog.status === 'published'
+                        ? '<span class="px-2 py-1 bg-green-500/20 text-green-400 rounded text-xs font-medium">✅ Published</span>'
+                        : '<span class="px-2 py-1 bg-yellow-500/20 text-yellow-400 rounded text-xs font-medium">📝 Draft</span>';
+                    const suggestionsBadge = (blog.suggestions && blog.suggestions.length > 0)
+                        ? `<span class="px-2 py-1 bg-purple-500/20 text-purple-400 rounded text-xs font-medium">💬 ${blog.suggestions.length} suggestion${blog.suggestions.length > 1 ? 's' : ''}</span>`
+                        : '';
+                    const dateStr = blog.published_at
+                        ? `Published: ${formatDateTime(blog.published_at)}`
+                        : `Created: ${formatDateTime(blog.created_at)}`;
+
+                    return `
+                        <div class="p-5 bg-slate-900/50 rounded-xl border border-slate-700/50 hover:border-slate-600/50 transition-all">
+                            <div class="flex items-start justify-between gap-4">
+                                <div class="flex-1 min-w-0">
+                                    <h3 class="text-lg font-semibold text-white mb-2 truncate">${escapeHtml(blog.title)}</h3>
+                                    <p class="text-sm text-slate-400 mb-3">Topic: ${escapeHtml(blog.topic)}</p>
+                                    <div class="flex flex-wrap items-center gap-2 text-xs">
+                                        ${statusBadge}
+                                        ${suggestionsBadge}
+                                        <span class="text-slate-500">${dateStr}</span>
+                                        ${blog.status === 'published' ? `<a href="/blog/${blog.slug}" target="_blank" class="text-blue-400 hover:text-blue-300">🔗 View</a>` : ''}
+                                    </div>
+                                </div>
+                                <div class="flex items-center gap-2 flex-shrink-0">
+                                    <button onclick="editBlog('${blog.id}')" class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm transition-all" title="Edit">
+                                        ✏️ Edit
+                                    </button>
+                                    ${blog.status === 'draft'
+                            ? `<button onclick="publishBlog('${blog.id}')" class="px-3 py-1.5 bg-green-600/20 hover:bg-green-600/40 text-green-400 rounded-lg text-sm transition-all" title="Publish">
+                                            🚀 Publish
+                                        </button>`
+                            : `<button onclick="unpublishBlog('${blog.id}')" class="px-3 py-1.5 bg-yellow-600/20 hover:bg-yellow-600/40 text-yellow-400 rounded-lg text-sm transition-all" title="Unpublish">
+                                            ↩️ Unpublish
+                                        </button>`
+                        }
+                                    <button onclick="deleteBlog('${blog.id}', '${escapeHtml(blog.title).replace(/'/g, "\\'")}')"
+                                        class="px-3 py-1.5 bg-red-600/20 hover:bg-red-600/40 text-red-400 rounded-lg text-sm transition-all" title="Delete">
+                                        🗑️
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+
+                loading.classList.add('hidden');
+                list.classList.remove('hidden');
+            } catch (error) {
+                loading.textContent = 'Failed to load blogs';
+                console.error('Error loading blogs:', error);
+            }
+        }
+
+        async function generateBlog() {
+            const topic = document.getElementById('blog-topic').value.trim();
+            const articleType = document.getElementById('blog-article-type').value;
+            const btn = document.getElementById('generate-blog-btn');
+            const status = document.getElementById('blog-generate-status');
+
+            if (!topic) {
+                alert('Please enter a blog topic');
+                return;
+            }
+
+            btn.disabled = true;
+            btn.innerHTML = '<span class="animate-spin inline-block w-5 h-5 border-2 border-white border-t-transparent rounded-full mr-2"></span> Generating with GPT-5.2...';
+            status.classList.remove('hidden');
+            status.className = 'p-4 rounded-lg border bg-blue-500/20 border-blue-500/50 text-blue-300';
+            status.innerHTML = '⏳ Generating blog with AI + live web search... This may take 30-60 seconds.';
+
+            try {
+                const response = await fetch('/api/admin/blogs/generate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ topic, article_type: articleType })
+                });
+                const data = await response.json();
+
+                if (response.ok && data.success) {
+                    status.className = 'p-4 rounded-lg border bg-green-500/20 border-green-500/50 text-green-300';
+                    status.innerHTML = `✅ Blog generated: <strong>${escapeHtml(data.blog.title)}</strong><br><small>Status: Draft — review and publish when ready.</small>`;
+                    document.getElementById('blog-topic').value = '';
+                    loadBlogs();
+                } else if (data.declined) {
+                    status.className = 'p-4 rounded-lg border bg-amber-500/20 border-amber-500/50 text-amber-300';
+                    status.innerHTML = `${data.error}<br><small>Try a different or more specific topic.</small>`;
+                } else {
+                    status.className = 'p-4 rounded-lg border bg-red-500/20 border-red-500/50 text-red-300';
+                    status.innerHTML = `❌ Error: ${data.error || 'Unknown error'}`;
+                }
+            } catch (error) {
+                status.className = 'p-4 rounded-lg border bg-red-500/20 border-red-500/50 text-red-300';
+                status.innerHTML = `❌ Network error: ${error.message}`;
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = `<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg><span>Generate with AI</span>`;
+            }
+        }
+
+        async function editBlog(blogId) {
+            try {
+                const response = await fetch('/api/admin/blogs');
+                const data = await response.json();
+                const blog = (data.blogs || []).find(b => b.id === blogId);
+                if (!blog) { alert('Blog not found'); return; }
+
+                currentEditBlogId = blogId;
+                document.getElementById('edit-blog-title').value = blog.title;
+                document.getElementById('edit-blog-content').value = blog.content_html;
+
+                // Show suggestions if any
+                const suggestionsSection = document.getElementById('edit-blog-suggestions');
+                const suggestionsList = document.getElementById('suggestions-list');
+                if (blog.suggestions && blog.suggestions.length > 0) {
+                    suggestionsSection.classList.remove('hidden');
+                    suggestionsList.innerHTML = blog.suggestions.map((s, idx) => `
+                        <div class="p-3 bg-slate-900/50 rounded-lg border border-slate-700/50">
+                            <p class="text-sm text-slate-300 mb-2">${escapeHtml(s.text)}</p>
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs text-slate-500">${formatDateTime(s.submitted_at)}</span>
+                                <button onclick="regenerateWithSuggestion('${blogId}', ${idx})"
+                                    class="text-xs px-3 py-1 bg-purple-600/20 hover:bg-purple-600/40 text-purple-400 rounded-lg transition-all">
+                                    🔄 Regenerate with this feedback
+                                </button>
+                            </div>
+                        </div>
+                    `).join('');
+                } else {
+                    suggestionsSection.classList.add('hidden');
+                }
+
+                document.getElementById('blog-edit-modal').classList.remove('hidden');
+            } catch (error) {
+                alert('Failed to load blog for editing');
+            }
+        }
+
+        function closeEditModal() {
+            document.getElementById('blog-edit-modal').classList.add('hidden');
+            currentEditBlogId = null;
+        }
+
+        async function saveBlogEdits() {
+            if (!currentEditBlogId) return;
+
+            const title = document.getElementById('edit-blog-title').value.trim();
+            const content_html = document.getElementById('edit-blog-content').value;
+
+            if (!title) { alert('Title is required'); return; }
+
+            try {
+                const response = await fetch(`/api/admin/blogs/${currentEditBlogId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title, content_html })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    closeEditModal();
+                    loadBlogs();
+                } else {
+                    alert('Error: ' + (data.error || 'Failed to save'));
+                }
+            } catch (error) {
+                alert('Network error saving blog');
+            }
+        }
+
+        async function publishBlog(blogId) {
+            if (!confirm('Publish this blog? It will be visible at /blog')) return;
+            try {
+                const response = await fetch(`/api/admin/blogs/${blogId}/publish`, { method: 'POST' });
+                const data = await response.json();
+                if (data.success) { loadBlogs(); } else { alert('Error: ' + data.error); }
+            } catch (error) { alert('Network error'); }
+        }
+
+        async function unpublishBlog(blogId) {
+            if (!confirm('Unpublish this blog? It will revert to draft.')) return;
+            try {
+                const response = await fetch(`/api/admin/blogs/${blogId}/unpublish`, { method: 'POST' });
+                const data = await response.json();
+                if (data.success) { loadBlogs(); } else { alert('Error: ' + data.error); }
+            } catch (error) { alert('Network error'); }
+        }
+
+        async function deleteBlog(blogId, title) {
+            if (!confirm(`Delete blog "${title}"? This cannot be undone.`)) return;
+            try {
+                const response = await fetch(`/api/admin/blogs/${blogId}`, { method: 'DELETE' });
+                const data = await response.json();
+                if (data.success) { loadBlogs(); } else { alert('Error: ' + data.error); }
+            } catch (error) { alert('Network error'); }
+        }
+
+        async function regenerateWithSuggestion(blogId, suggestionIdx) {
+            try {
+                const response = await fetch('/api/admin/blogs');
+                const data = await response.json();
+                const blog = (data.blogs || []).find(b => b.id === blogId);
+                if (!blog || !blog.suggestions[suggestionIdx]) return;
+
+                const suggestion = blog.suggestions[suggestionIdx].text;
+                if (!confirm(`Regenerate blog with suggestion:\n"${suggestion.substring(0, 100)}..."?`)) return;
+
+                closeEditModal();
+                const status = document.getElementById('blog-generate-status');
+                status.classList.remove('hidden');
+                status.className = 'p-4 rounded-lg border bg-blue-500/20 border-blue-500/50 text-blue-300';
+                status.innerHTML = '🔄 Regenerating blog with feedback... This may take 30-60 seconds.';
+
+                const regenResponse = await fetch(`/api/admin/blogs/${blogId}/regenerate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ suggestion })
+                });
+                const regenData = await regenResponse.json();
+
+                if (regenData.success) {
+                    status.className = 'p-4 rounded-lg border bg-green-500/20 border-green-500/50 text-green-300';
+                    status.innerHTML = `✅ Blog regenerated: <strong>${escapeHtml(regenData.blog.title)}</strong>`;
+                    loadBlogs();
+                } else {
+                    status.className = 'p-4 rounded-lg border bg-red-500/20 border-red-500/50 text-red-300';
+                    status.innerHTML = `❌ Error: ${regenData.error}`;
+                }
+            } catch (error) {
+                alert('Regeneration failed: ' + error.message);
             }
         }
     </script>
