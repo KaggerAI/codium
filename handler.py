@@ -1116,27 +1116,34 @@ def admin_generate_blog():
         
         # --- SHARED EDITORIAL DNA ---
         shared_style = """1. NARRATIVE STYLE & TONE:
-- Write like a sharp, investigative reporter telling a fascinating story. The tone should be conversational, confident, and clear — a smart friend explaining something complex over coffee.
-- Open with the single most surprising, important, or intriguing fact from your research. No metaphors, no proverbs — just the most compelling piece of reality.
-- Every paragraph should flow naturally into the next. The reader should never wonder "why am I reading this now?" Each section should end by setting up what comes next.
-- DO NOT use idioms, proverbs, or forced metaphors. Write in plain, direct English. If a 25-year-old MBA student cannot understand a sentence on first read, rewrite it simpler.
-- This should read like a detective story: you present evidence, connect the dots, and build toward a conclusion that feels inevitable."""
+- Write like a sharp, experienced business journalist who explains complex things clearly. Your tone is confident, conversational, and authoritative — like you're explaining something fascinating to a smart friend over coffee.
+- DO NOT use idioms, proverbs, metaphors, or figurative language. Write in plain, direct English. If a sentence would confuse a 25-year-old MBA student on first read, rewrite it simpler.
+- Open with the single most surprising, important, or counter-intuitive FACT you found in your research. Not a metaphor. Not a proverb. A real fact that makes the reader think "wait, really?"
+- Your job is to make the STORY fascinating, not the WRITING clever. The story should carry itself."""
 
-        shared_data = """DATA & QUANTIFICATION:
-- Ground every claim in specific numbers. Never say "massive growth" — say "revenue grew from $2M to $15M in 18 months."
-- Use percentages, timelines, valuation multiples, and market sizes. Let the numbers do the convincing — they are more powerful than any adjective."""
+        shared_flow = """2. FLOW & TRANSITIONS (CRITICAL):
+- The article must read like a detective story. Each section naturally sets up the next one, building toward a conclusion that feels inevitable.
+- End each section with a sentence that creates a bridge to the next section. The reader should never feel a jarring jump between topics.
+- Use this mental model: "Here's what happened → Here's why it happened → Here's what it means → Here's what comes next."
+- DO NOT use transition phrases like "Let's now turn to..." or "Speaking of which..." or "But that's not all." Instead, let the logic of the story create the transitions naturally."""
 
-        shared_sourcing = """SOURCING RULES:
+        shared_data = """3. DATA & EVIDENCE:
+- Every major claim must be backed by a specific number, date, or verifiable fact. Not "revenues grew significantly" but "revenues hit ₹4,200 crore in FY24, up 34% from the previous year."
+- Weave numbers INTO the narrative — don't dump them in a separate paragraph. The data should feel like natural evidence supporting your story, not a data sheet.
+- Use comparisons to make numbers meaningful: "That's roughly the GDP of Goa" or "enough to fill 12 Olympic swimming pools" — but only when the comparison genuinely helps comprehension, not for style points."""
+
+        shared_sourcing = """4. SOURCING RULES:
 - DO NOT use in-text citations, footnotes, [1], or hyperlink placeholders anywhere in the main body. 
-- State facts directly and confidently (e.g., "Profits fell 40% last quarter" — not "According to Bloomberg, profits fell...").
-- At the very bottom, create a "Sources & References:" section listing the URLs and names of sources you used. Every claim must be truthful."""
+- State facts as truths within the narrative (e.g., "Profits dropped 40% last quarter" — NOT "According to Bloomberg, profits dropped...").
+- At the very bottom, create a "Sources & References:" section listing the URLs and names of the real-world sources you used. The article must be entirely truthful."""
 
-        shared_anti_ai = """ANTI-AI & CLARITY DIRECTIVES (CRITICAL):
-- BANNED WORDS/PHRASES: delve, tapestry, testament, bustling, landscape, navigating the complexities, a symphony of, beacon, robust, dynamic, paramount, revolutionize, foster, "in conclusion", "in today's world", "it's worth noting", "at the end of the day".
-- BANNED PATTERNS: idioms, proverbs, forced metaphors, rhetorical questions as section openers, starting sentences with "Imagine this:" or "Picture this:".
-- Vary sentence lengths. Short sentences for impact. Longer ones for explanation. Use em-dashes (—) sparingly for asides.
-- Active voice. Strong verbs. Specific nouns. Clear cause-and-effect reasoning.
-- READABILITY TEST: Every sentence should be immediately understandable. If it sounds "writerly" or clever but unclear, simplify it."""
+        shared_anti_ai = """5. CLARITY RULES (CRITICAL — READ CAREFULLY):
+- DO NOT use idioms or proverbs. No "Rome wasn't built in a day", no "the winds of change", no "a rising tide lifts all boats." Write direct statements instead.
+- DO NOT use forced metaphors or analogies unless they genuinely help explain something complex. If you wouldn't use the metaphor in a boardroom presentation, don't use it here.
+- DO NOT use these overused AI words/phrases: delve, tapestry, testament, bustling, landscape, navigating the complexities, a symphony of, beacon, robust, dynamic, paramount, revolutionize, foster, "in conclusion", "in the ever-evolving", "stands as a", "poised to".
+- Vary sentence lengths. Mix short punchy sentences with longer explanatory ones. Use em-dashes (—) sparingly for emphasis.
+- Active voice. Strong verbs. Specific nouns. Plain language.
+- CLARITY TEST: After writing each paragraph, ask yourself — "Would a smart reader understand this on the first read without re-reading?" If not, simplify."""
 
         shared_output = """OUTPUT FORMAT:
 - Start your response with a JSON line containing the article title: {"title": "Your Article Title Here"}
@@ -1149,26 +1156,32 @@ Now, execute your search and write the article."""
 
         # --- ARTICLE TYPE SPECIFIC PROMPTS ---
         if article_type == 'needle':
-            instructions = f"""You are an investigative business journalist and equity analyst. You have access to real-time web search. Your task is to write a "Needle in a Haystack" article — find the rare, under-the-radar company (or rare few) that will benefit the most from a specific structural change.
+            instructions = f"""You are an experienced investigative business journalist and equity research analyst. You have access to real-time web search.
+
+Your task is to write a "Needle in a Haystack" article. The admin has provided a topic describing a regulatory, economic, demographic, or structural change. Your job is to:
+1. Research this change deeply using web search.
+2. Identify the RARE company (or rare few companies) that will benefit the MOST from this change. NOT the obvious large-cap names. Dig into under-the-radar mid-cap or small-cap companies with a structural edge.
+3. Build a clear, evidence-based narrative explaining WHY these companies are uniquely positioned.
 
 THINK DEEPLY: Use the highest level of reasoning effort to analyze your research before writing.
 
 STEP 1: AUTONOMOUS RESEARCH
-Search for the most recent news, financial data, policy documents, and analyses on this topic. Specifically look for lesser-known mid-cap or small-cap companies with outsized exposure to this change. Do NOT pick the obvious large-cap names.
+Use your web search to find the latest news, financial data, policy documents, and analyses on this topic. Specifically research which lesser-known companies have the most direct exposure to this change.
 
-STEP 2: WRITE THE ARTICLE
-Write a clear, evidence-driven article that reads like a detective uncovering a hidden opportunity:
+STEP 2: DRAFT THE ARTICLE
+Write the article following these editorial guidelines:
 
 {shared_style}
 
-2. STRUCTURE & FLOW:
-- Opening: Start with the specific change/event and why it matters. State the most compelling fact upfront.
-- The Big Picture: Explain the structural shift — what changed, who it affects, and why most people are looking in the wrong place.
-- The Discovery: Introduce the company/companies you found. This is the heart of the article. Explain exactly WHY they are uniquely positioned — their moat, supply chain advantage, regulatory positioning, capacity, or financial edge.
-- The Evidence: Back up every claim with hard numbers — revenue exposure, capacity utilization, order books, margin profiles, valuations relative to peers.
-- The Implication: What happens if your thesis plays out? What would the reader miss if they ignored this? Do NOT give buy/sell recommendations — frame it as "this is where informed capital is likely to flow."
+{shared_flow}
 
-STORY FLOW RULE: End each section with a sentence that naturally transitions to the next. The reader should feel pulled forward, not jolted between topics.
+STRUCTURE (follow this story arc):
+- Open with the single most important fact about this change — the number or event that makes it real and urgent.
+- Explain the change clearly: what happened, why it matters, and how big the opportunity is. Use specific numbers.
+- Set the scene: briefly describe who the obvious players are, and why the market is looking at the wrong companies.
+- Reveal the needle(s): introduce the specific company/companies you found. Explain their edge with hard evidence — revenue exposure, supply chain position, regulatory advantage, capacity, order books, margin profiles.
+- Show the math: back up your thesis with financial data and valuations. Make it concrete.
+- Close with a forward-looking statement about what to watch for next. Do NOT give buy/sell recommendations.
 
 {shared_data}
 
@@ -1179,28 +1192,30 @@ STORY FLOW RULE: End each section with a sentence that naturally transitions to 
 {shared_output}"""
 
         elif article_type == 'informative':
-            instructions = f"""You are a senior business journalist known for making complex topics deeply understandable. You have access to real-time web search. Your task is to write a comprehensive, information-dense article that leaves the reader genuinely more knowledgeable.
+            instructions = f"""You are an experienced, deeply knowledgeable business journalist. You have access to real-time web search.
 
-This is an INFORMATIVE article — every paragraph must add real information. No filler, no speculation, no hypothetical scenarios.
+Your task is to write a comprehensive, informative article about the topic provided. This is a PURE INFORMATION article — every paragraph must teach the reader something concrete. No fluff, no speculation, no hypothetical scenarios.
 
 THINK DEEPLY: Use the highest level of reasoning effort to analyze your research before writing.
 
 STEP 1: AUTONOMOUS RESEARCH
-Search exhaustively for the most recent news, financial data, regulatory filings, expert analyses, and industry reports on this topic.
+Use your web search to find the latest news, financial data, regulatory filings, expert opinions, and deep analyses on this topic. Be exhaustive — the value of this article is in its completeness and accuracy.
 
-STEP 2: WRITE THE ARTICLE
-Write a clear, structured article that explains the topic like the best explainer journalism:
+STEP 2: DRAFT THE ARTICLE
+Write the article following these editorial guidelines:
 
 {shared_style}
 
-2. STRUCTURE & FLOW:
-- Opening: Lead with the single most important or surprising fact. Why should the reader care about this topic right now?
-- The Background: Provide essential context — history, key players, regulatory framework, market dynamics. Assume the reader is intelligent but new to this domain.
-- The Mechanics: Break down how things actually work. Explain the processes, the money flows, the competitive dynamics. Use specific examples and numbers.
-- The Stakes: What does this mean in practice? Who wins, who loses, and what changes? Be specific about real-world consequences.
-- The Takeaway: End with the single clearest insight — the one thing the reader should remember.
+{shared_flow}
 
-DENSITY RULE: Every paragraph must teach the reader something specific they didn't know. If a paragraph is just filler or transition, cut it and merge the surrounding paragraphs.
+STRUCTURE (follow this logical flow):
+- Open with the most important or surprising fact about this topic. Set the stakes immediately — why should the reader care about this RIGHT NOW?
+- Provide context: the history, key stakeholders, regulatory framework, and market dynamics. Assume the reader is smart but may not know this domain. Build understanding step by step.
+- Deep dive: break down the mechanics clearly. Cover the financial, regulatory, competitive, and strategic dimensions. Each paragraph should build on the previous one.
+- Real-world implications: what does this mean for businesses, investors, consumers, or the industry? Be specific and actionable.
+- Close with the single most important takeaway — the one thing the reader should remember.
+
+Keep everything grounded in verified facts and real data. The article should feel like a briefing document that also happens to be a pleasure to read.
 
 {shared_data}
 
@@ -1210,27 +1225,28 @@ DENSITY RULE: Every paragraph must teach the reader something specific they didn
 
 {shared_output}"""
 
-        else:  # 'general' — investigative blog
-            instructions = f"""You are a senior investigative business journalist. You have access to real-time web search. Your task is to write an engaging, well-researched article that tells a compelling story about the topic provided.
+        else:  # 'general' — the original investigative blog
+            instructions = f"""You are an experienced investigative business journalist. You have access to real-time web search.
 
-THINK DEEPLY: Use the highest level of reasoning effort to critically analyze the topic and research before writing.
+Your task is to write an engaging, long-form investigative article about the topic provided.
+THINK DEEPLY: You must use the highest level of reasoning effort to critically analyze the topic and web search results before drafting.
 
 STEP 1: AUTONOMOUS RESEARCH
-Search for the most recent and relevant news, financial data, and deep analyses on this topic. Find the angles that others miss.
+Use your web search to find the latest and most relevant news, financial data, and analyses on this topic. Look for the angles that aren't obvious — the hidden connections, the surprising data points, the untold parts of the story.
 
-STEP 2: WRITE THE ARTICLE
-Write an article that reads like a story — the reader follows you through a chain of evidence, and the conclusion feels earned:
+STEP 2: DRAFT THE ARTICLE
+Write the article following these editorial guidelines:
 
 {shared_style}
 
-2. STRUCTURE & FLOW:
-- Opening: Start with the most interesting fact, event, or contradiction you found. Drop the reader straight into the action.
-- The Setup: What is the situation? Who are the key players? What is at stake? Set the stage clearly so every reader is on the same page.
-- The Deep Dive: Break down the business model, the strategy, or the history. Explain complex things simply — but never dumb them down.
-- Connecting the Dots: This is where you show the reader something they haven't seen. Connect two or three pieces of evidence to reveal a pattern, a risk, or an opportunity that isn't obvious on the surface. This should feel like an "aha" moment, not a tangent.
-- The Kicker: End with a forward-looking question or observation that makes the reader think. Not a summary — a genuine open question about what happens next.
+{shared_flow}
 
-STORY FLOW RULE: The article should read like one continuous narrative, not a collection of separate sections. Each paragraph should logically lead to the next. If you remove a section heading and the article still flows, you've done it right.
+STRUCTURE (follow this story arc):
+- Open with the most surprising or counter-intuitive fact you found. Make the reader lean in.
+- Establish the central question or tension: what is the conflict, the paradox, or the big reveal? Why should the reader care?
+- Build the case: break down the business model, strategy, or history piece by piece. Each section should add one clear insight that the reader didn't have before.
+- Connect the dots: show how the individual facts and data points fit together into a bigger picture. This is where the article earns its keep — the reader should have an "aha" moment where everything clicks.
+- Close with a forward-looking question or insight that leaves the reader thinking. Not a summary — a genuine provocation about what comes next.
 
 {shared_data}
 
@@ -1279,25 +1295,25 @@ STORY FLOW RULE: The article should read like one continuous narrative, not a co
                 blog_jobs[job_id]['phase'] = 'editor'
                 print(f"INFO: [Job {job_id}] [Checker Phase] Sending draft to Gemini 3.1 Pro...", file=sys.stderr)
                 
-                checker_prompt = f"""You are the Head Editor at a premium business publication. A reporter has filed the article below. Your job is to edit it into the best possible version before publication.
+                checker_prompt = f"""You are the Head Editor at a premium business publication. A reporter has filed a draft. Your job is to edit it into a clear, compelling, well-structured article.
 
-YOUR EDITORIAL PRIORITIES (in order):
+EDITORIAL STANDARDS:
+- The article should read like a detective story: each section flows naturally into the next, building toward a conclusion that feels inevitable.
+- Every sentence must be clear on first read. If a paragraph requires re-reading to understand, rewrite it in simpler language.
+- NO idioms, proverbs, or forced metaphors. Replace any you find with direct statements. Example: "Rome wasn't built in a day" → "This transformation will take years."
+- NO overused AI words: delve, tapestry, testament, bustling, landscape, navigating the complexities, a symphony of, beacon, robust, dynamic, paramount, revolutionize, foster, "in conclusion", "in the ever-evolving", "stands as a", "poised to".
 
-1. CLARITY FIRST: Strip out ANY idioms, proverbs, forced metaphors, or "clever" phrases that obscure meaning. Replace them with direct, clear language. If a sentence sounds like it's trying too hard to be clever, rewrite it plainly.
-
-2. STORY FLOW: Read the article as one continuous narrative. Does each paragraph naturally lead to the next? If any section feels disconnected or jarring, add a bridging sentence or restructure the order. Remove section breaks that interrupt the flow.
-
-3. FACT-CHECK: Verify all claims, numbers, dates, and company details using Google Search. Correct any errors. Add important missing data points.
-
-4. CUT FILLER: Every paragraph must earn its place. If a paragraph doesn't add new information or advance the narrative, delete it. Target: under 2000 words.
-
-5. READABILITY: Every sentence should be understandable on first read by a smart non-expert. If you have to re-read a sentence to understand it, rewrite it.
-
-6. BANNED: delve, tapestry, testament, bustling, landscape, navigating the complexities, a symphony of, beacon, robust, dynamic, paramount, revolutionize, foster, "in conclusion", "in today's world", "it's worth noting", "at the end of the day". Also banned: idioms, proverbs, rhetorical questions as openers, "Imagine this:", "Picture this:".
+YOUR EDITING MANDATE:
+1. FACT-CHECK: Verify all claims, numbers, dates using Google Search. Fix any errors.
+2. CLARITY: Rewrite any confusing or overly clever passages in plain language. The reader should never have to decode what you mean.
+3. FLOW: Ensure each section ends by naturally setting up the next one. Fix any jarring transitions.
+4. ENHANCE: If the reporter missed important data points or recent developments, add them.
+5. WORD COUNT: Under 2000 words. Cut aggressively — every sentence must earn its place.
+6. STRIP IDIOMS: Find and replace ALL idioms, proverbs, and figurative language with direct, factual statements.
 
 OUTPUT FORMAT:
-- First line MUST be a JSON object: {{"title": "Final Title", "short_topic": "Concise Theme (max 10 words)"}}
-- Second line: ---
+- First line MUST be a JSON object: {{"title": "Clear Descriptive Title", "short_topic": "Max 10 Word Theme Label"}}
+- Second line MUST be exactly: ---
 - Then clean HTML (<h2>, <h3>, <p>, <ul>/<li>, <strong>, <em>, <blockquote>).
 - NO ```html blocks, no <html>/<head>/<body> tags.
 
@@ -1306,7 +1322,7 @@ Reporter's draft:
 {raw_response}
 =========================================
 
-Edit this into a clear, flowing, publication-ready article (under 2000 words)."""
+Edit this into a publication-ready piece (under 2000 words). Prioritize CLARITY over cleverness."""
 
                 try:
                     checker_response = call_gemini_api(
@@ -1541,16 +1557,17 @@ def admin_regenerate_blog(blog_id):
         
         def _do_regenerate():
             try:
-                instructions = """You are a senior investigative business journalist. You have access to real-time web search. You previously wrote an article on the topic below. A reader has provided feedback. Rewrite and improve the article based on this feedback.
+                instructions = """You are an experienced investigative business journalist. You have access to real-time web search.
 
-EDITORIAL GUIDELINES:
-- Write clearly and directly. Each paragraph should flow naturally into the next, like telling a story.
-- Ground every claim in specific numbers from your web research.
-- NO idioms, proverbs, or forced metaphors. Plain, direct English.
-- NO in-text citations or [1] markers — state facts confidently.
-- "Sources & References:" section at the bottom with URLs.
-- BANNED: delve, tapestry, testament, landscape, beacon, robust, paramount, revolutionize, foster, "in conclusion", idioms, proverbs.
-- Active voice. Strong verbs. Vary sentence lengths.
+You previously wrote a blog post on the topic below. A reader has provided feedback. Your job is to REWRITE and IMPROVE the article, incorporating the feedback while maintaining clear, evidence-based storytelling.
+
+Follow these editorial guidelines:
+- Write in plain, direct language. NO idioms, proverbs, or forced metaphors.
+- Conversational but authoritative tone — like explaining something to a smart friend.
+- Hard numbers anchored in real data (use web search for the latest).
+- Each section should flow naturally into the next, like a detective story building toward a conclusion.
+- NO in-text citations. State facts as truths. "Sources & References:" section at the bottom with URLs.
+- NO banned AI words: delve, tapestry, testament, landscape, beacon, robust, paramount, revolutionize, foster, "in conclusion", "poised to".
 
 OUTPUT FORMAT:
 - Start with: {"title": "Updated Article Title"}
@@ -1571,26 +1588,21 @@ OUTPUT FORMAT:
                 blog_jobs[job_id]['phase'] = 'editor'
                 print(f"INFO: [Job {job_id}] [Checker Phase] Sending regenerated draft to Gemini...", file=sys.stderr)
                 
-                checker_prompt = f"""You are the Head Editor at a premium business publication. A reporter has rewritten an article based on reader feedback. Your job is to edit it into the best possible version.
+                checker_prompt = f"""You are the Head Editor at a premium business publication. A reporter has rewritten an article based on reader feedback. Your job is to edit it for clarity, accuracy, and flow.
 
-READER FEEDBACK that was addressed: "{suggestion}"
+READER FEEDBACK that was incorporated: "{suggestion}"
 
-YOUR EDITORIAL PRIORITIES (in order):
-
-1. CLARITY FIRST: Strip out ANY idioms, proverbs, forced metaphors, or "clever" phrases. Replace with direct, clear language.
-
-2. STORY FLOW: Does each paragraph naturally lead to the next? Fix any disconnected or jarring transitions.
-
-3. FACT-CHECK: Verify claims using Google Search. Correct errors. Add missing data.
-
-4. CUT FILLER: Every paragraph must earn its place. Target: under 2000 words.
-
-5. READABILITY: Every sentence understandable on first read by a smart non-expert.
-
-6. BANNED: delve, tapestry, testament, bustling, landscape, navigating the complexities, a symphony of, beacon, robust, dynamic, paramount, revolutionize, foster, "in conclusion", idioms, proverbs, "Imagine this:", "Picture this:".
+YOUR EDITING MANDATE:
+1. FACT-CHECK: Verify all claims, numbers, dates using Google Search. Fix errors.
+2. CLARITY: Rewrite any confusing or overly clever passages in plain language. The reader should never have to decode what you mean.
+3. FLOW: Ensure the article reads like a story — each section naturally leads to the next.
+4. STRIP IDIOMS: Find and replace ALL idioms, proverbs, and figurative language with direct, factual statements.
+5. ENHANCE: Add missing data points or recent developments.
+6. WORD COUNT: Under 2000 words.
+7. NO banned AI words: delve, tapestry, testament, bustling, landscape, navigating the complexities, a symphony of, beacon, robust, dynamic, paramount, revolutionize, foster, "in conclusion", "poised to", "in the ever-evolving".
 
 OUTPUT FORMAT:
-- First line: {{"title": "Final Title", "short_topic": "Concise Theme (max 10 words)"}}
+- First line: {{"title": "Clear Title", "short_topic": "Max 10 Word Theme"}}
 - Second line: ---
 - Then clean HTML (<h2>, <h3>, <p>, <ul>/<li>, <strong>, <em>, <blockquote>).
 - NO ```html blocks, no <html>/<head>/<body> tags.
@@ -1600,7 +1612,8 @@ Reporter's rewritten draft:
 {raw_response}
 =========================================
 
-Edit this into a clear, flowing, publication-ready article (under 2000 words)."""
+Edit this into a publication-ready piece (under 2000 words). Prioritize CLARITY over cleverness."""
+
 
                 title = target_blog['title']
                 content_html = raw_response
