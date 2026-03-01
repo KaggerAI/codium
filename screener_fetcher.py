@@ -31,8 +31,10 @@ GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 genai_client = None
 if GOOGLE_API_KEY:
     try:
-        genai_client = genai.Client(api_key=GOOGLE_API_KEY)
-        print("INFO: (screener_fetcher) Google GenAI client initialized.")
+        import httpx
+        timeout = httpx.Timeout(300.0, connect=30.0)
+        genai_client = genai.Client(api_key=GOOGLE_API_KEY, http_options={'timeout': timeout})
+        print("INFO: (screener_fetcher) Google GenAI client initialized with 300s timeout.")
     except Exception as e:
         print(f"ERROR: (screener_fetcher) Failed to initialize Google GenAI client: {e}")
 else:

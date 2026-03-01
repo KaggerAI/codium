@@ -1015,7 +1015,10 @@ def call_openai_responses_api(instructions, user_input, use_web_search=True, mod
         raise ValueError("OpenAI API key is not configured.")
     
     try:
-        client = openai.OpenAI()
+        import httpx
+        # Add a 300-second timeout to prevent indefinite hangs on Azure
+        timeout = httpx.Timeout(300.0, connect=30.0)
+        client = openai.OpenAI(timeout=timeout)
         
         tools = []
         if use_web_search:
@@ -2284,8 +2287,10 @@ GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 genai_client = None
 if GOOGLE_API_KEY:
     try:
-        genai_client = genai.Client(api_key=GOOGLE_API_KEY)
-        print("INFO: Google GenAI (v1.0+) client initialized.")
+        import httpx
+        timeout = httpx.Timeout(300.0, connect=30.0)
+        genai_client = genai.Client(api_key=GOOGLE_API_KEY, http_options={'timeout': timeout})
+        print("INFO: Google GenAI (v1.0+) client initialized with 300s timeout.")
     except Exception as e:
         print(f"ERROR: Failed to initialize Google GenAI client: {e}")
 
