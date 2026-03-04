@@ -996,26 +996,17 @@ def generate_slug(title):
     slug = slug.strip('-')
     return slug[:80]  # Limit length
 
-def call_openai_responses_api(instructions, user_input, use_web_search=True, model="gpt-5.2-pro"):
+def call_openai_responses_api(instructions, user_input, use_web_search=True, model="gpt-5.2"):
     """
     Call OpenAI Responses API with optional web search.
-    This uses the newer Responses API (not Chat Completions) which supports
-    built-in web search via the web_search_preview tool.
-    
-    Args:
-        instructions: System-level instructions (like system prompt)
-        user_input: The user's input/question
-        use_web_search: Whether to enable live web search
-        model: Model to use (default: gpt-5.2-pro)
-    
-    Returns:
-        The output text from the model
+    Uses streaming to prevent Azure SNAT TCP idle timeout (4 min).
     """
-    if not openai.api_key:
+    import openai as _openai
+    if not _openai.api_key and not os.environ.get('OPENAI_API_KEY'):
         raise ValueError("OpenAI API key is not configured.")
     
     try:
-        client = openai.OpenAI()
+        client = _openai.OpenAI(timeout=600.0)
         
         tools = []
         if use_web_search:
@@ -1025,17 +1016,52 @@ def call_openai_responses_api(instructions, user_input, use_web_search=True, mod
             "model": model,
             "instructions": instructions,
             "input": user_input,
-            "reasoning": {"effort": "high"}
+            "reasoning": {"effort": "high"},
+            "stream": True
         }
         if tools:
             create_params["tools"] = tools
         
-        print(f"INFO: Calling OpenAI Responses API with model={model}, web_search={use_web_search}", file=sys.stderr)
-        response = client.responses.create(**create_params)
+        print(f"INFO: Calling OpenAI Responses API (streaming) with model={model}, web_search={use_web_search}", file=sys.stderr)
+        sys.stderr.flush()
         
-        return response.output_text
+        stream = client.responses.create(**create_params)
+        
+        # Collect output text from stream events
+        output_parts = []
+        event_count = 0
+        for event in stream:
+            event_count += 1
+            # Log periodic progress so Azure sees activity
+            if event_count % 50 == 0:
+                print(f"INFO: OpenAI stream progress — {event_count} events received", file=sys.stderr)
+                sys.stderr.flush()
+            
+            # Collect text output events
+            if hasattr(event, 'type'):
+                if event.type == 'response.output_text.delta':
+                    if hasattr(event, 'delta'):
+                        output_parts.append(event.delta)
+                elif event.type == 'response.completed':
+                    # Final event — extract full output_text from response
+                    if hasattr(event, 'response') and hasattr(event.response, 'output_text'):
+                        output_text = event.response.output_text
+                        print(f"INFO: OpenAI Responses API streaming complete. Total events: {event_count}", file=sys.stderr)
+                        sys.stderr.flush()
+                        return output_text
+        
+        # Fallback: if we didn't get a response.completed event, use collected parts
+        result = ''.join(output_parts)
+        if result:
+            print(f"INFO: OpenAI Responses API streaming complete (from deltas). Total events: {event_count}", file=sys.stderr)
+            sys.stderr.flush()
+            return result
+        
+        raise RuntimeError(f"OpenAI streaming completed with {event_count} events but no output text was captured.")
+        
     except Exception as e:
         print(f"ERROR in call_openai_responses_api: {e}", file=sys.stderr)
+        sys.stderr.flush()
         traceback.print_exc()
         raise
 
