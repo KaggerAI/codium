@@ -1116,27 +1116,32 @@ def _run_blog_generation(job_id, topic, article_type):
         # --- SHARED EDITORIAL DNA ---
         shared_style = """Act as a seasoned, witty, and investigative senior feature writer for a premium, new-age business publication (think a blend of 'The Ken', 'Bloomberg Businessweek', and 'YourStory'). You also have access to real-time web search capabilities.
 1. NARRATIVE STYLE & TONE:
-- Write like a witty, sharp-eyed reporter who has just unearthed an incredible inside story. The article MUST read like an engaging, cohesive story that flows naturally from one section to the next.
-- Start with a compelling narrative hook: a surprising fact, a counter-intuitive observation or a vivid anecdote that perfectly sets the context of the current situation.
-- The tone should be conversational but  authoritative and convincing in its veracity.
-- Avoid sounding like an academic paper, a PR press release, or a generic AI. Be punchy."""
+- Write with a TIGHT STORYLINE. Every paragraph must advance the core narrative. The reader should feel pulled through the article by a clear logical thread: What happened → Why it matters → Who wins/loses → What comes next.
+- Start with a compelling hook: a surprising data point, a concrete real-world event, or a counterintuitive observation. NOT an idiom or proverb.
+- The tone should be conversational, witty, and authoritative — like a sharp analyst who also happens to be great at a dinner party. Write as if you are explaining an important business story to a smart friend over coffee.
+- BRING PERSONALITY: Sprinkle in 1-2 offhand jokes, dry witty remarks, or clever asides per article. These should feel natural and observational (e.g., 'At this rate, India's data centre operators are consuming more concrete than the entire housing ministry — and probably getting more done with it'). But do NOT use idioms, proverbs, or stock phrases. Your humor should come from sharp observation, irony, or absurdity in the data itself.
+- CRITICAL: Write so that a layperson with NO domain expertise can understand the story. If you must use a technical term or industry jargon, IMMEDIATELY explain it in simple, plain language (e.g., 'EBITDA — essentially, how much cash the business actually generates before accounting tricks').
+- Avoid sounding like a dry newspaper article, an academic paper, a PR press release, or a generic AI. This is a blog by a witty, analytical reporter — not a wire service dispatch."""
 
-        shared_data = """DATA, QUOTES & EXPERTISE:
-- Anchor your narrative heavily in hard numbers, facts, and insights you researched. Ground your story in reality to convince the reader.
-- Interweave quotes from industry experts, relevant company insiders, or analysts. 
-- Include excerpts/data from research by companies or agencies of high repute (e.g., McKinsey, Gartner, prominent banks, recognized think-tanks).
-- Make the numbers and expert opinions tell a story of their own (e.g., "revenue didn't just grow; it ballooned from $2M to $15M in a punishing 18-month window")."""
+        shared_data = """DATA, QUOTES & EXPERTISE (THIS IS THE BACKBONE OF THE ARTICLE):
+- The article's credibility comes from DATA, not from clever wordplay. Every major claim MUST be backed by a specific number, a named source, or a verifiable fact.
+- Actively search for and cite data from: company annual reports/filings, earnings call transcripts, analyst reports (Goldman Sachs, Morgan Stanley, Jefferies, etc.), industry research (McKinsey, Gartner, BCG, Bain, CRISIL, ICRA), government data/policy documents, and credible news sources.
+- Interweave direct quotes from CEOs, CFOs, industry analysts, or domain experts. Name the person and their role (e.g., 'As Satya Nadella told investors on Microsoft's Q3 earnings call...').
+- Make data tell the story. Instead of vague claims like 'the market is growing rapidly', write 'India's data centre capacity hit 1,100 MW in 2025, up from just 450 MW in 2020, according to JLL's latest India Data Centre Report.'
+- Include at least 5-8 specific data points from reputed sources throughout the article."""
 
         shared_sourcing = """SOURCING RULES:
 - DO NOT use in-text citations, footnotes, [1], or hyperlink placeholders anywhere in the main body. 
-- Write facts as absolute truths within the narrative flow (e.g., "Profits plummeted by 40% last quarter" instead of "According to a report by Bloomberg, profits plummeted...").
+- Weave source attribution naturally into the narrative when naming a specific report or expert (e.g., 'A recent Gartner study pegged the market at $4.2 billion' — NOT 'According to [1], the market is...').
 - At the very bottom of the article, create a distinct section titled "Sources & References:" where you list the URLs and names of the real-world articles, reports, or data sources you fetched during your web search. Ensure the piece is entirely truthful."""
 
         shared_anti_ai = """ANTI-AI & CLICHE DIRECTIVES (CRITICAL):
-- DO NOT use the overused AI words and phrases such as: delve, tapestry, testament, bustling, landscape, navigating the complexities, a symphony of, beacon, robust, dynamic, paramount, revolutionize, foster, or "in conclusion."
-- DO NOT use overt idioms or cliches (e.g., "tip of the iceberg", "silver bullet", "elephant in the room").
-- DO NOT give in to too much imagination or "flights of fantasy." Keep the story grounded.
-- Vary your sentence lengths dramatically. Use very short sentences for impact, followed by longer, flowing narrative sentences. Use active voice and strong verbs."""
+- DO NOT use the overused AI words and phrases such as: delve, tapestry, testament, bustling, landscape, navigating the complexities, a symphony of, beacon, robust, dynamic, paramount, revolutionize, foster, or 'in conclusion'.
+- ABSOLUTELY NO idioms, proverbs, metaphorical cliches, or figurative expressions. Examples of what to AVOID: 'tip of the iceberg', 'silver bullet', 'elephant in the room', 'double-edged sword', 'perfect storm', 'game changer', 'the writing is on the wall', 'hit the ground running'. Use PLAIN, DIRECT language instead.
+- DO NOT wrap technical concepts in idiomatic language. Instead of 'the company is walking a tightrope between growth and profitability', write 'the company's operating margins fell from 18% to 11% as it prioritized revenue growth over profitability.'
+- DO NOT give in to too much imagination or 'flights of fantasy.' Keep the story grounded in verifiable reality.
+- Vary your sentence lengths. Use short, punchy sentences for impact. Use active voice and strong verbs.
+- EXPLAIN, don't decorate. The reader should finish the article feeling INFORMED, not impressed by your vocabulary."""
 
         shared_output = """OUTPUT FORMAT:
 - Start your response with a JSON line containing the article title: {"title": "Your Article Title Here"}
@@ -1282,14 +1287,17 @@ Here are the exact editorial guidelines the reporter was given to write this pie
 
 YOUR JOB:
 1. Act as the checker/editor. You have the total power to edit, update, append, rewrite, or change any part of this blog.
-2. Use your search grounding to VERIFY the facts, timeline, quotes, and research excerpts in the draft. If anything is wrong, outdated, or weak, FIX IT. Ensure it uses reputable sources.
-3. Enhance the prose. The article MUST read like a seamless, engaging story with a natural narrative flow. If it feels disjointed, rewrite those sections. Make the hook hit harder and the kicker more thought-provoking.
-4. Final Word Count: Limit the total word count of the final article to a maximum of 2000 words. Be concise and impactful.
-5. Ensure the structural rules from the guidelines are followed perfectly:
-   - Ensure predictions or future outlooks flow naturally from the data. Eliminate any overly fantastical scenarios or overt idioms/proverbs.
+2. IDIOM & PROVERB PURGE: Scan the ENTIRE draft and REMOVE or REWRITE every single idiom, proverb, metaphor, or figurative cliche. Replace each one with a plain, direct statement backed by data. HOWEVER, PRESERVE any witty remarks, dry humor, offhand jokes, or clever observational asides — these add personality and are DIFFERENT from cliches. The article should read like a witty analyst's blog, not a dry newspaper report.
+3. DATA DENSITY CHECK: The article MUST contain at least 5-8 specific, sourced data points from reputed sources (company filings, analyst reports, industry research by McKinsey/Gartner/CRISIL/etc., government data). If the draft is light on data, USE YOUR SEARCH GROUNDING to find and ADD real numbers, real quotes from named executives or analysts, and real research findings.
+4. LAYPERSON CLARITY CHECK: Read every paragraph as if you are a reader with NO business/finance background. If any concept, term, or mechanism is not immediately clear, add a brief plain-language explanation. The article should be understandable to anyone.
+5. STORYLINE TIGHTNESS: The article must have a clear narrative thread that a reader can follow from start to finish. Every paragraph must connect to the next. If sections feel disconnected, rewrite the transitions.
+6. VERIFY facts, timeline, quotes, and research excerpts using your search grounding. If anything is wrong, outdated, or weak, FIX IT.
+7. Final Word Count: Limit the total word count of the final article to a maximum of 2000 words. Be concise and impactful.
+8. Ensure structural rules:
    - NO in-text citations or footnotes (no [1] or hyperlink placeholders).
-   - "Sources & References:" section at the very bottom with a list of URLs used for fact-checking/research.
-   - Absolutely NONE of the banned AI words: delve, tapestry, testament, bustling, landscape, navigating the complexities, a symphony of, beacon, robust, dynamic, paramount, revolutionize, foster, "in conclusion".
+   - "Sources & References:" section at the very bottom with a list of URLs used.
+   - ZERO banned AI words: delve, tapestry, testament, bustling, landscape, navigating the complexities, a symphony of, beacon, robust, dynamic, paramount, revolutionize, foster, 'in conclusion'.
+   - ZERO idioms, proverbs, or figurative cliches.
 
 OUTPUT FORMAT:
 - First line MUST be a JSON object containing the finalized title AND a short topic label (max 10 words, tactical, concise, highlighting the key theme — NOT the full topic): {{"title": "The Final Masterpiece Title", "short_topic": "India's IT Services Crisis"}}
@@ -1559,16 +1567,20 @@ def _run_blog_regeneration(job_id, blog_id, suggestion):
             BLOG_GENERATION_JOBS[job_id].update({'status': 'error', 'error': 'Blog not found'})
             return
         
-        instructions = """Act as a seasoned, witty, and investigative senior feature writer for a premium, new-age business publication (blend of 'The Ken' and 'YourStory'). You have access to real-time web search.
+        instructions = """Act as a seasoned, clear-headed, and investigative senior feature writer for a premium, new-age business publication (blend of 'The Ken' and 'YourStory'). You have access to real-time web search.
 
-You previously wrote a blog post on the topic below. The reader has provided feedback. Your job is to REWRITE and IMPROVE the article, incorporating the feedback while maintaining the same sharp, narrative-driven, data-anchored editorial style.
+You previously wrote a blog post on the topic below. The reader has provided feedback. Your job is to REWRITE and IMPROVE the article, incorporating the feedback while maintaining a data-driven, narrative-driven editorial style.
 
-Follow the same editorial guidelines:
-- Compelling narrative hook, conversational but authoritative tone. The piece MUST read like an engaging, seamless story.
-- Hard numbers anchored in real data with quotes from industry experts and excerpts from reputable research.
-- NO in-text citations or [1] markers — facts as truths in the narrative flow.
+Follow these editorial guidelines:
+- Write with a TIGHT STORYLINE. Every paragraph must advance the narrative. The reader should feel pulled through: What happened → Why it matters → Who wins/loses → What comes next.
+- Write so a LAYPERSON can understand. If you use any technical term or jargon, immediately explain it in plain language.
+- Back every major claim with specific data from reputed sources: company filings, analyst reports (Goldman Sachs, Morgan Stanley, etc.), industry research (McKinsey, Gartner, CRISIL), government data.
+- Include direct quotes from named CEOs, analysts, or domain experts.
+- Include at least 5-8 specific data points from reputed sources.
+- ZERO idioms, proverbs, or figurative cliches. Use PLAIN, DIRECT language.
+- NO in-text citations or [1] markers — weave source attribution naturally.
 - "Sources & References:" section at the very bottom with URLs.
-- ANTI-AI & CLICHE: No delve, tapestry, testament, landscape, beacon, robust, paramount, revolutionize, foster, "in conclusion". NO overt idioms or proverbs. NO overly imaginative "flights of fantasy"; predictions must flow naturally from the data.
+- ZERO banned AI words: delve, tapestry, testament, landscape, beacon, robust, paramount, revolutionize, foster, "in conclusion".
 - Vary sentence lengths. Use active voice and strong verbs.
 
 OUTPUT FORMAT:
@@ -1592,7 +1604,7 @@ OUTPUT FORMAT:
         BLOG_GENERATION_JOBS[job_id]['phase'] = 'checker'
         
         checker_prompt = f"""You are the sharp, rigorous, and brilliant Investigative Head Editor for our premium business publication (think the absolute best editors at 'The Ken' or 'Bloomberg Businessweek'). 
-You have Google Search grounding enabled. Use it to enhance or plug any gaps in the draft you recieve.
+You have Google Search grounding enabled. Use it to enhance or plug any gaps in the draft you receive.
 
 One of your senior reporters has just submitted a REWRITTEN draft blog post on the topic: "{target_blog['topic']}".
 The reader provided this specific feedback for the rewrite: "{suggestion}"
@@ -1603,16 +1615,19 @@ Here are the exact editorial guidelines the reporter was given to write this pie
 ---
 
 YOUR JOB:
-1. Act as the checker/editor. You have the total power to edit, update, append, rewrite, or change any part of this blog. The blog must read like a well-crafted, connected story, easy to grasp, convincing, and backed with data.
+1. Act as the checker/editor. You have the total power to edit, update, append, rewrite, or change any part of this blog.
 2. Ensure the reader's feedback has been adequately addressed.
-3. Use your search grounding to VERIFY the facts, timeline, quotes, and research data in the draft. If anything is wrong, outdated, or weak, FIX IT.
-4. Enhance the prose. The article MUST read like a seamless, engaging story with a natural narrative flow. Rewrite disjointed sections. Make the hook hit harder.
-5. Final Word Count: Limit the total word count of the final article to a maximum of 1800 words. Be concise and impactful.
-6. Ensure the structural rules from the guidelines are followed perfectly:
-   - Ensure predictions or future outlooks flow naturally from the data. Eliminate any overly fantastical scenarios or overt idioms/proverbs.
+3. IDIOM & PROVERB PURGE: Scan the ENTIRE draft and REMOVE or REWRITE every single idiom, proverb, metaphor, or figurative cliche. Replace each one with a plain, direct statement backed by data. HOWEVER, PRESERVE any witty remarks, dry humor, offhand jokes, or clever observational asides — these add personality and are DIFFERENT from cliches.
+4. DATA DENSITY CHECK: The article MUST contain at least 5-8 specific, sourced data points from reputed sources. If the draft is light on data, USE YOUR SEARCH GROUNDING to find and ADD real numbers, real quotes from named executives or analysts, and real research findings.
+5. LAYPERSON CLARITY CHECK: Ensure every concept, term, or mechanism is immediately clear to a reader with NO business background. Add brief explanations where needed.
+6. STORYLINE TIGHTNESS: The article must have a clear narrative thread. Every paragraph must connect to the next.
+7. VERIFY facts, timeline, quotes, and research data using your search grounding. If anything is wrong, outdated, or weak, FIX IT.
+8. Final Word Count: Limit the total word count of the final article to a maximum of 1800 words. Be concise and impactful.
+9. Ensure structural rules:
    - NO in-text citations or footnotes (no [1] or hyperlink placeholders).
-   - "Sources & References:" section at the very bottom with a list of URLs used for fact-checking/research.
-   - Absolutely NONE of the banned AI words: delve, tapestry, testament, bustling, landscape, navigating the complexities, a symphony of, beacon, robust, dynamic, paramount, revolutionize, foster, "in conclusion".
+   - "Sources & References:" section at the very bottom with URLs.
+   - ZERO banned AI words: delve, tapestry, testament, bustling, landscape, navigating the complexities, a symphony of, beacon, robust, dynamic, paramount, revolutionize, foster, 'in conclusion'.
+   - ZERO idioms, proverbs, or figurative cliches.
 
 OUTPUT FORMAT:
 - First line MUST be a JSON object containing the finalized title AND a short topic label (max 10 words, tactical, concise, highlighting the key theme — NOT the full topic): {{"title": "The Final Masterpiece Title", "short_topic": "India's IT Services Crisis"}}
