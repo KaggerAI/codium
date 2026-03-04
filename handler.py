@@ -1015,10 +1015,7 @@ def call_openai_responses_api(instructions, user_input, use_web_search=True, mod
         raise ValueError("OpenAI API key is not configured.")
     
     try:
-        import httpx
-        # Add a 300-second timeout to prevent indefinite hangs on Azure
-        timeout = httpx.Timeout(300.0, connect=30.0)
-        client = openai.OpenAI(timeout=timeout)
+        client = openai.OpenAI()
         
         tools = []
         if use_web_search:
@@ -1065,46 +1062,9 @@ def admin_list_blogs():
     blogs = load_blogs()
     return jsonify({'blogs': blogs, 'count': len(blogs)})
 
-# --- Blog Job Tracking for Async Generation (Azure 230s timeout workaround) ---
-import threading
-
-blog_jobs = {}  # job_id -> { status, phase, type, topic, result, error }
-
-
-@app.route('/api/admin/blogs/generate/status/<job_id>', methods=['GET'])
-def admin_blog_job_status(job_id):
-    """Poll endpoint for async blog generation/regeneration jobs."""
-    user, err = check_admin_auth()
-    if err:
-        return err
-    
-    job = blog_jobs.get(job_id)
-    if not job:
-        return jsonify({'error': 'Job not found'}), 404
-    
-    response = {
-        'job_id': job_id,
-        'status': job['status'],
-        'phase': job.get('phase', ''),
-        'type': job.get('type', 'generate')
-    }
-    
-    if job['status'] == 'complete':
-        response['result'] = job['result']
-        del blog_jobs[job_id]
-    elif job['status'] == 'declined':
-        response['result'] = job.get('result', {})
-        del blog_jobs[job_id]
-    elif job['status'] == 'error':
-        response['error'] = job.get('error', 'Unknown error')
-        del blog_jobs[job_id]
-    
-    return jsonify(response)
-
-
 @app.route('/api/admin/blogs/generate', methods=['POST'])
 def admin_generate_blog():
-    """Admin endpoint to generate a blog post — returns immediately with job_id, runs in background."""
+    """Admin endpoint to generate a blog post using GPT-5.2-pro with web search"""
     user, err = check_admin_auth()
     if err:
         return err
@@ -1118,35 +1078,29 @@ def admin_generate_blog():
             return jsonify({'error': 'Topic is required'}), 400
         
         # --- SHARED EDITORIAL DNA ---
-        shared_style = """1. NARRATIVE STYLE & TONE:
-- Write like a sharp, experienced business journalist who explains complex things clearly. Your tone is confident, conversational, and authoritative — like you're explaining something fascinating to a smart friend over coffee.
-- DO NOT use idioms, proverbs, metaphors, or figurative language. Write in plain, direct English. If a sentence would confuse a 25-year-old MBA student on first read, rewrite it simpler.
-- Open with the single most surprising, important, or counter-intuitive FACT you found in your research. Not a metaphor. Not a proverb. A real fact that makes the reader think "wait, really?"
-- Your job is to make the STORY fascinating, not the WRITING clever. The story should carry itself."""
+        shared_style = """Act as a seasoned, witty, and investigative senior feature writer for a premium, new-age business publication (think a blend of 'The Ken', 'Bloomberg Businessweek', and 'YourStory'). You also have access to real-time web search capabilities.
+1. NARRATIVE STYLE & TONE:
+- Write like a witty, sharp-eyed reporter who has just unearthed an incredible inside story. The article MUST read like an engaging, cohesive story that flows naturally from one section to the next.
+- Start with a compelling narrative hook: a surprising fact, a counter-intuitive observation or a vivid anecdote that perfectly sets the context of the current situation.
+- The tone should be conversational but  authoritative and convincing in its veracity.
+- Avoid sounding like an academic paper, a PR press release, or a generic AI. Be punchy."""
 
-        shared_flow = """2. FLOW & TRANSITIONS (CRITICAL):
-- The article must read like a detective story. Each section naturally sets up the next one, building toward a conclusion that feels inevitable.
-- End each section with a sentence that creates a bridge to the next section. The reader should never feel a jarring jump between topics.
-- Use this mental model: "Here's what happened → Here's why it happened → Here's what it means → Here's what comes next."
-- DO NOT use transition phrases like "Let's now turn to..." or "Speaking of which..." or "But that's not all." Instead, let the logic of the story create the transitions naturally."""
+        shared_data = """DATA, QUOTES & EXPERTISE:
+- Anchor your narrative heavily in hard numbers, facts, and insights you researched. Ground your story in reality to convince the reader.
+- Interweave quotes from industry experts, relevant company insiders, or analysts. 
+- Include excerpts/data from research by companies or agencies of high repute (e.g., McKinsey, Gartner, prominent banks, recognized think-tanks).
+- Make the numbers and expert opinions tell a story of their own (e.g., "revenue didn't just grow; it ballooned from $2M to $15M in a punishing 18-month window")."""
 
-        shared_data = """3. DATA & EVIDENCE:
-- Every major claim must be backed by a specific number, date, or verifiable fact. Not "revenues grew significantly" but "revenues hit ₹4,200 crore in FY24, up 34% from the previous year."
-- Weave numbers INTO the narrative — don't dump them in a separate paragraph. The data should feel like natural evidence supporting your story, not a data sheet.
-- Use comparisons to make numbers meaningful: "That's roughly the GDP of Goa" or "enough to fill 12 Olympic swimming pools" — but only when the comparison genuinely helps comprehension, not for style points."""
-
-        shared_sourcing = """4. SOURCING RULES:
+        shared_sourcing = """SOURCING RULES:
 - DO NOT use in-text citations, footnotes, [1], or hyperlink placeholders anywhere in the main body. 
-- State facts as truths within the narrative (e.g., "Profits dropped 40% last quarter" — NOT "According to Bloomberg, profits dropped...").
-- At the very bottom, create a "Sources & References:" section listing the URLs and names of the real-world sources you used. The article must be entirely truthful."""
+- Write facts as absolute truths within the narrative flow (e.g., "Profits plummeted by 40% last quarter" instead of "According to a report by Bloomberg, profits plummeted...").
+- At the very bottom of the article, create a distinct section titled "Sources & References:" where you list the URLs and names of the real-world articles, reports, or data sources you fetched during your web search. Ensure the piece is entirely truthful."""
 
-        shared_anti_ai = """5. CLARITY RULES (CRITICAL — READ CAREFULLY):
-- DO NOT use idioms or proverbs. No "Rome wasn't built in a day", no "the winds of change", no "a rising tide lifts all boats." Write direct statements instead.
-- DO NOT use forced metaphors or analogies unless they genuinely help explain something complex. If you wouldn't use the metaphor in a boardroom presentation, don't use it here.
-- DO NOT use these overused AI words/phrases: delve, tapestry, testament, bustling, landscape, navigating the complexities, a symphony of, beacon, robust, dynamic, paramount, revolutionize, foster, "in conclusion", "in the ever-evolving", "stands as a", "poised to".
-- Vary sentence lengths. Mix short punchy sentences with longer explanatory ones. Use em-dashes (—) sparingly for emphasis.
-- Active voice. Strong verbs. Specific nouns. Plain language.
-- CLARITY TEST: After writing each paragraph, ask yourself — "Would a smart reader understand this on the first read without re-reading?" If not, simplify."""
+        shared_anti_ai = """ANTI-AI & CLICHE DIRECTIVES (CRITICAL):
+- DO NOT use the overused AI words and phrases such as: delve, tapestry, testament, bustling, landscape, navigating the complexities, a symphony of, beacon, robust, dynamic, paramount, revolutionize, foster, or "in conclusion."
+- DO NOT use overt idioms or cliches (e.g., "tip of the iceberg", "silver bullet", "elephant in the room").
+- DO NOT give in to too much imagination or "flights of fantasy." Keep the story grounded.
+- Vary your sentence lengths dramatically. Use very short sentences for impact, followed by longer, flowing narrative sentences. Use active voice and strong verbs."""
 
         shared_output = """OUTPUT FORMAT:
 - Start your response with a JSON line containing the article title: {"title": "Your Article Title Here"}
@@ -1159,32 +1113,28 @@ Now, execute your search and write the article."""
 
         # --- ARTICLE TYPE SPECIFIC PROMPTS ---
         if article_type == 'needle':
-            instructions = f"""You are an experienced investigative business journalist and equity research analyst. You have access to real-time web search.
+            instructions = f"""Act as a seasoned, witty, and investigative senior feature writer AND stock-picking analyst for a premium, new-age business publication (think a blend of 'The Ken', 'Bloomberg Businessweek', and 'YourStory'). You also have access to real-time web search capabilities.
 
-Your task is to write a "Needle in a Haystack" article. The admin has provided a topic describing a regulatory, economic, demographic, or structural change. Your job is to:
-1. Research this change deeply using web search.
-2. Identify the RARE company (or rare few companies) that will benefit the MOST from this change. NOT the obvious large-cap names. Dig into under-the-radar mid-cap or small-cap companies with a structural edge.
-3. Build a clear, evidence-based narrative explaining WHY these companies are uniquely positioned.
-
-THINK DEEPLY: Use the highest level of reasoning effort to analyze your research before writing.
+Your task is to write a highly engaging, long-form "Needle in a Haystack" article. The admin has provided a topic describing a regulatory, economic, demographic, or structural change. Your job is to:
+1. Research the change/event/trend deeply using web search.
+2. Identify the RARE company (or rare few companies) — the "needle" — that stands to benefit the MOST from this change. These should NOT be the obvious large-cap names everyone already knows. Dig deeper. Find the under-the-radar, mid-cap, or small-cap plays that have a structural edge.
+3. Build a compelling narrative around WHY these specific companies are uniquely positioned.
 
 STEP 1: AUTONOMOUS RESEARCH
-Use your web search to find the latest news, financial data, policy documents, and analyses on this topic. Specifically research which lesser-known companies have the most direct exposure to this change.
+Before you begin writing, use your web search capabilities to fetch the most recent and relevant news, financial data, policy documents, and deep-dive analyses on this topic. Research which companies (especially lesser-known ones) have the most exposure to this change.
 
 STEP 2: DRAFT THE ARTICLE
-Write the article following these editorial guidelines:
+Using the real-world data you just fetched, write the article following these strict editorial guidelines:
 
 {shared_style}
 
-{shared_flow}
-
-STRUCTURE (follow this story arc):
-- Open with the single most important fact about this change — the number or event that makes it real and urgent.
-- Explain the change clearly: what happened, why it matters, and how big the opportunity is. Use specific numbers.
-- Set the scene: briefly describe who the obvious players are, and why the market is looking at the wrong companies.
-- Reveal the needle(s): introduce the specific company/companies you found. Explain their edge with hard evidence — revenue exposure, supply chain position, regulatory advantage, capacity, order books, margin profiles.
-- Show the math: back up your thesis with financial data and valuations. Make it concrete.
-- Close with a forward-looking statement about what to watch for next. Do NOT give buy/sell recommendations.
+2. STRUCTURE & PACING:
+- Start with a hook: Pull the reader in with a surprising fact, a counterintuitive observation, or a cinematic/relatable opening that frames the structural change.
+- Move on to the core idea: Establish the big change and why it creates an asymmetric opportunity.
+- Describe the current landscape: Briefly paint the landscape of the sector/industry affected.
+- The Needle(s): Reveal the specific company/companies that are uniquely positioned. This is the CORE of the article. Explain exactly WHY — moats, supply chain position, regulatory advantage, capacity, management vision, financial metrics.
+- Back up with Data: Back up the thesis with hard numbers — revenue exposure, capacity utilization, order books, margin profiles, valuations, etc. Give whatever data is relevant, required and helps bring value to the article.
+- End with conclusion: End on a sharp, thought-provoking note. Do NOT give buy/sell recommendations. Frame it as "this is where the smart money should be looking."
 
 {shared_data}
 
@@ -1195,30 +1145,27 @@ STRUCTURE (follow this story arc):
 {shared_output}"""
 
         elif article_type == 'informative':
-            instructions = f"""You are an experienced, deeply knowledgeable business journalist. You have access to real-time web search.
+            instructions = f"""Act as a seasoned, authoritative, and deeply knowledgeable senior feature writer for a premium, new-age business publication (think a blend of 'The Ken', 'Bloomberg Businessweek', and 'YourStory'). You also have access to real-time web search capabilities.
 
-Your task is to write a comprehensive, informative article about the topic provided. This is a PURE INFORMATION article — every paragraph must teach the reader something concrete. No fluff, no speculation, no hypothetical scenarios.
+Your task is to write a highly informative, comprehensive, and data-dense long-form article about the topic provided. This is an INFORMATIVE article — no fluff, no flights of fantasy, no speculative scenarios. Every paragraph must add tangible information or insight.
 
-THINK DEEPLY: Use the highest level of reasoning effort to analyze your research before writing.
 
 STEP 1: AUTONOMOUS RESEARCH
-Use your web search to find the latest news, financial data, regulatory filings, expert opinions, and deep analyses on this topic. Be exhaustive — the value of this article is in its completeness and accuracy.
+Before you begin writing, use your web search capabilities to fetch the most recent and relevant news, financial data, regulatory filings, expert opinions, and deep-dive analyses on this topic. Be exhaustive.
 
 STEP 2: DRAFT THE ARTICLE
-Write the article following these editorial guidelines:
+Using the real-world data you just fetched, write the article following these strict editorial guidelines:
 
 {shared_style}
 
-{shared_flow}
+2. STRUCTURE & PACING:
+- Start with a hook: Pull the reader in with a sharp, relevant opening — a surprising statistic, a recent event, or a key question.
+- Proceed with context: Provide the full background — history, stakeholders, regulatory framework, market dynamics. Assume the reader is intelligent but may not know the domain.
+- Deep Dive: Break down the mechanics, the data, the key players, and the implications. Cover every important dimension: financial, regulatory, competitive, and strategic.
+- The "So What": Explain the real-world implications clearly. What does this mean for businesses, investors, or the industry?
+- End with conclusion: End with a crisp conclusion that crystallizes the key takeaway — no generic summaries, just the sharpest insight.
 
-STRUCTURE (follow this logical flow):
-- Open with the most important or surprising fact about this topic. Set the stakes immediately — why should the reader care about this RIGHT NOW?
-- Provide context: the history, key stakeholders, regulatory framework, and market dynamics. Assume the reader is smart but may not know this domain. Build understanding step by step.
-- Deep dive: break down the mechanics clearly. Cover the financial, regulatory, competitive, and strategic dimensions. Each paragraph should build on the previous one.
-- Real-world implications: what does this mean for businesses, investors, consumers, or the industry? Be specific and actionable.
-- Close with the single most important takeaway — the one thing the reader should remember.
-
-Keep everything grounded in verified facts and real data. The article should feel like a briefing document that also happens to be a pleasure to read.
+IMPORTANT: Do NOT include "flights of fantasy" or hypothetical scenarios. Keep everything grounded in verified facts and real data. Be dense with information, not prose.
 
 {shared_data}
 
@@ -1229,27 +1176,25 @@ Keep everything grounded in verified facts and real data. The article should fee
 {shared_output}"""
 
         else:  # 'general' — the original investigative blog
-            instructions = f"""You are an experienced investigative business journalist. You have access to real-time web search.
+            instructions = f"""Act as a seasoned, witty, and investigative senior feature writer for a premium, new-age business publication (think a blend of the analytical, slightly cynical, and deep-dive style of 'The Ken' and the founder-centric, narrative-driven storytelling of 'YourStory'). You also have access to real-time web search capabilities.
 
-Your task is to write an engaging, long-form investigative article about the topic provided.
+Your task is to write a highly engaging, long-form business/tech blog post about the topic provided by the user.
 THINK DEEPLY: You must use the highest level of reasoning effort to critically analyze the topic and web search results before drafting.
 
 STEP 1: AUTONOMOUS RESEARCH
-Use your web search to find the latest and most relevant news, financial data, and analyses on this topic. Look for the angles that aren't obvious — the hidden connections, the surprising data points, the untold parts of the story.
+Before you begin writing, use your web search capabilities to fetch the most recent and relevant news, financial data, and deep-dive analyses on this topic. You do not need to print out your research notes—simply use the data you find to construct the narrative. 
 
 STEP 2: DRAFT THE ARTICLE
-Write the article following these editorial guidelines:
+Using the real-world data you just fetched, write the article following these strict editorial guidelines:
 
 {shared_style}
 
-{shared_flow}
-
-STRUCTURE (follow this story arc):
-- Open with the most surprising or counter-intuitive fact you found. Make the reader lean in.
-- Establish the central question or tension: what is the conflict, the paradox, or the big reveal? Why should the reader care?
-- Build the case: break down the business model, strategy, or history piece by piece. Each section should add one clear insight that the reader didn't have before.
-- Connect the dots: show how the individual facts and data points fit together into a bigger picture. This is where the article earns its keep — the reader should have an "aha" moment where everything clicks.
-- Close with a forward-looking question or insight that leaves the reader thinking. Not a summary — a genuine provocation about what comes next.
+1. STRUCTURE & PACING:
+- Start with a hook: Pull the reader in with a surprising fact, counterintuitive observation, or cinematic or relatable opening that flows naturally into the core story.
+- Proceed with thesis (The "Why Should I Care"): Establish the core conflict or the big revelation early on.
+- Do deep dive: Break down the business model, the strategy, or the history. Explain complex mechanics simply but smartly. Interweave your expert quotes and research data here.
+- The future outlook: Predict the natural trajectory of this topic. Do NOT use overly imaginative or fantasized scenarios; whatever predictions you make must flow logically and naturally as part of the overarching story you've woven from the data.
+- The kicker (Conclusion): End on a sharp, thought-provoking note—not a neat, summarizing bow. Leave the reader pondering the implications.
 
 {shared_data}
 
@@ -1259,190 +1204,178 @@ STRUCTURE (follow this story arc):
 
 {shared_output}"""
 
-        # --- LAUNCH BACKGROUND JOB ---
-        job_id = str(uuid.uuid4())[:12]
-        blog_jobs[job_id] = {
-            'status': 'running',
-            'phase': 'reporter',
-            'type': 'generate',
-            'topic': topic,
-            'result': None,
-            'error': None
-        }
+        user_input = f"{topic}"
         
-        def _do_generate():
+        print(f"INFO: Generating blog [{article_type}] for topic: {topic}", file=sys.stderr)
+        raw_response = call_openai_responses_api(instructions, user_input, use_web_search=True)
+        
+        # Check if the AI declined the topic
+        first_line = raw_response.strip().split('\n')[0].strip()
+        if first_line.startswith('{') and '"decline"' in first_line:
             try:
-                user_input = f"{topic}"
-                print(f"INFO: [Job {job_id}] Generating blog [{article_type}] for topic: {topic}", file=sys.stderr)
-                raw_response = call_openai_responses_api(instructions, user_input, use_web_search=True)
-                
-                # Check if the AI declined the topic
-                first_line = raw_response.strip().split('\n')[0].strip()
-                if first_line.startswith('{') and '"decline"' in first_line:
-                    try:
-                        decline_data = json.loads(first_line)
-                        if decline_data.get('decline'):
-                            reason = decline_data.get('reason', 'This topic does not have enough depth for a quality blog post.')
-                            blog_jobs[job_id]['status'] = 'declined'
-                            blog_jobs[job_id]['result'] = {'declined': True, 'error': f"🤔 The AI chose not to write this blog: {reason}"}
-                            return
-                    except json.JSONDecodeError:
-                        pass
-                
-                # Parse the response — extract title from first JSON line
-                title = f"Blog: {topic}"
-                content_html = raw_response
-                short_topic = ''
-                
-                # --- CHECKER PHASE ---
-                blog_jobs[job_id]['phase'] = 'editor'
-                print(f"INFO: [Job {job_id}] [Checker Phase] Sending draft to Gemini 3.1 Pro...", file=sys.stderr)
-                
-                checker_prompt = f"""You are the Head Editor at a premium business publication. A reporter has filed a draft. Your job is to edit it into a clear, compelling, well-structured article.
+                decline_data = json.loads(first_line)
+                if decline_data.get('decline'):
+                    reason = decline_data.get('reason', 'This topic does not have enough depth for a quality blog post.')
+                    return jsonify({
+                        'success': False,
+                        'declined': True,
+                        'error': f"🤔 The AI chose not to write this blog: {reason}"
+                    }), 200  # 200 because it's not an error — it's a deliberate choice
+            except json.JSONDecodeError:
+                pass
+        
+        # Parse the response — extract title from first JSON line
+        title = f"Blog: {topic}"  # fallback title
+        content_html = raw_response
+        short_topic = ''  # will be set by checker
+        
+        # --- MAKER-CHECKER: CHECKER PHASE ---
+        print(f"INFO: [Checker Phase] Sending draft to Gemini 3.1 Pro for editorial review...", file=sys.stderr)
+        
+        checker_prompt = f"""You are the sharp, rigorous, and brilliant Investigative Head Editor for our premium business publication (think the absolute best editors at 'The Ken' or 'Bloomberg Businessweek'). 
+You have Google Search grounding enabled.
 
-EDITORIAL STANDARDS:
-- The article should read like a detective story: each section flows naturally into the next, building toward a conclusion that feels inevitable.
-- Every sentence must be clear on first read. If a paragraph requires re-reading to understand, rewrite it in simpler language.
-- NO idioms, proverbs, or forced metaphors. Replace any you find with direct statements. Example: "Rome wasn't built in a day" → "This transformation will take years."
-- NO overused AI words: delve, tapestry, testament, bustling, landscape, navigating the complexities, a symphony of, beacon, robust, dynamic, paramount, revolutionize, foster, "in conclusion", "in the ever-evolving", "stands as a", "poised to".
+One of your senior reporters has just submitted a draft blog post on the topic: "{topic}".
 
-YOUR EDITING MANDATE:
-1. FACT-CHECK: Verify all claims, numbers, dates using Google Search. Fix any errors.
-2. CLARITY: Rewrite any confusing or overly clever passages in plain language. The reader should never have to decode what you mean.
-3. FLOW: Ensure each section ends by naturally setting up the next one. Fix any jarring transitions.
-4. ENHANCE: If the reporter missed important data points or recent developments, add them.
-5. WORD COUNT: Under 2000 words. Cut aggressively — every sentence must earn its place.
-6. STRIP IDIOMS: Find and replace ALL idioms, proverbs, and figurative language with direct, factual statements.
+Here are the exact editorial guidelines the reporter was given to write this piece. You must understand the spirit, tone, narrative styling, and structure of what we want, and enforce it:
+---
+{instructions}
+---
+
+YOUR JOB:
+1. Act as the checker/editor. You have the total power to edit, update, append, rewrite, or change any part of this blog.
+2. Use your search grounding to VERIFY the facts, timeline, quotes, and research excerpts in the draft. If anything is wrong, outdated, or weak, FIX IT. Ensure it uses reputable sources.
+3. Enhance the prose. The article MUST read like a seamless, engaging story with a natural narrative flow. If it feels disjointed, rewrite those sections. Make the hook hit harder and the kicker more thought-provoking.
+4. Final Word Count: Limit the total word count of the final article to a maximum of 2000 words. Be concise and impactful.
+5. Ensure the structural rules from the guidelines are followed perfectly:
+   - Ensure predictions or future outlooks flow naturally from the data. Eliminate any overly fantastical scenarios or overt idioms/proverbs.
+   - NO in-text citations or footnotes (no [1] or hyperlink placeholders).
+   - "Sources & References:" section at the very bottom with a list of URLs used for fact-checking/research.
+   - Absolutely NONE of the banned AI words: delve, tapestry, testament, bustling, landscape, navigating the complexities, a symphony of, beacon, robust, dynamic, paramount, revolutionize, foster, "in conclusion".
 
 OUTPUT FORMAT:
-- First line MUST be a JSON object: {{"title": "Clear Descriptive Title", "short_topic": "Max 10 Word Theme Label"}}
-- Second line MUST be exactly: ---
-- Then clean HTML (<h2>, <h3>, <p>, <ul>/<li>, <strong>, <em>, <blockquote>).
-- NO ```html blocks, no <html>/<head>/<body> tags.
+- First line MUST be a JSON object containing the finalized title AND a short topic label (max 10 words, tactical, concise, highlighting the key theme — NOT the full topic): {{"title": "The Final Masterpiece Title", "short_topic": "India's IT Services Crisis"}}
+- Second line MUST be exactly three dashes: ---
+- Then provide the incredibly clean, polished HTML (<h2>, <h3>, <p>, <ul>/<li>, <strong>, <em>, <blockquote>). Ensure the semantic HTML supports the narrative flow.
+- DO NOT wrap the output in ```html blocks or include <html>, <head>, or <body> tags. Just the raw HTML content.
 
-Reporter's draft:
+Here is the reporter's draft:
 =========================================
 {raw_response}
 =========================================
 
-Edit this into a publication-ready piece (under 2000 words). Prioritize CLARITY over cleverness."""
+Now, do your job as the Head Editor and output the finalized, publication-ready piece (under 2000 words)."""
 
-                try:
-                    checker_response = call_gemini_api(
-                        messages=[{{"role": "user", "content": checker_prompt}}],
-                        model="gemini-3.1-pro-preview",
-                        temperature=1.0,
-                        use_google_search=True,
-                        thinking_level="HIGH"
-                    )
-                    print(f"INFO: [Job {job_id}] [Checker Phase] Editorial review complete.", file=sys.stderr)
-                    
-                    if checker_response.startswith("```html"):
-                        checker_response = checker_response[7:]
-                    if checker_response.startswith("```"):
-                        checker_response = checker_response[3:]
-                    if checker_response.endswith("```"):
-                        checker_response = checker_response[:-3]
-                    
-                    checker_response = checker_response.strip()
-                    
-                    lines = checker_response.split('\n')
-                    for i, line in enumerate(lines):
-                        line_stripped = line.strip()
-                        if line_stripped.startswith('{') and '"title"' in line_stripped:
-                            try:
-                                title_data = json.loads(line_stripped)
-                                title = title_data.get('title', title)
-                                short_topic = title_data.get('short_topic', short_topic)
-                                remaining = '\n'.join(lines[i+1:])
-                                if '---' in remaining:
-                                    content_html = remaining.split('---', 1)[1].strip()
-                                else:
-                                    content_html = remaining.strip()
-                                break
-                            except json.JSONDecodeError:
-                                pass
-                except Exception as checker_err:
-                    print(f"ERROR: [Job {job_id}] Checker failed: {checker_err}. Using Maker draft.", file=sys.stderr)
-                    lines = raw_response.split('\n')
-                    for i, line in enumerate(lines):
-                        line_stripped = line.strip()
-                        if line_stripped.startswith('{') and '"title"' in line_stripped:
-                            try:
-                                title_data = json.loads(line_stripped)
-                                title = title_data.get('title', title)
-                                short_topic = title_data.get('short_topic', short_topic)
-                                remaining = '\n'.join(lines[i+1:])
-                                if '---' in remaining:
-                                    content_html = remaining.split('---', 1)[1].strip()
-                                else:
-                                    content_html = remaining.strip()
-                                break
-                            except json.JSONDecodeError:
-                                pass
-                
-                if content_html == raw_response:
-                    import re as re_mod
-                    h_match = re_mod.search(r'<h[12][^>]*>(.*?)</h[12]>', content_html)
-                    if h_match:
-                        title = re_mod.sub(r'<[^>]+>', '', h_match.group(1)).strip()
-                
-                # --- SAVE ---
-                blog_jobs[job_id]['phase'] = 'saving'
-                from datetime import datetime
-                blog_id = str(uuid.uuid4())[:8]
-                slug = generate_slug(title)
-                
-                if not short_topic:
-                    words = topic.split()
-                    short_topic = ' '.join(words[:10])
-                
-                blogs = load_blogs()
-                existing_slugs = {b['slug'] for b in blogs}
-                original_slug = slug
-                counter = 1
-                while slug in existing_slugs:
-                    slug = f"{original_slug}-{counter}"
-                    counter += 1
-                
-                blog = {
-                    'id': blog_id,
-                    'title': title,
-                    'slug': slug,
-                    'topic': topic,
-                    'article_type': article_type,
-                    'short_topic': short_topic,
-                    'content_html': content_html,
-                    'status': 'draft',
-                    'created_at': datetime.now().isoformat(),
-                    'published_at': None,
-                    'updated_at': datetime.now().isoformat(),
-                    'suggestions': []
-                }
-                
-                blogs.insert(0, blog)
-                save_blogs(blogs)
-                
-                print(f"INFO: [Job {job_id}] Blog generated — id={blog_id}, title={title}", file=sys.stderr)
-                blog_jobs[job_id]['status'] = 'complete'
-                blog_jobs[job_id]['result'] = {'success': True, 'blog': blog}
+        try:
+            checker_response = call_gemini_api(
+                messages=[{"role": "user", "content": checker_prompt}],
+                model="gemini-3.1-pro-preview",
+                temperature=1.0,
+                use_google_search=True,
+                thinking_level="HIGH"
+            )
+            print(f"INFO: [Checker Phase] Editorial review complete.", file=sys.stderr)
             
-            except Exception as e:
-                print(f"ERROR: [Job {job_id}] Blog generation failed: {e}", file=sys.stderr)
-                traceback.print_exc()
-                blog_jobs[job_id]['status'] = 'error'
-                blog_jobs[job_id]['error'] = str(e)
+            # Clean potential markdown wrapping from Gemini
+            if checker_response.startswith("```html"):
+                checker_response = checker_response[7:]
+            if checker_response.startswith("```"):
+                checker_response = checker_response[3:]
+            if checker_response.endswith("```"):
+                checker_response = checker_response[:-3]
+            
+            checker_response = checker_response.strip()
+            
+            lines = checker_response.split('\n')
+            for i, line in enumerate(lines):
+                line_stripped = line.strip()
+                if line_stripped.startswith('{') and '"title"' in line_stripped:
+                    try:
+                        title_data = json.loads(line_stripped)
+                        title = title_data.get('title', title)
+                        short_topic = title_data.get('short_topic', short_topic)
+                        # Find the separator and get content after it
+                        remaining = '\n'.join(lines[i+1:])
+                        if '---' in remaining:
+                            content_html = remaining.split('---', 1)[1].strip()
+                        else:
+                            content_html = remaining.strip()
+                        break
+                    except json.JSONDecodeError:
+                        pass
+        except Exception as e:
+            print(f"ERROR: Checker phase failed: {e}. Falling back to Maker draft.", file=sys.stderr)
+            lines = raw_response.split('\n')
+            for i, line in enumerate(lines):
+                line_stripped = line.strip()
+                if line_stripped.startswith('{') and '"title"' in line_stripped:
+                    try:
+                        title_data = json.loads(line_stripped)
+                        title = title_data.get('title', title)
+                        short_topic = title_data.get('short_topic', short_topic)
+                        # Find the separator and get content after it
+                        remaining = '\n'.join(lines[i+1:])
+                        if '---' in remaining:
+                            content_html = remaining.split('---', 1)[1].strip()
+                        else:
+                            content_html = remaining.strip()
+                        break
+                    except json.JSONDecodeError:
+                        pass
         
-        thread = threading.Thread(target=_do_generate, daemon=True)
-        thread.start()
+        # If no JSON header found, use full response as content
+        if content_html == raw_response:
+            # Try to extract a title from the first heading
+            import re
+            h_match = re.search(r'<h[12][^>]*>(.*?)</h[12]>', content_html)
+            if h_match:
+                title = re.sub(r'<[^>]+>', '', h_match.group(1)).strip()
         
-        return jsonify({'success': True, 'job_id': job_id, 'message': 'Blog generation started'})
+        from datetime import datetime
+        blog_id = str(uuid.uuid4())[:8]
+        slug = generate_slug(title)
+        
+        # Ensure short_topic is set
+        if not short_topic:
+            # Fallback: truncate topic to max 10 words
+            words = topic.split()
+            short_topic = ' '.join(words[:10])
+        
+        # Ensure slug is unique
+        blogs = load_blogs()
+        existing_slugs = {b['slug'] for b in blogs}
+        original_slug = slug
+        counter = 1
+        while slug in existing_slugs:
+            slug = f"{original_slug}-{counter}"
+            counter += 1
+        
+        blog = {
+            'id': blog_id,
+            'title': title,
+            'slug': slug,
+            'topic': topic,
+            'article_type': article_type,
+            'short_topic': short_topic,
+            'content_html': content_html,
+            'status': 'draft',
+            'created_at': datetime.now().isoformat(),
+            'published_at': None,
+            'updated_at': datetime.now().isoformat(),
+            'suggestions': []
+        }
+        
+        blogs.insert(0, blog)
+        save_blogs(blogs)
+        
+        print(f"INFO: Blog generated — id={blog_id}, title={title}", file=sys.stderr)
+        
+        return jsonify({'success': True, 'blog': blog})
     
     except Exception as e:
-        print(f"ERROR: Blog generation failed to start: {e}", file=sys.stderr)
+        print(f"ERROR: Blog generation failed: {e}", file=sys.stderr)
         traceback.print_exc()
         return jsonify({'error': f'Blog generation failed: {str(e)}'}), 500
-
 
 @app.route('/api/admin/blogs/<blog_id>', methods=['PUT'])
 def admin_update_blog(blog_id):
@@ -1528,7 +1461,7 @@ def admin_delete_blog(blog_id):
 
 @app.route('/api/admin/blogs/<blog_id>/regenerate', methods=['POST'])
 def admin_regenerate_blog(blog_id):
-    """Admin endpoint to regenerate a blog — returns immediately with job_id, runs in background."""
+    """Admin endpoint to regenerate a blog with optional suggestion context"""
     user, err = check_admin_auth()
     if err:
         return err
@@ -1547,169 +1480,152 @@ def admin_regenerate_blog(blog_id):
         if not target_blog:
             return jsonify({'error': 'Blog not found'}), 404
         
-        # --- LAUNCH BACKGROUND JOB ---
-        job_id = str(uuid.uuid4())[:12]
-        blog_jobs[job_id] = {
-            'status': 'running',
-            'phase': 'reporter',
-            'type': 'regenerate',
-            'topic': target_blog['topic'],
-            'result': None,
-            'error': None
-        }
-        
-        def _do_regenerate():
-            try:
-                instructions = """You are an experienced investigative business journalist. You have access to real-time web search.
+        instructions = """Act as a seasoned, witty, and investigative senior feature writer for a premium, new-age business publication (blend of 'The Ken' and 'YourStory'). You have access to real-time web search.
 
-You previously wrote a blog post on the topic below. A reader has provided feedback. Your job is to REWRITE and IMPROVE the article, incorporating the feedback while maintaining clear, evidence-based storytelling.
+You previously wrote a blog post on the topic below. The reader has provided feedback. Your job is to REWRITE and IMPROVE the article, incorporating the feedback while maintaining the same sharp, narrative-driven, data-anchored editorial style.
 
-Follow these editorial guidelines:
-- Write in plain, direct language. NO idioms, proverbs, or forced metaphors.
-- Conversational but authoritative tone — like explaining something to a smart friend.
-- Hard numbers anchored in real data (use web search for the latest).
-- Each section should flow naturally into the next, like a detective story building toward a conclusion.
-- NO in-text citations. State facts as truths. "Sources & References:" section at the bottom with URLs.
-- NO banned AI words: delve, tapestry, testament, landscape, beacon, robust, paramount, revolutionize, foster, "in conclusion", "poised to".
+Follow the same editorial guidelines:
+- Compelling narrative hook, conversational but authoritative tone. The piece MUST read like an engaging, seamless story.
+- Hard numbers anchored in real data with quotes from industry experts and excerpts from reputable research.
+- NO in-text citations or [1] markers — facts as truths in the narrative flow.
+- "Sources & References:" section at the very bottom with URLs.
+- ANTI-AI & CLICHE: No delve, tapestry, testament, landscape, beacon, robust, paramount, revolutionize, foster, "in conclusion". NO overt idioms or proverbs. NO overly imaginative "flights of fantasy"; predictions must flow naturally from the data.
+- Vary sentence lengths. Use active voice and strong verbs.
 
 OUTPUT FORMAT:
-- Start with: {"title": "Updated Article Title"}
+- Start with: {{"title": "Updated Article Title"}}
 - Then ---
 - Then clean HTML (h2, h3, p, ul/li, strong, em, blockquote — no html/head/body/h1)
 - Sources & References section at the end."""
 
-                user_input = f"Original topic: {target_blog['topic']}\n"
-                if suggestion:
-                    user_input += f"\nReader feedback to incorporate: {suggestion}\n"
-                user_input += f"\nPrevious article (first 800 chars for context): {target_blog['content_html'][:800]}..."
-                user_input += "\n\nRewrite the article with these improvements."
-                
-                print(f"INFO: [Job {job_id}] Regenerating blog {blog_id}...", file=sys.stderr)
-                raw_response = call_openai_responses_api(instructions, user_input, use_web_search=True)
-                
-                # --- CHECKER PHASE ---
-                blog_jobs[job_id]['phase'] = 'editor'
-                print(f"INFO: [Job {job_id}] [Checker Phase] Sending regenerated draft to Gemini...", file=sys.stderr)
-                
-                checker_prompt = f"""You are the Head Editor at a premium business publication. A reporter has rewritten an article based on reader feedback. Your job is to edit it for clarity, accuracy, and flow.
+        user_input = f"Original topic: {target_blog['topic']}\n"
+        if suggestion:
+            user_input += f"\nReader feedback to incorporate: {suggestion}\n"
+        user_input += f"\nPrevious article (first 800 chars for context): {target_blog['content_html'][:800]}..."
+        user_input += "\n\nRewrite the article with these improvements."
+        
+        print(f"INFO: [Maker Phase] Regenerating blog draft for topic: {target_blog['topic']}", file=sys.stderr)
+        raw_response = call_openai_responses_api(instructions, user_input, use_web_search=True)
+        
+        # --- MAKER-CHECKER: CHECKER PHASE ---
+        print(f"INFO: [Checker Phase] Sending regenerated draft to Gemini 3.1 Pro for editorial review...", file=sys.stderr)
+        
+        checker_prompt = f"""You are the sharp, rigorous, and brilliant Investigative Head Editor for our premium business publication (think the absolute best editors at 'The Ken' or 'Bloomberg Businessweek'). 
+You have Google Search grounding enabled. Use it to enhance or plug any gaps in the draft you recieve.
 
-READER FEEDBACK that was incorporated: "{suggestion}"
+One of your senior reporters has just submitted a REWRITTEN draft blog post on the topic: "{target_blog['topic']}".
+The reader provided this specific feedback for the rewrite: "{suggestion}"
 
-YOUR EDITING MANDATE:
-1. FACT-CHECK: Verify all claims, numbers, dates using Google Search. Fix errors.
-2. CLARITY: Rewrite any confusing or overly clever passages in plain language. The reader should never have to decode what you mean.
-3. FLOW: Ensure the article reads like a story — each section naturally leads to the next.
-4. STRIP IDIOMS: Find and replace ALL idioms, proverbs, and figurative language with direct, factual statements.
-5. ENHANCE: Add missing data points or recent developments.
-6. WORD COUNT: Under 2000 words.
-7. NO banned AI words: delve, tapestry, testament, bustling, landscape, navigating the complexities, a symphony of, beacon, robust, dynamic, paramount, revolutionize, foster, "in conclusion", "poised to", "in the ever-evolving".
+Here are the exact editorial guidelines the reporter was given to write this piece. You must understand the spirit, tone, narrative styling, and structure of what we want, and enforce it:
+---
+{instructions}
+---
+
+YOUR JOB:
+1. Act as the checker/editor. You have the total power to edit, update, append, rewrite, or change any part of this blog. The blog must read like a well-crafted, connected story, easy to grasp, convincing, and backed with data.
+2. Ensure the reader's feedback has been adequately addressed.
+3. Use your search grounding to VERIFY the facts, timeline, quotes, and research data in the draft. If anything is wrong, outdated, or weak, FIX IT.
+4. Enhance the prose. The article MUST read like a seamless, engaging story with a natural narrative flow. Rewrite disjointed sections. Make the hook hit harder.
+5. Final Word Count: Limit the total word count of the final article to a maximum of 1800 words. Be concise and impactful.
+6. Ensure the structural rules from the guidelines are followed perfectly:
+   - Ensure predictions or future outlooks flow naturally from the data. Eliminate any overly fantastical scenarios or overt idioms/proverbs.
+   - NO in-text citations or footnotes (no [1] or hyperlink placeholders).
+   - "Sources & References:" section at the very bottom with a list of URLs used for fact-checking/research.
+   - Absolutely NONE of the banned AI words: delve, tapestry, testament, bustling, landscape, navigating the complexities, a symphony of, beacon, robust, dynamic, paramount, revolutionize, foster, "in conclusion".
 
 OUTPUT FORMAT:
-- First line: {{"title": "Clear Title", "short_topic": "Max 10 Word Theme"}}
-- Second line: ---
-- Then clean HTML (<h2>, <h3>, <p>, <ul>/<li>, <strong>, <em>, <blockquote>).
-- NO ```html blocks, no <html>/<head>/<body> tags.
+- First line MUST be a JSON object containing the finalized title AND a short topic label (max 10 words, tactical, concise, highlighting the key theme — NOT the full topic): {{"title": "The Final Masterpiece Title", "short_topic": "India's IT Services Crisis"}}
+- Second line MUST be exactly three dashes: ---
+- Then provide the incredibly clean, polished HTML (<h2>, <h3>, <p>, <ul>/<li>, <strong>, <em>, <blockquote>). Ensure the semantic HTML supports the narrative flow.
+- DO NOT wrap the output in ```html blocks or include <html>, <head>, or <body> tags. Just the raw HTML content.
 
-Reporter's rewritten draft:
+Here is the reporter's rewritten draft:
 =========================================
 {raw_response}
 =========================================
 
-Edit this into a publication-ready piece (under 2000 words). Prioritize CLARITY over cleverness."""
+Now, do your job as the Head Editor and output the finalized, publication-ready piece (under 2000 words)."""
 
+        title = target_blog['title']
+        content_html = raw_response
+        short_topic = target_blog.get('short_topic', '')
 
-                title = target_blog['title']
-                content_html = raw_response
-                short_topic = target_blog.get('short_topic', '')
-
-                try:
-                    checker_response = call_gemini_api(
-                        messages=[{"role": "user", "content": checker_prompt}],
-                        model="gemini-3.1-pro-preview",
-                        temperature=1.0,
-                        use_google_search=True,
-                        thinking_level="HIGH"
-                    )
-                    print(f"INFO: [Job {job_id}] [Checker Phase] Editorial review complete.", file=sys.stderr)
-                    
-                    if checker_response.startswith("```html"):
-                        checker_response = checker_response[7:]
-                    if checker_response.startswith("```"):
-                        checker_response = checker_response[3:]
-                    if checker_response.endswith("```"):
-                        checker_response = checker_response[:-3]
-                    
-                    checker_response = checker_response.strip()
-                    
-                    lines = checker_response.split('\n')
-                    for i, line in enumerate(lines):
-                        line_stripped = line.strip()
-                        if line_stripped.startswith('{') and '"title"' in line_stripped:
-                            try:
-                                title_data = json.loads(line_stripped)
-                                title = title_data.get('title', title)
-                                short_topic = title_data.get('short_topic', short_topic)
-                                remaining = '\n'.join(lines[i+1:])
-                                if '---' in remaining:
-                                    content_html = remaining.split('---', 1)[1].strip()
-                                else:
-                                    content_html = remaining.strip()
-                                break
-                            except json.JSONDecodeError:
-                                pass
-                except Exception as checker_err:
-                    print(f"ERROR: [Job {job_id}] Checker failed: {checker_err}. Using Maker draft.", file=sys.stderr)
-                    lines = raw_response.split('\n')
-                    for i, line in enumerate(lines):
-                        line_stripped = line.strip()
-                        if line_stripped.startswith('{') and '"title"' in line_stripped:
-                            try:
-                                title_data = json.loads(line_stripped)
-                                title = title_data.get('title', title)
-                                short_topic = title_data.get('short_topic', short_topic)
-                                remaining = '\n'.join(lines[i+1:])
-                                if '---' in remaining:
-                                    content_html = remaining.split('---', 1)[1].strip()
-                                else:
-                                    content_html = remaining.strip()
-                                break
-                            except json.JSONDecodeError:
-                                pass
-                            
-                if content_html == raw_response:
-                    import re as re_mod
-                    h_match = re_mod.search(r'<h[12][^>]*>(.*?)</h[12]>', content_html)
-                    if h_match:
-                        title = re_mod.sub(r'<[^>]+>', '', h_match.group(1)).strip()
-                        content_html = content_html.replace(h_match.group(0), '', 1).strip()
-                
-                # --- SAVE ---
-                blog_jobs[job_id]['phase'] = 'saving'
-                from datetime import datetime
-                target_blog['title'] = title
-                target_blog['content_html'] = content_html
-                target_blog['short_topic'] = short_topic
-                target_blog['updated_at'] = datetime.now().isoformat()
-                
-                save_blogs(blogs)
-                
-                print(f"INFO: [Job {job_id}] Blog regenerated — id={blog_id}, title={title}", file=sys.stderr)
-                blog_jobs[job_id]['status'] = 'complete'
-                blog_jobs[job_id]['result'] = {'success': True, 'blog': target_blog}
+        try:
+            checker_response = call_gemini_api(
+                messages=[{"role": "user", "content": checker_prompt}],
+                model="gemini-3.1-pro-preview",
+                temperature=1.0,
+                use_google_search=True,
+                thinking_level="HIGH"
+            )
+            print(f"INFO: [Checker Phase] Editorial review complete.", file=sys.stderr)
             
-            except Exception as e:
-                print(f"ERROR: [Job {job_id}] Blog regeneration failed: {e}", file=sys.stderr)
-                traceback.print_exc()
-                blog_jobs[job_id]['status'] = 'error'
-                blog_jobs[job_id]['error'] = str(e)
+            # Clean potential markdown wrapping from Gemini
+            if checker_response.startswith("```html"):
+                checker_response = checker_response[7:]
+            if checker_response.startswith("```"):
+                checker_response = checker_response[3:]
+            if checker_response.endswith("```"):
+                checker_response = checker_response[:-3]
+            
+            checker_response = checker_response.strip()
+            
+            lines = checker_response.split('\n')
+            for i, line in enumerate(lines):
+                line_stripped = line.strip()
+                if line_stripped.startswith('{') and '"title"' in line_stripped:
+                    try:
+                        title_data = json.loads(line_stripped)
+                        title = title_data.get('title', title)
+                        short_topic = title_data.get('short_topic', short_topic)
+                        # Find the separator and get content after it
+                        remaining = '\n'.join(lines[i+1:])
+                        if '---' in remaining:
+                            content_html = remaining.split('---', 1)[1].strip()
+                        else:
+                            content_html = remaining.strip()
+                        break
+                    except json.JSONDecodeError:
+                        pass
+        except Exception as e:
+            print(f"ERROR: Checker phase failed: {e}. Falling back to Maker draft.", file=sys.stderr)
+            lines = raw_response.split('\n')
+            for i, line in enumerate(lines):
+                line_stripped = line.strip()
+                if line_stripped.startswith('{') and '"title"' in line_stripped:
+                    try:
+                        title_data = json.loads(line_stripped)
+                        title = title_data.get('title', title)
+                        short_topic = title_data.get('short_topic', short_topic)
+                        # Find the separator and get content after it
+                        remaining = '\n'.join(lines[i+1:])
+                        if '---' in remaining:
+                            content_html = remaining.split('---', 1)[1].strip()
+                        else:
+                            content_html = remaining.strip()
+                        break
+                    except json.JSONDecodeError:
+                        pass
+                        
+        if content_html == raw_response:
+            # Try to extract a title from the first heading if JSON parsing failed
+            import re
+            h_match = re.search(r'<h[12][^>]*>(.*?)</h[12]>', content_html)
+            if h_match:
+                title = re.sub(r'<[^>]+>', '', h_match.group(1)).strip()
+                content_html = content_html.replace(h_match.group(0), '', 1).strip()
         
-        thread = threading.Thread(target=_do_regenerate, daemon=True)
-        thread.start()
+        from datetime import datetime
+        target_blog['title'] = title
+        target_blog['content_html'] = content_html
+        target_blog['short_topic'] = short_topic
+        target_blog['updated_at'] = datetime.now().isoformat()
         
-        return jsonify({'success': True, 'job_id': job_id, 'message': 'Blog regeneration started'})
+        save_blogs(blogs)
+        return jsonify({'success': True, 'blog': target_blog})
     
     except Exception as e:
-        print(f"ERROR: Blog regeneration failed to start: {e}", file=sys.stderr)
+        print(f"ERROR: Blog regeneration failed: {e}", file=sys.stderr)
         traceback.print_exc()
         return jsonify({'error': f'Regeneration failed: {str(e)}'}), 500
 
@@ -2287,10 +2203,8 @@ GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 genai_client = None
 if GOOGLE_API_KEY:
     try:
-        import httpx
-        timeout = httpx.Timeout(300.0, connect=30.0)
-        genai_client = genai.Client(api_key=GOOGLE_API_KEY, http_options={'timeout': timeout})
-        print("INFO: Google GenAI (v1.0+) client initialized with 300s timeout.")
+        genai_client = genai.Client(api_key=GOOGLE_API_KEY)
+        print("INFO: Google GenAI (v1.0+) client initialized.")
     except Exception as e:
         print(f"ERROR: Failed to initialize Google GenAI client: {e}")
 
