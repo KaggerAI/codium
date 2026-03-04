@@ -1062,20 +1062,30 @@ def admin_list_blogs():
     blogs = load_blogs()
     return jsonify({'blogs': blogs, 'count': len(blogs)})
 
-@app.route('/api/admin/blogs/generate', methods=['POST'])
-def admin_generate_blog():
-    """Admin endpoint to generate a blog post using GPT-5.2-pro with web search"""
+import threading
+
+# In-memory store for async blog generation jobs
+BLOG_GENERATION_JOBS = {}
+
+@app.route('/api/admin/blogs/generate/status/<job_id>', methods=['GET'])
+def admin_blog_generate_status(job_id):
+    """Poll the status of an async blog generation job."""
     user, err = check_admin_auth()
     if err:
         return err
     
+    job = BLOG_GENERATION_JOBS.get(job_id)
+    if not job:
+        return jsonify({'error': 'Job not found'}), 404
+    
+    return jsonify(job)
+
+
+def _run_blog_generation(job_id, topic, article_type):
+    """Background worker: runs Maker + Checker pipeline and saves the blog."""
     try:
-        data = request.get_json(force=True)
-        topic = data.get('topic', '').strip()
-        article_type = data.get('article_type', 'general').strip()
-        
-        if not topic:
-            return jsonify({'error': 'Topic is required'}), 400
+        BLOG_GENERATION_JOBS[job_id]['status'] = 'running'
+        BLOG_GENERATION_JOBS[job_id]['phase'] = 'maker'
         
         # --- SHARED EDITORIAL DNA ---
         shared_style = """Act as a seasoned, witty, and investigative senior feature writer for a premium, new-age business publication (think a blend of 'The Ken', 'Bloomberg Businessweek', and 'YourStory'). You also have access to real-time web search capabilities.
@@ -1207,6 +1217,7 @@ Using the real-world data you just fetched, write the article following these st
         user_input = f"{topic}"
         
         print(f"INFO: Generating blog [{article_type}] for topic: {topic}", file=sys.stderr)
+        BLOG_GENERATION_JOBS[job_id]['phase'] = 'maker'
         raw_response = call_openai_responses_api(instructions, user_input, use_web_search=True)
         
         # Check if the AI declined the topic
@@ -1216,11 +1227,11 @@ Using the real-world data you just fetched, write the article following these st
                 decline_data = json.loads(first_line)
                 if decline_data.get('decline'):
                     reason = decline_data.get('reason', 'This topic does not have enough depth for a quality blog post.')
-                    return jsonify({
-                        'success': False,
-                        'declined': True,
+                    BLOG_GENERATION_JOBS[job_id].update({
+                        'status': 'declined',
                         'error': f"🤔 The AI chose not to write this blog: {reason}"
-                    }), 200  # 200 because it's not an error — it's a deliberate choice
+                    })
+                    return
             except json.JSONDecodeError:
                 pass
         
@@ -1231,6 +1242,7 @@ Using the real-world data you just fetched, write the article following these st
         
         # --- MAKER-CHECKER: CHECKER PHASE ---
         print(f"INFO: [Checker Phase] Sending draft to Gemini 3.1 Pro for editorial review...", file=sys.stderr)
+        BLOG_GENERATION_JOBS[job_id]['phase'] = 'checker'
         
         checker_prompt = f"""You are the sharp, rigorous, and brilliant Investigative Head Editor for our premium business publication (think the absolute best editors at 'The Ken' or 'Bloomberg Businessweek'). 
 You have Google Search grounding enabled.
@@ -1331,6 +1343,8 @@ Now, do your job as the Head Editor and output the finalized, publication-ready 
             if h_match:
                 title = re.sub(r'<[^>]+>', '', h_match.group(1)).strip()
         
+        BLOG_GENERATION_JOBS[job_id]['phase'] = 'saving'
+        
         from datetime import datetime
         blog_id = str(uuid.uuid4())[:8]
         slug = generate_slug(title)
@@ -1370,12 +1384,55 @@ Now, do your job as the Head Editor and output the finalized, publication-ready 
         
         print(f"INFO: Blog generated — id={blog_id}, title={title}", file=sys.stderr)
         
-        return jsonify({'success': True, 'blog': blog})
+        BLOG_GENERATION_JOBS[job_id].update({
+            'status': 'complete',
+            'phase': 'done',
+            'blog': blog
+        })
     
     except Exception as e:
         print(f"ERROR: Blog generation failed: {e}", file=sys.stderr)
         traceback.print_exc()
-        return jsonify({'error': f'Blog generation failed: {str(e)}'}), 500
+        BLOG_GENERATION_JOBS[job_id].update({
+            'status': 'error',
+            'error': f'Blog generation failed: {str(e)}'
+        })
+
+
+@app.route('/api/admin/blogs/generate', methods=['POST'])
+def admin_generate_blog():
+    """Admin endpoint to generate a blog post — kicks off async job and returns job_id."""
+    user, err = check_admin_auth()
+    if err:
+        return err
+    
+    try:
+        data = request.get_json(force=True)
+        topic = data.get('topic', '').strip()
+        article_type = data.get('article_type', 'general').strip()
+        
+        if not topic:
+            return jsonify({'error': 'Topic is required'}), 400
+        
+        job_id = str(uuid.uuid4())[:8]
+        BLOG_GENERATION_JOBS[job_id] = {
+            'status': 'starting',
+            'phase': 'queued',
+            'topic': topic,
+            'article_type': article_type
+        }
+        
+        # Start background thread
+        t = threading.Thread(target=_run_blog_generation, args=(job_id, topic, article_type), daemon=True)
+        t.start()
+        
+        print(f"INFO: Blog generation job started — job_id={job_id}, topic={topic}", file=sys.stderr)
+        return jsonify({'success': True, 'job_id': job_id})
+    
+    except Exception as e:
+        print(f"ERROR: Failed to start blog generation: {e}", file=sys.stderr)
+        traceback.print_exc()
+        return jsonify({'error': f'Failed to start generation: {str(e)}'}), 500
 
 @app.route('/api/admin/blogs/<blog_id>', methods=['PUT'])
 def admin_update_blog(blog_id):
@@ -1459,16 +1516,11 @@ def admin_delete_blog(blog_id):
     save_blogs(blogs)
     return jsonify({'success': True})
 
-@app.route('/api/admin/blogs/<blog_id>/regenerate', methods=['POST'])
-def admin_regenerate_blog(blog_id):
-    """Admin endpoint to regenerate a blog with optional suggestion context"""
-    user, err = check_admin_auth()
-    if err:
-        return err
-    
+def _run_blog_regeneration(job_id, blog_id, suggestion):
+    """Background worker: runs Maker + Checker pipeline for blog regeneration."""
     try:
-        data = request.get_json(force=True)
-        suggestion = data.get('suggestion', '').strip()
+        BLOG_GENERATION_JOBS[job_id]['status'] = 'running'
+        BLOG_GENERATION_JOBS[job_id]['phase'] = 'loading'
         
         blogs = load_blogs()
         target_blog = None
@@ -1478,7 +1530,8 @@ def admin_regenerate_blog(blog_id):
                 break
         
         if not target_blog:
-            return jsonify({'error': 'Blog not found'}), 404
+            BLOG_GENERATION_JOBS[job_id].update({'status': 'error', 'error': 'Blog not found'})
+            return
         
         instructions = """Act as a seasoned, witty, and investigative senior feature writer for a premium, new-age business publication (blend of 'The Ken' and 'YourStory'). You have access to real-time web search.
 
@@ -1493,7 +1546,7 @@ Follow the same editorial guidelines:
 - Vary sentence lengths. Use active voice and strong verbs.
 
 OUTPUT FORMAT:
-- Start with: {{"title": "Updated Article Title"}}
+- Start with: {"title": "Updated Article Title"}
 - Then ---
 - Then clean HTML (h2, h3, p, ul/li, strong, em, blockquote — no html/head/body/h1)
 - Sources & References section at the end."""
@@ -1505,10 +1558,12 @@ OUTPUT FORMAT:
         user_input += "\n\nRewrite the article with these improvements."
         
         print(f"INFO: [Maker Phase] Regenerating blog draft for topic: {target_blog['topic']}", file=sys.stderr)
+        BLOG_GENERATION_JOBS[job_id]['phase'] = 'maker'
         raw_response = call_openai_responses_api(instructions, user_input, use_web_search=True)
         
         # --- MAKER-CHECKER: CHECKER PHASE ---
         print(f"INFO: [Checker Phase] Sending regenerated draft to Gemini 3.1 Pro for editorial review...", file=sys.stderr)
+        BLOG_GENERATION_JOBS[job_id]['phase'] = 'checker'
         
         checker_prompt = f"""You are the sharp, rigorous, and brilliant Investigative Head Editor for our premium business publication (think the absolute best editors at 'The Ken' or 'Bloomberg Businessweek'). 
 You have Google Search grounding enabled. Use it to enhance or plug any gaps in the draft you recieve.
@@ -1578,7 +1633,6 @@ Now, do your job as the Head Editor and output the finalized, publication-ready 
                         title_data = json.loads(line_stripped)
                         title = title_data.get('title', title)
                         short_topic = title_data.get('short_topic', short_topic)
-                        # Find the separator and get content after it
                         remaining = '\n'.join(lines[i+1:])
                         if '---' in remaining:
                             content_html = remaining.split('---', 1)[1].strip()
@@ -1597,7 +1651,6 @@ Now, do your job as the Head Editor and output the finalized, publication-ready 
                         title_data = json.loads(line_stripped)
                         title = title_data.get('title', title)
                         short_topic = title_data.get('short_topic', short_topic)
-                        # Find the separator and get content after it
                         remaining = '\n'.join(lines[i+1:])
                         if '---' in remaining:
                             content_html = remaining.split('---', 1)[1].strip()
@@ -1608,12 +1661,13 @@ Now, do your job as the Head Editor and output the finalized, publication-ready 
                         pass
                         
         if content_html == raw_response:
-            # Try to extract a title from the first heading if JSON parsing failed
             import re
             h_match = re.search(r'<h[12][^>]*>(.*?)</h[12]>', content_html)
             if h_match:
                 title = re.sub(r'<[^>]+>', '', h_match.group(1)).strip()
                 content_html = content_html.replace(h_match.group(0), '', 1).strip()
+        
+        BLOG_GENERATION_JOBS[job_id]['phase'] = 'saving'
         
         from datetime import datetime
         target_blog['title'] = title
@@ -1622,12 +1676,66 @@ Now, do your job as the Head Editor and output the finalized, publication-ready 
         target_blog['updated_at'] = datetime.now().isoformat()
         
         save_blogs(blogs)
-        return jsonify({'success': True, 'blog': target_blog})
+        
+        print(f"INFO: Blog regenerated — id={blog_id}, title={title}", file=sys.stderr)
+        
+        BLOG_GENERATION_JOBS[job_id].update({
+            'status': 'complete',
+            'phase': 'done',
+            'blog': target_blog
+        })
     
     except Exception as e:
         print(f"ERROR: Blog regeneration failed: {e}", file=sys.stderr)
         traceback.print_exc()
-        return jsonify({'error': f'Regeneration failed: {str(e)}'}), 500
+        BLOG_GENERATION_JOBS[job_id].update({
+            'status': 'error',
+            'error': f'Regeneration failed: {str(e)}'
+        })
+
+
+@app.route('/api/admin/blogs/<blog_id>/regenerate', methods=['POST'])
+def admin_regenerate_blog(blog_id):
+    """Admin endpoint to regenerate a blog — kicks off async job and returns job_id."""
+    user, err = check_admin_auth()
+    if err:
+        return err
+    
+    try:
+        data = request.get_json(force=True)
+        suggestion = data.get('suggestion', '').strip()
+        
+        # Quick validation: blog must exist
+        blogs = load_blogs()
+        target_blog = None
+        for blog in blogs:
+            if blog['id'] == blog_id:
+                target_blog = blog
+                break
+        
+        if not target_blog:
+            return jsonify({'error': 'Blog not found'}), 404
+        
+        job_id = str(uuid.uuid4())[:8]
+        BLOG_GENERATION_JOBS[job_id] = {
+            'status': 'starting',
+            'phase': 'queued',
+            'topic': target_blog.get('topic', ''),
+            'blog_id': blog_id,
+            'type': 'regenerate'
+        }
+        
+        # Start background thread
+        t = threading.Thread(target=_run_blog_regeneration, args=(job_id, blog_id, suggestion), daemon=True)
+        t.start()
+        
+        print(f"INFO: Blog regeneration job started — job_id={job_id}, blog_id={blog_id}", file=sys.stderr)
+        return jsonify({'success': True, 'job_id': job_id})
+    
+    except Exception as e:
+        print(f"ERROR: Failed to start blog regeneration: {e}", file=sys.stderr)
+        traceback.print_exc()
+        return jsonify({'error': f'Failed to start regeneration: {str(e)}'}), 500
 
 # --- Public Blog API Endpoints ---
 

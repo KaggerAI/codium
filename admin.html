@@ -1127,10 +1127,10 @@
             }
 
             btn.disabled = true;
-            btn.innerHTML = '<span class="animate-spin inline-block w-5 h-5 border-2 border-white border-t-transparent rounded-full mr-2"></span> Generating with GPT-5.2...';
+            btn.innerHTML = '<span class="animate-spin inline-block w-5 h-5 border-2 border-white border-t-transparent rounded-full mr-2"></span> Starting generation...';
             status.classList.remove('hidden');
             status.className = 'p-4 rounded-lg border bg-blue-500/20 border-blue-500/50 text-blue-300';
-            status.innerHTML = '⏳ Generating blog with AI + live web search... This may take 30-60 seconds.';
+            status.innerHTML = '⏳ Starting blog generation job...';
 
             try {
                 const response = await fetch('/api/admin/blogs/generate', {
@@ -1140,25 +1140,67 @@
                 });
                 const data = await response.json();
 
-                if (response.ok && data.success) {
-                    status.className = 'p-4 rounded-lg border bg-green-500/20 border-green-500/50 text-green-300';
-                    status.innerHTML = `✅ Blog generated: <strong>${escapeHtml(data.blog.title)}</strong><br><small>Status: Draft — review and publish when ready.</small>`;
+                if (response.ok && data.success && data.job_id) {
                     document.getElementById('blog-topic').value = '';
-                    loadBlogs();
-                } else if (data.declined) {
-                    status.className = 'p-4 rounded-lg border bg-amber-500/20 border-amber-500/50 text-amber-300';
-                    status.innerHTML = `${data.error}<br><small>Try a different or more specific topic.</small>`;
+                    pollBlogJobStatus(data.job_id, status, btn);
                 } else {
                     status.className = 'p-4 rounded-lg border bg-red-500/20 border-red-500/50 text-red-300';
                     status.innerHTML = `❌ Error: ${data.error || 'Unknown error'}`;
+                    resetGenerateBtn(btn);
                 }
             } catch (error) {
                 status.className = 'p-4 rounded-lg border bg-red-500/20 border-red-500/50 text-red-300';
                 status.innerHTML = `❌ Network error: ${error.message}`;
-            } finally {
-                btn.disabled = false;
-                btn.innerHTML = `<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg><span>Generate with AI</span>`;
+                resetGenerateBtn(btn);
             }
+        }
+
+        function resetGenerateBtn(btn) {
+            btn.disabled = false;
+            btn.innerHTML = `<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg><span>Generate with AI</span>`;
+        }
+
+        function pollBlogJobStatus(jobId, statusEl, btn) {
+            const phaseLabels = {
+                'queued': '⏳ Job queued...',
+                'maker': '✍️ Maker AI is writing the draft with web research... (this may take 3-5 min)',
+                'checker': '🔍 Checker AI is editing & fact-checking... (this may take 2-4 min)',
+                'saving': '💾 Saving the final article...',
+                'loading': '📂 Loading blog data...',
+                'done': '✅ Complete!'
+            };
+
+            const interval = setInterval(async () => {
+                try {
+                    const res = await fetch(`/api/admin/blogs/generate/status/${jobId}`);
+                    const data = await res.json();
+
+                    if (data.status === 'running' || data.status === 'starting') {
+                        const label = phaseLabels[data.phase] || `⏳ Processing (${data.phase})...`;
+                        statusEl.className = 'p-4 rounded-lg border bg-blue-500/20 border-blue-500/50 text-blue-300';
+                        statusEl.innerHTML = label;
+                        btn.innerHTML = `<span class="animate-spin inline-block w-5 h-5 border-2 border-white border-t-transparent rounded-full mr-2"></span> ${data.phase === 'checker' ? 'Checker phase...' : 'Generating...'}`;
+                    } else if (data.status === 'complete') {
+                        clearInterval(interval);
+                        statusEl.className = 'p-4 rounded-lg border bg-green-500/20 border-green-500/50 text-green-300';
+                        statusEl.innerHTML = `✅ Blog generated: <strong>${escapeHtml(data.blog.title)}</strong><br><small>Status: Draft — review and publish when ready.</small>`;
+                        loadBlogs();
+                        resetGenerateBtn(btn);
+                    } else if (data.status === 'declined') {
+                        clearInterval(interval);
+                        statusEl.className = 'p-4 rounded-lg border bg-amber-500/20 border-amber-500/50 text-amber-300';
+                        statusEl.innerHTML = `${data.error}<br><small>Try a different or more specific topic.</small>`;
+                        resetGenerateBtn(btn);
+                    } else if (data.status === 'error') {
+                        clearInterval(interval);
+                        statusEl.className = 'p-4 rounded-lg border bg-red-500/20 border-red-500/50 text-red-300';
+                        statusEl.innerHTML = `❌ Error: ${data.error || 'Unknown error'}`;
+                        resetGenerateBtn(btn);
+                    }
+                } catch (e) {
+                    // Network glitch — keep polling
+                }
+            }, 5000);
         }
 
         async function editBlog(blogId) {
@@ -1269,9 +1311,12 @@
 
                 closeEditModal();
                 const status = document.getElementById('blog-generate-status');
+                const btn = document.getElementById('generate-blog-btn');
                 status.classList.remove('hidden');
                 status.className = 'p-4 rounded-lg border bg-blue-500/20 border-blue-500/50 text-blue-300';
-                status.innerHTML = '🔄 Regenerating blog with feedback... This may take 30-60 seconds.';
+                status.innerHTML = '🔄 Starting regeneration job with feedback...';
+                btn.disabled = true;
+                btn.innerHTML = '<span class="animate-spin inline-block w-5 h-5 border-2 border-white border-t-transparent rounded-full mr-2"></span> Regenerating...';
 
                 const regenResponse = await fetch(`/api/admin/blogs/${blogId}/regenerate`, {
                     method: 'POST',
@@ -1280,13 +1325,12 @@
                 });
                 const regenData = await regenResponse.json();
 
-                if (regenData.success) {
-                    status.className = 'p-4 rounded-lg border bg-green-500/20 border-green-500/50 text-green-300';
-                    status.innerHTML = `✅ Blog regenerated: <strong>${escapeHtml(regenData.blog.title)}</strong>`;
-                    loadBlogs();
+                if (regenData.success && regenData.job_id) {
+                    pollBlogJobStatus(regenData.job_id, status, btn);
                 } else {
                     status.className = 'p-4 rounded-lg border bg-red-500/20 border-red-500/50 text-red-300';
                     status.innerHTML = `❌ Error: ${regenData.error}`;
+                    resetGenerateBtn(btn);
                 }
             } catch (error) {
                 alert('Regeneration failed: ' + error.message);
