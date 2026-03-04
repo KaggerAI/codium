@@ -996,7 +996,7 @@ def generate_slug(title):
     slug = slug.strip('-')
     return slug[:80]  # Limit length
 
-def call_openai_responses_api(instructions, user_input, use_web_search=True, model="gpt-5.2"):
+def call_openai_responses_api(instructions, user_input, use_web_search=True, model="gpt-5.2-pro"):
     """
     Call OpenAI Responses API with optional web search.
     Uses streaming to prevent Azure SNAT TCP idle timeout (4 min).
@@ -2541,53 +2541,86 @@ def call_perplexity_api(messages, model="sonar-pro", temperature=1, timeout=120,
 def call_gemini_api(messages, model="gemini-3-flash-preview", temperature=1, use_google_search=False, thinking_level=None):
     """
     Call the Gemini API with optional thinking mode for deeper reasoning.
-    Using the new google-genai (v1.0+) SDK.
+    Includes exponential backoff retries for 503/429 errors and model fallback.
     """
     global genai_client
     if not genai_client:
         raise ValueError("Google Gemini API client is not initialized (check GOOGLE_API_KEY).")
         
-    try:
-        # Build generation config
-        config_args = {
-            "temperature": temperature,
-            "safety_settings": [
-                types.SafetySetting(category="HARM_CATEGORY_HARASSMENT", threshold="BLOCK_NONE"),
-                types.SafetySetting(category="HARM_CATEGORY_HATE_SPEECH", threshold="BLOCK_NONE"),
-                types.SafetySetting(category="HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold="BLOCK_NONE"),
-                types.SafetySetting(category="HARM_CATEGORY_DANGEROUS_CONTENT", threshold="BLOCK_NONE"),
-            ]
-        }
+    from google.genai.errors import ServerError, APIError
+    import time
+    
+    models_to_try = [model]
+    if model == "gemini-3.1-pro-preview":
+        models_to_try.append("gemini-3-flash-preview")
         
-        # Tools (Google Search)
-        if use_google_search:
-            config_args["tools"] = [types.Tool(google_search=types.GoogleSearch())]
-            
-        # Thinking Config (Native support in new SDK)
-        if thinking_level:
-            config_args["thinking_config"] = types.ThinkingConfig(thinking_level=thinking_level)
-            print(f"DEBUG: Gemini thinking mode enabled: {thinking_level}", file=sys.stderr)
+    for current_model in models_to_try:
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                # Build generation config
+                config_args = {
+                    "temperature": temperature,
+                    "safety_settings": [
+                        types.SafetySetting(category="HARM_CATEGORY_HARASSMENT", threshold="BLOCK_NONE"),
+                        types.SafetySetting(category="HARM_CATEGORY_HATE_SPEECH", threshold="BLOCK_NONE"),
+                        types.SafetySetting(category="HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold="BLOCK_NONE"),
+                        types.SafetySetting(category="HARM_CATEGORY_DANGEROUS_CONTENT", threshold="BLOCK_NONE"),
+                    ]
+                }
+                
+                # Tools (Google Search)
+                if use_google_search:
+                    config_args["tools"] = [types.Tool(google_search=types.GoogleSearch())]
+                    
+                # Thinking Config
+                if thinking_level and "gemini-3" in current_model:
+                    config_args["thinking_config"] = types.ThinkingConfig(thinking_level=thinking_level)
+                    print(f"DEBUG: Gemini thinking mode enabled for {current_model}: {thinking_level}", file=sys.stderr)
 
-        # Build final config object
-        gen_config = types.GenerateContentConfig(**config_args)
-        
-        # Format messages for new SDK
-        gemini_contents = []
-        for msg in messages:
-            role = "user" if msg["role"] == "user" else "model"
-            gemini_contents.append(types.Content(role=role, parts=[types.Part.from_text(text=msg["content"])]))
+                gen_config = types.GenerateContentConfig(**config_args)
+                
+                gemini_contents = []
+                for msg in messages:
+                    role = "user" if msg["role"] == "user" else "model"
+                    gemini_contents.append(types.Content(role=role, parts=[types.Part.from_text(text=msg["content"])]))
 
-        response = genai_client.models.generate_content(
-            model=model,
-            contents=gemini_contents,
-            config=gen_config
-        )
-        
-        return response.text
-    except Exception as e:
-        print(f"ERROR in call_gemini_api (v1.0): {e}")
-        traceback.print_exc()
-        raise
+                response = genai_client.models.generate_content(
+                    model=current_model,
+                    contents=gemini_contents,
+                    config=gen_config
+                )
+                
+                return response.text
+                
+            except (ServerError, APIError) as e:
+                # 503 (Unavailable) or 429 (Rate Limit)
+                is_retryable = False
+                if isinstance(e, ServerError) and "503" in str(e):
+                    is_retryable = True
+                if isinstance(e, APIError) and "429" in str(e):
+                    is_retryable = True
+                    
+                if is_retryable and attempt < max_retries - 1:
+                    wait_time = (2 ** attempt) * 2 # 2s, 4s, 8s
+                    print(f"WARN: Gemini {current_model} returned {type(e).__name__} (attempt {attempt+1}). Retrying in {wait_time}s...", file=sys.stderr)
+                    time.sleep(wait_time)
+                    continue
+                
+                if current_model != models_to_try[-1]:
+                    print(f"ERROR: Gemini {current_model} failed after retries. Falling back to {models_to_try[-1]}...", file=sys.stderr)
+                    break # Break inner loop, try next model in outer loop
+                else:
+                    print(f"ERROR in call_gemini_api (final model {current_model}): {e}")
+                    traceback.print_exc()
+                    raise
+            except Exception as e:
+                print(f"NON-RETRYABLE ERROR in call_gemini_api: {e}")
+                traceback.print_exc()
+                raise
+                
+    raise Exception("All attempted Gemini models failed.")
+
 
 
 def call_generative_ai_model(model, messages, temperature=1, timeout=180, thinking_level=None):
