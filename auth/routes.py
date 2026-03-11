@@ -134,7 +134,7 @@ def login_required(f):
 
 def admin_required(f):
     """Decorator to protect admin-only routes."""
-    @wraps(f)
+    @wraps(f)  # type: ignore
     @login_required
     def decorated_function(*args, **kwargs):
         if not request.current_user.is_admin:
@@ -359,7 +359,8 @@ def api_insights_summary():
 def init_auth(app):
     """Initialize auth module with Flask app."""
     # Configure session
-    app.secret_key = os.getenv('SECRET_KEY', 'dev-secret-key-change-in-production')
+    import secrets as _secrets
+    app.secret_key = os.getenv('SECRET_KEY') or _secrets.token_hex(32)  # Random key if env not set
     app.config['SESSION_COOKIE_SECURE'] = not app.debug  # HTTPS only in production
     app.config['SESSION_COOKIE_HTTPONLY'] = True
     app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'

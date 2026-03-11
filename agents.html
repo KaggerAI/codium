@@ -1000,10 +1000,160 @@
                 padding: 1rem;
             }
         }
+
+        /* === HISTORY PANEL (AGENTS) === */
+        .kagger-history-toggle {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            padding: 0.4rem 0.85rem;
+            font-size: 0.8rem;
+            font-weight: 600;
+            border-radius: 999px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border: 1px solid rgba(139,92,246,0.3);
+            background: transparent;
+            font-family: inherit;
+            color: var(--accent-violet);
+        }
+        .kagger-history-toggle:hover {
+            background: rgba(139,92,246,0.1);
+        }
+        .kagger-history-panel {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease, opacity 0.3s ease;
+            opacity: 0;
+            border-radius: 0.75rem;
+        }
+        .kagger-history-panel.open {
+            max-height: 400px;
+            opacity: 1;
+            padding: 0.5rem 0;
+        }
+        .kagger-history-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            max-height: 280px;
+            overflow-y: auto;
+        }
+        .kagger-history-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.55rem 0.75rem;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            transition: background 0.15s ease;
+            gap: 0.75rem;
+        }
+        .kagger-history-item:hover {
+            background: rgba(255,255,255,0.06);
+        }
+        .kagger-history-item-query {
+            font-size: 0.85rem;
+            font-weight: 500;
+            color: var(--text-primary);
+            flex: 1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .kagger-history-item-time {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+        .kagger-history-empty {
+            text-align: center;
+            padding: 1.25rem 1rem;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+        .kagger-history-clear-btn {
+            font-size: 0.7rem;
+            padding: 0.25rem 0.6rem;
+            border-radius: 999px;
+            cursor: pointer;
+            border: 1px solid rgba(139,92,246,0.3);
+            background: transparent;
+            font-family: inherit;
+            color: var(--text-muted);
+            transition: all 0.2s ease;
+            opacity: 0.6;
+        }
+        .kagger-history-clear-btn:hover {
+            opacity: 1;
+            color: var(--accent-violet);
+        }
     </style>
 </head>
 
 <body>
+    <script>
+        // ===================================================================================
+        // KAGGER HISTORY: Persistent localStorage-based history for all modules
+        // ===================================================================================
+        const KaggerHistory = {
+            MAX_ITEMS: 15,
+            _key(module) { return 'kagger_history_' + module; },
+            get(module) {
+                try { return JSON.parse(localStorage.getItem(this._key(module)) || '[]'); }
+                catch (e) { return []; }
+            },
+            add(module, entry) {
+                try {
+                    const items = this.get(module);
+                    const record = { ...entry, timestamp: Date.now() };
+                    const filtered = items.filter(i => i.query !== entry.query);
+                    filtered.unshift(record);
+                    localStorage.setItem(this._key(module), JSON.stringify(filtered.slice(0, this.MAX_ITEMS)));
+                } catch (e) { console.error('[KaggerHistory] Save error:', e); }
+            },
+            clear(module) {
+                try { localStorage.removeItem(this._key(module)); } catch (e) {}
+            },
+            timeAgo(ts) {
+                const diff = Date.now() - ts;
+                const minutes = Math.floor(diff / 60000);
+                if (minutes < 1) return 'just now';
+                if (minutes < 60) return minutes + 'm ago';
+                const hours = Math.floor(minutes / 60);
+                if (hours < 24) return hours + 'h ago';
+                const days = Math.floor(hours / 24);
+                if (days < 7) return days + 'd ago';
+                return new Date(ts).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+            },
+            renderList(module, listEl, opts) {
+                const items = this.get(module);
+                if (!items.length) {
+                    listEl.innerHTML = '<li class="kagger-history-empty">' + (opts.emptyText || 'No recent activity') + '</li>';
+                    return;
+                }
+                listEl.innerHTML = items.map((item, i) => {
+                    const label = opts.labelFn ? opts.labelFn(item) : item.query;
+                    return '<li class="kagger-history-item" data-index="' + i + '">'
+                        + '<span class="kagger-history-item-query">' + this._escHtml(label) + '</span>'
+                        + '<span class="kagger-history-item-time">' + this.timeAgo(item.timestamp) + '</span>'
+                        + '</li>';
+                }).join('');
+                listEl.querySelectorAll('.kagger-history-item').forEach(el => {
+                    el.addEventListener('click', () => {
+                        const idx = parseInt(el.dataset.index);
+                        if (opts.onSelect) opts.onSelect(items[idx]);
+                    });
+                });
+            },
+            _escHtml(s) {
+                const div = document.createElement('div');
+                div.textContent = s;
+                return div.innerHTML;
+            }
+        };
+    </script>
 
     <!-- ================================ -->
     <!-- NAVIGATION BAR                    -->
@@ -1088,6 +1238,14 @@
                     <button class="analyze-btn" id="concallAnalyzeBtn" onclick="startConcallAnalysis()">
                         <span id="concallBtnText">Analyze Concall</span>
                     </button>
+                </div>
+                <!-- Concall History Panel -->
+                <div class="mt-4" style="display:flex;align-items:center;justify-content:space-between;">
+                    <button class="kagger-history-toggle" onclick="toggleHistoryPanel('concall')">🕐 Recent Analyses</button>
+                    <button class="kagger-history-clear-btn" onclick="KaggerHistory.clear('concall');renderConcallHistory();" title="Clear">Clear</button>
+                </div>
+                <div id="concallHistoryPanel" class="kagger-history-panel">
+                    <ul id="concallHistoryList" class="kagger-history-list"></ul>
                 </div>
             </div>
 
@@ -1183,6 +1341,14 @@
                     <button class="analyze-btn" id="forensicAnalyzeBtn" onclick="startForensicAnalysis()">
                         <span id="forensicBtnText">Run Forensic Scan</span>
                     </button>
+                </div>
+                <!-- Forensic History Panel -->
+                <div class="mt-4" style="display:flex;align-items:center;justify-content:space-between;">
+                    <button class="kagger-history-toggle" onclick="toggleHistoryPanel('forensic')">🕐 Recent Scans</button>
+                    <button class="kagger-history-clear-btn" onclick="KaggerHistory.clear('forensic');renderForensicHistory();" title="Clear">Clear</button>
+                </div>
+                <div id="forensicHistoryPanel" class="kagger-history-panel">
+                    <ul id="forensicHistoryList" class="kagger-history-list"></ul>
                 </div>
             </div>
 
@@ -1399,6 +1565,10 @@
             document.getElementById('concallProgressText').textContent = 'Starting concall analysis...';
             document.getElementById('concallAnalyzeBtn').disabled = true;
             document.getElementById('concallBtnText').innerHTML = '<span class="spinner"></span> Analyzing...';
+
+            // Save to history
+            KaggerHistory.add('concall', { query: ticker, name: concallSelectedName || ticker });
+            renderConcallHistory();
 
             // Start timer
             concallStartTime = Date.now();
@@ -1799,6 +1969,10 @@
             document.getElementById('forensicAnalyzeBtn').disabled = true;
             document.getElementById('forensicBtnText').innerHTML = '<span class="spinner"></span> Scanning...';
 
+            // Save to history
+            KaggerHistory.add('forensic', { query: ticker, name: forensicSelectedName || ticker });
+            renderForensicHistory();
+
             // Start timer
             forensicStartTime = Date.now();
             if (forensicTimerInterval) clearInterval(forensicTimerInterval);
@@ -2118,6 +2292,59 @@
         if (typeof marked !== 'undefined') {
             marked.setOptions({ breaks: true, gfm: true });
         }
+    </script>
+
+    <script>
+        // ===================================================================================
+        // HISTORY PANEL: Toggle, render, and initialization for agents
+        // ===================================================================================
+        function toggleHistoryPanel(module) {
+            const panel = document.getElementById(module + 'HistoryPanel');
+            if (!panel) return;
+            panel.classList.toggle('open');
+            if (panel.classList.contains('open')) {
+                if (module === 'concall') renderConcallHistory();
+                else if (module === 'forensic') renderForensicHistory();
+            }
+        }
+
+        function renderConcallHistory() {
+            const listEl = document.getElementById('concallHistoryList');
+            if (!listEl) return;
+            KaggerHistory.renderList('concall', listEl, {
+                emptyText: 'No concall analyses yet',
+                labelFn: item => (item.name && item.name !== item.query ? item.name + ' (' + item.query + ')' : item.query),
+                onSelect: item => {
+                    concallSelectedTicker = item.query;
+                    concallSelectedName = item.name || item.query;
+                    concallInput.value = item.name && item.name !== item.query ? item.name + ' (' + item.query + ')' : item.query;
+                    toggleHistoryPanel('concall');
+                    startConcallAnalysis();
+                }
+            });
+        }
+
+        function renderForensicHistory() {
+            const listEl = document.getElementById('forensicHistoryList');
+            if (!listEl) return;
+            KaggerHistory.renderList('forensic', listEl, {
+                emptyText: 'No forensic scans yet',
+                labelFn: item => (item.name && item.name !== item.query ? item.name + ' (' + item.query + ')' : item.query),
+                onSelect: item => {
+                    forensicSelectedTicker = item.query;
+                    forensicSelectedName = item.name || item.query;
+                    forensicInput.value = item.name && item.name !== item.query ? item.name + ' (' + item.query + ')' : item.query;
+                    toggleHistoryPanel('forensic');
+                    startForensicAnalysis();
+                }
+            });
+        }
+
+        // Auto-render on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            renderConcallHistory();
+            renderForensicHistory();
+        });
     </script>
 </body>
 

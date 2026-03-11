@@ -11,8 +11,17 @@ import talib
 from tvDatafeed import TvDatafeed, Interval
 import plotly.graph_objects as go
 
-# Initialize TradingView datafeed here, as it's used by fetch_histogram
-tv = TvDatafeed()
+import os
+
+# Initialize TradingView datafeed (authenticated if credentials provided, else guest)
+_tv_user = os.environ.get('TV_USERNAME', '')
+_tv_pass = os.environ.get('TV_PASSWORD', '')
+if _tv_user and _tv_pass:
+    tv = TvDatafeed(username=_tv_user, password=_tv_pass)
+    print(f"INFO: TvDatafeed initialized with authenticated session (user: {_tv_user})")
+else:
+    tv = TvDatafeed()
+    print("INFO: TvDatafeed initialized as guest (set TV_USERNAME & TV_PASSWORD for stable connection)")
 
 # -------------------------------------------------------------------
 # 1) Data Fetching and Technical Calculation Helpers

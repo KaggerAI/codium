@@ -594,6 +594,14 @@ from flask import jsonify
 
 @app.route('/debug/env', methods=['GET'])
 def debug_env():
+    # Admin-only: check authentication
+    from flask import session as flask_session
+    if 'user_id' not in flask_session:
+        return jsonify({'error': 'Authentication required'}), 401
+    from auth.database import User
+    user = User.get_by_id(flask_session['user_id'])
+    if not user or not user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
     keys = [
         "OPENAI_API_KEY",
         "AZURE_OPENAI_API_KEY",
@@ -774,8 +782,17 @@ def api_ask_unanswerable_status(run_id):
 
 @app.route('/debug/cookies-source')
 def debug_cookies_source():
-    """Debug endpoint to check which source Trendlyne cookies are loaded from"""
+    """Debug endpoint to check which source Trendlyne cookies are loaded from (admin only)"""
+    from flask import session as flask_session
     import json as json_lib
+
+    # Admin-only: check authentication
+    if 'user_id' not in flask_session:
+        return jsonify({'error': 'Authentication required'}), 401
+    from auth.database import User
+    user = User.get_by_id(flask_session['user_id'])
+    if not user or not user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
     
     result = {
         'env_var_exists': bool(os.getenv('TRENDLYNE_COOKIES')),
@@ -1935,6 +1952,7 @@ def api_portfolio_add():
     stock_name = (data.get('stock_name') or '').strip()
     quantity = data.get('quantity')
     avg_buy_price = data.get('avg_buy_price')
+    buy_date = (data.get('buy_date') or '').strip()
 
     if not ticker or quantity is None or avg_buy_price is None:
         return jsonify({'error': 'ticker, quantity, and avg_buy_price are required'}), 400
@@ -1968,7 +1986,7 @@ def api_portfolio_add():
     except Exception as e:
         print(f"WARN: Could not fetch sector for {ticker}: {e}")
 
-    Portfolio.add_holding(user_id, ticker, stock_name, quantity, avg_buy_price, sector, industry)
+    Portfolio.add_holding(user_id, ticker, stock_name, quantity, avg_buy_price, sector, industry, buy_date)
     return jsonify({'success': True, 'ticker': ticker, 'stock_name': stock_name, 'sector': sector, 'industry': industry})
 
 
@@ -1984,6 +2002,7 @@ def api_portfolio_update():
     ticker = (data.get('ticker') or '').strip().upper()
     quantity = data.get('quantity')
     avg_buy_price = data.get('avg_buy_price')
+    buy_date = data.get('buy_date')  # Can be None (don't update) or '' or 'YYYY-MM-DD'
 
     if not ticker or quantity is None or avg_buy_price is None:
         return jsonify({'error': 'ticker, quantity, and avg_buy_price are required'}), 400
@@ -1994,11 +2013,235 @@ def api_portfolio_update():
     except (ValueError, TypeError):
         return jsonify({'error': 'quantity and avg_buy_price must be numbers'}), 400
 
-    updated = Portfolio.update_holding(user_id, ticker, quantity, avg_buy_price)
+    updated = Portfolio.update_holding(user_id, ticker, quantity, avg_buy_price, buy_date)
     if not updated:
         return jsonify({'error': f'{ticker} not found in portfolio'}), 404
     return jsonify({'success': True})
 
+
+@app.route('/api/stock/price-on-date', methods=['GET'])
+def api_stock_price_on_date():
+    """Fetch the close price of a stock on a specific date."""
+    ticker = request.args.get('ticker')
+    date_str = request.args.get('date')
+    if not ticker or not date_str:
+        return jsonify({'error': 'ticker and date required'}), 400
+    try:
+        from datetime import datetime, timedelta
+        dt = datetime.strptime(date_str, '%Y-%m-%d')
+        # fetch 5-day window to catch weekends/holidays
+        end_dt = dt + timedelta(days=5)
+        yf_ticker = yf.Ticker(f"{ticker}.NS")
+        hist = yf_ticker.history(start=dt.strftime('%Y-%m-%d'), end=end_dt.strftime('%Y-%m-%d'))
+        if not hist.empty:
+            price = float(hist['Close'].iloc[0])
+            return jsonify({'price': price, 'date_used': hist.index[0].strftime('%Y-%m-%d')})
+        return jsonify({'error': 'No price data found for date'}), 404
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/portfolio/what-if', methods=['POST'])
+def api_portfolio_what_if():
+    """Simulate swapping one holding for another and show portfolio impact."""
+    from flask import session as flask_session
+    from datetime import datetime, timedelta
+    user_id = flask_session.get('user_id')
+    if not user_id:
+        return jsonify({'error': 'Authentication required'}), 401
+
+    data = request.get_json(force=True)
+    sell_ticker = (data.get('sell_ticker') or '').strip().upper()
+    buy_ticker = (data.get('buy_ticker') or '').strip().upper()
+
+    if not sell_ticker or not buy_ticker:
+        return jsonify({'error': 'sell_ticker and buy_ticker are required'}), 400
+
+    holdings = Portfolio.get_by_user(user_id)
+    if not holdings:
+        return jsonify({'error': 'No holdings found'}), 400
+
+    # Find the sell holding
+    sell_holding = None
+    for h in holdings:
+        if h.ticker == sell_ticker:
+            sell_holding = h
+            break
+
+    if not sell_holding:
+        return jsonify({'error': f'{sell_ticker} not in portfolio'}), 404
+
+    try:
+        # --- Fetch current prices ---
+        sell_yf = yf.Ticker(f"{sell_ticker}.NS")
+        sell_info = sell_yf.info or {}
+        sell_price = sell_info.get('currentPrice') or sell_info.get('regularMarketPrice') or sell_info.get('previousClose')
+
+        buy_yf = yf.Ticker(f"{buy_ticker}.NS")
+        buy_info = buy_yf.info or {}
+        buy_price = buy_info.get('currentPrice') or buy_info.get('regularMarketPrice') or buy_info.get('previousClose')
+
+        if not sell_price or not buy_price:
+            return jsonify({'error': 'Could not fetch current prices. Try again.'}), 400
+
+        # --- Swap Details ---
+        capital_freed = sell_holding.quantity * sell_price
+        buy_quantity = int(capital_freed / buy_price)  # whole shares
+        buy_industry = buy_info.get('industry', '') or ''
+        buy_name = buy_info.get('shortName', buy_ticker) or buy_ticker
+
+        # Look up buy stock name from STOCKS_LIST if available
+        for s in STOCKS_LIST:
+            if s['ticker'].upper() == buy_ticker:
+                buy_name = s['name']
+                break
+
+        sell_details = {
+            'name': sell_holding.stock_name,
+            'ticker': sell_ticker,
+            'quantity': sell_holding.quantity,
+            'current_price': round(sell_price, 2),
+            'capital_freed': round(capital_freed, 2)
+        }
+        buy_details = {
+            'name': buy_name,
+            'ticker': buy_ticker,
+            'quantity': buy_quantity,
+            'current_price': round(buy_price, 2),
+            'industry': buy_industry
+        }
+
+        # --- Diversification Score (HHI-based) ---
+        def calc_diversification(holdings_list):
+            """Calculate diversification score from 0-10 using HHI."""
+            # Group by industry
+            industry_values = {}
+            total_value = 0
+            for h_item in holdings_list:
+                ind = h_item.get('industry', '') or 'Unknown'
+                val = h_item.get('value', 0)
+                industry_values[ind] = industry_values.get(ind, 0) + val
+                total_value += val
+
+            if total_value == 0:
+                return {'diversification_score': 5.0, 'hhi': 0, 'top_industry': 'N/A', 'top_weight': 0}
+
+            # HHI = sum of squared weights (0 to 1, lower is more diversified)
+            hhi = sum((v / total_value) ** 2 for v in industry_values.values())
+
+            # Convert to 0-10 score (10 = perfectly diversified)
+            # Perfect concentration = HHI of 1.0 → score 0
+            # Perfect diversification = HHI of 1/n → score ~10
+            n = len(industry_values)
+            if n <= 1:
+                score = 1.0
+            else:
+                min_hhi = 1.0 / n
+                score = max(0, min(10, 10 * (1 - hhi) / (1 - min_hhi)))
+
+            top_ind = max(industry_values, key=industry_values.get)
+            top_weight = round(100 * industry_values[top_ind] / total_value, 1)
+
+            return {
+                'diversification_score': round(score, 1),
+                'hhi': round(hhi, 4),
+                'top_industry': top_ind,
+                'top_weight': top_weight
+            }
+
+        # Current portfolio values
+        current_holdings_vals = []
+        for h in holdings:
+            try:
+                h_yf = yf.Ticker(f"{h.ticker}.NS")
+                h_info = h_yf.info or {}
+                h_price = h_info.get('currentPrice') or h_info.get('regularMarketPrice') or h_info.get('previousClose') or h.avg_buy_price
+            except Exception:
+                h_price = h.avg_buy_price
+            current_holdings_vals.append({
+                'ticker': h.ticker,
+                'industry': h.industry or 'Unknown',
+                'value': h.quantity * h_price
+            })
+
+        # New portfolio values (swap applied)
+        new_holdings_vals = []
+        for item in current_holdings_vals:
+            if item['ticker'] == sell_ticker:
+                # Replace with buy stock
+                new_holdings_vals.append({
+                    'ticker': buy_ticker,
+                    'industry': buy_industry or 'Unknown',
+                    'value': buy_quantity * buy_price
+                })
+            else:
+                new_holdings_vals.append(item)
+
+        current_concentration = calc_diversification(current_holdings_vals)
+        new_concentration = calc_diversification(new_holdings_vals)
+
+        # --- Backtest Delta ---
+        backtest_delta_pct = None
+        try:
+            end_date = datetime.now()
+            start_date = end_date - timedelta(days=180)
+            
+            if sell_holding.buy_date:
+                try:
+                    parsed_date = datetime.strptime(sell_holding.buy_date, '%Y-%m-%d')
+                    if parsed_date < end_date:
+                        start_date = parsed_date
+                except ValueError:
+                    pass
+            
+            start_str = start_date.strftime('%Y-%m-%d')
+            end_str = end_date.strftime('%Y-%m-%d')
+
+            sell_hist = sell_yf.history(start=start_str, end=end_str)
+            buy_hist = buy_yf.history(start=start_str, end=end_str)
+
+            if len(sell_hist) > 0 and len(buy_hist) > 0:
+                # Simulation basis: Original invested value and stock price on buying date
+                initial_capital = sell_holding.quantity * sell_holding.avg_buy_price
+                buy_start_price = buy_hist['Close'].iloc[0]
+                
+                # Simulated buy quantity at start date
+                simulated_buy_qty = initial_capital / buy_start_price
+                
+                # Portfolio value if sold today
+                sell_current_value = sell_hist['Close'].iloc[-1] * sell_holding.quantity
+                # Portfolio value if swapped then
+                buy_current_value = buy_hist['Close'].iloc[-1] * simulated_buy_qty
+                
+                # Returns based on original capital
+                sell_return_pct = (sell_current_value / initial_capital - 1) * 100
+                buy_return_pct = (buy_current_value / initial_capital - 1) * 100
+                
+                backtest_delta_pct = round(buy_return_pct - sell_return_pct, 2)
+        except Exception as e:
+            print(f"WHAT-IF: Backtest calc failed: {e}")
+
+        # --- New Industry Allocation ---
+        new_industry_data = {}
+        for item in new_holdings_vals:
+            ind = item['industry'] or 'Unknown'
+            new_industry_data[ind] = new_industry_data.get(ind, 0) + item['value']
+        # Round values
+        new_industry_data = {k: round(v, 0) for k, v in new_industry_data.items()}
+
+        return jsonify({
+            'sell_details': sell_details,
+            'buy_details': buy_details,
+            'current_concentration': current_concentration,
+            'new_concentration': new_concentration,
+            'backtest_delta_pct': backtest_delta_pct,
+            'new_industry_data': new_industry_data
+        })
+
+    except Exception as e:
+        print(f"WHAT-IF ERROR: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Simulation failed: {str(e)}'}), 500
 
 @app.route('/api/portfolio/<ticker>', methods=['DELETE'])
 def api_portfolio_delete(ticker):
@@ -2078,6 +2321,9 @@ def api_portfolio_upload_csv():
 
             stock_name = ticker_lookup.get(ticker, ticker)
 
+            # Parse buy_date (optional column)
+            buy_date = norm_row.get('buy date', '') or norm_row.get('buy_date', '') or norm_row.get('purchase date', '') or ''
+
             # Fetch sector (best-effort)
             sector = ''
             industry = ''
@@ -2089,7 +2335,7 @@ def api_portfolio_upload_csv():
             except Exception:
                 pass
 
-            Portfolio.add_holding(user_id, ticker, stock_name, qty, price, sector, industry)
+            Portfolio.add_holding(user_id, ticker, stock_name, qty, price, sector, industry, buy_date)
             added.append(ticker)
 
         return jsonify({
@@ -2105,6 +2351,149 @@ def api_portfolio_upload_csv():
         traceback.print_exc()
         return jsonify({'error': f'CSV parsing failed: {str(e)}'}), 500
 
+
+@app.route('/api/portfolio/metrics', methods=['GET'])
+def api_portfolio_metrics():
+    """Compute portfolio-level PM metrics: Beta, Alpha, Diversification, NIFTY comparison."""
+    from flask import session as flask_session
+    from datetime import datetime, timedelta
+    user_id = flask_session.get('user_id')
+    if not user_id:
+        return jsonify({'error': 'Authentication required'}), 401
+
+    holdings = Portfolio.get_by_user(user_id)
+    if not holdings:
+        return jsonify({'error': 'No holdings'}), 400
+
+    try:
+        # --- Gather current prices and values ---
+        total_value = 0
+        holding_data = []
+        for h in holdings:
+            try:
+                h_yf = yf.Ticker(f"{h.ticker}.NS")
+                h_info = h_yf.info or {}
+                h_price = h_info.get('currentPrice') or h_info.get('regularMarketPrice') or h_info.get('previousClose') or h.avg_buy_price
+                h_beta = h_info.get('beta', None)
+            except Exception:
+                h_price = h.avg_buy_price
+                h_beta = None
+
+            value = h.quantity * h_price
+            total_value += value
+            holding_data.append({
+                'ticker': h.ticker,
+                'industry': h.industry or 'Unknown',
+                'value': value,
+                'beta': h_beta,
+                'buy_date': h.buy_date or '',
+                'avg_buy_price': h.avg_buy_price,
+                'current_price': h_price,
+                'quantity': h.quantity
+            })
+
+        # --- Portfolio Beta (value-weighted average) ---
+        portfolio_beta = None
+        weighted_beta_sum = 0
+        beta_value_sum = 0
+        for hd in holding_data:
+            if hd['beta'] is not None and total_value > 0:
+                weight = hd['value'] / total_value
+                weighted_beta_sum += hd['beta'] * weight
+                beta_value_sum += hd['value']
+        if beta_value_sum > 0:
+            portfolio_beta = round(weighted_beta_sum, 2)
+
+        # --- Diversification Score (HHI-based) ---
+        industry_values = {}
+        for hd in holding_data:
+            ind = hd['industry']
+            industry_values[ind] = industry_values.get(ind, 0) + hd['value']
+
+        hhi = sum((v / total_value) ** 2 for v in industry_values.values()) if total_value > 0 else 1
+        n_industries = len(industry_values)
+        if n_industries <= 1:
+            div_score = 1.0
+        else:
+            min_hhi = 1.0 / n_industries
+            div_score = max(0, min(10, 10 * (1 - hhi) / (1 - min_hhi)))
+        div_score = round(div_score, 1)
+
+        # --- Portfolio vs NIFTY & Alpha (requires buy_dates) ---
+        portfolio_return_pct = None
+        nifty_return_pct = None
+        alpha = None
+        has_buy_dates = any(hd['buy_date'] for hd in holding_data)
+
+        if has_buy_dates:
+            try:
+                # Compute weighted portfolio return based on buy dates
+                total_invested = 0
+                total_current = 0
+                for hd in holding_data:
+                    invested = hd['quantity'] * hd['avg_buy_price']
+                    current = hd['value']
+                    total_invested += invested
+                    total_current += current
+
+                if total_invested > 0:
+                    portfolio_return_pct = round(((total_current / total_invested) - 1) * 100, 2)
+
+                # Find earliest buy date for NIFTY comparison
+                buy_dates = []
+                for hd in holding_data:
+                    if hd['buy_date']:
+                        try:
+                            buy_dates.append(datetime.strptime(hd['buy_date'], '%Y-%m-%d'))
+                        except Exception:
+                            pass
+
+                if buy_dates:
+                    earliest_date = min(buy_dates)
+                    nifty = yf.Ticker('^NSEI')
+                    nifty_hist = nifty.history(start=earliest_date.strftime('%Y-%m-%d'), end=datetime.now().strftime('%Y-%m-%d'))
+
+                    if len(nifty_hist) > 5:
+                        nifty_start = nifty_hist['Close'].iloc[0]
+                        nifty_end = nifty_hist['Close'].iloc[-1]
+                        nifty_return_pct = round(((nifty_end / nifty_start) - 1) * 100, 2)
+
+                        # Alpha = Portfolio Return - (Risk Free Rate + Beta * (Market Return - Risk Free Rate))
+                        # Using simple alpha: Portfolio Return - NIFTY Return (for intuitive PM use)
+                        if portfolio_return_pct is not None and nifty_return_pct is not None:
+                            if portfolio_beta is not None:
+                                # CAPM Alpha = Rp - [Rf + β(Rm - Rf)] where Rf ≈ 7% annually (India FD rate)
+                                # Annualize if needed, but for simplicity use period returns
+                                risk_free = 7.0  # approximate Indian risk-free rate
+                                # Scale to period
+                                days_held = (datetime.now() - earliest_date).days
+                                if days_held > 0:
+                                    rf_period = risk_free * days_held / 365
+                                    expected_return = rf_period + portfolio_beta * (nifty_return_pct - rf_period)
+                                    alpha = round(portfolio_return_pct - expected_return, 2)
+                            else:
+                                alpha = round(portfolio_return_pct - nifty_return_pct, 2)
+
+            except Exception as e:
+                print(f"METRICS: Alpha/NIFTY calc failed: {e}")
+
+        return jsonify({
+            'portfolio_beta': portfolio_beta,
+            'diversification_score': div_score,
+            'hhi': round(hhi, 4),
+            'n_industries': n_industries,
+            'portfolio_return_pct': portfolio_return_pct,
+            'nifty_return_pct': nifty_return_pct,
+            'alpha': alpha,
+            'has_buy_dates': has_buy_dates,
+            'total_value': round(total_value, 0)
+        })
+
+    except Exception as e:
+        print(f"METRICS ERROR: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Metrics failed: {str(e)}'}), 500
 
 @app.route('/api/portfolio/dashboard', methods=['GET'])
 def api_portfolio_dashboard():
@@ -2168,52 +2557,61 @@ def api_portfolio_dashboard():
             'pnl_pct': round(pnl_pct, 2),
             'day_change_pct': day_change_pct,
             'sector': h.sector,
-            'industry': h.industry
+            'industry': h.industry,
+            'buy_date': h.buy_date
         })
 
-        # Technical health (chart pattern, RSI, trend)
+        # Technical health — full analysis via generate_summary() from tech_calculations
         try:
             tech_res = evaluate_ticker_signal(h.ticker, interval='daily')
             if tech_res and tech_res.get('Signal') not in ['NO DATA', 'INSUFFICIENT DATA']:
-                df = tech_res['Data']
-                latest_rsi = round(float(df['rsi_14'].iloc[-1]), 1) if 'rsi_14' in df.columns and not pd.isna(df['rsi_14'].iloc[-1]) else None
-                signal = tech_res.get('Signal', 'N/A')
+                # Use generate_summary() to extract all FM-grade indicators in one pass
+                summary_rows = generate_summary(tech_res)
+                summary_dict = {row['key']: row['value'] for row in summary_rows}
 
-                # Determine trend from EMAs
-                trend = 'Sideways'
-                if 'ema_20' in df.columns and 'ema_50' in df.columns:
-                    ema20 = df['ema_20'].iloc[-1]
-                    ema50 = df['ema_50'].iloc[-1]
-                    close = df['close'].iloc[-1]
-                    if not pd.isna(ema20) and not pd.isna(ema50) and not pd.isna(close):
-                        if close > ema20 > ema50:
-                            trend = 'Uptrend'
-                        elif close < ema20 < ema50:
-                            trend = 'Downtrend'
+                pa = summary_dict.get('Price-Action Trend (based on Close prices)', 'N/A')
+                ms = summary_dict.get('Market Structure (based on EMA Stack)', 'N/A')
 
-                technical_health.append({
+                # Custom Signal Logic (PM-grade):
+                # HOLD if price action is Uptrend
+                # HOLD if price action is Sideways AND market structure is Uptrend or Mild Uptrend
+                # SELL in all other cases
+                if 'Uptrend' in pa:
+                    signal = 'HOLD'
+                elif 'Sideways' in pa and ('Uptrend' in ms or 'Mild Uptrend' in ms):
+                    signal = 'HOLD'
+                else:
+                    signal = 'SELL'
+
+                health_entry = {
                     'ticker': h.ticker,
                     'stock_name': h.stock_name,
                     'signal': signal,
-                    'rsi': latest_rsi,
-                    'trend': trend
-                })
+                    'price_action': pa,
+                    'fib_strength': summary_dict.get('Trend Strength (based on Fibonacci retracement)', 'N/A'),
+                    'market_structure': ms,
+                    'sentiment': summary_dict.get('Market Sentiment (based on RSI)', 'N/A'),
+                    'rsi_divergence': summary_dict.get('Hidden Trend Divergence (based on RSI)', 'N/A'),
+                    'relative_strength': summary_dict.get('Relative Strength vs Nifty', 'N/A'),
+                    'volume': summary_dict.get('Accumulating or Distributing (based on Volume)', 'N/A'),
+                    'support': summary_dict.get('Support Zone', None),
+                    'resistance': summary_dict.get('Resistance Zone', None)
+                }
+                technical_health.append(health_entry)
             else:
                 technical_health.append({
-                    'ticker': h.ticker,
-                    'stock_name': h.stock_name,
-                    'signal': 'N/A',
-                    'rsi': None,
-                    'trend': 'N/A'
+                    'ticker': h.ticker, 'stock_name': h.stock_name, 'signal': 'N/A',
+                    'price_action': 'N/A', 'fib_strength': 'N/A', 'market_structure': 'N/A',
+                    'sentiment': 'N/A', 'rsi_divergence': 'N/A', 'relative_strength': 'N/A',
+                    'volume': 'N/A', 'support': None, 'resistance': None
                 })
         except Exception as e:
             print(f"WARN: Tech signal failed for {h.ticker}: {e}")
             technical_health.append({
-                'ticker': h.ticker,
-                'stock_name': h.stock_name,
-                'signal': 'N/A',
-                'rsi': None,
-                'trend': 'N/A'
+                'ticker': h.ticker, 'stock_name': h.stock_name, 'signal': 'N/A',
+                'price_action': 'N/A', 'fib_strength': 'N/A', 'market_structure': 'N/A',
+                'sentiment': 'N/A', 'rsi_divergence': 'N/A', 'relative_strength': 'N/A',
+                'volume': 'N/A', 'support': None, 'resistance': None
             })
 
     total_pnl = total_current - total_invested
@@ -2255,6 +2653,1351 @@ def api_portfolio_dashboard():
             'diversification_score': round((1 - hhi) * 10, 1)
         }
     }))
+
+
+# =====================================================================
+# PORTFOLIO BRIEF ENGINE (Post-Market & Pre-Market)
+# =====================================================================
+
+LOCAL_BRIEF_CACHE = {}  # { "type:user_id:date": { "data": {...}, "timestamp": ..., "expires": ... } }
+BRIEF_REDIS_PREFIX = "portfolio_brief:"
+
+def get_brief_cache(brief_type, user_id, date_str):
+    """Get cached brief from local memory or Redis."""
+    cache_key = f"{brief_type}:{user_id}:{date_str}"
+
+    if cache_key in LOCAL_BRIEF_CACHE:
+        entry = LOCAL_BRIEF_CACHE[cache_key]
+        if time.time() < entry.get("expires", 0):
+            return entry.get("data")
+        else:
+            del LOCAL_BRIEF_CACHE[cache_key]
+
+    if DIRECT_REDIS_CLIENT:
+        try:
+            raw = DIRECT_REDIS_CLIENT.get(f"{BRIEF_REDIS_PREFIX}{cache_key}")
+            if raw:
+                data = pickle.loads(zlib.decompress(raw))
+                # Determine remaining TTL from Redis
+                ttl = DIRECT_REDIS_CLIENT.ttl(f"{BRIEF_REDIS_PREFIX}{cache_key}")
+                if ttl and ttl > 0:
+                    LOCAL_BRIEF_CACHE[cache_key] = {"data": data, "timestamp": time.time(), "expires": time.time() + ttl}
+                    return data
+        except Exception as e:
+            print(f"WARN: Redis brief cache read failed: {e}", file=sys.stderr)
+
+    return None
+
+def set_brief_cache(brief_type, user_id, date_str, data, ttl_seconds):
+    """Save brief to local memory and Redis with specific TTL."""
+    cache_key = f"{brief_type}:{user_id}:{date_str}"
+    LOCAL_BRIEF_CACHE[cache_key] = {"data": data, "timestamp": time.time(), "expires": time.time() + ttl_seconds}
+
+    if DIRECT_REDIS_CLIENT:
+        try:
+            compressed = zlib.compress(pickle.dumps(data))
+            DIRECT_REDIS_CLIENT.setex(
+                f"{BRIEF_REDIS_PREFIX}{cache_key}",
+                int(ttl_seconds),
+                compressed
+            )
+        except Exception as e:
+            print(f"WARN: Redis brief cache write failed: {e}", file=sys.stderr)
+
+def clear_brief_cache(brief_type, user_id, date_str):
+    """Clear a specific brief from cache."""
+    cache_key = f"{brief_type}:{user_id}:{date_str}"
+    LOCAL_BRIEF_CACHE.pop(cache_key, None)
+    if DIRECT_REDIS_CLIENT:
+        try:
+            DIRECT_REDIS_CLIENT.delete(f"{BRIEF_REDIS_PREFIX}{cache_key}")
+        except Exception:
+            pass
+
+
+# --- Candlestick Pattern Detection ---
+def detect_candlestick_patterns(df):
+    """Detect candlestick patterns on the last candle using TA-Lib CDL* functions."""
+    if df is None or len(df) < 5:
+        return []
+
+    o = df['Open'].values.astype(float)
+    h = df['High'].values.astype(float)
+    l = df['Low'].values.astype(float)
+    c = df['Close'].values.astype(float)
+
+    patterns_map = {
+        'Doji': talib.CDLDOJI,
+        'Hammer': talib.CDLHAMMER,
+        'Inverted Hammer': talib.CDLINVERTEDHAMMER,
+        'Engulfing': talib.CDLENGULFING,
+        'Morning Star': talib.CDLMORNINGSTAR,
+        'Evening Star': talib.CDLEVENINGSTAR,
+        'Marubozu': talib.CDLMARUBOZU,
+        'Spinning Top': talib.CDLSPINNINGTOP,
+        'Harami': talib.CDLHARAMI,
+        'Three White Soldiers': talib.CDL3WHITESOLDIERS,
+        'Three Black Crows': talib.CDL3BLACKCROWS,
+        'Shooting Star': talib.CDLSHOOTINGSTAR,
+        'Hanging Man': talib.CDLHANGINGMAN,
+    }
+
+    detected = []
+    for name, func in patterns_map.items():
+        try:
+            result = func(o, h, l, c)
+            if len(result) > 0 and result[-1] != 0:
+                direction = 'Bullish' if result[-1] > 0 else 'Bearish'
+                detected.append(f"{direction} {name}")
+        except Exception:
+            pass
+
+    return detected
+
+
+# --- Index Data Fetching ---
+def fetch_index_data():
+    """
+    Fetch NIFTY 50 via yfinance (reliable, no WebSocket dependency).
+    Fetch GIFT Nifty via tvDatafeed (best-effort, non-blocking).
+    Returns dict with close, prev_close, change_pct for both indices.
+    """
+    import yfinance as yf
+    result = {
+        'nifty_close': None, 'nifty_prev_close': None, 'nifty_change_pct': None,
+        'gift_nifty_last': None, 'gift_nifty_change_pct': None
+    }
+
+    # --- NIFTY 50 via yfinance (^NSEI) — always works ---
+    try:
+        nifty = yf.download('^NSEI', period='5d', interval='1d', auto_adjust=False, progress=False)
+        if nifty is not None and len(nifty) >= 2:
+            result['nifty_close'] = round(float(nifty['Close'].iloc[-1]), 2)
+            result['nifty_prev_close'] = round(float(nifty['Close'].iloc[-2]), 2)
+            if result['nifty_prev_close'] > 0:
+                result['nifty_change_pct'] = round(
+                    ((result['nifty_close'] - result['nifty_prev_close']) / result['nifty_prev_close']) * 100, 2
+                )
+        print(f"BRIEF: NIFTY data fetched via yfinance — Close: {result['nifty_close']}, Chg: {result['nifty_change_pct']}%", file=sys.stderr)
+    except Exception as e:
+        print(f"BRIEF: NIFTY data fetch failed: {e}", file=sys.stderr)
+
+    # --- GIFT Nifty via tvDatafeed (best-effort, non-blocking) ---
+    try:
+        from tech_calculations import tv as tv_global
+        from tvDatafeed import Interval
+        gift_df = None
+        for attempt in range(2):  # Only 2 attempts, quick timeout
+            try:
+                gift_df = tv_global.get_hist('NIFTY1!', 'NSEIX', Interval.in_daily, n_bars=5)
+                if gift_df is not None and not gift_df.empty:
+                    break
+            except Exception:
+                time.sleep(0.5)
+        if gift_df is not None and len(gift_df) >= 2:
+            result['gift_nifty_last'] = round(float(gift_df['close'].iloc[-1]), 2)
+            prev = float(gift_df['close'].iloc[-2])
+            if prev > 0:
+                result['gift_nifty_change_pct'] = round(
+                    ((result['gift_nifty_last'] - prev) / prev) * 100, 2
+                )
+            print(f"BRIEF: GIFT Nifty fetched — Last: {result['gift_nifty_last']}", file=sys.stderr)
+        else:
+            print("BRIEF: GIFT Nifty unavailable (tvDatafeed down) — skipping, non-critical", file=sys.stderr)
+    except Exception as e:
+        print(f"BRIEF: GIFT Nifty fetch failed (non-critical): {e}", file=sys.stderr)
+
+    return result
+
+
+# --- Parallel Per-Stock Data Gathering ---
+def _gather_stock_data_for_brief(holding, brief_type='post'):
+    """
+    Gather all data for a single stock. Designed to run in ThreadPoolExecutor.
+    brief_type: 'post' for post-market (full), 'pre' for pre-market (lighter).
+    """
+    ticker = holding.ticker
+    stock_name = holding.stock_name
+    result = {
+        'ticker': ticker,
+        'stock_name': stock_name,
+        'sector': holding.sector,
+        'industry': holding.industry,
+        'quantity': holding.quantity,
+        'avg_buy_price': holding.avg_buy_price,
+    }
+
+    # --- Price data ---
+    try:
+        yf_ticker = yf.Ticker(f"{ticker}.NS")
+        hist = yf_ticker.history(period="25d")
+        if hist is not None and not hist.empty:
+            result['close'] = round(float(hist['Close'].iloc[-1]), 2)
+            result['open'] = round(float(hist['Open'].iloc[-1]), 2)
+            result['high'] = round(float(hist['High'].iloc[-1]), 2)
+            result['low'] = round(float(hist['Low'].iloc[-1]), 2)
+            result['volume'] = int(hist['Volume'].iloc[-1])
+
+            if len(hist) >= 2:
+                result['prev_close'] = round(float(hist['Close'].iloc[-2]), 2)
+                if result['prev_close'] > 0:
+                    result['day_change_pct'] = round(
+                        ((result['close'] - result['prev_close']) / result['prev_close']) * 100, 2
+                    )
+                else:
+                    result['day_change_pct'] = 0
+            else:
+                result['prev_close'] = result['close']
+                result['day_change_pct'] = 0
+
+            # Volume analysis (last candle vs 20-day average)
+            if len(hist) >= 20:
+                vol_20_avg = float(hist['Volume'].iloc[-21:-1].mean())
+                if vol_20_avg > 0:
+                    result['volume_ratio'] = round(result['volume'] / vol_20_avg, 2)
+                    if result['volume_ratio'] >= 2.0:
+                        result['volume_signal'] = 'Very High Volume'
+                    elif result['volume_ratio'] >= 1.3:
+                        result['volume_signal'] = 'High Volume'
+                    elif result['volume_ratio'] <= 0.5:
+                        result['volume_signal'] = 'Low Volume'
+                    else:
+                        result['volume_signal'] = 'Average Volume'
+                else:
+                    result['volume_ratio'] = 1.0
+                    result['volume_signal'] = 'Average Volume'
+
+            # Candlestick patterns (post-market only)
+            if brief_type == 'post' and len(hist) >= 5:
+                result['candlestick_patterns'] = detect_candlestick_patterns(hist)
+            else:
+                result['candlestick_patterns'] = []
+
+            # P&L
+            invested = holding.quantity * holding.avg_buy_price
+            current_val = holding.quantity * result['close']
+            result['invested'] = round(invested, 2)
+            result['current_value'] = round(current_val, 2)
+            result['pnl'] = round(current_val - invested, 2)
+            result['pnl_pct'] = round(((current_val - invested) / invested) * 100, 2) if invested > 0 else 0
+    except Exception as e:
+        print(f"BRIEF: Price data failed for {ticker}: {e}", file=sys.stderr)
+        result['close'] = None
+        result['day_change_pct'] = 0
+
+    # --- Technical analysis (post-market only) ---
+    if brief_type == 'post':
+        try:
+            tech_res = evaluate_ticker_signal(ticker, interval='daily')
+            if tech_res and tech_res.get('Signal') not in ['NO DATA', 'INSUFFICIENT DATA']:
+                summary_rows = generate_summary(tech_res)
+                result['tech_signal'] = tech_res.get('Signal', 'N/A')
+                result['tech_summary'] = summary_rows  # list of {key, value} dicts
+
+                df = tech_res['Data']
+                result['rsi'] = round(float(df['RSI14'].iloc[-1]), 1) if 'RSI14' in df.columns and not pd.isna(df['RSI14'].iloc[-1]) else None
+
+                # EMA stack
+                if all(col in df.columns for col in ['EMA13', 'EMA55', 'EMA144']):
+                    e13 = float(df['EMA13'].iloc[-1])
+                    e55 = float(df['EMA55'].iloc[-1])
+                    e144 = float(df['EMA144'].iloc[-1])
+                    cp = float(df['Close'].iloc[-1])
+                    if cp > e13 > e55 > e144:
+                        result['trend'] = 'Strong Uptrend'
+                    elif cp > e13 > e55:
+                        result['trend'] = 'Uptrend'
+                    elif cp < e13 < e55 < e144:
+                        result['trend'] = 'Strong Downtrend'
+                    elif cp < e13 < e55:
+                        result['trend'] = 'Downtrend'
+                    else:
+                        result['trend'] = 'Sideways'
+                else:
+                    result['trend'] = 'N/A'
+            else:
+                result['tech_signal'] = 'N/A'
+                result['tech_summary'] = []
+                result['rsi'] = None
+                result['trend'] = 'N/A'
+        except Exception as e:
+            print(f"BRIEF: Tech analysis failed for {ticker}: {e}", file=sys.stderr)
+            result['tech_signal'] = 'N/A'
+            result['tech_summary'] = []
+            result['rsi'] = None
+            result['trend'] = 'N/A'
+    else:
+        result['tech_signal'] = 'N/A'
+        result['tech_summary'] = []
+        result['rsi'] = None
+        result['trend'] = 'N/A'
+
+    # --- News via Gemini Google Search ---
+    try:
+        if brief_type == 'post':
+            news_query = f"What are the latest major news, developments, analyst upgrades/downgrades, and corporate announcements about {stock_name} ({ticker}) Indian stock market in the last 24 hours? Be concise and factual. If there are no significant developments, just say 'No major news today.'"
+        else:
+            news_query = f"What happened with {stock_name} ({ticker}) since yesterday 3:30 PM IST? Cover any corporate announcements, global news impacting the stock, analyst upgrades/downgrades. Be concise. If nothing significant, say 'No overnight developments.'"
+
+        news_result = call_gemini_api(
+            messages=[{"role": "user", "content": news_query}],
+            model="gemini-2.0-flash",
+            temperature=0.3,
+            use_google_search=True
+        )
+        result['news'] = news_result.strip() if news_result else 'No news available.'
+    except Exception as e:
+        print(f"BRIEF: News fetch failed for {ticker}: {e}", file=sys.stderr)
+        result['news'] = 'News fetch failed.'
+
+    # --- Quarterly Results (post-market only) ---
+    if brief_type == 'post':
+        try:
+            from screener_fetcher import fetch_consolidated_async
+            loop = asyncio.new_event_loop()
+            tables, desc, _, _ = loop.run_until_complete(fetch_consolidated_async(ticker))
+            loop.close()
+
+            qr = tables.get('Quarterly Results')
+            if qr is not None and not qr.empty:
+                # Check if latest quarter is recent (within 30 days)
+                latest_col = qr.columns[-1] if len(qr.columns) > 0 else None
+                if latest_col:
+                    try:
+                        from dateutil import parser as dateparser
+                        quarter_date = dateparser.parse(str(latest_col))
+                        days_ago = (datetime.now() - quarter_date).days
+                        if days_ago <= 45:
+                            # Extract key metrics
+                            qr_data = {}
+                            for idx in qr.index:
+                                val = qr.at[idx, latest_col]
+                                idx_lower = str(idx).lower().strip()
+                                if 'sales' in idx_lower or 'revenue' in idx_lower:
+                                    qr_data['revenue'] = str(val)
+                                elif 'net profit' in idx_lower:
+                                    qr_data['net_profit'] = str(val)
+                                elif 'opm' in idx_lower or 'operating profit margin' in idx_lower:
+                                    qr_data['opm'] = str(val)
+                            if qr_data:
+                                result['quarterly_results'] = {
+                                    'quarter': str(latest_col),
+                                    'data': qr_data,
+                                    'days_ago': days_ago
+                                }
+                    except Exception:
+                        pass
+        except Exception as e:
+            print(f"BRIEF: Quarterly results failed for {ticker}: {e}", file=sys.stderr)
+
+    return result
+
+
+# --- Post-Market Brief Generation ---
+def generate_post_market_brief(user_id):
+    """Generate full post-market analysis brief for a user's portfolio."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    holdings = Portfolio.get_by_user(user_id)
+    if not holdings:
+        return None
+
+    # Parallel data gathering
+    stock_data = []
+    with ThreadPoolExecutor(max_workers=min(8, len(holdings))) as executor:
+        futures = {executor.submit(_gather_stock_data_for_brief, h, 'post'): h for h in holdings}
+        for future in futures:
+            try:
+                stock_data.append(future.result())
+            except Exception as e:
+                print(f"BRIEF: Stock data gathering failed: {e}", file=sys.stderr)
+
+    if not stock_data:
+        return None
+
+    # Index data
+    index_data = fetch_index_data()
+
+    # Portfolio-level calculations
+    total_invested = sum(s.get('invested', 0) for s in stock_data if s.get('invested'))
+    total_current = sum(s.get('current_value', 0) for s in stock_data if s.get('current_value'))
+    total_pnl = total_current - total_invested
+    total_pnl_pct = round((total_pnl / total_invested * 100), 2) if total_invested > 0 else 0
+
+    # Day P&L
+    day_pnl = sum(
+        s.get('quantity', 0) * (s.get('close', 0) - s.get('prev_close', s.get('close', 0)))
+        for s in stock_data if s.get('close')
+    )
+    prev_total = sum(
+        s.get('quantity', 0) * s.get('prev_close', s.get('close', 0))
+        for s in stock_data if s.get('close')
+    )
+    day_change_pct = round((day_pnl / prev_total * 100), 2) if prev_total > 0 else 0
+
+    # Alpha vs NIFTY
+    nifty_change = index_data.get('nifty_change_pct') or 0
+    alpha_pct = round(day_change_pct - nifty_change, 2)
+
+    # Build comprehensive prompt
+    today_str = datetime.now().strftime("%B %d, %Y (%A)")
+
+    stocks_detail = []
+    for s in stock_data:
+        detail = f"""
+--- {s.get('stock_name', 'N/A')} ({s.get('ticker', 'N/A')}) ---
+Price: ₹{s.get('close', 'N/A')} (Open: ₹{s.get('open', 'N/A')}, High: ₹{s.get('high', 'N/A')}, Low: ₹{s.get('low', 'N/A')})
+Day Change: {s.get('day_change_pct', 0):+.2f}%
+Overall P&L: ₹{s.get('pnl', 0):+,.0f} ({s.get('pnl_pct', 0):+.2f}%)
+Candlestick Patterns: {', '.join(s.get('candlestick_patterns', [])) or 'No pattern detected'}
+Volume: {s.get('volume_signal', 'N/A')} ({s.get('volume_ratio', 1.0):.1f}x vs 20-day avg)
+Technical Signal: {s.get('tech_signal', 'N/A')} | RSI: {s.get('rsi', 'N/A')} | Trend: {s.get('trend', 'N/A')}
+News/Developments: {s.get('news', 'No news')}"""
+
+        # Add tech summary rows
+        if s.get('tech_summary'):
+            detail += "\nChart Analysis:"
+            for row in s['tech_summary']:
+                detail += f"\n  {row['key']}: {row['value']}"
+
+        # Add quarterly results if available
+        if s.get('quarterly_results'):
+            qr = s['quarterly_results']
+            detail += f"\nLatest Quarterly Results ({qr['quarter']}, {qr['days_ago']} days ago):"
+            for k, v in qr.get('data', {}).items():
+                detail += f"\n  {k}: {v}"
+
+        stocks_detail.append(detail)
+
+    prompt_data = f"""Date: {today_str}
+
+MARKET CONTEXT:
+- NIFTY 50: {index_data.get('nifty_close', 'N/A')} ({nifty_change:+.2f}%)
+- GIFT Nifty: {index_data.get('gift_nifty_last', 'N/A')}
+
+PORTFOLIO OVERVIEW:
+- Total Invested: ₹{total_invested:,.0f}
+- Current Value: ₹{total_current:,.0f}
+- Overall P&L: ₹{total_pnl:,.0f} ({total_pnl_pct:+.2f}%)
+- Today's P&L: ₹{day_pnl:,.0f} ({day_change_pct:+.2f}%)
+- Alpha vs NIFTY: {alpha_pct:+.2f}% ({'outperformed' if alpha_pct > 0 else 'underperformed'})
+- Holdings: {len(stock_data)}
+
+PER-STOCK DETAILED DATA:
+{''.join(stocks_detail)}
+"""
+
+    system_prompt = """You are a senior portfolio analyst at a ₹100 Crore+ family office AUM. Generate a comprehensive post-market brief for the portfolio manager. Output ONLY clean HTML (no wrapping <html>, <body> tags).
+
+STRUCTURE YOUR OUTPUT AS FOLLOWS:
+
+1. **📊 Portfolio Overview** (3-4 sentences):
+   - Today's portfolio performance with exact numbers
+   - Alpha vs NIFTY 50 commentary (e.g., "outperformed NIFTY by 80 bps" or "underperformed by 120 bps")
+   - Overall portfolio health snapshot
+
+2. **🔴 Action Required** (stocks needing immediate attention):
+   - Stocks that moved >4%, had bearish engulfing/evening star on high volume, major breaking news, or earnings release
+   - For each: explain WHY it needs attention, linking candlestick + volume context
+   - Example: "Doji on 3x average volume at resistance → signals institutional distribution"
+
+3. **🟡 Watch List** (stocks with notable developments):
+   - Technical shifts (RSI divergence, EMA crossover, morning star formation)
+   - Moderate news or analyst actions
+   - New quarterly results published
+
+4. **🟢 Steady Holdings** (brief, 1 line each):
+   - Small moves, no news, standard inside-day action
+
+5. **💡 PM's Take** (2-3 sentences):
+   - Actionable editorial: concentration risks, sector tilts, specific recommendations
+
+RULES:
+- ALWAYS interpret candlestick patterns IN CONTEXT of volume (e.g., "Hammer on 2.5x volume = strong reversal" vs "Hammer on 0.5x volume = weak signal")
+- Use <strong> for stock names and key numbers
+- Use <span style="color:#22c55e"> for positive and <span style="color:#ef4444"> for negative numbers
+- Keep each stock's commentary to 2-3 lines max
+- Sort stocks within each tier by severity/importance
+- Never fabricate data — only use what is provided
+- If a section has no stocks, omit it entirely
+- Format as clean HTML with <h3>, <ul><li>, <p> tags"""
+
+    try:
+        briefing_html = call_gemini_api(
+            messages=[{"role": "user", "content": system_prompt + "\n\n" + prompt_data}],
+            model="gemini-3-flash-preview",
+            temperature=0.6
+        )
+    except Exception as e:
+        print(f"BRIEF: Post-market Gemini synthesis failed: {e}", file=sys.stderr)
+        briefing_html = "<p>Could not generate post-market brief. Please try again.</p>"
+
+    return {
+        'briefing_html': briefing_html,
+        'brief_type': 'post-market',
+        'portfolio_summary': {
+            'total_invested': round(total_invested, 2),
+            'total_current': round(total_current, 2),
+            'total_pnl': round(total_pnl, 2),
+            'total_pnl_pct': total_pnl_pct,
+            'day_pnl': round(day_pnl, 2),
+            'day_change_pct': day_change_pct,
+            'alpha_pct': alpha_pct,
+            'holding_count': len(stock_data)
+        },
+        'index_data': index_data,
+        'generated_at': datetime.now().isoformat()
+    }
+
+
+# --- Pre-Market Brief Generation ---
+def generate_pre_market_brief(user_id):
+    """Generate pre-market outlook brief."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    holdings = Portfolio.get_by_user(user_id)
+    if not holdings:
+        return None
+
+    # Parallel data gathering (lighter)
+    stock_data = []
+    with ThreadPoolExecutor(max_workers=min(8, len(holdings))) as executor:
+        futures = {executor.submit(_gather_stock_data_for_brief, h, 'pre'): h for h in holdings}
+        for future in futures:
+            try:
+                stock_data.append(future.result())
+            except Exception as e:
+                print(f"BRIEF: Pre-market data failed: {e}", file=sys.stderr)
+
+    if not stock_data:
+        return None
+
+    index_data = fetch_index_data()
+    today_str = datetime.now().strftime("%B %d, %Y (%A)")
+
+    stocks_detail = []
+    for s in stock_data:
+        detail = f"""
+--- {s.get('stock_name', 'N/A')} ({s.get('ticker', 'N/A')}) ---
+Previous Close: ₹{s.get('close', 'N/A')}
+Overall P&L: ₹{s.get('pnl', 0):+,.0f} ({s.get('pnl_pct', 0):+.2f}%)
+Overnight News: {s.get('news', 'No news')}"""
+        stocks_detail.append(detail)
+
+    prompt_data = f"""Date: {today_str} (Pre-Market)
+
+MARKET INDICATORS:
+- GIFT Nifty: {index_data.get('gift_nifty_last', 'N/A')} ({index_data.get('gift_nifty_change_pct', 'N/A')}%)
+- Previous NIFTY Close: {index_data.get('nifty_close', 'N/A')}
+
+PORTFOLIO HOLDINGS:
+{''.join(stocks_detail)}
+"""
+
+    system_prompt = """You are a senior portfolio analyst preparing a pre-market brief for a ₹100 Crore+ AUM family office. Output ONLY clean HTML.
+
+STRUCTURE:
+
+1. **🌅 Market Outlook** (2-3 sentences):
+   - GIFT Nifty directional bias (e.g., "GIFT Nifty at 23,450, up 0.6% → expect a positive opening")
+   - Global cues if mentioned in news
+
+2. **📋 Stocks to Watch Today**:
+   - Only stocks with significant overnight developments
+   - Corporate actions, earnings announcements, analyst changes
+   - Key levels to watch (if available from previous analysis)
+
+3. **🔇 No Overnight Action**:
+   - Brief line listing stocks with no overnight developments
+
+RULES:
+- Be concise — PMs read this at 8 AM before market open
+- Use <strong> for stock names
+- Skip empty sections
+- No fabricated data
+- Format as clean HTML with <h3>, <ul><li>, <p> tags"""
+
+    try:
+        briefing_html = call_gemini_api(
+            messages=[{"role": "user", "content": system_prompt + "\n\n" + prompt_data}],
+            model="gemini-3-flash-preview",
+            temperature=0.5
+        )
+    except Exception as e:
+        print(f"BRIEF: Pre-market Gemini synthesis failed: {e}", file=sys.stderr)
+        briefing_html = "<p>Could not generate pre-market brief. Please try again.</p>"
+
+    return {
+        'briefing_html': briefing_html,
+        'brief_type': 'pre-market',
+        'index_data': index_data,
+        'generated_at': datetime.now().isoformat()
+    }
+
+
+# --- Scheduled Brief Generation ---
+def _run_scheduled_briefs():
+    """Background thread that checks if it's time to generate briefs."""
+    from datetime import timedelta, timezone
+    ist = timezone(timedelta(hours=5, minutes=30))
+
+    while True:
+        try:
+            now = datetime.now(ist)
+            hour, minute = now.hour, now.minute
+
+            # Pre-market: generate at 7:30 AM, cache until 10:00 AM (2.5h = 9000s)
+            if hour == 7 and minute == 30:
+                print("SCHEDULER: Triggering pre-market brief generation...", file=sys.stderr)
+                _generate_briefs_for_all_users('pre', ttl_seconds=9000)
+                time.sleep(60)  # Prevent re-trigger
+
+            # Post-market: generate at 4:00 PM, cache until next day 9:15 AM (~17.25h = 62100s)
+            elif hour == 16 and minute == 0:
+                print("SCHEDULER: Triggering post-market brief generation...", file=sys.stderr)
+                _generate_briefs_for_all_users('post', ttl_seconds=62100)
+                time.sleep(60)
+
+            time.sleep(30)  # Check every 30 seconds
+        except Exception as e:
+            print(f"SCHEDULER: Error: {e}", file=sys.stderr)
+            time.sleep(60)
+
+def _generate_briefs_for_all_users(brief_type, ttl_seconds):
+    """Generate briefs for all users with portfolios."""
+    try:
+        all_users = Portfolio.get_all_user_ids()
+    except Exception:
+        # Fallback: if no get_all_user_ids method, skip
+        print("SCHEDULER: Could not retrieve user list. Skipping scheduled generation.", file=sys.stderr)
+        return
+
+    today = datetime.now().strftime('%Y-%m-%d')
+    for user_id in all_users:
+        try:
+            if brief_type == 'pre':
+                data = generate_pre_market_brief(user_id)
+            else:
+                data = generate_post_market_brief(user_id)
+
+            if data:
+                set_brief_cache(brief_type, user_id, today, data, ttl_seconds)
+                print(f"SCHEDULER: {brief_type}-market brief generated for user {user_id}", file=sys.stderr)
+        except Exception as e:
+            print(f"SCHEDULER: Failed for user {user_id}: {e}", file=sys.stderr)
+
+# Start scheduler thread
+_brief_scheduler_thread = threading.Thread(target=_run_scheduled_briefs, daemon=True)
+_brief_scheduler_thread.start()
+
+
+# --- API Endpoints ---
+
+@app.route('/api/portfolio/brief/post-market', methods=['GET'])
+def api_portfolio_brief_post():
+    """Return post-market brief. On-demand if not cached."""
+    from flask import session as flask_session
+    user_id = flask_session.get('user_id')
+    if not user_id:
+        return jsonify({'error': 'Authentication required'}), 401
+
+    today = datetime.now().strftime('%Y-%m-%d')
+
+    # Check cache
+    cached = get_brief_cache('post', user_id, today)
+    if cached:
+        return jsonify(sanitize_for_json(cached))
+
+    # Generate on-demand with 12h TTL
+    brief = generate_post_market_brief(user_id)
+    if not brief:
+        return jsonify({'empty': True, 'message': 'No portfolio holdings found'})
+
+    set_brief_cache('post', user_id, today, brief, 43200)
+    return jsonify(sanitize_for_json(brief))
+
+
+@app.route('/api/portfolio/brief/pre-market', methods=['GET'])
+def api_portfolio_brief_pre():
+    """Return pre-market brief. On-demand if not cached."""
+    from flask import session as flask_session
+    user_id = flask_session.get('user_id')
+    if not user_id:
+        return jsonify({'error': 'Authentication required'}), 401
+
+    today = datetime.now().strftime('%Y-%m-%d')
+
+    cached = get_brief_cache('pre', user_id, today)
+    if cached:
+        return jsonify(sanitize_for_json(cached))
+
+    brief = generate_pre_market_brief(user_id)
+    if not brief:
+        return jsonify({'empty': True, 'message': 'No portfolio holdings found'})
+
+    set_brief_cache('pre', user_id, today, brief, 9000)
+    return jsonify(sanitize_for_json(brief))
+
+
+@app.route('/api/portfolio/brief/refresh', methods=['POST'])
+def api_portfolio_brief_refresh():
+    """Admin force-refresh endpoint. Clears cache and regenerates."""
+    from flask import session as flask_session
+    user_id = flask_session.get('user_id')
+    if not user_id:
+        return jsonify({'error': 'Authentication required'}), 401
+
+    data = request.get_json() or {}
+    brief_type = data.get('type', 'post')  # 'pre' or 'post'
+
+    today = datetime.now().strftime('%Y-%m-%d')
+    clear_brief_cache(brief_type, user_id, today)
+
+    if brief_type == 'pre':
+        brief = generate_pre_market_brief(user_id)
+        ttl = 9000
+    else:
+        brief = generate_post_market_brief(user_id)
+        ttl = 43200
+
+    if not brief:
+        return jsonify({'error': 'No portfolio found'}), 404
+
+    set_brief_cache(brief_type, user_id, today, brief, ttl)
+    return jsonify(sanitize_for_json(brief))
+
+
+# =====================================================================
+# WHAT-IF SIMULATOR
+# =====================================================================
+
+@app.route('/api/portfolio/what-if', methods=['POST'])
+def api_portfolio_whatif():
+    """
+    Simulate swapping one holding for another.
+    Input: {sell_ticker, buy_ticker}
+    Returns: new industry allocation, concentration, and 6-month backtest delta.
+    """
+    from flask import session as flask_session
+    user_id = flask_session.get('user_id')
+    if not user_id:
+        return jsonify({'error': 'Authentication required'}), 401
+
+    data = request.get_json()
+    sell_ticker = (data.get('sell_ticker') or '').strip().upper()
+    buy_ticker = (data.get('buy_ticker') or '').strip().upper()
+
+    if not sell_ticker or not buy_ticker:
+        return jsonify({'error': 'Both sell_ticker and buy_ticker are required'}), 400
+
+    if sell_ticker == buy_ticker:
+        return jsonify({'error': 'Cannot swap a stock with itself'}), 400
+
+    holdings = Portfolio.get_by_user(user_id)
+    if not holdings:
+        return jsonify({'error': 'No portfolio found'}), 404
+
+    # Find the holding being sold
+    sell_holding = None
+    for h in holdings:
+        if h.ticker.upper() == sell_ticker:
+            sell_holding = h
+            break
+
+    if not sell_holding:
+        return jsonify({'error': f'{sell_ticker} not found in your portfolio'}), 404
+
+    try:
+        # --- 1. Get current prices ---
+        sell_price = None
+        buy_price = None
+        buy_info = {}
+
+        try:
+            yf_sell = yf.Ticker(f"{sell_ticker}.NS")
+            hist = yf_sell.history(period="1d")
+            if hist is not None and not hist.empty:
+                sell_price = float(hist['Close'].iloc[-1])
+        except Exception:
+            pass
+
+        try:
+            yf_buy = yf.Ticker(f"{buy_ticker}.NS")
+            hist = yf_buy.history(period="1d")
+            if hist is not None and not hist.empty:
+                buy_price = float(hist['Close'].iloc[-1])
+            info = yf_buy.info
+            buy_info = {
+                'name': info.get('shortName', buy_ticker),
+                'sector': info.get('sector', 'N/A'),
+                'industry': info.get('industry', 'N/A')
+            }
+        except Exception:
+            buy_info = {'name': buy_ticker, 'sector': 'N/A', 'industry': 'N/A'}
+
+        if not sell_price or not buy_price:
+            return jsonify({'error': 'Could not fetch current prices for one or both tickers'}), 400
+
+        # Capital freed by selling
+        sell_capital = sell_holding.quantity * sell_price
+        # Shares of buy_ticker we can purchase
+        buy_quantity = sell_capital / buy_price
+
+        # --- 2. Build "after" portfolio for industry allocation + HHI ---
+        after_holdings = []
+        total_current_after = 0
+
+        for h in holdings:
+            if h.ticker.upper() == sell_ticker:
+                # Replace with buy_ticker
+                current_val = buy_quantity * buy_price
+                after_holdings.append({
+                    'ticker': buy_ticker,
+                    'industry': buy_info.get('industry', 'N/A'),
+                    'current_value': current_val
+                })
+            else:
+                cp = None
+                try:
+                    yf_t = yf.Ticker(f"{h.ticker}.NS")
+                    th = yf_t.history(period="1d")
+                    if th is not None and not th.empty:
+                        cp = float(th['Close'].iloc[-1])
+                except Exception:
+                    pass
+                current_val = h.quantity * (cp if cp else h.avg_buy_price)
+                after_holdings.append({
+                    'ticker': h.ticker,
+                    'industry': h.industry or 'N/A',
+                    'current_value': current_val
+                })
+            total_current_after += after_holdings[-1]['current_value']
+
+        # Industry allocation
+        new_industry_data = {}
+        for ah in after_holdings:
+            ind = ah['industry'] or 'Unknown'
+            new_industry_data[ind] = new_industry_data.get(ind, 0) + ah['current_value']
+
+        # Compute HHI
+        weights_after = [ah['current_value'] / total_current_after for ah in after_holdings if total_current_after > 0]
+        hhi_after = sum(w ** 2 for w in weights_after) if weights_after else 0
+
+        # Also compute current HHI for comparison
+        current_weights = []
+        total_current_before = 0
+        for h in holdings:
+            cp = None
+            try:
+                yf_t = yf.Ticker(f"{h.ticker}.NS")
+                th = yf_t.history(period="1d")
+                if th is not None and not th.empty:
+                    cp = float(th['Close'].iloc[-1])
+            except Exception:
+                pass
+            val = h.quantity * (cp if cp else h.avg_buy_price)
+            current_weights.append(val)
+            total_current_before += val
+
+        if total_current_before > 0:
+            current_weights = [w / total_current_before for w in current_weights]
+        hhi_before = sum(w ** 2 for w in current_weights) if current_weights else 0
+
+        # --- 3. 6-month backtest ---
+        backtest_delta_pct = None
+        try:
+            sell_hist = yf.Ticker(f"{sell_ticker}.NS").history(period="6mo")
+            buy_hist = yf.Ticker(f"{buy_ticker}.NS").history(period="6mo")
+
+            if sell_hist is not None and not sell_hist.empty and buy_hist is not None and not buy_hist.empty:
+                sell_return = (sell_hist['Close'].iloc[-1] / sell_hist['Close'].iloc[0] - 1) * 100
+                buy_return = (buy_hist['Close'].iloc[-1] / buy_hist['Close'].iloc[0] - 1) * 100
+                backtest_delta_pct = round(float(buy_return - sell_return), 2)
+        except Exception as e:
+            print(f"WHAT-IF: Backtest failed: {e}", file=sys.stderr)
+
+        # --- 4. Sell/Buy details ---
+        sell_details = {
+            'ticker': sell_ticker,
+            'name': sell_holding.stock_name,
+            'quantity': sell_holding.quantity,
+            'current_price': round(sell_price, 2),
+            'capital_freed': round(sell_capital, 2)
+        }
+
+        buy_details = {
+            'ticker': buy_ticker,
+            'name': buy_info.get('name', buy_ticker),
+            'quantity': round(buy_quantity, 2),
+            'current_price': round(buy_price, 2),
+            'capital_used': round(sell_capital, 2),
+            'industry': buy_info.get('industry', 'N/A')
+        }
+
+        return jsonify(sanitize_for_json({
+            'new_industry_data': new_industry_data,
+            'new_concentration': {
+                'hhi': round(hhi_after, 4),
+                'diversification_score': round((1 - hhi_after) * 10, 1)
+            },
+            'current_concentration': {
+                'hhi': round(hhi_before, 4),
+                'diversification_score': round((1 - hhi_before) * 10, 1)
+            },
+            'backtest_delta_pct': backtest_delta_pct,
+            'sell_details': sell_details,
+            'buy_details': buy_details
+        }))
+
+    except Exception as e:
+        print(f"WHAT-IF: Error: {e}", file=sys.stderr)
+        traceback.print_exc()
+        return jsonify({'error': f'Simulation failed: {str(e)}'}), 500
+
+
+# =====================================================================
+# PEER SWAP CARDS
+# =====================================================================
+
+LOCAL_PEER_CACHE = {}  # { "ticker": { "data": {...}, "timestamp": ... } }
+PEER_CACHE_TTL = 21600  # 6 hours
+
+@app.route('/api/portfolio/peer-swaps', methods=['GET'])
+def api_portfolio_peer_swaps():
+    """
+    For each holding, find the #1 peer alternative using Screener peer comparison.
+    Returns metrics comparison for "peer swap" suggestions.
+    """
+    from flask import session as flask_session
+    from screener_fetcher import fetch_peer_comparison_from_screener_async
+    user_id = flask_session.get('user_id')
+    if not user_id:
+        return jsonify({'error': 'Authentication required'}), 401
+
+    holdings = Portfolio.get_by_user(user_id)
+    if not holdings:
+        return jsonify({'error': 'No portfolio found'}), 404
+
+    peer_swaps = []
+
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
+    try:
+        for h in holdings:
+            ticker = h.ticker
+
+            # Check local cache
+            cache_key = ticker.upper()
+            if cache_key in LOCAL_PEER_CACHE:
+                entry = LOCAL_PEER_CACHE[cache_key]
+                age = time.time() - entry.get("timestamp", 0)
+                if age < PEER_CACHE_TTL:
+                    peer_swaps.append(entry["data"])
+                    continue
+                else:
+                    del LOCAL_PEER_CACHE[cache_key]
+
+            try:
+                peer_data = loop.run_until_complete(
+                    fetch_peer_comparison_from_screener_async(ticker, h.stock_name)
+                )
+
+                if not peer_data or not peer_data.get('company'):
+                    continue
+
+                company = peer_data.get('company', {})
+                peers_list = peer_data.get('peers') or []
+
+                # --- Helper: safely parse numeric value from Screener data ---
+                def _num(obj, *keys):
+                    for k in keys:
+                        v = obj.get(k)
+                        if v is not None and v != 'N/A' and v != '':
+                            try:
+                                return float(str(v).replace(',', ''))
+                            except (ValueError, TypeError):
+                                pass
+                    return None
+
+                # --- Compute Industry Average from peers (same logic as app.html calculateIndustryAverage) ---
+                def _peer_avg(*keys):
+                    """Average a metric across all peers, skipping N/A."""
+                    vals = []
+                    for p in peers_list:
+                        v = _num(p, *keys)
+                        if v is not None:
+                            vals.append(v)
+                    if not vals:
+                        return 'N/A'
+                    return f"{sum(vals) / len(vals):.2f}"
+
+                ind_metrics = {
+                    'pe': _peer_avg('pe_ratio', 'pe'),
+                    'roe': _peer_avg('roce', 'roe'),
+                    'market_cap': _peer_avg('market_cap'),
+                    'sales_growth': _peer_avg('sales_growth_yoy', 'sales_growth'),
+                }
+
+                # Company metrics (for 4-criteria comparison)
+                c_pe = _num(company, 'pe_ratio', 'pe')
+                c_sales_gr = _num(company, 'sales_growth_yoy', 'sales_growth')
+                c_mcap = _num(company, 'market_cap')
+                c_roce = _num(company, 'roce', 'roe')
+
+                # --- 4-Criteria Smart Peer Selection ---
+                best_peer = None
+                for p in (peer_data.get('peers') or []):
+                    peer_name_lower = p.get('name', '').lower()
+                    company_name_lower = (company.get('name', '') or '').lower()
+                    if peer_name_lower == company_name_lower or not peer_name_lower:
+                        continue
+
+                    p_pe = _num(p, 'pe_ratio', 'pe')
+                    p_sales_gr = _num(p, 'sales_growth_yoy', 'sales_growth')
+                    p_mcap = _num(p, 'market_cap')
+                    p_roce = _num(p, 'roce', 'roe')
+
+                    if None in (p_pe, p_sales_gr, p_mcap, p_roce,
+                                c_pe, c_sales_gr, c_mcap, c_roce):
+                        continue
+
+                    if p_pe > c_pe:
+                        continue
+                    if p_sales_gr <= c_sales_gr:
+                        continue
+                    mcap_floor = min(2000, c_mcap * 0.5)
+                    if p_mcap < mcap_floor:
+                        continue
+                    if p_roce <= c_roce:
+                        continue
+
+                    if best_peer is None or p_roce > _num(best_peer, 'roce', 'roe'):
+                        best_peer = p
+
+                # Build swap entry — ALWAYS, even without a qualifying peer
+                swap_entry = {
+                    'holding_ticker': ticker,
+                    'holding_name': h.stock_name,
+                    'holding_metrics': {
+                        'cmp': company.get('cmp', 'N/A'),
+                        'pe': company.get('pe_ratio', company.get('pe', 'N/A')),
+                        'roe': company.get('roce', company.get('roe', 'N/A')),
+                        'market_cap': company.get('market_cap', 'N/A'),
+                        'sales_growth': company.get('sales_growth_yoy', company.get('sales_growth', 'N/A')),
+                    },
+                    'industry_avg': ind_metrics,
+                    'peer_name': None,
+                    'peer_metrics': None,
+                    'swap_reason': None,
+                }
+
+                if best_peer:
+                    swap_entry['peer_name'] = best_peer.get('name', 'N/A')
+                    swap_entry['peer_metrics'] = {
+                        'cmp': best_peer.get('cmp', 'N/A'),
+                        'pe': best_peer.get('pe_ratio', best_peer.get('pe', 'N/A')),
+                        'roe': best_peer.get('roce', best_peer.get('roe', 'N/A')),
+                        'market_cap': best_peer.get('market_cap', 'N/A'),
+                        'sales_growth': best_peer.get('sales_growth_yoy', best_peer.get('sales_growth', 'N/A')),
+                    }
+                    swap_entry['swap_reason'] = f"Lower P/E ({_num(best_peer, 'pe_ratio', 'pe'):.1f} vs {c_pe:.1f}), Higher Sales Growth, Better ROCE ({_num(best_peer, 'roce', 'roe'):.1f}% vs {c_roce:.1f}%)"
+
+                peer_swaps.append(swap_entry)
+
+                # Cache it
+                LOCAL_PEER_CACHE[cache_key] = {"data": swap_entry, "timestamp": time.time()}
+
+            except Exception as e:
+                print(f"PEER-SWAP: Failed for {ticker}: {e}", file=sys.stderr)
+                continue
+    finally:
+        loop.close()
+
+    return jsonify(sanitize_for_json({'peer_swaps': peer_swaps}))
+
+
+# =====================================================================
+# AI PORTFOLIO MANAGER — Phase 1 (Chat with Full Portfolio Context)
+# =====================================================================
+
+# In-memory stores for portfolio AI chat
+_PORTFOLIO_AI_HISTORY = {}      # { user_id: [ {role, content}, ... ] }
+_PORTFOLIO_CONTEXT_CACHE = {}   # { user_id: { "text": str, "timestamp": float } }
+PORTFOLIO_CONTEXT_TTL = 300     # 5 minutes
+
+def _build_portfolio_context(user_id):
+    """
+    Assemble a comprehensive text snapshot of the user's portfolio.
+    Cached for 5 minutes to avoid re-fetching on each chat message.
+    Returns a string suitable for injecting into the system prompt.
+    """
+    # Check cache
+    cached = _PORTFOLIO_CONTEXT_CACHE.get(user_id)
+    if cached and (time.time() - cached["timestamp"]) < PORTFOLIO_CONTEXT_TTL:
+        return cached["text"]
+
+    holdings = Portfolio.get_by_user(user_id)
+    if not holdings:
+        return "The user has no holdings in their portfolio yet."
+
+    lines = []
+    lines.append("=" * 60)
+    lines.append("PORTFOLIO SNAPSHOT (live data)")
+    lines.append("=" * 60)
+
+    total_invested = 0
+    total_current = 0
+    holding_rows = []
+    industry_map = {}
+    tech_signals = []
+
+    for h in holdings:
+        current_price = None
+        day_change_pct = 0
+        try:
+            yf_ticker = yf.Ticker(f"{h.ticker}.NS")
+            hist = yf_ticker.history(period="2d")
+            if hist is not None and not hist.empty:
+                current_price = float(hist['Close'].iloc[-1])
+                if len(hist) >= 2:
+                    prev_close = float(hist['Close'].iloc[-2])
+                    if prev_close > 0:
+                        day_change_pct = round(((current_price - prev_close) / prev_close) * 100, 2)
+        except Exception:
+            pass
+
+        invested = h.quantity * h.avg_buy_price
+        current_val = h.quantity * current_price if current_price else invested
+        pnl = current_val - invested
+        pnl_pct = (pnl / invested * 100) if invested > 0 else 0
+
+        total_invested += invested
+        total_current += current_val
+
+        ind = h.industry or 'Unknown'
+        industry_map[ind] = industry_map.get(ind, 0) + current_val
+
+        days_held = ''
+        if h.buy_date:
+            try:
+                bd = datetime.strptime(h.buy_date, '%Y-%m-%d')
+                days_held = str((datetime.now() - bd).days)
+            except Exception:
+                pass
+
+        cmp_str = f"₹{current_price:.2f}" if current_price else "N/A"
+        holding_rows.append(
+            f"  {h.stock_name} ({h.ticker}) | Qty: {h.quantity} | "
+            f"Avg Buy: ₹{h.avg_buy_price:.2f} | CMP: {cmp_str} | "
+            f"P&L: ₹{pnl:+,.0f} ({pnl_pct:+.2f}%) | Day: {day_change_pct:+.2f}% | "
+            f"Sector: {h.sector or 'N/A'} | Industry: {ind} | Days Held: {days_held or 'N/A'}"
+        )
+
+        # Technical health (best-effort, lightweight)
+        try:
+            tech_res = evaluate_ticker_signal(h.ticker, interval='daily')
+            if tech_res and tech_res.get('Signal') not in ['NO DATA', 'INSUFFICIENT DATA']:
+                summary_rows = generate_summary(tech_res)
+                summary_dict = {row['key']: row['value'] for row in summary_rows}
+                pa = summary_dict.get('Price-Action Trend (based on Close prices)', 'N/A')
+                ms = summary_dict.get('Market Structure (based on EMA Stack)', 'N/A')
+                sentiment = summary_dict.get('Market Sentiment (based on RSI)', 'N/A')
+                rel_str = summary_dict.get('Relative Strength vs Nifty', 'N/A')
+                vol = summary_dict.get('Accumulating or Distributing (based on Volume)', 'N/A')
+                fib = summary_dict.get('Trend Strength (based on Fibonacci retracement)', 'N/A')
+
+                # Compute signal
+                if 'Uptrend' in pa:
+                    signal = 'HOLD'
+                elif 'Sideways' in pa and ('Uptrend' in ms or 'Mild Uptrend' in ms):
+                    signal = 'HOLD'
+                else:
+                    signal = 'SELL'
+
+                tech_signals.append(
+                    f"  {h.ticker}: Signal={signal} | Price Action={pa} | "
+                    f"Market Structure={ms} | Sentiment={sentiment} | "
+                    f"Rel. Strength vs Nifty={rel_str} | Volume={vol} | Fib Strength={fib}"
+                )
+            else:
+                tech_signals.append(f"  {h.ticker}: Technical data insufficient")
+        except Exception:
+            tech_signals.append(f"  {h.ticker}: Technical analysis unavailable")
+
+    total_pnl = total_current - total_invested
+    total_pnl_pct = (total_pnl / total_invested * 100) if total_invested > 0 else 0
+
+    lines.append("")
+    lines.append(f"PORTFOLIO SUMMARY:")
+    lines.append(f"  Total Invested: ₹{total_invested:,.0f}")
+    lines.append(f"  Current Value:  ₹{total_current:,.0f}")
+    lines.append(f"  Total P&L:      ₹{total_pnl:+,.0f} ({total_pnl_pct:+.2f}%)")
+    lines.append(f"  Holdings Count: {len(holdings)}")
+
+    lines.append("")
+    lines.append("HOLDINGS:")
+    lines.extend(holding_rows)
+
+    # Industry allocation
+    lines.append("")
+    lines.append("INDUSTRY ALLOCATION:")
+    for ind_name, ind_val in sorted(industry_map.items(), key=lambda x: -x[1]):
+        pct = (ind_val / total_current * 100) if total_current > 0 else 0
+        lines.append(f"  {ind_name}: ₹{ind_val:,.0f} ({pct:.1f}%)")
+
+    # Concentration
+    if total_current > 0:
+        hhi = sum((v / total_current) ** 2 for v in industry_map.values())
+        lines.append("")
+        lines.append(f"CONCENTRATION (HHI): {hhi:.4f}")
+        if hhi > 0.25:
+            lines.append("  Level: HIGH — portfolio is concentrated in few industries")
+        elif hhi > 0.15:
+            lines.append("  Level: MODERATE")
+        else:
+            lines.append("  Level: LOW — well diversified")
+
+    # Technical health
+    lines.append("")
+    lines.append("TECHNICAL HEALTH (per stock):")
+    lines.extend(tech_signals)
+
+    # Portfolio-level metrics (beta, alpha, nifty comparison) — lightweight
+    try:
+        beta_sum = 0
+        beta_weight = 0
+        for h in holdings:
+            try:
+                h_yf = yf.Ticker(f"{h.ticker}.NS")
+                h_info = h_yf.info or {}
+                h_beta = h_info.get('beta', None)
+                h_price = h_info.get('currentPrice') or h_info.get('regularMarketPrice') or h.avg_buy_price
+                val = h.quantity * h_price
+                if h_beta is not None and total_current > 0:
+                    beta_sum += h_beta * (val / total_current)
+                    beta_weight += val
+            except Exception:
+                pass
+        if beta_weight > 0:
+            lines.append("")
+            lines.append(f"PORTFOLIO BETA (value-weighted): {beta_sum:.2f}")
+    except Exception:
+        pass
+
+    context_text = "\n".join(lines)
+
+    # Cache it
+    _PORTFOLIO_CONTEXT_CACHE[user_id] = {"text": context_text, "timestamp": time.time()}
+    return context_text
+
+
+@app.route('/api/portfolio/ai-chat', methods=['POST'])
+def api_portfolio_ai_chat():
+    """
+    AI Portfolio Manager chat endpoint.
+    Accepts { message, history? } and returns AI response with full portfolio context.
+    Uses gemini-3.1-pro-preview with HIGH thinking and Google Search enabled.
+    """
+    from flask import session as flask_session
+    user_id = flask_session.get('user_id')
+    if not user_id:
+        return jsonify({'error': 'Authentication required'}), 401
+
+    data = request.get_json(force=True)
+    user_message = (data.get('message') or '').strip()
+    if not user_message:
+        return jsonify({'error': 'Message is required'}), 400
+
+    # Build portfolio context
+    try:
+        portfolio_context = _build_portfolio_context(user_id)
+    except Exception as e:
+        print(f"AI-PM: Context build failed: {e}", file=sys.stderr)
+        traceback.print_exc()
+        portfolio_context = "Could not load portfolio data."
+
+    # System prompt with portfolio context
+    system_prompt = f"""You are Kagger AI Portfolio Manager — a senior, highly experienced portfolio analyst working exclusively for this investor.
+
+You have FULL ACCESS to the investor's live portfolio data below. Use this data to answer questions with precision and confidence, citing exact numbers (P&L, weights, returns, etc.) from their portfolio.
+
+YOUR CAPABILITIES:
+- Deep analysis of the investor's current holdings, P&L, sector allocation, and concentration risk
+- Technical analysis interpretation (price action, market structure, RSI, EMA stack, relative strength vs Nifty)
+- Risk assessment and diversification recommendations
+- Stock-level commentary: hold/sell signals, momentum shifts, volume anomalies
+- Portfolio-level insights: beta exposure, alpha generation, sector tilts
+- Market context via web search (you have Google Search access for real-time market data, news, and analyst opinions)
+
+RESPONSE STYLE:
+- Be direct and actionable — this is a real portfolio with real money
+- Lead with the bottom line, then explain the reasoning
+- Use numbers from the portfolio data to support your analysis
+- When discussing stocks, always reference the investor's actual position size, P&L, and weight
+- Format your responses in clean markdown (use **bold** for emphasis, bullet points for lists, ### for section headers)
+- Keep responses concise but comprehensive — think FM-grade portfolio review, not academic essay
+- Use ₹ for Indian currency. Format large numbers in Lakhs (L) or Crores (Cr) as appropriate
+- If the investor asks about something outside their portfolio, use your Google Search to provide current market information
+
+{portfolio_context}
+"""
+
+    # Get or create conversation history
+    if user_id not in _PORTFOLIO_AI_HISTORY:
+        _PORTFOLIO_AI_HISTORY[user_id] = []
+
+    history = _PORTFOLIO_AI_HISTORY[user_id]
+
+    # Build messages for Gemini
+    messages = [{"role": "user", "content": system_prompt + "\n\nPlease acknowledge you have loaded the portfolio. Do not list all the holdings — just confirm you're ready."}]
+    # If no history, add a synthetic assistant greeting
+    if not history:
+        messages.append({"role": "model", "content": "Portfolio loaded. I have full visibility into your holdings, P&L, sector allocation, technical signals, and risk metrics. How can I help you today?"})
+
+    # Add conversation history
+    for msg in history:
+        messages.append({"role": msg["role"], "content": msg["content"]})
+
+    # Add current user message
+    messages.append({"role": "user", "content": user_message})
+
+    # Call Gemini
+    try:
+        ai_response = call_gemini_api(
+            messages=messages,
+            model="gemini-3.1-pro-preview",
+            temperature=0.7,
+            use_google_search=True,
+            thinking_level="HIGH"
+        )
+    except Exception as e:
+        print(f"AI-PM: Gemini call failed: {e}", file=sys.stderr)
+        traceback.print_exc()
+        ai_response = "I'm sorry, I encountered an issue processing your request. Please try again in a moment."
+
+    # Store in history (keep last 20 messages = 10 turns)
+    history.append({"role": "user", "content": user_message})
+    history.append({"role": "model", "content": ai_response})
+    if len(history) > 20:
+        history[:] = history[-20:]
+
+    return jsonify({
+        'response': ai_response,
+        'history_length': len(history)
+    })
+
+
+@app.route('/api/portfolio/ai-chat/clear', methods=['POST'])
+def api_portfolio_ai_chat_clear():
+    """Clear the AI Portfolio Manager conversation history."""
+    from flask import session as flask_session
+    user_id = flask_session.get('user_id')
+    if not user_id:
+        return jsonify({'error': 'Authentication required'}), 401
+    _PORTFOLIO_AI_HISTORY.pop(user_id, None)
+    _PORTFOLIO_CONTEXT_CACHE.pop(user_id, None)
+    return jsonify({'success': True})
 
 
 # AI Summarize Analyst PDF
@@ -4622,8 +6365,13 @@ from screener_fetcher import (
 
 from scanx_fetcher import scrape_scanx_company_async
 
-# Initialize TradingView datafeed (guest)
-tv = TvDatafeed()
+# Initialize TradingView datafeed (authenticated if credentials provided)
+_tv_user = os.environ.get('TV_USERNAME', '')
+_tv_pass = os.environ.get('TV_PASSWORD', '')
+if _tv_user and _tv_pass:
+    tv = TvDatafeed(username=_tv_user, password=_tv_pass)
+else:
+    tv = TvDatafeed()
 
 
 def extract_key_metrics_from_fundamentals(fundamentals_data, top_ratios=None):
@@ -5995,8 +7743,8 @@ def analyze():
                         try:
                             # Get TradingView data (charts)
                             log_progress("Fetching TradingView price data...")
-                            from tvDatafeed import TvDatafeed, Interval
-                            tv = TvDatafeed()
+                            from tvDatafeed import Interval
+                            # Reuse global tv instance (already authenticated)
                             
                             # Main price data
                             res = tv.get_hist(symbol=tick, exchange='NSE', interval=Interval.in_daily, n_bars=1000)
@@ -6730,6 +8478,14 @@ def download_debug_file(filename):
     Serves the temporary debug Excel file for download from the 'debug_files' subdir.
     """
     try:
+        # Admin-only: check authentication
+        from flask import session as flask_session
+        if 'user_id' not in flask_session:
+            return "Authentication required", 401
+        from auth.database import User
+        user = User.get_by_id(flask_session['user_id'])
+        if not user or not user.is_admin:
+            return "Admin access required", 403
         # --- MODIFIED FILE SERVING LOGIC ---
         # Explicitly serve from the dedicated 'debug_files' directory
         return send_from_directory("debug_files", filename, as_attachment=True)

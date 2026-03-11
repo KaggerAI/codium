@@ -94,11 +94,18 @@ def init_db():
                 avg_buy_price REAL NOT NULL,
                 sector TEXT DEFAULT '',
                 industry TEXT DEFAULT '',
+                buy_date TEXT DEFAULT '',
                 added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (user_id) REFERENCES users (id),
                 UNIQUE(user_id, ticker)
             )
         ''')
+
+        # Migration: add buy_date column if not exists (for existing DBs)
+        try:
+            cursor.execute("ALTER TABLE portfolio_holdings ADD COLUMN buy_date TEXT DEFAULT ''")
+        except Exception:
+            pass  # Column already exists
         
         print(f"INFO: Database initialized at {DB_PATH}")
 
@@ -334,7 +341,7 @@ class UserEvent:
 
 # Portfolio holding model
 class Portfolio:
-    def __init__(self, id, user_id, ticker, stock_name, quantity, avg_buy_price, sector, industry, added_at):
+    def __init__(self, id, user_id, ticker, stock_name, quantity, avg_buy_price, sector, industry, buy_date=None, added_at=None, **kwargs):
         self.id = id
         self.user_id = user_id
         self.ticker = ticker
@@ -343,6 +350,7 @@ class Portfolio:
         self.avg_buy_price = avg_buy_price
         self.sector = sector or ''
         self.industry = industry or ''
+        self.buy_date = buy_date or ''
         self.added_at = added_at
 
     def to_dict(self):
@@ -354,6 +362,7 @@ class Portfolio:
             'avg_buy_price': self.avg_buy_price,
             'sector': self.sector,
             'industry': self.industry,
+            'buy_date': self.buy_date,
             'added_at': str(self.added_at)
         }
 
@@ -367,35 +376,47 @@ class Portfolio:
                 (user_id,)
             )
             rows = cursor.fetchall()
-            return [cls(*row) for row in rows]
+            results = []
+            for row in rows:
+                d = dict(row)
+                results.append(cls(**d))
+            return results
 
     @classmethod
-    def add_holding(cls, user_id, ticker, stock_name, quantity, avg_buy_price, sector='', industry=''):
+    def add_holding(cls, user_id, ticker, stock_name, quantity, avg_buy_price, sector='', industry='', buy_date=''):
         """Add or update a holding (UPSERT)."""
         with get_db() as conn:
             cursor = conn.cursor()
             cursor.execute('''
-                INSERT INTO portfolio_holdings (user_id, ticker, stock_name, quantity, avg_buy_price, sector, industry)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO portfolio_holdings (user_id, ticker, stock_name, quantity, avg_buy_price, sector, industry, buy_date)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(user_id, ticker) DO UPDATE SET
                     stock_name = excluded.stock_name,
                     quantity = excluded.quantity,
                     avg_buy_price = excluded.avg_buy_price,
                     sector = excluded.sector,
-                    industry = excluded.industry
-            ''', (user_id, ticker.upper(), stock_name, quantity, avg_buy_price, sector, industry))
+                    industry = excluded.industry,
+                    buy_date = excluded.buy_date
+            ''', (user_id, ticker.upper(), stock_name, quantity, avg_buy_price, sector, industry, buy_date or ''))
             return cursor.lastrowid
 
     @classmethod
-    def update_holding(cls, user_id, ticker, quantity, avg_buy_price):
-        """Update quantity and avg price for an existing holding."""
+    def update_holding(cls, user_id, ticker, quantity, avg_buy_price, buy_date=None):
+        """Update quantity, avg price, and optionally buy_date for an existing holding."""
         with get_db() as conn:
             cursor = conn.cursor()
-            cursor.execute('''
-                UPDATE portfolio_holdings
-                SET quantity = ?, avg_buy_price = ?
-                WHERE user_id = ? AND ticker = ?
-            ''', (quantity, avg_buy_price, user_id, ticker.upper()))
+            if buy_date is not None:
+                cursor.execute('''
+                    UPDATE portfolio_holdings
+                    SET quantity = ?, avg_buy_price = ?, buy_date = ?
+                    WHERE user_id = ? AND ticker = ?
+                ''', (quantity, avg_buy_price, buy_date, user_id, ticker.upper()))
+            else:
+                cursor.execute('''
+                    UPDATE portfolio_holdings
+                    SET quantity = ?, avg_buy_price = ?
+                    WHERE user_id = ? AND ticker = ?
+                ''', (quantity, avg_buy_price, user_id, ticker.upper()))
             return cursor.rowcount > 0
 
     @classmethod
@@ -419,6 +440,14 @@ class Portfolio:
                 (user_id,)
             )
             return cursor.rowcount
+
+    @classmethod
+    def get_all_user_ids(cls):
+        """Get all unique user IDs that have portfolio holdings."""
+        with get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute('SELECT DISTINCT user_id FROM portfolio_holdings')
+            return [row[0] for row in cursor.fetchall()]
 
 
 # Initialize database on module import

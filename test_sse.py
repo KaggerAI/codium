@@ -2,7 +2,7 @@ import requests
 import os
 import json
 
-PARALLEL_API_KEY = "p0_2905273eb2eb4340a6b57950c77462c7" # From previous context/env if available, or I'll just try to get it from .env
+PARALLEL_API_KEY = os.getenv("PARALLEL_API_KEY", "")  # Must be set in environment
 RUN_ID = "trun_7e1a40da1a4d40c78c09901d2985ff90"
 
 def test_stream():

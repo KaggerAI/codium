@@ -1515,6 +1515,7 @@ def _parse_peer_table(soup, ticker: str, company_name: str = None) -> dict:
             print(f"WARN: Could not find {ticker} in peer table by name, using first row as fallback")
         
         # Now process records with proper company identification
+        industry_avg = {}
         for i, record in enumerate(records):
             # Clean the record - convert all values to strings and handle NaN
             cleaned_record = {}
@@ -1543,6 +1544,12 @@ def _parse_peer_table(soup, ticker: str, company_name: str = None) -> dict:
                     pass
 
             
+            # Detect the Median / Industry Average row (e.g. "Median: 59 Co.")
+            rec_name = cleaned_record.get('name', '')
+            if rec_name.lower().startswith('median'):
+                industry_avg = cleaned_record
+                continue
+            
             # Use the identified company_index to determine company vs peer
             if i == company_index:
                 cleaned_record['ticker'] = ticker
@@ -1553,10 +1560,12 @@ def _parse_peer_table(soup, ticker: str, company_name: str = None) -> dict:
         # Limit to 10 peers max
         peers_data = peers_data[:10]
         
-        print(f"SUCCESS: Screener.in peer comparison fetched - 1 company + {len(peers_data)} peers")
+        print(f"SUCCESS: Screener.in peer comparison fetched - 1 company + {len(peers_data)} peers" + 
+              (f" + industry avg" if industry_avg else ""))
         return {
             'company': company_data,
-            'peers': peers_data
+            'peers': peers_data,
+            'industry_avg': industry_avg
         }
         
     except Exception as e:

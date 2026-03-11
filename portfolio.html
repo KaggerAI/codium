@@ -76,7 +76,7 @@
             font-size: 0.75rem;
             text-transform: uppercase;
             letter-spacing: 0.05em;
-            padding: 0.75rem 1rem;
+            padding: 0.75rem 1.7rem;
             text-align: left;
             border-bottom: 1px solid rgba(255, 255, 255, 0.06);
             position: sticky;
@@ -93,7 +93,7 @@
         }
 
         .holdings-table tbody td {
-            padding: 0.75rem 1rem;
+            padding: 0.75rem 1.7rem;
             font-size: 0.875rem;
             border-bottom: 1px solid rgba(255, 255, 255, 0.04);
         }
@@ -356,6 +356,377 @@
         .modal-overlay.active {
             display: flex;
         }
+
+        /* Portfolio Tabs */
+        .portfolio-tabs {
+            display: flex;
+            gap: 0.25rem;
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 12px;
+            padding: 0.25rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .portfolio-tab {
+            flex: 1;
+            padding: 0.65rem 1rem;
+            border-radius: 10px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: #64748b;
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+
+        .portfolio-tab:hover {
+            color: #94a3b8;
+            background: rgba(255, 255, 255, 0.03);
+        }
+
+        .portfolio-tab.active {
+            color: #ffffff;
+            background: linear-gradient(135deg, rgba(34, 197, 94, 0.15) 0%, rgba(30, 41, 59, 0.9) 100%);
+            border: 1px solid rgba(34, 197, 94, 0.2);
+            box-shadow: 0 2px 8px rgba(34, 197, 94, 0.1);
+        }
+
+        /* Brief content styles */
+        .brief-container {
+            min-height: 400px;
+        }
+
+        .brief-content {
+            font-size: 0.9rem;
+            line-height: 1.8;
+            color: #cbd5e1;
+        }
+
+        .brief-content h3 {
+            color: #f1f5f9;
+            font-size: 1.1rem;
+            font-weight: 700;
+            margin: 1.25rem 0 0.5rem;
+        }
+
+        .brief-content h3:first-child {
+            margin-top: 0;
+        }
+
+        .brief-content ul {
+            padding-left: 0;
+            list-style: none;
+            margin: 0.5rem 0;
+        }
+
+        .brief-content li {
+            margin-bottom: 0.5rem;
+            padding: 0.5rem 0.75rem;
+            background: rgba(15, 23, 42, 0.4);
+            border-radius: 8px;
+            border-left: 3px solid rgba(34, 197, 94, 0.3);
+        }
+
+        .brief-content p {
+            margin: 0.5rem 0;
+        }
+
+        .brief-content strong {
+            color: #f1f5f9;
+        }
+
+        .brief-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+            margin-bottom: 1rem;
+        }
+
+        .brief-skeleton {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+
+        .brief-skeleton .skel-block {
+            background: rgba(100, 116, 139, 0.15);
+            border-radius: 8px;
+            margin-bottom: 0.75rem;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.4;
+            }
+        }
+
+        /* Info tooltip for Technical Health Grid */
+        .th-info {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            position: relative;
+        }
+
+        .info-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 15px;
+            height: 15px;
+            border-radius: 50%;
+            background: rgba(99, 102, 241, 0.15);
+            color: #818cf8;
+            font-size: 9px;
+            font-weight: 700;
+            cursor: pointer;
+            border: 1px solid rgba(99, 102, 241, 0.25);
+            transition: all 0.15s;
+            flex-shrink: 0;
+        }
+
+        .info-btn:hover {
+            background: rgba(99, 102, 241, 0.35);
+            color: #c7d2fe;
+        }
+
+        .info-tip {
+            display: none;
+            position: fixed;
+            background: #1e293b;
+            border: 1px solid rgba(99, 102, 241, 0.25);
+            border-radius: 8px;
+            padding: 0.65rem 0.85rem;
+            max-width: 260px;
+            z-index: 2000;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+        }
+
+        .info-tip.active {
+            display: block;
+        }
+
+        .info-tip h4 {
+            color: #c7d2fe;
+            font-size: 0.7rem;
+            font-weight: 600;
+            margin: 0 0 0.3rem 0;
+            letter-spacing: 0.02em;
+        }
+
+        .info-tip p {
+            color: #94a3b8;
+            font-size: 0.68rem;
+            line-height: 1.45;
+            margin: 0;
+        }
+
+        /* AI Chat */
+        .ai-chat-container {
+            display: flex;
+            flex-direction: column;
+            height: calc(100vh - 220px);
+            min-height: 500px;
+        }
+
+        .ai-chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .ai-msg {
+            max-width: 85%;
+            padding: 0.85rem 1.1rem;
+            border-radius: 14px;
+            font-size: 0.875rem;
+            line-height: 1.7;
+            animation: fadeIn 0.3s ease-out;
+        }
+
+        .ai-msg.user {
+            align-self: flex-end;
+            background: linear-gradient(135deg, rgba(34, 197, 94, 0.15) 0%, rgba(34, 197, 94, 0.06) 100%);
+            border: 1px solid rgba(34, 197, 94, 0.2);
+            color: #e2e8f0;
+        }
+
+        .ai-msg.assistant {
+            align-self: flex-start;
+            background: rgba(30, 41, 59, 0.8);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            color: #cbd5e1;
+        }
+
+        .ai-msg.assistant h3, .ai-msg.assistant h2, .ai-msg.assistant h1 {
+            color: #f1f5f9;
+            font-size: 0.95rem;
+            font-weight: 700;
+            margin: 0.8rem 0 0.3rem;
+        }
+
+        .ai-msg.assistant h3:first-child, .ai-msg.assistant h2:first-child {
+            margin-top: 0;
+        }
+
+        .ai-msg.assistant strong {
+            color: #f1f5f9;
+        }
+
+        .ai-msg.assistant ul, .ai-msg.assistant ol {
+            padding-left: 1.2rem;
+            margin: 0.4rem 0;
+        }
+
+        .ai-msg.assistant li {
+            margin-bottom: 0.3rem;
+        }
+
+        .ai-msg.assistant code {
+            background: rgba(15, 23, 42, 0.6);
+            padding: 0.15rem 0.4rem;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            color: #7dd3fc;
+        }
+
+        .ai-msg.assistant p {
+            margin: 0.4rem 0;
+        }
+
+        .ai-msg.assistant p:first-child {
+            margin-top: 0;
+        }
+
+        .ai-msg.assistant p:last-child {
+            margin-bottom: 0;
+        }
+
+        .ai-chat-input-bar {
+            padding: 1rem 1.5rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.06);
+            display: flex;
+            gap: 0.75rem;
+            align-items: center;
+            background: rgba(15, 23, 42, 0.5);
+            border-radius: 0 0 16px 16px;
+        }
+
+        .ai-chat-input-bar input {
+            flex: 1;
+        }
+
+        .ai-chat-send-btn {
+            background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+            border: none;
+            color: white;
+            width: 40px;
+            height: 40px;
+            border-radius: 10px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.15s, box-shadow 0.15s;
+            flex-shrink: 0;
+        }
+
+        .ai-chat-send-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 16px rgba(34, 197, 94, 0.3);
+        }
+
+        .ai-chat-send-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .ai-quick-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            padding: 0 1.5rem 1rem;
+        }
+
+        .ai-quick-btn {
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            color: #94a3b8;
+            font-size: 0.75rem;
+            padding: 0.4rem 0.8rem;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.15s;
+            white-space: nowrap;
+        }
+
+        .ai-quick-btn:hover {
+            background: rgba(34, 197, 94, 0.08);
+            border-color: rgba(34, 197, 94, 0.2);
+            color: #e2e8f0;
+        }
+
+        .ai-typing {
+            display: flex;
+            gap: 4px;
+            padding: 0.8rem 1rem;
+            align-self: flex-start;
+        }
+
+        .ai-typing span {
+            width: 7px;
+            height: 7px;
+            background: #64748b;
+            border-radius: 50%;
+            animation: typingBounce 1.4s infinite ease-in-out;
+        }
+
+        .ai-typing span:nth-child(2) { animation-delay: 0.2s; }
+        .ai-typing span:nth-child(3) { animation-delay: 0.4s; }
+
+        @keyframes typingBounce {
+            0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+            40% { transform: scale(1); opacity: 1; }
+        }
+
+        .ai-welcome {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            flex: 1;
+            text-align: center;
+            padding: 2rem;
+            gap: 1rem;
+        }
+
+        .ai-welcome-icon {
+            width: 56px;
+            height: 56px;
+            background: linear-gradient(135deg, rgba(34, 197, 94, 0.15) 0%, rgba(99, 102, 241, 0.15) 100%);
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+        }
     </style>
 </head>
 
@@ -382,7 +753,7 @@
     </nav>
 
     <!-- ==================== MAIN CONTENT ==================== -->
-    <main class="max-w-7xl mx-auto px-4 sm:px-6 py-8">
+    <main class="max-w-[90rem] mx-auto px-4 sm:px-6 py-8">
 
         <!-- Header -->
         <div class="mb-8 fade-in">
@@ -391,202 +762,539 @@
                 health.</p>
         </div>
 
-        <!-- ==================== SUMMARY CARDS ==================== -->
-        <div id="summarySection" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8" style="display:none;">
-            <div id="cardInvested" class="stat-card fade-in">
-                <p class="text-xs text-slate-400 mb-1 uppercase tracking-wider">Total Invested</p>
-                <p id="totalInvested" class="text-xl font-bold text-white">—</p>
-            </div>
-            <div id="cardCurrent" class="stat-card fade-in">
-                <p class="text-xs text-slate-400 mb-1 uppercase tracking-wider">Current Value</p>
-                <p id="totalCurrent" class="text-xl font-bold text-white">—</p>
-            </div>
-            <div id="cardPnl" class="stat-card fade-in">
-                <p class="text-xs text-slate-400 mb-1 uppercase tracking-wider">Total P&L</p>
-                <p id="totalPnl" class="text-xl font-bold">—</p>
-                <p id="totalPnlPct" class="text-xs mt-0.5">—</p>
-            </div>
-            <div id="cardHoldings" class="stat-card fade-in">
-                <p class="text-xs text-slate-400 mb-1 uppercase tracking-wider">Holdings</p>
-                <p id="holdingCount" class="text-xl font-bold text-white">—</p>
-            </div>
+        <!-- ==================== TAB NAVIGATION ==================== -->
+        <div class="portfolio-tabs fade-in">
+            <button class="portfolio-tab active" onclick="switchTab('summary')" id="tabBtnSummary">
+                📊 Portfolio Summary
+            </button>
+            <button class="portfolio-tab" onclick="switchTab('premarket')" id="tabBtnPremarket">
+                🌅 Pre-market Brief
+            </button>
+            <button class="portfolio-tab" onclick="switchTab('postmarket')" id="tabBtnPostmarket">
+                🌇 Post-market Brief
+            </button>
+            <button class="portfolio-tab" onclick="switchTab('aimanager')" id="tabBtnAI">
+                🤖 AI Manager
+            </button>
         </div>
 
-        <!-- ==================== ADD HOLDING + CSV UPLOAD ==================== -->
-        <div class="grid md:grid-cols-3 gap-6 mb-8">
-            <!-- Manual Add Section -->
-            <div class="md:col-span-2 glass-card p-6 fade-in">
-                <h2 class="text-base font-semibold text-white mb-4 flex items-center gap-2">
-                    <svg class="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                    </svg>
-                    Add Holding
-                </h2>
-                <div class="grid grid-cols-1 sm:grid-cols-4 gap-3">
-                    <div class="relative sm:col-span-2">
-                        <input type="text" id="stockSearchInput" class="input-field w-full"
-                            placeholder="Search stock..." autocomplete="off">
-                        <input type="hidden" id="selectedTicker" value="">
-                        <input type="hidden" id="selectedStockName" value="">
-                        <div id="stockDropdown" class="autocomplete-dropdown"></div>
-                    </div>
-                    <input type="number" id="quantityInput" class="input-field" placeholder="Quantity" min="0.01"
-                        step="any">
-                    <input type="number" id="avgPriceInput" class="input-field" placeholder="Avg Buy Price (₹)"
-                        min="0.01" step="any">
+        <!-- ==================== TAB: PORTFOLIO SUMMARY ==================== -->
+        <div id="tabSummary">
+
+            <!-- ==================== SUMMARY CARDS ==================== -->
+            <div id="summarySection" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8" style="display:none;">
+                <div id="cardInvested" class="stat-card fade-in">
+                    <p class="text-xs text-slate-400 mb-1 uppercase tracking-wider">Total Invested</p>
+                    <p id="totalInvested" class="text-xl font-bold text-white">—</p>
                 </div>
-                <div class="mt-4 flex gap-3">
-                    <button id="addHoldingBtn" onclick="addHolding()" class="btn-primary text-sm" disabled>Add to
-                        Portfolio</button>
-                    <span id="addStatus" class="text-xs text-slate-400 self-center"></span>
+                <div id="cardCurrent" class="stat-card fade-in">
+                    <p class="text-xs text-slate-400 mb-1 uppercase tracking-wider">Current Value</p>
+                    <p id="totalCurrent" class="text-xl font-bold text-white">—</p>
+                </div>
+                <div id="cardPnl" class="stat-card fade-in">
+                    <p class="text-xs text-slate-400 mb-1 uppercase tracking-wider">Total P&L</p>
+                    <p id="totalPnl" class="text-xl font-bold">—</p>
+                    <p id="totalPnlPct" class="text-xs mt-0.5">—</p>
+                </div>
+                <div id="cardHoldings" class="stat-card fade-in">
+                    <p class="text-xs text-slate-400 mb-1 uppercase tracking-wider">Holdings</p>
+                    <p id="holdingCount" class="text-xl font-bold text-white">—</p>
                 </div>
             </div>
 
-            <!-- CSV Upload -->
-            <div class="glass-card p-6 fade-in">
-                <h2 class="text-base font-semibold text-white mb-4 flex items-center gap-2">
-                    <svg class="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                    </svg>
-                    Upload CSV
-                </h2>
-                <div id="csvDropzone" class="dropzone" onclick="document.getElementById('csvFileInput').click()">
-                    <svg class="w-8 h-8 mx-auto text-slate-500 mb-2" fill="none" stroke="currentColor"
-                        viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-                            d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                    <p class="text-sm text-slate-400">Drop CSV here or click to browse</p>
-                    <p class="text-xs text-slate-500 mt-1">Columns: Ticker, Quantity, Avg Buy Price</p>
-                </div>
-                <input type="file" id="csvFileInput" accept=".csv" style="display:none" onchange="uploadCSV(this)">
-                <p id="csvStatus" class="text-xs text-slate-400 mt-3"></p>
-            </div>
-        </div>
-
-        <!-- ==================== HOLDINGS TABLE ==================== -->
-        <div id="holdingsTableContainer" class="glass-card-bright overflow-hidden mb-8 fade-in" style="display:none;">
-            <div class="px-6 py-4 flex items-center justify-between border-b border-white/5">
-                <h2 class="text-base font-semibold text-white flex items-center gap-2">
-                    <svg class="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                    </svg>
-                    Holdings
-                </h2>
-                <button onclick="refreshDashboard()" class="btn-secondary text-xs py-1.5 px-3">↻ Refresh
-                    Dashboard</button>
-            </div>
-            <div class="overflow-x-auto">
-                <table class="holdings-table">
-                    <thead>
-                        <tr>
-                            <th>Stock</th>
-                            <th>Qty</th>
-                            <th>Avg Price</th>
-                            <th>CMP</th>
-                            <th>Invested</th>
-                            <th>Current</th>
-                            <th>P&L</th>
-                            <th>P&L %</th>
-                            <th>Day %</th>
-                            <th>Sector</th>
-                            <th></th>
-                        </tr>
-                    </thead>
-                    <tbody id="holdingsTableBody"></tbody>
-                </table>
-            </div>
-        </div>
-
-        <!-- ==================== DASHBOARD GRID ==================== -->
-        <div id="dashboardSection" class="grid md:grid-cols-2 gap-6 mb-8" style="display:none;">
-
-            <!-- Industry Allocation Treemap -->
-            <div class="glass-card p-6 fade-in">
-                <h2 class="text-base font-semibold text-white mb-4 flex items-center gap-2">
-                    <svg class="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z" />
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z" />
-                    </svg>
-                    Industry Allocation
-                </h2>
-                <div id="industryChart" style="height: 320px;"></div>
-            </div>
-
-            <!-- Concentration Risk -->
-            <div class="glass-card p-6 fade-in">
-                <h2 class="text-base font-semibold text-white mb-4 flex items-center gap-2">
-                    <svg class="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
-                    </svg>
-                    Concentration Risk
-                </h2>
-                <div id="concentrationContainer">
-                    <div class="flex items-center gap-4 mb-6">
-                        <div class="flex-1">
-                            <div class="flex items-baseline justify-between mb-2">
-                                <span class="text-sm text-slate-400">Diversification Score</span>
-                                <span id="divScore" class="text-2xl font-bold text-white">—</span>
-                            </div>
-                            <div class="concentration-bar">
-                                <div id="divBar" class="concentration-fill" style="width:0%;"></div>
-                            </div>
-                        </div>
-                        <div id="concentrationBadge" class="badge text-sm">—</div>
-                    </div>
-                    <div id="topHoldingsConc" class="space-y-2"></div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Technical Health Grid -->
-        <div id="techHealthSection" class="glass-card-bright overflow-hidden mb-8 fade-in" style="display:none;">
-            <div class="px-6 py-4 border-b border-white/5">
-                <h2 class="text-base font-semibold text-white flex items-center gap-2">
+            <!-- ==================== PORTFOLIO HEALTH ==================== -->
+            <div id="portfolioHealthSection" class="mb-8 fade-in" style="display:none;">
+                <div class="flex items-center gap-2 mb-4">
                     <svg class="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                     </svg>
-                    Technical Health Grid
+                    <h2 class="text-base font-semibold text-white">Portfolio Health</h2>
+                    <span class="text-xs text-slate-500 ml-2">Key risk & return metrics</span>
+                </div>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <!-- Beta -->
+                    <div class="glass-card p-4 relative">
+                        <div class="flex items-center justify-between mb-1">
+                            <p class="text-xs text-slate-400 uppercase tracking-wider">Portfolio Beta</p>
+                            <button onclick="showMetricInfo(this, 'beta')"
+                                class="w-5 h-5 rounded-full bg-slate-700 hover:bg-slate-600 text-slate-400 hover:text-white text-xs flex items-center justify-center transition-colors"
+                                title="What is Beta?">i</button>
+                        </div>
+                        <p id="metricBeta" class="text-2xl font-bold text-white">—</p>
+                        <p id="metricBetaLabel" class="text-xs text-slate-500 mt-0.5"></p>
+                    </div>
+                    <!-- Alpha -->
+                    <div class="glass-card p-4 relative">
+                        <div class="flex items-center justify-between mb-1">
+                            <p class="text-xs text-slate-400 uppercase tracking-wider">Alpha (CAPM)</p>
+                            <button onclick="showMetricInfo(this, 'alpha')"
+                                class="w-5 h-5 rounded-full bg-slate-700 hover:bg-slate-600 text-slate-400 hover:text-white text-xs flex items-center justify-center transition-colors"
+                                title="What is Alpha?">i</button>
+                        </div>
+                        <p id="metricAlpha" class="text-2xl font-bold text-white">—</p>
+                        <p id="metricAlphaLabel" class="text-xs text-slate-500 mt-0.5"></p>
+                    </div>
+                    <!-- NIFTY Comparison -->
+                    <div class="glass-card p-4 relative">
+                        <div class="flex items-center justify-between mb-1">
+                            <p class="text-xs text-slate-400 uppercase tracking-wider">vs NIFTY 50</p>
+                            <button onclick="showMetricInfo(this, 'nifty')"
+                                class="w-5 h-5 rounded-full bg-slate-700 hover:bg-slate-600 text-slate-400 hover:text-white text-xs flex items-center justify-center transition-colors"
+                                title="Portfolio vs NIFTY">i</button>
+                        </div>
+                        <p id="metricNifty" class="text-2xl font-bold text-white">—</p>
+                        <p id="metricNiftyLabel" class="text-xs text-slate-500 mt-0.5"></p>
+                    </div>
+                    <!-- Diversification -->
+                    <div class="glass-card p-4 relative">
+                        <div class="flex items-center justify-between mb-1">
+                            <p class="text-xs text-slate-400 uppercase tracking-wider">Diversification</p>
+                            <button onclick="showMetricInfo(this, 'diversification')"
+                                class="w-5 h-5 rounded-full bg-slate-700 hover:bg-slate-600 text-slate-400 hover:text-white text-xs flex items-center justify-center transition-colors"
+                                title="Diversification Score">i</button>
+                        </div>
+                        <p id="metricDiversification" class="text-2xl font-bold text-white">—</p>
+                        <p id="metricDivLabel" class="text-xs text-slate-500 mt-0.5"></p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ==================== ADD HOLDING + CSV UPLOAD ==================== -->
+            <div class="grid md:grid-cols-3 gap-6 mb-8">
+                <!-- Manual Add Section -->
+                <div class="md:col-span-2 glass-card p-6 fade-in">
+                    <h2 class="text-base font-semibold text-white mb-4 flex items-center gap-2">
+                        <svg class="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                        </svg>
+                        Add Holding
+                    </h2>
+                    <div class="grid grid-cols-1 sm:grid-cols-5 gap-3">
+                        <div class="relative sm:col-span-2">
+                            <input type="text" id="stockSearchInput" class="input-field w-full"
+                                placeholder="Search stock..." autocomplete="off">
+                            <input type="hidden" id="selectedTicker" value="">
+                            <input type="hidden" id="selectedStockName" value="">
+                            <div id="stockDropdown" class="autocomplete-dropdown"></div>
+                        </div>
+                        <input type="number" id="quantityInput" class="input-field" placeholder="Quantity" min="0.01"
+                            step="any">
+                        <input type="number" id="avgPriceInput" class="input-field" placeholder="Avg Buy Price (₹)"
+                            min="0.01" step="any">
+                        <div class="relative w-full">
+                            <input type="date" id="buyDateInput" class="input-field w-full" placeholder="Buy Date"
+                                onchange="fetchPriceForDate('add')">
+                        </div>
+                    </div>
+                    <div class="mt-4 flex gap-3">
+                        <button id="addHoldingBtn" onclick="addHolding()" class="btn-primary text-sm" disabled>Add to
+                            Portfolio</button>
+                        <span id="addStatus" class="text-xs text-slate-400 self-center flex items-center gap-2"></span>
+                    </div>
+                </div>
+
+                <!-- CSV Upload -->
+                <div class="glass-card p-6 fade-in">
+                    <h2 class="text-base font-semibold text-white mb-4 flex items-center gap-2">
+                        <svg class="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                        </svg>
+                        Upload CSV
+                    </h2>
+                    <div id="csvDropzone" class="dropzone" onclick="document.getElementById('csvFileInput').click()">
+                        <svg class="w-8 h-8 mx-auto text-slate-500 mb-2" fill="none" stroke="currentColor"
+                            viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                                d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        <p class="text-sm text-slate-400">Drop CSV here or click to browse</p>
+                        <p class="text-xs text-slate-500 mt-1">Columns: Ticker, Quantity, Avg Buy Price</p>
+                        <a href="#" onclick="event.stopPropagation(); downloadCsvTemplate();"
+                            class="text-xs text-indigo-400 hover:text-indigo-300 mt-1.5 inline-block"
+                            style="text-decoration: underline;">⬇ Download template</a>
+                    </div>
+                    <input type="file" id="csvFileInput" accept=".csv" style="display:none" onchange="uploadCSV(this)">
+                    <p id="csvStatus" class="text-xs text-slate-400 mt-3"></p>
+                </div>
+            </div>
+
+            <!-- ==================== HOLDINGS TABLE ==================== -->
+            <div id="holdingsTableContainer" class="glass-card-bright overflow-hidden mb-8 fade-in"
+                style="display:none;">
+                <div class="px-6 py-4 flex items-center justify-between border-b border-white/5">
+                    <h2 class="text-base font-semibold text-white flex items-center gap-2">
+                        <svg class="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                        </svg>
+                        Holdings
+                    </h2>
+                    <button onclick="refreshDashboard()" class="btn-secondary text-xs py-1.5 px-3">↻ Refresh
+                        Dashboard</button>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="holdings-table">
+                        <thead>
+                            <tr>
+                                <th>Stock</th>
+                                <th>Qty</th>
+                                <th>Avg Price</th>
+                                <th>CMP</th>
+                                <th>Days Held</th>
+                                <th>Invested</th>
+                                <th>Current</th>
+                                <th>P&L</th>
+                                <th>P&L %</th>
+                                <th>Day %</th>
+                                <th>Sector</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody id="holdingsTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- ==================== DASHBOARD GRID ==================== -->
+            <div id="dashboardSection" class="grid md:grid-cols-2 gap-6 mb-8" style="display:none;">
+
+                <!-- Industry Allocation Treemap -->
+                <div class="glass-card p-6 fade-in">
+                    <h2 class="text-base font-semibold text-white mb-4 flex items-center gap-2">
+                        <svg class="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z" />
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z" />
+                        </svg>
+                        Industry Allocation
+                    </h2>
+                    <div id="industryChart" style="height: 320px;"></div>
+                </div>
+
+                <!-- Concentration Risk -->
+                <div class="glass-card p-6 fade-in">
+                    <h2 class="text-base font-semibold text-white mb-4 flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <svg class="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                            </svg>
+                            Concentration Risk
+                        </div>
+                        <button onclick="showMetricInfo(this, 'concentration')"
+                            class="w-5 h-5 rounded-full bg-slate-700 hover:bg-slate-600 text-slate-400 hover:text-white text-xs flex items-center justify-center transition-colors"
+                            title="Concentration Risk info">i</button>
+                    </h2>
+                    <div id="concentrationContainer">
+                        <div class="flex items-center gap-4 mb-6">
+                            <div class="flex-1">
+                                <div class="flex items-baseline justify-between mb-2">
+                                    <span class="text-sm text-slate-400">Diversification Score</span>
+                                    <span id="divScore" class="text-2xl font-bold text-white">—</span>
+                                </div>
+                                <div class="concentration-bar">
+                                    <div id="divBar" class="concentration-fill" style="width:0%;"></div>
+                                </div>
+                            </div>
+                            <div id="concentrationBadge" class="badge text-sm">—</div>
+                        </div>
+                        <div id="topHoldingsConc" class="space-y-2"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Technical Health Grid -->
+            <div id="techHealthSection" class="glass-card-bright overflow-hidden mb-8 fade-in" style="display:none;">
+                <div class="px-6 py-4 border-b border-white/5">
+                    <h2 class="text-base font-semibold text-white flex items-center gap-2">
+                        <svg class="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                        </svg>
+                        Technical Health Grid
+                    </h2>
+                </div>
+                <!-- Lightweight info popover (anchored to button, no dimming) -->
+                <div id="infoTip" class="info-tip">
+                    <h4 id="infoTipTitle"></h4>
+                    <p id="infoTipText"></p>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="holdings-table" style="min-width: 1050px;">
+                        <thead>
+                            <tr>
+                                <th>Stock</th>
+                                <th><span class="th-info">Signal <span class="info-btn"
+                                            onclick="showInfo('Signal','HOLD or SELL depending on chart pattern', event)">i</span></span>
+                                </th>
+                                <th><span class="th-info">Price Action <span class="info-btn"
+                                            onclick="showInfo('Price Action','Detects price action based on swing highs and lows of Close prices.', event)">i</span></span>
+                                </th>
+                                <th><span class="th-info">Fib Strength <span class="info-btn"
+                                            onclick="showInfo('Fibonacci Strength','Detects the trend strength depending on how deep was the latest pullback.', event)">i</span></span>
+                                </th>
+                                <th><span class="th-info">Market Structure <span class="info-btn"
+                                            onclick="showInfo('EMA Stack','Detects overall market structure based on alignment of EMA 13, 55, 144.', event)">i</span></span>
+                                </th>
+                                <th><span class="th-info">Market Sentiment <span class="info-btn"
+                                            onclick="showInfo('Market Sentiment','Market Sentiment measure using RSI: Overbought (&gt;80), Oversold (&lt;20), Bullish (&gt;55), Bearish (&lt;45).', event)">i</span></span>
+                                </th>
+                                <th><span class="th-info">vs NIFTY <span class="info-btn"
+                                            onclick="showInfo('Relative Strength','55-day returns vs NIFTY 50. Positive = outperforming the benchmark. Negative = underperforming.', event)">i</span></span>
+                                </th>
+                                <th><span class="th-info">Volume <span class="info-btn"
+                                            onclick="showInfo('Volume Flow','ADL (Accumulation/Distribution Line). Accumulating = smart money flowing in. Distributing = smart money flowing out.', event)">i</span></span>
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody id="techHealthTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- ==================== PEER SWAP CARDS ==================== -->
+            <div id="peerSwapSection" class="mb-8 fade-in" style="display:none;">
+                <div class="flex items-center gap-2 mb-4">
+                    <svg class="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
+                    </svg>
+                    <h2 class="text-base font-semibold text-white">Peer Swap Suggestions</h2>
+                    <span class="text-xs text-slate-500 ml-2">Top alternative in each industry</span>
+                </div>
+                <div id="peerSwapGrid" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+                <div id="peerSwapLoading" class="text-center py-8" style="display:none;">
+                    <div class="spinner mx-auto mb-3"></div>
+                    <p class="text-xs text-slate-400">Loading peer comparisons...</p>
+                </div>
+            </div>
+
+            <!-- ==================== WHAT-IF SIMULATOR ==================== -->
+            <div id="whatIfSection" class="glass-card p-6 mb-8 fade-in" style="display:none;">
+                <h2 class="text-base font-semibold text-white mb-4 flex items-center gap-2">
+                    <svg class="w-5 h-5 text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                    </svg>
+                    What-If Simulator
                 </h2>
+                <p class="text-xs text-slate-400 mb-4">Simulate swapping one holding for another — see how it changes
+                    your
+                    portfolio.</p>
+
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+                    <div>
+                        <label class="text-xs text-slate-400 mb-1 block">I want to sell</label>
+                        <select id="whatIfSellSelect" class="input-field w-full">
+                            <option value="">Select holding...</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-xs text-slate-400 mb-1 block">And buy</label>
+                        <div class="relative">
+                            <input type="text" id="whatIfBuyInput" class="input-field w-full"
+                                placeholder="Search stock..." autocomplete="off">
+                            <input type="hidden" id="whatIfBuyTicker" value="">
+                            <div id="whatIfBuyDropdown" class="autocomplete-dropdown"></div>
+                        </div>
+                    </div>
+                    <div>
+                        <button id="simulateBtn" onclick="runWhatIf()" class="btn-primary text-sm w-full" disabled>
+                            🔮 Simulate
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Results Panel -->
+                <div id="whatIfResults" style="display:none;" class="mt-6">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                        <!-- Swap Details -->
+                        <div class="glass-card p-4">
+                            <p class="text-xs text-slate-400 uppercase tracking-wider mb-2">Swap Details</p>
+                            <div id="whatIfSwapDetails" class="text-sm text-slate-200 space-y-1"></div>
+                        </div>
+                        <!-- Concentration Change -->
+                        <div class="glass-card p-4">
+                            <p class="text-xs text-slate-400 uppercase tracking-wider mb-2">Diversification Score</p>
+                            <div id="whatIfConcentration" class="text-sm text-slate-200"></div>
+                        </div>
+                        <!-- Backtest -->
+                        <div class="glass-card p-4">
+                            <p class="text-xs text-slate-400 uppercase tracking-wider mb-2">6-Month Backtest</p>
+                            <div id="whatIfBacktest" class="text-sm text-slate-200"></div>
+                        </div>
+                    </div>
+                    <!-- New industry allocation chart -->
+                    <div class="glass-card p-4">
+                        <p class="text-xs text-slate-400 uppercase tracking-wider mb-3">New Industry Allocation</p>
+                        <div id="whatIfChart" style="height: 280px;"></div>
+                    </div>
+                </div>
             </div>
-            <div class="overflow-x-auto">
-                <table class="holdings-table">
-                    <thead>
-                        <tr>
-                            <th>Stock</th>
-                            <th>Signal</th>
-                            <th>RSI (14)</th>
-                            <th>RSI Zone</th>
-                            <th>Trend</th>
-                        </tr>
-                    </thead>
-                    <tbody id="techHealthTableBody"></tbody>
-                </table>
+
+            <!-- Loading state -->
+            <div id="dashboardLoading" class="flex flex-col items-center justify-center py-16" style="display:none;">
+                <div class="spinner mb-4"></div>
+                <p class="text-sm text-slate-400">Loading dashboard data...</p>
+            </div>
+
+            <!-- Empty state -->
+            <div id="emptyState" class="glass-card p-12 text-center fade-in" style="display:none;">
+                <svg class="w-16 h-16 mx-auto text-slate-600 mb-4" fill="none" stroke="currentColor"
+                    viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1"
+                        d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+                </svg>
+                <h3 class="text-lg font-semibold text-white mb-2">Your portfolio is empty</h3>
+                <p class="text-sm text-slate-400 max-w-md mx-auto">Add your first stock above — search by name or
+                    ticker,
+                    enter quantity and average buy price, then click "Add to Portfolio". You can also upload a CSV.</p>
+            </div>
+
+        </div><!-- close tabSummary -->
+
+        <!-- ==================== TAB: PRE-MARKET BRIEF ==================== -->
+        <div id="tabPremarket" style="display:none;">
+            <div class="glass-card p-6 brief-container fade-in">
+                <div class="brief-meta">
+                    <div>
+                        <h2 class="text-lg font-bold text-white flex items-center gap-2">🌅 Pre-market Brief</h2>
+                        <p id="premarketTimestamp" class="text-xs text-slate-500 mt-1"></p>
+                    </div>
+                    <button onclick="refreshBrief('pre')"
+                        class="btn-secondary text-xs py-1.5 px-3 flex items-center gap-1" id="premarketRefreshBtn">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        Refresh
+                    </button>
+                </div>
+                <div id="premarketContent">
+                    <!-- Skeleton loading -->
+                    <div class="brief-skeleton" id="premarketSkeleton">
+                        <div class="skel-block" style="height:24px;width:60%"></div>
+                        <div class="skel-block" style="height:16px;width:90%"></div>
+                        <div class="skel-block" style="height:16px;width:75%"></div>
+                        <div class="skel-block" style="height:80px;width:100%"></div>
+                        <div class="skel-block" style="height:16px;width:85%"></div>
+                        <div class="skel-block" style="height:60px;width:100%"></div>
+                        <div class="skel-block" style="height:16px;width:70%"></div>
+                    </div>
+                    <div class="brief-content" id="premarketBriefHTML" style="display:none;"></div>
+                </div>
             </div>
         </div>
 
-        <!-- Loading state -->
-        <div id="dashboardLoading" class="flex flex-col items-center justify-center py-16" style="display:none;">
-            <div class="spinner mb-4"></div>
-            <p class="text-sm text-slate-400">Loading dashboard data...</p>
+        <!-- ==================== TAB: POST-MARKET BRIEF ==================== -->
+        <div id="tabPostmarket" style="display:none;">
+            <div class="glass-card p-6 brief-container fade-in">
+                <div class="brief-meta">
+                    <div>
+                        <h2 class="text-lg font-bold text-white flex items-center gap-2">🌇 Post-market Brief</h2>
+                        <p id="postmarketTimestamp" class="text-xs text-slate-500 mt-1"></p>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <div id="postmarketAlpha" class="text-sm font-semibold"></div>
+                        <button onclick="refreshBrief('post')"
+                            class="btn-secondary text-xs py-1.5 px-3 flex items-center gap-1" id="postmarketRefreshBtn">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            </svg>
+                            Refresh
+                        </button>
+                    </div>
+                </div>
+                <!-- Portfolio Summary Bar -->
+                <div id="postmarketSummaryBar" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4" style="display:none;">
+                    <div class="bg-slate-800/50 rounded-lg p-3">
+                        <p class="text-xs text-slate-400">Today's P&L</p>
+                        <p id="pmDayPnl" class="text-lg font-bold">—</p>
+                    </div>
+                    <div class="bg-slate-800/50 rounded-lg p-3">
+                        <p class="text-xs text-slate-400">Day Change</p>
+                        <p id="pmDayChange" class="text-lg font-bold">—</p>
+                    </div>
+                    <div class="bg-slate-800/50 rounded-lg p-3">
+                        <p class="text-xs text-slate-400">NIFTY 50</p>
+                        <p id="pmNifty" class="text-lg font-bold">—</p>
+                    </div>
+                    <div class="bg-slate-800/50 rounded-lg p-3">
+                        <p class="text-xs text-slate-400">Alpha vs NIFTY</p>
+                        <p id="pmAlpha" class="text-lg font-bold">—</p>
+                    </div>
+                </div>
+                <div id="postmarketContent">
+                    <!-- Skeleton loading -->
+                    <div class="brief-skeleton" id="postmarketSkeleton">
+                        <div class="skel-block" style="height:24px;width:50%"></div>
+                        <div class="skel-block" style="height:16px;width:95%"></div>
+                        <div class="skel-block" style="height:16px;width:80%"></div>
+                        <div class="skel-block" style="height:100px;width:100%"></div>
+                        <div class="skel-block" style="height:24px;width:45%"></div>
+                        <div class="skel-block" style="height:80px;width:100%"></div>
+                        <div class="skel-block" style="height:24px;width:55%"></div>
+                        <div class="skel-block" style="height:60px;width:100%"></div>
+                        <div class="skel-block" style="height:16px;width:85%"></div>
+                    </div>
+                    <div class="brief-content" id="postmarketBriefHTML" style="display:none;"></div>
+                </div>
+            </div>
         </div>
 
-        <!-- Empty state -->
-        <div id="emptyState" class="glass-card p-12 text-center fade-in" style="display:none;">
-            <svg class="w-16 h-16 mx-auto text-slate-600 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1"
-                    d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
-            </svg>
-            <h3 class="text-lg font-semibold text-white mb-2">Your portfolio is empty</h3>
-            <p class="text-sm text-slate-400 max-w-md mx-auto">Add your first stock above — search by name or ticker,
-                enter quantity and average buy price, then click "Add to Portfolio". You can also upload a CSV.</p>
+        <!-- ==================== TAB: AI PORTFOLIO MANAGER ==================== -->
+        <div id="tabAIManager" style="display:none;">
+            <div class="glass-card ai-chat-container fade-in">
+                <!-- Header -->
+                <div class="px-6 py-4 flex items-center justify-between border-b border-white/5">
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-green-500/20 to-indigo-500/20 flex items-center justify-center text-base">🤖</div>
+                        <div>
+                            <h2 class="text-sm font-semibold text-white">AI Portfolio Manager</h2>
+                            <p class="text-xs text-slate-500">Gemini 3.1 Pro · Deep Thinking · Web Search</p>
+                        </div>
+                    </div>
+                    <button onclick="clearAIChat()" class="btn-secondary text-xs py-1.5 px-3" title="Clear chat history">✕ Clear</button>
+                </div>
+
+                <!-- Messages -->
+                <div class="ai-chat-messages" id="aiChatMessages">
+                    <!-- Welcome state -->
+                    <div id="aiWelcome" class="ai-welcome">
+                        <div class="ai-welcome-icon">🤖</div>
+                        <h3 class="text-lg font-semibold text-white">AI Portfolio Manager</h3>
+                        <p class="text-sm text-slate-400 max-w-md">I have full context of your portfolio — holdings, P&L, technical signals, sector allocation, and risk metrics. Ask me anything.</p>
+                    </div>
+                </div>
+
+                <!-- Quick Actions -->
+                <div class="ai-quick-actions" id="aiQuickActions">
+                    <button class="ai-quick-btn" onclick="sendQuickAction('Give me a full portfolio review')">📋 Portfolio Review</button>
+                    <button class="ai-quick-btn" onclick="sendQuickAction('Which stocks should I consider selling based on technical signals?')">📉 Sell Candidates</button>
+                    <button class="ai-quick-btn" onclick="sendQuickAction('How diversified is my portfolio? Any concentration risks?')">🎯 Diversification Check</button>
+                    <button class="ai-quick-btn" onclick="sendQuickAction('What are the red flags in my portfolio right now?')">🚩 Red Flags</button>
+                    <button class="ai-quick-btn" onclick="sendQuickAction('Which of my holdings are the strongest performers and why?')">🏆 Top Performers</button>
+                    <button class="ai-quick-btn" onclick="sendQuickAction('What is the overall market sentiment today and how does it affect my portfolio?')">📊 Market Outlook</button>
+                    <button class="ai-quick-btn" onclick="sendQuickAction('Fetch the latest relevant news for all the stocks in my portfolio and analyze the potential impact on my holdings.')">🗞️ Latest News</button>
+                </div>
+
+                <!-- Input Bar -->
+                <div class="ai-chat-input-bar">
+                    <input type="text" id="aiChatInput" class="input-field" placeholder="Ask about your portfolio..." autocomplete="off"
+                        onkeydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault();sendAIMessage()}">
+                    <button id="aiSendBtn" class="ai-chat-send-btn" onclick="sendAIMessage()" title="Send">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="22" y1="2" x2="11" y2="13"></line>
+                            <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                        </svg>
+                    </button>
+                </div>
+            </div>
         </div>
 
     </main>
@@ -606,6 +1314,16 @@
                     <label class="text-xs text-slate-400 mb-1 block">Avg Buy Price (₹)</label>
                     <input type="number" id="editAvgPrice" class="input-field w-full" min="0.01" step="any">
                 </div>
+                <div>
+                    <label class="text-xs text-slate-400 mb-1 block">Buy Date</label>
+                    <div class="flex gap-2">
+                        <input type="date" id="editBuyDate" class="input-field flex-1"
+                            onchange="fetchPriceForDate('edit')">
+                        <button onclick="fetchPriceForDate('edit')" class="btn-secondary px-3 py-1 text-xs"
+                            title="Fetch close price on this date">Fetch Price</button>
+                    </div>
+                    <span id="editFetchStatus" class="text-xs text-slate-400 mt-1 block"></span>
+                </div>
             </div>
             <div class="flex gap-3 mt-5">
                 <button onclick="saveEdit()" class="btn-primary text-sm flex-1">Save</button>
@@ -623,6 +1341,207 @@
         // ================================================================
         let allStocks = [];
         let dashboardData = null;
+        let premarketLoaded = false;
+        let postmarketLoaded = false;
+        let aiChatHistory = [];
+        let aiIsLoading = false;
+
+        // ================================================================
+        // TAB SWITCHING & BRIEF LOADING
+        // ================================================================
+        function switchTab(tab) {
+            // Hide all tabs
+            document.getElementById('tabSummary').style.display = 'none';
+            document.getElementById('tabPremarket').style.display = 'none';
+            document.getElementById('tabPostmarket').style.display = 'none';
+            document.getElementById('tabAIManager').style.display = 'none';
+
+            // Deactivate all tab buttons
+            document.querySelectorAll('.portfolio-tab').forEach(btn => btn.classList.remove('active'));
+
+            // Show selected tab
+            if (tab === 'summary') {
+                document.getElementById('tabSummary').style.display = '';
+                document.getElementById('tabBtnSummary').classList.add('active');
+            } else if (tab === 'premarket') {
+                document.getElementById('tabPremarket').style.display = '';
+                document.getElementById('tabBtnPremarket').classList.add('active');
+                if (!premarketLoaded) loadBrief('pre');
+            } else if (tab === 'postmarket') {
+                document.getElementById('tabPostmarket').style.display = '';
+                document.getElementById('tabBtnPostmarket').classList.add('active');
+                if (!postmarketLoaded) loadBrief('post');
+            } else if (tab === 'aimanager') {
+                document.getElementById('tabAIManager').style.display = '';
+                document.getElementById('tabBtnAI').classList.add('active');
+                document.getElementById('aiChatInput').focus();
+            }
+        }
+
+        function formatCurrencyBrief(val) {
+            if (val == null || isNaN(val)) return '—';
+            const abs = Math.abs(val);
+            const sign = val >= 0 ? '+' : '';
+            if (abs >= 10000000) return sign + '₹' + (val / 10000000).toFixed(2) + ' Cr';
+            if (abs >= 100000) return sign + '₹' + (val / 100000).toFixed(2) + ' L';
+            return sign + '₹' + val.toLocaleString('en-IN', { maximumFractionDigits: 0 });
+        }
+
+        async function loadBrief(type) {
+            const isPost = type === 'post';
+            const skelEl = document.getElementById(isPost ? 'postmarketSkeleton' : 'premarketSkeleton');
+            const htmlEl = document.getElementById(isPost ? 'postmarketBriefHTML' : 'premarketBriefHTML');
+            const tsEl = document.getElementById(isPost ? 'postmarketTimestamp' : 'premarketTimestamp');
+
+            skelEl.style.display = '';
+            htmlEl.style.display = 'none';
+
+            try {
+                const url = isPost ? '/api/portfolio/brief/post-market' : '/api/portfolio/brief/pre-market';
+                const res = await fetch(url);
+                if (!res.ok) {
+                    htmlEl.innerHTML = '<p class="text-red-400">Failed to load brief. Please try again.</p>';
+                    skelEl.style.display = 'none';
+                    htmlEl.style.display = '';
+                    return;
+                }
+
+                const data = await res.json();
+
+                if (data.empty) {
+                    htmlEl.innerHTML = '<p class="text-slate-400">Add holdings to your portfolio to see the brief.</p>';
+                    skelEl.style.display = 'none';
+                    htmlEl.style.display = '';
+                    return;
+                }
+
+                // Clean HTML (strip markdown fences if present)
+                let html = data.briefing_html || '';
+                html = html.replace(/^```html?\s*/i, '').replace(/\s*```\s*$/i, '');
+                htmlEl.innerHTML = html;
+
+                // Timestamp
+                if (data.generated_at) {
+                    const genTime = new Date(data.generated_at);
+                    tsEl.textContent = `Generated ${genTime.toLocaleString('en-IN', {
+                        hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short'
+                    })}`;
+                }
+
+                // Post-market specific: populate summary bar
+                if (isPost && data.portfolio_summary) {
+                    const ps = data.portfolio_summary;
+                    document.getElementById('postmarketSummaryBar').style.display = '';
+
+                    const dayPnl = ps.day_pnl || 0;
+                    const dayChg = ps.day_change_pct || 0;
+                    const alpha = ps.alpha_pct || 0;
+                    const colorDay = dayPnl >= 0 ? '#22c55e' : '#ef4444';
+                    const colorAlpha = alpha >= 0 ? '#22c55e' : '#ef4444';
+
+                    document.getElementById('pmDayPnl').innerHTML =
+                        `<span style="color:${colorDay}">${formatCurrencyBrief(dayPnl)}</span>`;
+                    document.getElementById('pmDayChange').innerHTML =
+                        `<span style="color:${colorDay}">${dayChg >= 0 ? '+' : ''}${dayChg.toFixed(2)}%</span>`;
+
+                    if (data.index_data) {
+                        const niftyChg = data.index_data.nifty_change_pct || 0;
+                        const niftyColor = niftyChg >= 0 ? '#22c55e' : '#ef4444';
+                        document.getElementById('pmNifty').innerHTML =
+                            `<span style="color:${niftyColor}">${data.index_data.nifty_close || '—'} (${niftyChg >= 0 ? '+' : ''}${niftyChg.toFixed(2)}%)</span>`;
+                    }
+
+                    document.getElementById('pmAlpha').innerHTML =
+                        `<span style="color:${colorAlpha}">${alpha >= 0 ? '+' : ''}${alpha.toFixed(2)}%</span>`;
+
+                    postmarketLoaded = true;
+                }
+
+                if (!isPost) premarketLoaded = true;
+
+                skelEl.style.display = 'none';
+                htmlEl.style.display = '';
+
+            } catch (e) {
+                console.error('Brief load error:', e);
+                htmlEl.innerHTML = '<p class="text-red-400">Error loading brief. Check your connection and try again.</p>';
+                skelEl.style.display = 'none';
+                htmlEl.style.display = '';
+            }
+        }
+
+        async function refreshBrief(type) {
+            const btnId = type === 'post' ? 'postmarketRefreshBtn' : 'premarketRefreshBtn';
+            const btn = document.getElementById(btnId);
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner" style="width:14px;height:14px;border-width:2px;"></span> Generating...';
+
+            // Reset loaded flag so it re-fetches
+            if (type === 'post') postmarketLoaded = false;
+            else premarketLoaded = false;
+
+            try {
+                const res = await fetch('/api/portfolio/brief/refresh', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ type: type })
+                });
+
+                if (res.ok) {
+                    const data = await res.json();
+                    // Re-render
+                    const isPost = type === 'post';
+                    const htmlEl = document.getElementById(isPost ? 'postmarketBriefHTML' : 'premarketBriefHTML');
+                    const skelEl = document.getElementById(isPost ? 'postmarketSkeleton' : 'premarketSkeleton');
+                    const tsEl = document.getElementById(isPost ? 'postmarketTimestamp' : 'premarketTimestamp');
+
+                    let html = data.briefing_html || '';
+                    html = html.replace(/^```html?\s*/i, '').replace(/\s*```\s*$/i, '');
+                    htmlEl.innerHTML = html;
+
+                    if (data.generated_at) {
+                        const genTime = new Date(data.generated_at);
+                        tsEl.textContent = `Generated ${genTime.toLocaleString('en-IN', {
+                            hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short'
+                        })}`;
+                    }
+
+                    if (isPost && data.portfolio_summary) {
+                        const ps = data.portfolio_summary;
+                        document.getElementById('postmarketSummaryBar').style.display = '';
+                        const dayPnl = ps.day_pnl || 0;
+                        const dayChg = ps.day_change_pct || 0;
+                        const alpha = ps.alpha_pct || 0;
+                        const colorDay = dayPnl >= 0 ? '#22c55e' : '#ef4444';
+                        const colorAlpha = alpha >= 0 ? '#22c55e' : '#ef4444';
+                        document.getElementById('pmDayPnl').innerHTML = `<span style="color:${colorDay}">${formatCurrencyBrief(dayPnl)}</span>`;
+                        document.getElementById('pmDayChange').innerHTML = `<span style="color:${colorDay}">${dayChg >= 0 ? '+' : ''}${dayChg.toFixed(2)}%</span>`;
+                        if (data.index_data) {
+                            const niftyChg = data.index_data.nifty_change_pct || 0;
+                            const niftyColor = niftyChg >= 0 ? '#22c55e' : '#ef4444';
+                            document.getElementById('pmNifty').innerHTML = `<span style="color:${niftyColor}">${data.index_data.nifty_close || '—'} (${niftyChg >= 0 ? '+' : ''}${niftyChg.toFixed(2)}%)</span>`;
+                        }
+                        document.getElementById('pmAlpha').innerHTML = `<span style="color:${colorAlpha}">${alpha >= 0 ? '+' : ''}${alpha.toFixed(2)}%</span>`;
+                    }
+
+                    if (isPost) postmarketLoaded = true;
+                    else premarketLoaded = true;
+
+                    skelEl.style.display = 'none';
+                    htmlEl.style.display = '';
+
+                    showToast('Brief refreshed successfully!', 'success');
+                } else {
+                    showToast('Refresh failed. Try again.', 'error');
+                }
+            } catch (e) {
+                console.error('Refresh error:', e);
+                showToast('Refresh failed. Check connection.', 'error');
+            }
+
+            btn.disabled = false;
+            btn.innerHTML = '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg> Refresh';
+        }
 
         // ================================================================
         // INIT
@@ -724,6 +1643,35 @@
             });
         }
 
+        async function fetchPriceForDate(mode) {
+            const tickerId = mode === 'add' ? 'selectedTicker' : 'editTicker';
+            const dateId = mode === 'add' ? 'buyDateInput' : 'editBuyDate';
+            const priceId = mode === 'add' ? 'avgPriceInput' : 'editAvgPrice';
+            const statusId = mode === 'add' ? 'addStatus' : 'editFetchStatus';
+
+            const ticker = document.getElementById(tickerId).value;
+            const dateStr = document.getElementById(dateId).value;
+
+            if (!ticker || !dateStr) return;
+
+            const statusEl = document.getElementById(statusId);
+            statusEl.innerHTML = '<div class="spinner w-3 h-3 border-2 border-slate-400 border-t-transparent mx-1"></div> Fetching...';
+
+            try {
+                const res = await fetch(`/api/stock/price-on-date?ticker=${encodeURIComponent(ticker)}&date=${encodeURIComponent(dateStr)}`);
+                const data = await res.json();
+                if (data.price) {
+                    document.getElementById(priceId).value = data.price.toFixed(2);
+                    statusEl.innerHTML = '<span class="text-green-400">✓ Price fetched</span>';
+                    setTimeout(() => { if (statusEl.innerHTML.includes('Price fetched')) statusEl.innerHTML = ''; }, 3000);
+                } else {
+                    statusEl.innerHTML = `<span class="text-amber-400">${data.error || 'Price not found'}</span>`;
+                }
+            } catch (e) {
+                statusEl.innerHTML = '<span class="text-red-400">Failed to fetch fetch</span>';
+            }
+        }
+
         // ================================================================
         // ADD HOLDING
         // ================================================================
@@ -732,29 +1680,30 @@
             const stock_name = document.getElementById('selectedStockName').value;
             const quantity = parseFloat(document.getElementById('quantityInput').value);
             const avg_buy_price = parseFloat(document.getElementById('avgPriceInput').value);
+            const buy_date = document.getElementById('buyDateInput').value || '';
 
             if (!ticker || !quantity || !avg_buy_price) return;
 
             const btn = document.getElementById('addHoldingBtn');
             const status = document.getElementById('addStatus');
             btn.disabled = true;
-            status.textContent = 'Adding...';
+            status.innerHTML = '<div class="spinner w-4 h-4 border-2 border-white border-t-transparent"></div> Adding...';
 
             try {
                 const res = await fetch('/api/portfolio/add', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ ticker, stock_name, quantity, avg_buy_price })
+                    body: JSON.stringify({ ticker, stock_name, quantity, avg_buy_price, buy_date })
                 });
                 const data = await res.json();
                 if (data.success) {
                     showToast(`${ticker} added to portfolio`, 'success');
-                    // Clear inputs
                     document.getElementById('stockSearchInput').value = '';
                     document.getElementById('selectedTicker').value = '';
                     document.getElementById('selectedStockName').value = '';
                     document.getElementById('quantityInput').value = '';
                     document.getElementById('avgPriceInput').value = '';
+                    document.getElementById('buyDateInput').value = '';
                     status.textContent = '';
                     loadPortfolio();
                 } else {
@@ -766,6 +1715,18 @@
                 status.textContent = '';
             }
             btn.disabled = false;
+        }
+
+        // ================================================================
+        // CSV TEMPLATE DOWNLOAD
+        function downloadCsvTemplate() {
+            const csv = 'Ticker,Quantity,Avg Buy Price,Buy Date\nRELIANCE,10,2450.50,2024-06-15\nTCS,5,3800.00,2024-08-20\n';
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = 'portfolio_template.csv';
+            a.click();
+            URL.revokeObjectURL(a.href);
         }
 
         // ================================================================
@@ -822,6 +1783,7 @@
                     document.getElementById('holdingsTableContainer').style.display = 'none';
                     document.getElementById('dashboardSection').style.display = 'none';
                     document.getElementById('techHealthSection').style.display = 'none';
+                    document.getElementById('portfolioHealthSection').style.display = 'none';
                     return;
                 }
             } catch { return; }
@@ -834,6 +1796,7 @@
                 const res = await fetch('/api/portfolio/dashboard');
                 dashboardData = await res.json();
                 renderDashboard(dashboardData);
+                loadMetrics();
             } catch (e) {
                 showToast('Failed to load dashboard', 'error');
                 console.error(e);
@@ -889,7 +1852,20 @@
             // --- Holdings Table ---
             document.getElementById('holdingsTableContainer').style.display = '';
             const tbody = document.getElementById('holdingsTableBody');
-            tbody.innerHTML = holdings.map(h => `
+
+            const today = new Date();
+            tbody.innerHTML = holdings.map(h => {
+                let daysHeldStr = '—';
+                if (h.buy_date) {
+                    const buyObj = new Date(h.buy_date);
+                    if (!isNaN(buyObj)) {
+                        const diffTime = Math.abs(today - buyObj);
+                        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                        daysHeldStr = diffDays;
+                    }
+                }
+
+                return `
         <tr>
           <td>
             <div class="font-medium text-white text-sm">${h.stock_name}</div>
@@ -898,6 +1874,7 @@
           <td class="text-slate-300">${h.quantity}</td>
           <td class="text-slate-300">₹${h.avg_buy_price.toLocaleString('en-IN')}</td>
           <td class="text-white font-medium">${h.current_price ? '₹' + h.current_price.toLocaleString('en-IN') : '—'}</td>
+          <td class="text-slate-400 text-sm">${daysHeldStr}</td>
           <td class="text-slate-300">${formatCurrency(h.invested)}</td>
           <td class="text-white">${formatCurrency(h.current_value)}</td>
           <td class="${h.pnl >= 0 ? 'text-green-400' : 'text-red-400'} font-medium">${h.pnl >= 0 ? '+' : ''}${formatCurrency(h.pnl)}</td>
@@ -906,12 +1883,12 @@
           <td class="text-xs text-slate-500">${h.industry || '—'}</td>
           <td>
             <div class="flex gap-1.5">
-              <button onclick="openEditModal('${h.ticker}', '${h.stock_name.replace(/'/g, "\\'")}', ${h.quantity}, ${h.avg_buy_price})" class="btn-secondary text-xs py-1 px-2">✏️</button>
+              <button onclick="openEditModal('${h.ticker}', '${h.stock_name.replace(/'/g, "\\'")}', ${h.quantity}, ${h.avg_buy_price}, '${h.buy_date || ''}')" class="btn-secondary text-xs py-1 px-2">✏️</button>
               <button onclick="deleteHolding('${h.ticker}')" class="btn-danger">✕</button>
             </div>
           </td>
         </tr>
-      `).join('');
+      `}).join('');
 
             // --- Industry Chart ---
             document.getElementById('dashboardSection').style.display = '';
@@ -977,42 +1954,412 @@
                 document.getElementById('techHealthSection').style.display = '';
                 const techTbody = document.getElementById('techHealthTableBody');
                 techTbody.innerHTML = technical_health.map(t => {
-                    let rsiZone = '—';
-                    let rsiClass = 'badge-blue';
-                    if (t.rsi !== null && t.rsi !== undefined) {
-                        if (t.rsi < 30) { rsiZone = 'Oversold'; rsiClass = 'badge-green'; }
-                        else if (t.rsi > 70) { rsiZone = 'Overbought'; rsiClass = 'badge-red'; }
-                        else if (t.rsi > 50) { rsiZone = 'Bullish'; rsiClass = 'badge-green'; }
-                        else { rsiZone = 'Bearish'; rsiClass = 'badge-yellow'; }
+                    // Signal badge color
+                    let sigClass = t.signal === 'SELL' ? 'badge-red' : 'badge-green';
+
+                    // --- Parse display values: split verdict from detail ---
+                    // Price Action: "Uptrend (HH, HL)" → verdict="Uptrend", detail="HH, HL"
+                    let paVerdict = 'N/A', paDetail = '', paClass = 'text-slate-400';
+                    if (t.price_action && t.price_action !== 'N/A') {
+                        const paMatch = t.price_action.match(/^(\w+)\s*\((.+)\)$/);
+                        paVerdict = paMatch ? paMatch[1] : t.price_action;
+                        paDetail = paMatch ? paMatch[2] : '';
+                        if (paVerdict === 'Uptrend') paClass = 'text-green-400';
+                        else if (paVerdict === 'Downtrend') paClass = 'text-red-400';
                     }
 
-                    let trendIcon = '➡️';
-                    let trendClass = 'text-slate-400';
-                    if (t.trend === 'Uptrend') { trendIcon = '⬆️'; trendClass = 'text-green-400'; }
-                    else if (t.trend === 'Downtrend') { trendIcon = '⬇️'; trendClass = 'text-red-400'; }
+                    // Fib Strength: "Strong (0.236)" → verdict="Strong", detail="0.236"
+                    let fibVerdict = 'N/A', fibDetail = '', fibClass = 'text-slate-400';
+                    if (t.fib_strength && t.fib_strength !== 'N/A') {
+                        const fibMatch = t.fib_strength.match(/^(\w+)\s*\((.+)\)$/);
+                        fibVerdict = fibMatch ? fibMatch[1] : t.fib_strength;
+                        fibDetail = fibMatch ? fibMatch[2] : '';
+                        if (fibVerdict === 'Strong') fibClass = 'text-green-400';
+                        else if (fibVerdict === 'Weak') fibClass = 'text-amber-400';
+                    }
+
+                    // Market Structure: "Uptrend (EMA13 > EMA55 > EMA144)" → verdict="Uptrend", detail="13>55>144"
+                    let msVerdict = 'N/A', msDetail = '', msClass = 'text-slate-400';
+                    if (t.market_structure && t.market_structure !== 'N/A') {
+                        const msMatch = t.market_structure.match(/^(.+?)\s*\((.+)\)$/);
+                        msVerdict = msMatch ? msMatch[1] : t.market_structure;
+                        msDetail = msMatch ? msMatch[2].replace(/EMA/g, '').replace(/\s+/g, '') : '';
+                        if (msVerdict.includes('Uptrend')) msClass = 'text-green-400';
+                        else if (msVerdict.includes('Downtrend')) msClass = 'text-red-400';
+                        else if (msVerdict.includes('Mild Up')) msClass = 'text-emerald-300';
+                        else if (msVerdict.includes('Mild Down')) msClass = 'text-orange-400';
+                    }
+
+                    // RSI Sentiment: "Bullish (RSI: 57.76)" → verdict="Bullish", detail="RSI: 57.76"
+                    let sentVerdict = 'N/A', sentDetail = '', sentClass = 'text-slate-400';
+                    if (t.sentiment && t.sentiment !== 'N/A') {
+                        const sentMatch = t.sentiment.match(/^(.+?)\s*\((.+)\)$/);
+                        sentVerdict = sentMatch ? sentMatch[1] : t.sentiment;
+                        sentDetail = sentMatch ? sentMatch[2] : '';
+                        if (sentVerdict.includes('Bullish') || sentVerdict.includes('Bottomed')) sentClass = 'text-green-400';
+                        else if (sentVerdict.includes('Bearish') || sentVerdict.includes('Topped') || sentVerdict.includes('Overbought')) sentClass = 'text-red-400';
+                        else if (sentVerdict.includes('Oversold')) sentClass = 'text-green-400';
+                    }
+
+                    // Relative Strength
+                    let rsClass = t.relative_strength === 'Positive' ? 'text-green-400' : 'text-red-400';
+
+                    // Volume Flow
+                    let volClass = 'text-slate-400';
+                    if (t.volume && t.volume.includes('Accumulating')) volClass = 'text-green-400';
+                    else if (t.volume && t.volume.includes('Distributing')) volClass = 'text-red-400';
+
+                    // Build cell helper: verdict on top, detail below in small grey
+                    const cell = (verdict, detail, colorClass) => {
+                        return `<div class="${colorClass} font-medium text-xs">${verdict}</div>${detail ? `<div class="text-[10px] text-slate-500 mt-0.5">${detail}</div>` : ''}`;
+                    };
+
+                    // Sub-info line (support, resistance, divergence) — compact inline
+                    let subParts = [];
+                    if (t.support) subParts.push(`<span class="text-green-400">S: ${t.support}</span>`);
+                    if (t.resistance) subParts.push(`<span class="text-red-400">R: ${t.resistance}</span>`);
+                    if (t.rsi_divergence && t.rsi_divergence !== 'No Divergence' && t.rsi_divergence !== 'N/A') {
+                        let divColor = t.rsi_divergence.includes('Bullish') ? 'text-green-400' : 'text-red-400';
+                        subParts.push(`<span class="${divColor}">⚡ ${t.rsi_divergence}</span>`);
+                    }
+                    let subInfo = subParts.length > 0
+                        ? `<div class="text-[10px] mt-1 opacity-60">${subParts.join(' · ')}</div>`
+                        : '';
 
                     return `<tr>
             <td>
               <div class="font-medium text-white text-sm">${t.stock_name}</div>
               <div class="text-xs text-slate-500">${t.ticker}</div>
+              ${subInfo}
             </td>
-            <td><span class="badge badge-blue">${t.signal}</span></td>
-            <td class="text-white font-medium">${t.rsi !== null ? t.rsi : '—'}</td>
-            <td><span class="badge ${rsiClass}">${rsiZone}</span></td>
-            <td class="${trendClass} font-medium">${trendIcon} ${t.trend}</td>
+            <td><span class="badge ${sigClass}">${t.signal}</span></td>
+            <td>${cell(paVerdict, paDetail, paClass)}</td>
+            <td>${cell(fibVerdict, fibDetail, fibClass)}</td>
+            <td>${cell(msVerdict, msDetail, msClass)}</td>
+            <td>${cell(sentVerdict, sentDetail, sentClass)}</td>
+            <td class="${rsClass} text-xs font-medium">${t.relative_strength || 'N/A'}</td>
+            <td class="${volClass} text-xs font-medium">${t.volume || 'N/A'}</td>
           </tr>`;
                 }).join('');
+            }
+
+            // --- Phase 4: What-If + Peer Swaps ---
+            populateWhatIfSellDropdown(holdings);
+            document.getElementById('whatIfSection').style.display = '';
+            setupWhatIfAutocomplete();
+
+            // Load peer swaps asynchronously (don't block dashboard render)
+            loadPeerSwaps();
+        }
+
+        // ================================================================
+        // INFO POPOVER FUNCTIONS (global scope — lightweight, anchored to button)
+        // ================================================================
+        function showInfo(title, text, evt) {
+            const tip = document.getElementById('infoTip');
+            tip.querySelector('h4').textContent = title;
+            tip.querySelector('p').textContent = text;
+
+            // Position near the clicked button
+            const btn = evt ? evt.currentTarget || evt.target : null;
+            tip.classList.add('active');
+            if (btn) {
+                const rect = btn.getBoundingClientRect();
+                let top = rect.bottom + 6;
+                let left = rect.left - 40;
+                // Keep within viewport
+                if (left + 260 > window.innerWidth) left = window.innerWidth - 270;
+                if (left < 10) left = 10;
+                if (top + 150 > window.innerHeight) top = rect.top - tip.offsetHeight - 6;
+                tip.style.top = top + 'px';
+                tip.style.left = left + 'px';
+            }
+        }
+        // Close on any click outside the popover
+        document.addEventListener('click', function (e) {
+            const tip = document.getElementById('infoTip');
+            if (!tip) return;
+            if (e.target.classList.contains('info-btn')) return; // let showInfo handle it
+            if (!tip.contains(e.target)) {
+                tip.classList.remove('active');
+            }
+        });
+
+        // ================================================================
+        // WHAT-IF SIMULATOR
+        // ================================================================
+        function setupWhatIfAutocomplete() {
+            const input = document.getElementById('whatIfBuyInput');
+            const dropdown = document.getElementById('whatIfBuyDropdown');
+            const sellSelect = document.getElementById('whatIfSellSelect');
+            let debounceTimer;
+
+            input.addEventListener('input', () => {
+                clearTimeout(debounceTimer);
+                document.getElementById('whatIfBuyTicker').value = '';
+                checkSimulateBtn();
+                debounceTimer = setTimeout(() => {
+                    const q = input.value.trim().toLowerCase();
+                    if (q.length < 1) { dropdown.classList.remove('show'); return; }
+
+                    const matches = allStocks.filter(s =>
+                        s.name.toLowerCase().includes(q) || s.ticker.toLowerCase().includes(q)
+                    ).slice(0, 8);
+
+                    if (matches.length === 0) { dropdown.classList.remove('show'); return; }
+
+                    dropdown.innerHTML = matches.map(s => `
+                        <div class="autocomplete-item" onclick="selectWhatIfBuy('${s.ticker}', '${s.name.replace(/'/g, "\\'")}')">
+                            <span class="text-slate-200">${s.name}</span>
+                            <span class="badge badge-green">${s.ticker}</span>
+                        </div>
+                    `).join('');
+                    dropdown.classList.add('show');
+                }, 150);
+            });
+
+            document.addEventListener('click', (e) => {
+                if (!e.target.closest('#whatIfBuyInput') && !e.target.closest('#whatIfBuyDropdown')) {
+                    dropdown.classList.remove('show');
+                }
+            });
+
+            sellSelect.addEventListener('change', checkSimulateBtn);
+        }
+
+        function selectWhatIfBuy(ticker, name) {
+            document.getElementById('whatIfBuyInput').value = `${name} (${ticker})`;
+            document.getElementById('whatIfBuyTicker').value = ticker;
+            document.getElementById('whatIfBuyDropdown').classList.remove('show');
+            checkSimulateBtn();
+        }
+
+        function checkSimulateBtn() {
+            const sell = document.getElementById('whatIfSellSelect').value;
+            const buy = document.getElementById('whatIfBuyTicker').value;
+            document.getElementById('simulateBtn').disabled = !(sell && buy);
+        }
+
+        function populateWhatIfSellDropdown(holdings) {
+            const select = document.getElementById('whatIfSellSelect');
+            select.innerHTML = '<option value="">Select holding...</option>';
+            holdings.forEach(h => {
+                const opt = document.createElement('option');
+                opt.value = h.ticker;
+                opt.textContent = `${h.stock_name} (${h.ticker})`;
+                select.appendChild(opt);
+            });
+        }
+
+        async function runWhatIf() {
+            const sell_ticker = document.getElementById('whatIfSellSelect').value;
+            const buy_ticker = document.getElementById('whatIfBuyTicker').value;
+            if (!sell_ticker || !buy_ticker) return;
+
+            const btn = document.getElementById('simulateBtn');
+            btn.disabled = true;
+            btn.textContent = '⏳ Simulating...';
+
+            try {
+                const res = await fetch('/api/portfolio/what-if', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ sell_ticker, buy_ticker })
+                });
+                const data = await res.json();
+
+                if (data.error) { showToast(data.error, 'error'); return; }
+
+                document.getElementById('whatIfResults').style.display = '';
+
+                // Swap Details
+                const sd = data.sell_details;
+                const bd = data.buy_details;
+                document.getElementById('whatIfSwapDetails').innerHTML = `
+                    <p>📤 <strong>Sell:</strong> ${sd.name} (${sd.ticker})</p>
+                    <p class="text-xs text-slate-400">${sd.quantity} shares × ₹${sd.current_price.toLocaleString('en-IN')}</p>
+                    <p class="text-xs text-slate-400">Capital: ${formatCurrency(sd.capital_freed)}</p>
+                    <hr class="border-white/5 my-2">
+                    <p>📥 <strong>Buy:</strong> ${bd.name} (${bd.ticker})</p>
+                    <p class="text-xs text-slate-400">${bd.quantity} shares × ₹${bd.current_price.toLocaleString('en-IN')}</p>
+                    <p class="text-xs text-slate-400">Industry: ${bd.industry}</p>`;
+
+                // Concentration
+                const cc = data.current_concentration;
+                const nc = data.new_concentration;
+                const improved = nc.diversification_score > cc.diversification_score;
+                document.getElementById('whatIfConcentration').innerHTML = `
+                    <div class="flex items-center gap-2 mb-2">
+                        <span class="text-2xl font-bold text-white">${cc.diversification_score}/10</span>
+                        <span class="text-slate-400">→</span>
+                        <span class="text-2xl font-bold ${improved ? 'text-green-400' : 'text-red-400'}">${nc.diversification_score}/10</span>
+                    </div>
+                    <p class="text-xs ${improved ? 'text-green-400' : 'text-red-400'}">
+                        ${improved ? '✓ Better diversified' : '⚠ More concentrated'}
+                        (${improved ? '+' : ''}${(nc.diversification_score - cc.diversification_score).toFixed(1)} pts)
+                    </p>`;
+
+                // Backtest
+                const bt = data.backtest_delta_pct;
+                if (bt !== null && bt !== undefined) {
+                    const btClass = bt >= 0 ? 'text-green-400' : 'text-red-400';
+                    document.getElementById('whatIfBacktest').innerHTML = `
+                        <p class="text-2xl font-bold ${btClass}">${bt >= 0 ? '+' : ''}${bt.toFixed(2)}%</p>
+                        <p class="text-xs text-slate-400 mt-1">
+                            If swapped 6 months ago, return would have been
+                            <span class="${btClass}">${bt >= 0 ? 'better' : 'worse'}</span> by this amount.
+                        </p>`;
+                } else {
+                    document.getElementById('whatIfBacktest').innerHTML = '<p class="text-slate-400">Insufficient data.</p>';
+                }
+
+                // New Industry Treemap
+                const nd = data.new_industry_data;
+                if (nd) {
+                    const labels = Object.keys(nd);
+                    const values = Object.values(nd);
+                    const colors = ['#a855f7', '#3b82f6', '#22c55e', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899', '#84cc16'];
+                    Plotly.newPlot('whatIfChart', [{
+                        type: 'treemap',
+                        labels: labels,
+                        parents: labels.map(() => ''),
+                        values: values,
+                        textinfo: 'label+percent parent',
+                        textfont: { size: 13, color: '#fff' },
+                        marker: { colors: colors.slice(0, labels.length), line: { width: 1, color: '#0f172a' } },
+                        hovertemplate: '<b>%{label}</b><br>₹%{value:,.0f}<br>%{percentParent:.1%}<extra></extra>'
+                    }], {
+                        paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
+                        margin: { t: 5, b: 5, l: 5, r: 5 }, font: { family: 'Inter' }
+                    }, { responsive: true, displayModeBar: false });
+                }
+            } catch (e) {
+                showToast('Simulation failed: ' + e.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '🔮 Simulate';
+                checkSimulateBtn();
+            }
+        }
+
+        // ================================================================
+        // PEER SWAP CARDS
+        // ================================================================
+        async function loadPeerSwaps() {
+            const section = document.getElementById('peerSwapSection');
+            const grid = document.getElementById('peerSwapGrid');
+            const loading = document.getElementById('peerSwapLoading');
+
+            section.style.display = '';
+            loading.style.display = '';
+            grid.innerHTML = '';
+
+            try {
+                const res = await fetch('/api/portfolio/peer-swaps');
+                if (!res.ok) { section.style.display = 'none'; return; }
+
+                const data = await res.json();
+                const swaps = data.peer_swaps || [];
+
+                if (swaps.length === 0) {
+                    loading.style.display = 'none';
+                    grid.innerHTML = '<div class="col-span-2 text-center py-4"><p class="text-sm text-slate-400">No peer swaps suggested</p><p class="text-xs text-slate-500 mt-1">No peers found with lower P/E, higher Sales Growth, better ROCE, and comparable Market Cap. Your holdings look strong.</p></div>';
+                    return;
+                }
+
+                grid.innerHTML = swaps.map(swap => {
+                    const hm = swap.holding_metrics;
+                    const pm = swap.peer_metrics;
+                    const ia = swap.industry_avg || {};
+                    const hasPeer = swap.peer_name && swap.peer_metrics;
+
+                    // Helper: color a cell green/red vs reference
+                    const cmpCell = (refVal, cellVal, lowerIsBetter) => {
+                        const r = parseFloat(String(refVal).replace(/,/g, ''));
+                        const c = parseFloat(String(cellVal).replace(/,/g, ''));
+                        if (isNaN(r) || isNaN(c)) return `<td class="text-center text-xs">${cellVal || '—'}</td>`;
+                        const better = lowerIsBetter ? c < r : c > r;
+                        const clr = better ? 'text-green-400' : (c === r ? '' : 'text-red-400');
+                        return `<td class="text-center text-xs ${clr} font-medium">${cellVal}</td>`;
+                    };
+
+                    // Header section
+                    const headerRight = hasPeer
+                        ? `<span class="text-lg text-slate-600">→</span>
+                           <div class="text-right">
+                               <p class="text-sm font-semibold text-amber-400">${swap.peer_name}</p>
+                               <p class="text-xs text-slate-500">Suggested Swap</p>
+                           </div>`
+                        : `<span class="badge badge-green text-[10px]">✓ No swap needed</span>`;
+
+                    // Table columns
+                    const peerColHead = hasPeer ? `<th class="text-center py-1">Peer</th>` : '';
+                    const peerCell = (val) => hasPeer ? `<td class="text-center text-xs">${val || '—'}</td>` : '';
+
+                    return `
+                        <div class="glass-card p-5 fade-in">
+                            <div class="flex justify-between items-center mb-3">
+                                <div>
+                                    <p class="text-sm font-semibold text-white">${swap.holding_name}</p>
+                                    <p class="text-xs text-slate-500">${swap.holding_ticker}</p>
+                                </div>
+                                ${headerRight}
+                            </div>
+                            <table class="w-full text-xs">
+                                <thead><tr class="text-slate-500 border-b border-white/5">
+                                    <th class="text-left py-1 whitespace-nowrap pr-2">Metric</th>
+                                    <th class="text-center py-1 px-1">Stock</th>
+                                    <th class="text-center py-1 px-1">Ind. Avg</th>
+                                    ${hasPeer ? `<th class="text-center py-1 px-1">Peer</th>` : ''}
+                                </tr></thead>
+                                <tbody class="text-slate-300">
+                                    <tr class="border-b border-white/5">
+                                        <td class="py-1.5 text-slate-400 whitespace-nowrap pr-2">P/E</td>
+                                        <td class="text-center text-xs px-1">${hm.pe || '—'}</td>
+                                        <td class="text-center text-xs text-slate-500 px-1">${ia.pe || '—'}</td>
+                                        ${hasPeer ? cmpCell(hm.pe, pm.pe, true) : ''}
+                                    </tr>
+                                    <tr class="border-b border-white/5">
+                                        <td class="py-1.5 text-slate-400 whitespace-nowrap pr-2">ROCE %</td>
+                                        <td class="text-center text-xs px-1">${hm.roe || '—'}</td>
+                                        <td class="text-center text-xs text-slate-500 px-1">${ia.roe || '—'}</td>
+                                        ${hasPeer ? cmpCell(hm.roe, pm.roe, false) : ''}
+                                    </tr>
+                                    <tr class="border-b border-white/5">
+                                        <td class="py-1.5 text-slate-400 whitespace-nowrap pr-2">Mkt Cap (Rs. Crores)</td>
+                                        <td class="text-center text-xs px-1">${hm.market_cap || '—'}</td>
+                                        <td class="text-center text-xs text-slate-500 px-1">${ia.market_cap || '—'}</td>
+                                        ${hasPeer ? `<td class="text-center text-xs px-1">${pm.market_cap || '—'}</td>` : ''}
+                                    </tr>
+                                    <tr>
+                                        <td class="py-1.5 text-slate-400 whitespace-nowrap pr-2">Latest Qtr Sales Growth %</td>
+                                        <td class="text-center text-xs px-1">${hm.sales_growth || '—'}</td>
+                                        <td class="text-center text-xs text-slate-500 px-1">${ia.sales_growth || '—'}</td>
+                                        ${hasPeer ? cmpCell(hm.sales_growth, pm.sales_growth, false) : ''}
+                                    </tr>
+                                </tbody>
+                            </table>
+                            ${swap.swap_reason ? `<p class="text-[10px] text-emerald-400/70 mt-2.5 leading-relaxed">✓ ${swap.swap_reason}</p>` : ''}
+                            ${!hasPeer ? `<p class="text-[10px] text-emerald-400/70 mt-2.5">✓ No better peer found — your pick stands strong</p>` : ''}
+                        </div>`;
+                }).join('');
+            } catch (e) {
+                console.warn('Peer swaps load failed:', e);
+                section.style.display = 'none';
+            } finally {
+                loading.style.display = 'none';
             }
         }
 
         // ================================================================
         // EDIT / DELETE
         // ================================================================
-        function openEditModal(ticker, name, qty, price) {
+        function openEditModal(ticker, name, qty, price, buyDate) {
             document.getElementById('editTicker').value = ticker;
             document.getElementById('editStockLabel').textContent = `${name} (${ticker})`;
             document.getElementById('editQuantity').value = qty;
             document.getElementById('editAvgPrice').value = price;
+            document.getElementById('editBuyDate').value = buyDate || '';
             document.getElementById('editModal').classList.add('active');
         }
 
@@ -1024,17 +2371,23 @@
             const ticker = document.getElementById('editTicker').value;
             const quantity = parseFloat(document.getElementById('editQuantity').value);
             const avg_buy_price = parseFloat(document.getElementById('editAvgPrice').value);
+            const buy_date = document.getElementById('editBuyDate').value || '';
 
             if (!quantity || !avg_buy_price || quantity <= 0 || avg_buy_price <= 0) {
                 showToast('Enter valid quantity and price', 'error');
                 return;
             }
 
+            const btn = document.querySelector('#editModal .btn-primary');
+            const origText = btn.textContent;
+            btn.innerHTML = '<div class="flex items-center justify-center gap-2"><div class="spinner w-4 h-4 border-2 border-white border-t-transparent"></div> Saving...</div>';
+            btn.disabled = true;
+
             try {
                 const res = await fetch('/api/portfolio/update', {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ ticker, quantity, avg_buy_price })
+                    body: JSON.stringify({ ticker, quantity, avg_buy_price, buy_date })
                 });
                 const data = await res.json();
                 if (data.success) {
@@ -1045,6 +2398,9 @@
                     showToast(data.error || 'Update failed', 'error');
                 }
             } catch { showToast('Network error', 'error'); }
+
+            btn.innerHTML = origText;
+            btn.disabled = false;
         }
 
         async function deleteHolding(ticker) {
@@ -1082,6 +2438,273 @@
         async function logout() {
             await fetch('/api/logout', { method: 'POST' });
             window.location.href = '/login';
+        }
+
+        // ================================================================
+        // PORTFOLIO HEALTH METRICS
+        // ================================================================
+        async function loadMetrics() {
+            try {
+                const res = await fetch('/api/portfolio/metrics');
+                const m = await res.json();
+                if (m.error) return;
+
+                document.getElementById('portfolioHealthSection').style.display = '';
+
+                // Beta
+                const betaEl = document.getElementById('metricBeta');
+                const betaLabel = document.getElementById('metricBetaLabel');
+                if (m.portfolio_beta !== null) {
+                    betaEl.textContent = m.portfolio_beta.toFixed(2);
+                    if (m.portfolio_beta > 1.2) {
+                        betaEl.className = 'text-2xl font-bold text-red-400';
+                        betaLabel.textContent = 'High volatility vs market';
+                    } else if (m.portfolio_beta < 0.8) {
+                        betaEl.className = 'text-2xl font-bold text-green-400';
+                        betaLabel.textContent = 'Lower volatility than market';
+                    } else {
+                        betaEl.className = 'text-2xl font-bold text-cyan-400';
+                        betaLabel.textContent = 'Market-level volatility';
+                    }
+                } else {
+                    betaEl.textContent = '—';
+                    betaLabel.textContent = 'Beta data unavailable';
+                }
+
+                // Alpha
+                const alphaEl = document.getElementById('metricAlpha');
+                const alphaLabel = document.getElementById('metricAlphaLabel');
+                if (m.alpha !== null) {
+                    const sign = m.alpha >= 0 ? '+' : '';
+                    alphaEl.textContent = sign + m.alpha.toFixed(2) + '%';
+                    alphaEl.className = m.alpha >= 0
+                        ? 'text-2xl font-bold text-green-400'
+                        : 'text-2xl font-bold text-red-400';
+                    alphaLabel.textContent = m.alpha >= 0 ? 'Outperforming expected return' : 'Underperforming expected return';
+                } else if (!m.has_buy_dates) {
+                    alphaEl.textContent = '—';
+                    alphaLabel.textContent = 'Add buy dates to enable';
+                    alphaLabel.className = 'text-xs text-amber-400 mt-0.5';
+                } else {
+                    alphaEl.textContent = '—';
+                    alphaLabel.textContent = 'Insufficient data';
+                }
+
+                // NIFTY comparison
+                const niftyEl = document.getElementById('metricNifty');
+                const niftyLabel = document.getElementById('metricNiftyLabel');
+                if (m.portfolio_return_pct !== null && m.nifty_return_pct !== null) {
+                    const diff = m.portfolio_return_pct - m.nifty_return_pct;
+                    const sign = diff >= 0 ? '+' : '';
+                    niftyEl.textContent = sign + diff.toFixed(1) + '%';
+                    niftyEl.className = diff >= 0
+                        ? 'text-2xl font-bold text-green-400'
+                        : 'text-2xl font-bold text-red-400';
+                    niftyLabel.textContent = `You: ${m.portfolio_return_pct.toFixed(1)}% | NIFTY: ${m.nifty_return_pct.toFixed(1)}%`;
+                } else if (!m.has_buy_dates) {
+                    niftyEl.textContent = '—';
+                    niftyLabel.textContent = 'Add buy dates to enable';
+                    niftyLabel.className = 'text-xs text-amber-400 mt-0.5';
+                } else {
+                    niftyEl.textContent = '—';
+                    niftyLabel.textContent = 'Calculating...';
+                }
+
+                // Diversification
+                const divEl = document.getElementById('metricDiversification');
+                const divLabel = document.getElementById('metricDivLabel');
+                divEl.textContent = m.diversification_score.toFixed(1) + ' / 10';
+                if (m.diversification_score >= 7) {
+                    divEl.className = 'text-2xl font-bold text-green-400';
+                    divLabel.textContent = `Well diversified (${m.n_industries} industries)`;
+                } else if (m.diversification_score >= 4) {
+                    divEl.className = 'text-2xl font-bold text-amber-400';
+                    divLabel.textContent = `Moderate diversification (${m.n_industries} industries)`;
+                } else {
+                    divEl.className = 'text-2xl font-bold text-red-400';
+                    divLabel.textContent = `Concentrated portfolio (${m.n_industries} industries)`;
+                }
+
+            } catch (e) {
+                console.error('Metrics load failed:', e);
+            }
+        }
+
+        const metricInfoTexts = {
+            beta: 'Portfolio Beta measures volatility of your portfolio relative to the market (NIFTY 50). Higher Beta = more volatile, high risk/high return. Lower Beta = less volatile, low risk/low reward. Calculated as the value-weighted average of individual stock betas.',
+            alpha: 'Alpha measures excess return above what the Capital Asset Pricing Model (CAPM) predicts. Positive alpha means your stock-picking is generating returns beyond what market risk alone would explain. Uses India risk-free rate of ~7% (FD rate). Requires buy dates to compute.',
+            nifty: 'Shows how your portfolio has performed versus NIFTY 50 since your earliest buy date. A positive number means you are beating NIFTY. Requires buy dates and avg buy prices for accurate computation.',
+            diversification: 'Diversification Score (0-10) uses the Herfindahl-Hirschman Index (HHI) to measure industry concentration. 10 = perfectly diversified across many industries. Low scores indicate concentration risk — a downturn in one sector could significantly impact your portfolio.',
+            concentration: 'Concentration Risk looks at how heavily your portfolio is weighted in its top sectors/industries. While related to Diversification Score, it specifically highlights the vulnerability if your top concentrated sectors experience a downturn.'
+        };
+
+        function showMetricInfo(btn, key) {
+            // Remove existing popover
+            document.querySelectorAll('.metric-popover').forEach(el => el.remove());
+            const text = metricInfoTexts[key] || '';
+            const pop = document.createElement('div');
+            pop.className = 'metric-popover';
+
+            const rect = btn.getBoundingClientRect();
+            const topPos = rect.bottom + window.scrollY + 8;
+            let rightPos = window.innerWidth - rect.right;
+            if (rightPos < 10) rightPos = 10;
+
+            pop.style.cssText = `position:absolute;top:${topPos}px;right:${rightPos}px;z-index:9999;background:rgba(15,23,42,0.98);border:1px solid rgba(100,116,139,0.3);border-radius:8px;padding:12px;max-width:280px;font-size:12px;color:#94a3b8;box-shadow:0 8px 24px rgba(0,0,0,0.5);`;
+
+            pop.textContent = text;
+            document.body.appendChild(pop);
+
+            setTimeout(() => pop.remove(), 6000);
+            setTimeout(() => {
+                document.addEventListener('click', function handler(e) {
+                    if (!pop.contains(e.target) && e.target !== btn) {
+                        pop.remove();
+                        document.removeEventListener('click', handler);
+                    }
+                });
+            }, 10);
+        }
+
+        // ================================================================
+        // AI PORTFOLIO MANAGER CHAT
+        // ================================================================
+        function renderMarkdown(text) {
+            if (!text) return '';
+            let html = text;
+            // Headers
+            html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+            html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+            html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
+            // Bold
+            html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+            // Italic
+            html = html.replace(/(?<!\*)\*([^*]+?)\*(?!\*)/g, '<em>$1</em>');
+            // Inline code
+            html = html.replace(/`([^`]+?)`/g, '<code>$1</code>');
+            // Unordered lists
+            html = html.replace(/^[\-\*] (.+)$/gm, '<li>$1</li>');
+            html = html.replace(/(<li>.*<\/li>)/s, function(match) {
+                return '<ul>' + match + '</ul>';
+            });
+            // Fix consecutive <ul> wrapping
+            html = html.replace(/<\/ul>\s*<ul>/g, '');
+            // Ordered lists
+            html = html.replace(/^\d+\. (.+)$/gm, '<li>$1</li>');
+            // Line breaks for paragraphs
+            html = html.replace(/\n\n/g, '</p><p>');
+            html = html.replace(/\n/g, '<br>');
+            // Wrap in paragraph if not already structured
+            if (!html.startsWith('<')) html = '<p>' + html + '</p>';
+            return html;
+        }
+
+        function addAIMessage(role, content) {
+            const container = document.getElementById('aiChatMessages');
+            const welcome = document.getElementById('aiWelcome');
+            if (welcome) welcome.style.display = 'none';
+
+            const div = document.createElement('div');
+            div.className = `ai-msg ${role}`;
+
+            if (role === 'user') {
+                div.textContent = content;
+            } else {
+                div.innerHTML = renderMarkdown(content);
+            }
+
+            container.appendChild(div);
+            container.scrollTop = container.scrollHeight;
+            return div;
+        }
+
+        function showTypingIndicator() {
+            const container = document.getElementById('aiChatMessages');
+            const div = document.createElement('div');
+            div.className = 'ai-typing';
+            div.id = 'aiTyping';
+            div.innerHTML = '<span></span><span></span><span></span>';
+            container.appendChild(div);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function removeTypingIndicator() {
+            const el = document.getElementById('aiTyping');
+            if (el) el.remove();
+        }
+
+        async function sendAIMessage() {
+            if (aiIsLoading) return;
+            const input = document.getElementById('aiChatInput');
+            const msg = input.value.trim();
+            if (!msg) return;
+
+            input.value = '';
+            aiIsLoading = true;
+            document.getElementById('aiSendBtn').disabled = true;
+
+            // Show user message
+            addAIMessage('user', msg);
+
+            // Hide quick actions after first message
+            document.getElementById('aiQuickActions').style.display = 'none';
+
+            // Show typing
+            showTypingIndicator();
+
+            try {
+                const res = await fetch('/api/portfolio/ai-chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: msg })
+                });
+
+                removeTypingIndicator();
+
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({}));
+                    addAIMessage('assistant', err.error || 'Something went wrong. Please try again.');
+                } else {
+                    const data = await res.json();
+                    addAIMessage('assistant', data.response || 'No response received.');
+                }
+            } catch (e) {
+                removeTypingIndicator();
+                addAIMessage('assistant', 'Network error. Please check your connection and try again.');
+                console.error('AI chat error:', e);
+            }
+
+            aiIsLoading = false;
+            document.getElementById('aiSendBtn').disabled = false;
+            document.getElementById('aiChatInput').focus();
+        }
+
+        function sendQuickAction(text) {
+            document.getElementById('aiChatInput').value = text;
+            sendAIMessage();
+        }
+
+        async function clearAIChat() {
+            try {
+                await fetch('/api/portfolio/ai-chat/clear', { method: 'POST' });
+            } catch (e) {
+                console.warn('Failed to clear server chat history:', e);
+            }
+            const container = document.getElementById('aiChatMessages');
+            container.innerHTML = '';
+            // Restore welcome
+            const welcome = document.createElement('div');
+            welcome.id = 'aiWelcome';
+            welcome.className = 'ai-welcome';
+            welcome.innerHTML = `
+                <div class="ai-welcome-icon">🤖</div>
+                <h3 class="text-lg font-semibold text-white">AI Portfolio Manager</h3>
+                <p class="text-sm text-slate-400 max-w-md">I have full context of your portfolio — holdings, P&L, technical signals, sector allocation, and risk metrics. Ask me anything.</p>
+            `;
+            container.appendChild(welcome);
+            // Show quick actions again
+            document.getElementById('aiQuickActions').style.display = 'flex';
+            showToast('Chat cleared', 'success');
         }
     </script>
 
