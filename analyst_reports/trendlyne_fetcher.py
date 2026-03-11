@@ -78,11 +78,52 @@ async def fetch_analyst_reports_async(ticker: str) -> list[dict]:
     try:
         log_progress(f"Fetching analyst reports for {ticker}...")
         
-        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+        # Realistic Chrome browser headers to avoid 403 blocks from cloud IPs (Azure etc.)
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Accept-Encoding": "gzip, deflate, br",
+            "Referer": "https://trendlyne.com/",
+            "Sec-Ch-Ua": '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
+            "Sec-Ch-Ua-Mobile": "?0",
+            "Sec-Ch-Ua-Platform": '"Windows"',
+            "Sec-Fetch-Dest": "document",
+            "Sec-Fetch-Mode": "navigate",
+            "Sec-Fetch-Site": "same-origin",
+            "Sec-Fetch-User": "?1",
+            "Upgrade-Insecure-Requests": "1",
+            "Cache-Control": "max-age=0",
+            "Connection": "keep-alive",
+        }
         
-        async with httpx.AsyncClient() as client:
-            response = await client.get(url, timeout=30.0, follow_redirects=True, headers=headers)
-            response.raise_for_status()
+        MAX_RETRIES = 2
+        response = None
+        
+        async with httpx.AsyncClient(follow_redirects=True, timeout=30.0) as client:
+            # First, hit the homepage to establish cookies (session-based anti-bot check)
+            try:
+                homepage_resp = await client.get("https://trendlyne.com/", headers=headers, timeout=15.0)
+                # Small delay to appear more human-like
+                await asyncio.sleep(0.5)
+            except Exception:
+                pass  # Non-critical, proceed even if homepage fails
+            
+            # Now fetch the actual reports page with retry logic
+            for attempt in range(MAX_RETRIES + 1):
+                try:
+                    response = await client.get(url, headers=headers)
+                    if response.status_code == 403 or response.status_code == 429:
+                        if attempt < MAX_RETRIES:
+                            wait_time = (attempt + 1) * 2  # 2s, 4s backoff
+                            print(f"WARN: Got {response.status_code} fetching analyst reports for {ticker}, retrying in {wait_time}s (attempt {attempt + 1}/{MAX_RETRIES})")
+                            await asyncio.sleep(wait_time)
+                            continue
+                    response.raise_for_status()
+                    break
+                except httpx.HTTPStatusError:
+                    if attempt == MAX_RETRIES:
+                        raise
         
         soup = BeautifulSoup(response.text, 'html.parser')
         
