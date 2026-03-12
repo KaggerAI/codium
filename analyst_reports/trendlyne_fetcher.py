@@ -99,6 +99,7 @@ async def fetch_analyst_reports_async(ticker: str) -> list[dict]:
         
         MAX_RETRIES = 2
         response = None
+        html_content = ""
         
         async with httpx.AsyncClient(follow_redirects=True, timeout=30.0) as client:
             # First, hit the homepage to establish cookies (session-based anti-bot check)
@@ -114,18 +115,43 @@ async def fetch_analyst_reports_async(ticker: str) -> list[dict]:
                 try:
                     response = await client.get(url, headers=headers)
                     if response.status_code == 403 or response.status_code == 429:
-                        if attempt < MAX_RETRIES:
-                            wait_time = (attempt + 1) * 2  # 2s, 4s backoff
-                            print(f"WARN: Got {response.status_code} fetching analyst reports for {ticker}, retrying in {wait_time}s (attempt {attempt + 1}/{MAX_RETRIES})")
-                            await asyncio.sleep(wait_time)
-                            continue
+                        print(f"WARN: Got {response.status_code} fetching analyst reports for {ticker} via httpx. Falling back to Playwright...")
+                        # If we get blocked, break loop and handle with Playwright
+                        response = None
+                        break
                     response.raise_for_status()
+                    html_content = response.text
                     break
-                except httpx.HTTPStatusError:
+                except httpx.HTTPStatusError as e:
                     if attempt == MAX_RETRIES:
-                        raise
+                        # Attempt Playwright fallback on HTTP errors
+                        response = None
+                        break
+                        
+        # --- PLAYWRIGHT FALLBACK ---
+        if not html_content:
+            log_progress(f"Using browser fallback for Trendlyne Analyst Reports: {ticker}...")
+            from playwright.async_api import async_playwright
+            try:
+                async with async_playwright() as p:
+                    browser = await p.chromium.launch(headless=True)
+                    context = await browser.new_context(
+                        user_agent=headers["User-Agent"],
+                        viewport={'width': 1920, 'height': 1080}
+                    )
+                    page = await context.new_page()
+                    # Hit homepage first to grab cookies
+                    await page.goto("https://trendlyne.com/", wait_until='domcontentloaded', timeout=30000)
+                    await asyncio.sleep(1)
+                    # Now hit actual page
+                    await page.goto(url, wait_until='networkidle', timeout=45000)
+                    html_content = await page.content()
+                    await browser.close()
+            except Exception as pw_err:
+                print(f"ERROR: Playwright fallback failed for {ticker}: {pw_err}")
+                return []
         
-        soup = BeautifulSoup(response.text, 'html.parser')
+        soup = BeautifulSoup(html_content, 'html.parser')
         
         reports = []
         seen_brokerages = set()

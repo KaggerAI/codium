@@ -5625,7 +5625,14 @@
         if (payload.ai_scores && Array.isArray(payload.ai_scores) && payload.ai_scores.length) {
           aiScoreHTML = `
             <div class="bg-white p-6 rounded-xl shadow-lg">
-                <h2 class="text-2xl font-bold mb-4 text-slate-700">AI Quant Score</h2>
+                <div class="flex items-center gap-2 mb-4">
+                  <h2 class="text-2xl font-bold text-slate-700 m-0">AI Quant Score</h2>
+                  <button onclick="document.getElementById('aiQuantScoreModal').classList.add('active')" class="text-slate-400 hover:text-slate-600 transition-colors" title="Learn about AI Quant Scores">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
+                    </svg>
+                  </button>
+                </div>
                 
                 <!-- Tab Headers - 4 horizontal tabs -->
                 <div class="flex border-b border-slate-200 mb-4">
@@ -7806,6 +7813,49 @@
       renderUnanswerableHistory();
     });
   </script>
+  <!-- AI Quant Score Info Modal -->
+  <div id="aiQuantScoreModal" class="ai-summary-modal"
+    onclick="if(event.target === this) this.classList.remove('active')">
+    <div class="ai-summary-backdrop"></div>
+    <div class="ai-summary-content">
+      <div class="ai-summary-header">
+        <h2 class="ai-summary-title">Understanding AI Quant Scores</h2>
+        <button class="ai-summary-close"
+          onclick="document.getElementById('aiQuantScoreModal').classList.remove('active')">&times;</button>
+      </div>
+      <div class="ai-summary-body prose prose-slate max-w-none text-slate-600">
+        <div class="bg-blue-50 border-l-4 border-blue-500 p-4 mb-6 rounded-r-lg">
+          <p class="m-0 text-blue-800 font-medium">
+            <strong>The Golden Rule:</strong> The ideal buying opportunity comes at the golden confluence of an
+            undervalued stock with high liquidity, low volatility, and favorable technicals.
+          </p>
+        </div>
+
+        <h3 class="text-xl font-bold text-slate-800 mt-6 mb-3">1. Valuation Score</h3>
+        <p>This score measures how cheap or expensive a stock is relative to its fundamentals. A low score (e.g.,
+          undervalued) suggests the market may not be fully pricing in the company's true worth, offering a potential
+          margin of safety. It's calculated using traditional metrics like PE (Price-to-Earnings), PB (Price-to-Book),
+          EV/EBITDA, and Market Cap to Sales ratios.</p>
+
+        <h3 class="text-xl font-bold text-slate-800 mt-6 mb-3">2. Technical Score</h3>
+        <p>This score analyzes short to medium-term price trends and momentum. A low score (e.g., oversold) indicates
+          that the stock might be due for a bounce or extended upward movement based on recent trading activity. It
+          incorporates indicators like the RSI (Relative Strength Index) and moving averages (EMA crossovers).</p>
+
+        <h3 class="text-xl font-bold text-slate-800 mt-6 mb-3">3. Liquidity Score</h3>
+        <p>Liquidity defines how easily you can buy or sell shares without causing a significant impact on the stock
+          price. High liquidity means tighter bid-ask spreads and higher trading volume, which reduces trading costs and
+          execution risks. It is calculated analyzing overall trading volumes and implied bid-ask spreads. It typically
+          highlights investor interest in the stock. More the interest, most is typically the buying interest for
+          undervalued stocks.</p>
+
+        <h3 class="text-xl font-bold text-slate-800 mt-6 mb-3">4. Volatility Score</h3>
+        <p>Volatility measures the magnitude of price fluctuations over time. A lower volatility score indicates a more
+          stable stock price, meaning less risk of sudden deep drawdowns. It considers metrics like Beta, Implied
+          Volatility (IV), Historical Volatility (HV), Average True Range (ATR), and market-wide VIX.</p>
+      </div>
+    </div>
+  </div>
 </body>
 
 </html>
