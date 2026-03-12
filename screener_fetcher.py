@@ -89,12 +89,13 @@ def scrape_top_ratios(soup: BeautifulSoup) -> dict:
 
 
 def clean_df(df: pd.DataFrame) -> pd.DataFrame:
-    # No changes needed in this function
     df = df.copy()
     if df.columns.nlevels > 1:
-        df.columns = ['_'.join(col).strip() for col in df.columns.values]
+        df.columns = ['_'.join(str(c) for c in col).strip() for col in df.columns.values]
     else:
-        df.columns = df.columns.str.strip().str.replace("Unnamed: 0", "", regex=False)
+        # Ensure columns are strings before using .str accessor
+        # (pd.read_html can return integer column names for some tables)
+        df.columns = df.columns.astype(str).str.strip().str.replace("Unnamed: 0", "", regex=False)
     for col in df.select_dtypes(include="object"):
         df[col] = df[col].str.strip().str.replace("+", "", regex=False)
     if df.index.dtype == object:

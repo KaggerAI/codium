@@ -9412,6 +9412,7 @@ def run_batch_precache(job_id, tickers):
             # ============================================================
             # STEP 1: Fetch ONLY Screener.in data (fundamentals + documents)
             # ============================================================
+            is_consolidated_screener = False  # Default before try block
             try:
                 from screener_fetcher import fetch_consolidated, fetch_latest_documents
                 
