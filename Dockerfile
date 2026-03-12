@@ -31,9 +31,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 4. Install Playwright Browsers (Required for ScanX/News fetching)
-# Install both Chrome (for Trendlyne - bypasses CloudFront WAF) and Chromium (general use)
-RUN playwright install chrome --with-deps
+# 4. Install Playwright Browsers (Required for ScanX/News/Peer Comparison fetching)
 RUN playwright install chromium --with-deps
 
 # 5. Copy the application code

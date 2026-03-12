@@ -13,9 +13,44 @@ from progress_logger import log_progress
 import os
 import re
 
+import json
+
 # Load CSV once at module initialization
 CSV_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'trendlyne_all_stocks_master.csv')
 TRENDLYNE_DATA = {}  # Maps ticker -> {id, stock_name, url}
+
+# Pre-fetched analyst reports cache (populated by prefetch_analyst_reports.py)
+CACHE_FILE = os.path.join(os.path.dirname(__file__), 'analyst_reports_cache.json')
+_reports_cache = None  # Loaded lazily on first access
+
+
+def _load_reports_from_cache(ticker: str) -> list[dict] | None:
+    """Load pre-fetched analyst reports from JSON cache file.
+    Returns None if cache doesn't exist or ticker not found (caller should fall back to live fetch).
+    Returns [] if ticker was found but had no reports.
+    """
+    global _reports_cache
+    
+    if _reports_cache is None:
+        if not os.path.exists(CACHE_FILE):
+            return None
+        try:
+            with open(CACHE_FILE, 'r', encoding='utf-8') as f:
+                _reports_cache = json.load(f)
+            updated = _reports_cache.get('last_updated', 'unknown')
+            count = len(_reports_cache.get('reports', {}))
+            print(f"INFO: Loaded analyst reports cache ({count} stocks, updated: {updated})")
+        except (json.JSONDecodeError, OSError) as e:
+            print(f"WARN: Failed to load analyst reports cache: {e}")
+            _reports_cache = {'reports': {}}
+            return None
+    
+    reports = _reports_cache.get('reports', {})
+    if ticker.upper() in reports:
+        cached = reports[ticker.upper()]
+        print(f"INFO: Using cached analyst reports for {ticker} ({len(cached)} reports)")
+        return cached
+    return None
 
 
 def load_url_mapping():
@@ -57,19 +92,25 @@ def get_post_url(ticker: str) -> str | None:
     return f"https://trendlyne.com/research-reports/post/{ticker.upper()}/{data['id']}/"
 
 
-async def fetch_analyst_reports_async(ticker: str) -> list[dict]:
+async def fetch_analyst_reports_async(ticker: str, bypass_cache: bool = False) -> list[dict]:
     """
-    Scrapes analyst reports from Trendlyne's 'post' page format.
-    Returns up to 5 latest reports from DIFFERENT brokerages.
+    Fetches analyst reports for a given ticker.
     
-    HTML Structure (from browser inspection):
-    - Container: div.panel-post.Ltop.m-b-2.bdr
-    - Recommendation: .post-reco-type (e.g., "Buy:", "Hold:")
-    - Brokerage: a[href*="broker-recommendation-posts"]
-    - Target & Upside: .card-text.tbold.trending-body-text -> "Target: 1770 | Upside : 19.5%"
-    - Summary: .card-blockquote article
-    - Date: .post-head-subtext span
+    Priority:
+    1. JSON cache file (pre-fetched from localhost) — used on Azure
+    2. Live Playwright fetch (Chrome + stealth) — used locally
+    3. httpx direct fetch — last resort fallback
+    
+    Args:
+        ticker: Stock ticker (e.g., 'RELIANCE')
+        bypass_cache: If True, skip JSON cache (used by prefetch script for live fetch)
     """
+    # --- Tier 1: JSON cache (fast, works on Azure) ---
+    if not bypass_cache:
+        cached = _load_reports_from_cache(ticker)
+        if cached is not None:
+            return cached
+    
     url = get_post_url(ticker)
     if not url:
         log_progress(f"No analyst report URL found for {ticker}")
