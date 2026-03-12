@@ -4308,6 +4308,78 @@ Create a table with quarterly/annual financial metrics:
         return jsonify({'error': error_msg}), 500
 
 
+@app.route('/api/global-analyst-reports', methods=['GET'])
+def api_global_analyst_reports():
+    """
+    Endpoint to fetch global analyst reports using Perplexity Sonar Pro.
+    Returns a strict JSON array of objects.
+    """
+    ticker = request.args.get('ticker', '').upper().strip()
+    company_name = request.args.get('company_name', '').strip()
+    
+    if not ticker:
+        return jsonify({'error': 'Ticker is required'}), 400
+        
+    log_progress(f"Fetching Global Research for {ticker} using AI search...")
+    
+    prompt = f"""Search the web for the latest equity research analyst reports published in the last 6 months for the Indian stock {company_name} ({ticker}) specifically by these global research houses ONLY: Jefferies, CLSA, Nomura, Morgan Stanley, Goldman Sachs, Citigroup, Macquarie, UBS, and BofA Securities.
+
+Return the results ONLY as a valid JSON array of objects. Do not include markdown formatting like ```json or explanations outside the JSON array.
+If no reports are found for any of these specific firms, return an empty array [].
+
+[
+  {{
+    "brokerage": "Morgan Stanley",
+    "recommendation": "Overweight / Buy",
+    "target_price": "2400",
+    "upside": "15%",
+    "date": "15 Feb 2026",
+    "summary": "Expects strong volume recovery and margin expansion in upcoming quarters.",
+    "source_url": "https://www.moneycontrol.com/..."
+  }}
+]
+
+Make sure target_price is a clean number string (no symbols, just the value like "2400"). Ensure the JSON is perfectly valid."""
+
+    try:
+        messages = [{"role": "user", "content": prompt}]
+        # Call Perplexity with Pro Search enabled to do deep research
+        response_text = call_perplexity_api(
+            messages, 
+            model="sonar-pro", 
+            temperature=0.2, 
+            timeout=180, 
+            enable_pro_search=True
+        )
+        
+        # Clean up response text if it includes markdown formatting
+        cleaned_text = response_text.strip()
+        if cleaned_text.startswith("```json"):
+            cleaned_text = cleaned_text[7:]
+        if cleaned_text.startswith("```"):
+            cleaned_text = cleaned_text[3:]
+        if cleaned_text.endswith("```"):
+            cleaned_text = cleaned_text[:-3]
+        cleaned_text = cleaned_text.strip()
+        
+        # Parse the JSON
+        reports_data = json.loads(cleaned_text)
+        
+        if not isinstance(reports_data, list):
+            raise ValueError("Perplexity did not return a JSON array.")
+            
+        log_progress(f"Found {len(reports_data)} global analyst reports for {ticker}.")
+        return jsonify({'reports': reports_data})
+        
+    except json.JSONDecodeError as e:
+        print(f"ERROR parsing JSON from Perplexity for global reports: {e}\nRaw response: {response_text}")
+        return jsonify({'error': 'Failed to parse AI response into JSON format'}), 500
+    except Exception as e:
+        print(f"ERROR fetching global analyst reports: {e}")
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
 # =====================================================================
 # ANALYST REPORTS PDF TEXT EXTRACTION (Background Task Support)
 # =====================================================================

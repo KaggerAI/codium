@@ -4685,64 +4685,85 @@
 
         // Render Analyst Reports Tabbed Interface
         function renderAnalystReports(reports) {
+          let domesticHtml = '';
           if (!reports || reports.length === 0) {
-            return `<div class="bg-white p-6 rounded-xl shadow-lg mb-8">
-              <h2 class="text-2xl font-bold mb-4 text-slate-700">📊 Top Analyst Recommendations</h2>
-              <p class="text-slate-500 italic">No analyst reports available for this stock.</p>
-            </div>`;
-          }
+            domesticHtml = '<p class="text-slate-500 italic">No domestic reports available for this stock.</p>';
+          } else {
+            let tabsHtml = '<div class="analyst-tabs">';
+            let panelsHtml = '';
 
-          let tabsHtml = '<div class="analyst-tabs">';
-          let panelsHtml = '';
+            reports.forEach((r, i) => {
+              const active = i === 0 ? 'active' : '';
+              const recoClass = r.recommendation.toLowerCase() === 'buy' ? 'reco-buy' :
+                r.recommendation.toLowerCase() === 'sell' ? 'reco-sell' : 'reco-hold';
 
-          reports.forEach((r, i) => {
-            const active = i === 0 ? 'active' : '';
-            const recoClass = r.recommendation.toLowerCase() === 'buy' ? 'reco-buy' :
-              r.recommendation.toLowerCase() === 'sell' ? 'reco-sell' : 'reco-hold';
+              tabsHtml += `<button class="analyst-tab ${active}" onclick="switchAnalystTab(${i})">${r.brokerage}</button>`;
 
-            tabsHtml += `<button class="analyst-tab ${active}" onclick="switchAnalystTab(${i})">${r.brokerage}</button>`;
-
-            panelsHtml += `
-              <div class="analyst-panel ${active}" id="analyst-panel-${i}">
-                <div class="flex items-center gap-4 mb-4 flex-wrap">
-                  <span class="reco-badge ${recoClass}">${r.recommendation.toUpperCase()}</span>
-                  <span class="text-sm text-slate-500">${r.date}</span>
-                </div>
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-                  <div class="bg-gradient-to-br from-green-50 to-emerald-50 p-4 rounded-lg border border-green-200">
-                    <p class="text-xs text-slate-500 font-medium mb-1">Target Price</p>
-                    <p class="text-2xl font-bold text-green-600">₹${r.target_price}</p>
+              panelsHtml += `
+                <div class="analyst-panel ${active}" id="analyst-panel-${i}">
+                  <div class="flex items-center gap-4 mb-4 flex-wrap">
+                    <span class="reco-badge ${recoClass}">${r.recommendation.toUpperCase()}</span>
+                    <span class="text-sm text-slate-500">${r.date}</span>
                   </div>
-                  <div class="bg-slate-50 p-4 rounded-lg border border-slate-200">
-                    <p class="text-xs text-slate-500 font-medium mb-1">Upside Potential</p>
-                    <p class="text-2xl font-bold text-slate-700">${r.upside}</p>
-                  </div>
-                </div>
-                <p class="text-slate-600 leading-relaxed">${r.summary}</p>
-                ${r.pdf_url ? `
-                  <div class="mt-4 flex flex-col gap-2">
-                    <p class="text-xs text-slate-500 mb-1">Trendlyne blocks automated bot downloads. Please click "Download PDF" to save it manually, then click "Upload for AI Summary" to generate the insights.</p>
-                    <div class="flex gap-2">
-                      <a href="${r.pdf_url}" target="_blank" rel="noopener noreferrer" class="bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 px-4 py-2 rounded-lg flex items-center justify-center space-x-2 transition-all text-sm font-medium shadow-sm flex-1">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
-                        <span>1. Download PDF</span>
-                      </a>
-                      <button onclick="triggerAnalystPdfUpload('${r.brokerage}', ${i})" class="bg-gradient-to-r from-blue-500 to-blue-600 text-white px-4 py-2 rounded-lg hover:from-blue-600 hover:to-blue-700 focus:outline-none flex items-center justify-center space-x-2 transition-all text-sm font-medium shadow-sm flex-1" id="ai-summary-btn-${i}">
-                        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M5.5 13a3.5 3.5 0 01-.369-6.98 4 4 0 117.753-1.977A4.5 4.5 0 1113.5 13H11V9.413l1.293 1.293a1 1 0 001.414-1.414l-3-3a1 1 0 00-1.414 0l-3 3a1 1 0 001.414 1.414L9 9.414V13H5.5z"></path></svg>
-                        <span>2. Upload for AI Summary</span>
-                      </button>
+                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                    <div class="bg-gradient-to-br from-green-50 to-emerald-50 p-4 rounded-lg border border-green-200">
+                      <p class="text-xs text-slate-500 font-medium mb-1">Target Price</p>
+                      <p class="text-2xl font-bold text-green-600">₹${r.target_price}</p>
+                    </div>
+                    <div class="bg-slate-50 p-4 rounded-lg border border-slate-200">
+                      <p class="text-xs text-slate-500 font-medium mb-1">Upside Potential</p>
+                      <p class="text-2xl font-bold text-slate-700">${r.upside}</p>
                     </div>
                   </div>
-                  <div id="ai-summary-${i}" class="hidden mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg"></div>
-                ` : ''}
-              </div>`;
-          });
+                  <p class="text-slate-600 leading-relaxed">${r.summary}</p>
+                  ${r.pdf_url ? `
+                    <div class="mt-4 flex flex-col gap-2">
+                      <p class="text-xs text-slate-500 mb-1">Trendlyne blocks automated bot downloads. Please click "Download PDF" to save it manually, then click "Upload for AI Summary" to generate the insights.</p>
+                      <div class="flex gap-2">
+                        <a href="${r.pdf_url}" target="_blank" rel="noopener noreferrer" class="bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 px-4 py-2 rounded-lg flex items-center justify-center space-x-2 transition-all text-sm font-medium shadow-sm flex-1">
+                          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                          <span>1. Download PDF</span>
+                        </a>
+                        <button onclick="triggerAnalystPdfUpload('${r.brokerage}', ${i})" class="bg-gradient-to-r from-blue-500 to-blue-600 text-white px-4 py-2 rounded-lg hover:from-blue-600 hover:to-blue-700 focus:outline-none flex items-center justify-center space-x-2 transition-all text-sm font-medium shadow-sm flex-1" id="ai-summary-btn-${i}">
+                          <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M5.5 13a3.5 3.5 0 01-.369-6.98 4 4 0 117.753-1.977A4.5 4.5 0 1113.5 13H11V9.413l1.293 1.293a1 1 0 001.414-1.414l-3-3a1 1 0 00-1.414 0l-3 3a1 1 0 001.414 1.414L9 9.414V13H5.5z"></path></svg>
+                          <span>2. Upload for AI Summary</span>
+                        </button>
+                      </div>
+                    </div>
+                    <div id="ai-summary-${i}" class="hidden mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg"></div>
+                  ` : ''}
+                </div>`;
+            });
+            tabsHtml += '</div>';
+            domesticHtml = tabsHtml + panelsHtml;
+          }
 
-          tabsHtml += '</div>';
-          return `<div class="bg-white p-6 rounded-xl shadow-lg mb-8">
-            <h2 class="text-2xl font-bold mb-4 text-slate-700">📊 Analyst Recommendations</h2>
-            ${tabsHtml}
-            ${panelsHtml}
+          return `<div class="bg-white p-6 rounded-xl shadow-lg mb-8" id="analyst-reports-container">
+            <h2 class="text-2xl font-bold mb-6 text-slate-700">📊 Analyst Recommendations</h2>
+            
+            <div class="mb-8 border-b-2 border-slate-100 pb-8">
+              <h3 class="text-xl font-semibold mb-4 text-slate-600 flex items-center gap-2">
+                <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
+                Domestic Research
+              </h3>
+              ${domesticHtml}
+            </div>
+
+            <div>
+              <h3 class="text-xl font-semibold mb-4 text-slate-600 flex items-center gap-2">
+                <svg class="w-5 h-5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"></path></svg>
+                Global Research
+              </h3>
+              <div id="global-research-container">
+                 <div class="flex items-center text-slate-500 italic space-x-3 p-4 bg-slate-50 rounded-lg border border-slate-200">
+                   <svg class="animate-spin h-5 w-5 text-emerald-500" fill="none" viewBox="0 0 24 24">
+                     <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                     <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                   </svg>
+                   <span>Searching global research houses using AI...</span>
+                 </div>
+              </div>
+            </div>
           </div>`;
         }
 
@@ -4750,6 +4771,81 @@
         window.switchAnalystTab = function (index) {
           document.querySelectorAll('.analyst-tab').forEach((t, i) => t.classList.toggle('active', i === index));
           document.querySelectorAll('.analyst-panel').forEach((p, i) => p.classList.toggle('active', i === index));
+        };
+
+        window.switchGlobalAnalystTab = function (index) {
+          document.querySelectorAll('.global-tab').forEach((t, i) => t.classList.toggle('active', i === index));
+          document.querySelectorAll('.global-panel').forEach((p, i) => p.classList.toggle('active', i === index));
+        };
+
+        // Fetch Global Analyst Reports
+        window.fetchGlobalAnalystReports = async function(ticker, companyName) {
+          const container = document.getElementById('global-research-container');
+          if (!container) return;
+
+          try {
+            const response = await fetch(`/api/global-analyst-reports?ticker=${ticker}&company_name=${encodeURIComponent(companyName)}`);
+            const data = await response.json();
+
+            if (!response.ok) throw new Error(data.error || 'Failed to fetch global reports');
+
+            if (!data.reports || data.reports.length === 0) {
+              container.innerHTML = '<p class="text-slate-500 italic px-4 py-2 border border-slate-200 rounded-lg bg-slate-50">No recent global analyst reports found matching the criteria.</p>';
+              return;
+            }
+
+            let tabsHtml = '<div class="analyst-tabs mb-4">';
+            let panelsHtml = '';
+
+            data.reports.forEach((r, i) => {
+              const active = i === 0 ? 'active' : '';
+              let recoClass = 'reco-hold';
+              if (r.recommendation) {
+                const recLower = r.recommendation.toLowerCase();
+                if (recLower.includes('buy') || recLower.includes('overweight') || recLower.includes('outperform')) {
+                  recoClass = 'reco-buy';
+                } else if (recLower.includes('sell') || recLower.includes('underweight') || recLower.includes('underperform')) {
+                  recoClass = 'reco-sell';
+                }
+              }
+
+              tabsHtml += `<button class="analyst-tab global-tab ${active}" onclick="switchGlobalAnalystTab(${i})">${r.brokerage}</button>`;
+
+              panelsHtml += `
+                <div class="analyst-panel global-panel ${active}" id="global-analyst-panel-${i}">
+                  <div class="flex items-center gap-4 mb-4 flex-wrap">
+                    <span class="reco-badge ${recoClass}">${(r.recommendation || 'N/A').toUpperCase()}</span>
+                    <span class="text-sm text-slate-500">${r.date || 'Recent'}</span>
+                  </div>
+                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                    <div class="bg-gradient-to-br from-green-50 to-emerald-50 p-4 rounded-lg border border-green-200">
+                      <p class="text-xs text-slate-500 font-medium mb-1">Target Price</p>
+                      <p class="text-2xl font-bold text-green-600">₹${r.target_price || 'N/A'}</p>
+                    </div>
+                    <div class="bg-slate-50 p-4 rounded-lg border border-slate-200">
+                      <p class="text-xs text-slate-500 font-medium mb-1">Upside Potential</p>
+                      <p class="text-2xl font-bold text-slate-700">${r.upside || 'N/A'}</p>
+                    </div>
+                  </div>
+                  <p class="text-slate-700 leading-relaxed font-medium bg-slate-50 p-4 rounded-lg border border-slate-200">${r.summary}</p>
+                  ${r.source_url ? `
+                    <div class="mt-4 pt-4 text-right">
+                      <a href="${r.source_url}" target="_blank" rel="noopener noreferrer" class="text-sm text-blue-600 hover:text-blue-800 font-medium inline-flex items-center gap-1 hover:underline">
+                        Read Source Article 
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
+                      </a>
+                    </div>
+                  ` : ''}
+                </div>`;
+            });
+
+            tabsHtml += '</div>';
+            container.innerHTML = tabsHtml + panelsHtml;
+
+          } catch (error) {
+            container.innerHTML = `<p class="text-red-500 italic px-4 py-2 border border-red-200 rounded-lg bg-red-50">Error fetching global reports: ${error.message}</p>`;
+            console.error(error);
+          }
         };
 
         // AI Summary upload logic
@@ -5699,13 +5795,16 @@
           peerComparisonHTML = renderPeerComparisonTable(payload.peer_comparison);
         }
 
-        // NEW: Analyst Reports Section
-        let analystReportsHTML = '';
-        if (payload.analyst_reports && payload.analyst_reports.length > 0) {
-          analystReportsHTML = renderAnalystReports(payload.analyst_reports);
-        }
+        // NEW: Analyst Reports Section (always render to show the skeleton)
+        analystReportsHTML = renderAnalystReports(payload.analyst_reports);
 
         resultsContainer.innerHTML = keyMetricsHTML + summarySectionHTML + analystReportsHTML + peerComparisonHTML + aiScoreHTML + technicalSummaryHTML;
+
+        // Automatically trigger Global Analyst Reports fetch in the background
+        if (typeof window.fetchGlobalAnalystReports === 'function') {
+          // Fire and forget
+          window.fetchGlobalAnalystReports(payload.ticker, companyName).catch(console.error);
+        }
 
         // Attach click handlers for AI Score charts (only chart1 - Line Plot)
         // We check our payload.ai_scores variable for the test
