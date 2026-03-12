@@ -128,9 +128,12 @@ async def fetch_analyst_reports_async(ticker: str) -> list[dict]:
                         response = None
                         break
                         
-        # --- PLAYWRIGHT FALLBACK (Chrome new-headless + stealth) ---
-        # Trendlyne uses CloudFront WAF which detects Playwright's default headless Chromium.
-        # Chrome's own headless mode (channel="chrome") + playwright-stealth bypasses this.
+        # --- PLAYWRIGHT FALLBACK (Multi-strategy: direct goto OR homepage + JS fetch) ---
+        # Trendlyne uses CloudFront WAF which blocks headless browsers.
+        # Strategy 1: Direct page.goto (works locally with Chrome + stealth)
+        # Strategy 2: Visit homepage first, then use JS fetch() from page context (for Azure)
+        #   - JS fetch from within the page looks like a legitimate in-page AJAX request
+        #   - It inherits cookies from the homepage visit + correct Referer header
         if not html_content:
             log_progress(f"Using browser fallback for Trendlyne Analyst Reports: {ticker}...")
             from playwright.async_api import async_playwright
@@ -140,23 +143,19 @@ async def fetch_analyst_reports_async(ticker: str) -> list[dict]:
                 stealth_async = None
             try:
                 async with async_playwright() as p:
-                    # Try Chrome's new headless mode first (bypasses CloudFront WAF)
-                    # Fall back to default Chromium if Chrome isn't installed
                     anti_detect_args = [
                         "--disable-blink-features=AutomationControlled",
                         "--no-sandbox",
                     ]
+                    # Try Chrome's new headless mode first, fall back to Chromium
                     try:
                         browser = await p.chromium.launch(
-                            headless=True,
-                            channel="chrome",
-                            args=anti_detect_args,
+                            headless=True, channel="chrome", args=anti_detect_args,
                         )
                     except Exception:
-                        print(f"DEBUG: Chrome not available, falling back to Chromium for {ticker}")
+                        print(f"DEBUG: Chrome channel not available for {ticker}, using Chromium")
                         browser = await p.chromium.launch(
-                            headless=True,
-                            args=anti_detect_args,
+                            headless=True, args=anti_detect_args,
                         )
                     
                     context = await browser.new_context(
@@ -166,24 +165,87 @@ async def fetch_analyst_reports_async(ticker: str) -> list[dict]:
                     )
                     page = await context.new_page()
                     
-                    # Apply stealth to bypass fingerprint-based bot detection
                     if stealth_async:
                         await stealth_async(page)
                     
-                    # Navigate directly to the reports page
-                    resp = await page.goto(url, wait_until='domcontentloaded', timeout=45000)
-                    print(f"DEBUG: Trendlyne page status: {resp.status if resp else 'None'} for {ticker}")
-                    
-                    # Wait for dynamically-loaded report panels
+                    # --- Strategy 1: Direct navigation ---
                     try:
-                        await page.wait_for_selector('.panel-post', timeout=15000)
-                        print(f"DEBUG: Playwright found .panel-post elements for {ticker}")
-                    except Exception:
-                        print(f"DEBUG: No .panel-post found after 15s for {ticker}, waiting 3s more...")
-                        await asyncio.sleep(3)
+                        resp = await page.goto(url, wait_until='domcontentloaded', timeout=30000)
+                        status = resp.status if resp else 0
+                        print(f"DEBUG: Direct goto status: {status} for {ticker}")
+                        if status == 200:
+                            try:
+                                await page.wait_for_selector('.panel-post', timeout=15000)
+                            except Exception:
+                                await asyncio.sleep(3)
+                            html_content = await page.content()
+                    except Exception as goto_err:
+                        print(f"DEBUG: Direct goto failed for {ticker}: {goto_err}")
                     
-                    html_content = await page.content()
-                    print(f"DEBUG: Playwright fetched {len(html_content)} chars for {ticker}")
+                    # --- Strategy 2: Homepage + JS fetch (for Azure / blocked IPs) ---
+                    if not html_content or len(html_content) < 1000:
+                        print(f"DEBUG: Trying homepage + JS fetch fallback for {ticker}...")
+                        try:
+                            await page.goto("https://trendlyne.com/", wait_until='domcontentloaded', timeout=30000)
+                            await asyncio.sleep(2)
+                            
+                            # Use fetch() from within the page context
+                            # This looks like a legitimate in-page AJAX request
+                            fetched_html = await page.evaluate('''
+                                async (targetUrl) => {
+                                    try {
+                                        const resp = await fetch(targetUrl, {
+                                            credentials: 'include',
+                                            headers: {
+                                                'Accept': 'text/html,application/xhtml+xml',
+                                                'X-Requested-With': 'XMLHttpRequest'
+                                            }
+                                        });
+                                        if (resp.ok) {
+                                            return await resp.text();
+                                        }
+                                        return '';
+                                    } catch (e) {
+                                        return '';
+                                    }
+                                }
+                            ''', url)
+                            
+                            if fetched_html and len(fetched_html) > 1000:
+                                html_content = fetched_html
+                                print(f"DEBUG: JS fetch got {len(html_content)} chars for {ticker}")
+                            else:
+                                print(f"DEBUG: JS fetch returned {len(fetched_html) if fetched_html else 0} chars for {ticker}")
+                        except Exception as js_err:
+                            print(f"DEBUG: JS fetch fallback failed for {ticker}: {js_err}")
+                    
+                    # --- Strategy 3: Homepage session + navigate (last resort) ---
+                    if not html_content or len(html_content) < 1000:
+                        print(f"DEBUG: Trying homepage session + navigate for {ticker}...")
+                        try:
+                            # If we haven't visited homepage yet in strategy 2
+                            current_url = page.url
+                            if 'trendlyne.com' not in current_url:
+                                await page.goto("https://trendlyne.com/", wait_until='domcontentloaded', timeout=30000)
+                                await asyncio.sleep(2)
+                            
+                            resp = await page.goto(url, wait_until='networkidle', timeout=45000)
+                            status = resp.status if resp else 0
+                            print(f"DEBUG: Session navigate status: {status} for {ticker}")
+                            if status == 200:
+                                try:
+                                    await page.wait_for_selector('.panel-post', timeout=15000)
+                                except Exception:
+                                    await asyncio.sleep(3)
+                                html_content = await page.content()
+                        except Exception as sess_err:
+                            print(f"DEBUG: Session navigate failed for {ticker}: {sess_err}")
+                    
+                    if html_content:
+                        print(f"DEBUG: Playwright fetched {len(html_content)} chars for {ticker}")
+                    else:
+                        print(f"WARN: All Playwright strategies failed for {ticker}")
+                    
                     await browser.close()
             except Exception as pw_err:
                 print(f"ERROR: Playwright fallback failed for {ticker}: {pw_err}")
