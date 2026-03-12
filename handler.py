@@ -4362,17 +4362,24 @@ def api_global_analyst_reports():
                 citations.append(res.get('url'))
                 
         # 2. Use Gemini to extract the JSON structure from the search results
+        import datetime
+        current_date_str = datetime.datetime.now().strftime("%B %Y")
+        
         extraction_prompt = f"""You are an elite financial data extraction assistant working with strict JSON structures.
 I will provide you with a list of real-time search results about equity research reports for the Indian stock {company_name} ({ticker}).
 Review these search results carefully and extract EVERY mentioned analyst report from reputable global or global-affiliated research houses. Look for target prices, ratings (Buy/Sell/Hold), and rationales.
 
-CRITICAL INSTRUCTION: You MUST ONLY include reports from the following GLOBAL research houses: Morgan Stanley, Goldman Sachs, Jefferies, CLSA, Nomura, Macquarie, UBS, Nuvama, Bernstein, BofA Securities, Citi, HSBC, JPMorgan.
+CRITICAL INSTRUCTION 1: You MUST ONLY include reports from the following GLOBAL research houses: Morgan Stanley, Goldman Sachs, Jefferies, CLSA, Nomura, Macquarie, UBS, Nuvama, Bernstein, BofA Securities, Citi, HSBC, JPMorgan.
 DO NOT include any domestic Indian brokerages (e.g., absolutely NO Motilal Oswal, Prabhudas Lilladher, ICICI Securities, HDFC Securities, Kotak Securities, Axis Capital, Sharekhan, Emkay, KRChoksey, Anand Rathi, etc). If a search result only mentions a domestic brokerage, completely ignore it.
+
+CRITICAL INSTRUCTION 2: Only include reports published within the LAST 6 MONTHS. The current month is {current_date_str}. Do not include reports from 2023 or 2024.
+
+CRITICAL INSTRUCTION 3: You MUST extract the EXACT PUBLICATION DATE of the report (e.g., "15 Feb 2026"). Do not use vague terms like "recent" or "recently". If the exact day is missing but the month/year is present, use "Feb 2026". If you cannot deduce at least the month and year from the search snippet or URL date stamp, DO NOT INCLUDE THAT REPORT.
 
 {context_block}
 
 Return the extracted reports ONLY as a valid JSON array of objects. Do not include markdown formatting like ```json or explanations.
-If no relevant reports from the APPROVED GLOBAL HOUSES are found in the search results with a clear target price or rating, return an empty array [].
+If no relevant reports from the APPROVED GLOBAL HOUSES within the LAST 6 MONTHS are found, return an empty array [].
 
 [
   {{
@@ -4409,6 +4416,20 @@ For "source_url", you MUST output the EXACT URL string from the provided Search 
         
         if not isinstance(reports_data, list):
             raise ValueError("Gemini did not return a JSON array.")
+            
+        # Parse dates to sort chronologically (newest to oldest)
+        from dateutil import parser
+        def get_date(report):
+            date_str = report.get('date', '')
+            try:
+                # Use fuzzy parsing to handle formats like "Feb 2026" or "15 Feb 2026"
+                parsed_date = parser.parse(date_str, fuzzy=True)
+                return parsed_date
+            except (ValueError, TypeError):
+                # Fallback to a very old date if parsing fails so it sinks to the bottom
+                return datetime.datetime(1970, 1, 1)
+                
+        reports_data = sorted(reports_data, key=get_date, reverse=True)
             
         log_progress(f"Found {len(reports_data)} global analyst reports for {ticker} using Search API + Gemini.")
         
