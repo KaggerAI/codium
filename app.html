@@ -4720,15 +4720,19 @@
                 </div>
                 <p class="text-slate-600 leading-relaxed">${r.summary}</p>
                 ${r.pdf_url ? `
-                  <button onclick="getAnalystAISummary('${r.pdf_url}', '${r.brokerage}', ${i})" 
-                          class="mt-4 w-full bg-gradient-to-r from-blue-500 to-blue-600 text-white px-4 py-2 rounded-lg hover:from-blue-600 hover:to-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-150 ease-in-out flex items-center justify-center space-x-2 shadow-md hover:shadow-lg"
-                          id="ai-summary-btn-${i}">
-                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                      <path d="M10 12a2 2 0 100-4 2 2 0 000 4z"/>
-                      <path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd"/>
-                    </svg>
-                    <span>Get Full AI Summary</span>
-                  </button>
+                  <div class="mt-4 flex flex-col gap-2">
+                    <p class="text-xs text-slate-500 mb-1">Trendlyne blocks automated bot downloads. Please click "Download PDF" to save it manually, then click "Upload for AI Summary" to generate the insights.</p>
+                    <div class="flex gap-2">
+                      <a href="${r.pdf_url}" target="_blank" rel="noopener noreferrer" class="bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 px-4 py-2 rounded-lg flex items-center justify-center space-x-2 transition-all text-sm font-medium shadow-sm flex-1">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                        <span>1. Download PDF</span>
+                      </a>
+                      <button onclick="triggerAnalystPdfUpload('${r.brokerage}', ${i})" class="bg-gradient-to-r from-blue-500 to-blue-600 text-white px-4 py-2 rounded-lg hover:from-blue-600 hover:to-blue-700 focus:outline-none flex items-center justify-center space-x-2 transition-all text-sm font-medium shadow-sm flex-1" id="ai-summary-btn-${i}">
+                        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M5.5 13a3.5 3.5 0 01-.369-6.98 4 4 0 117.753-1.977A4.5 4.5 0 1113.5 13H11V9.413l1.293 1.293a1 1 0 001.414-1.414l-3-3a1 1 0 00-1.414 0l-3 3a1 1 0 001.414 1.414L9 9.414V13H5.5z"></path></svg>
+                        <span>2. Upload for AI Summary</span>
+                      </button>
+                    </div>
+                  </div>
                   <div id="ai-summary-${i}" class="hidden mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg"></div>
                 ` : ''}
               </div>`;
@@ -4748,39 +4752,51 @@
           document.querySelectorAll('.analyst-panel').forEach((p, i) => p.classList.toggle('active', i === index));
         };
 
-        // AI Summary function for Analyst Reports with caching
+        // AI Summary upload logic
         const summaryCache = new Map(); // Cache for storing generated summaries
 
-        window.getAnalystAISummary = async function (pdfUrl, brokerage, index) {
+        window.triggerAnalystPdfUpload = function(brokerage, index) {
+          const input = document.createElement('input');
+          input.type = 'file';
+          input.accept = 'application/pdf';
+          input.onchange = e => {
+            if (e.target.files.length > 0) {
+              processAnalystPdfUpload(e.target.files[0], brokerage, index);
+            }
+          };
+          input.click();
+        };
+
+        window.processAnalystPdfUpload = async function (file, brokerage, index) {
           const btn = document.getElementById(`ai-summary-btn-${index}`);
-          const summaryDiv = document.getElementById(`ai-summary-${index}`);
 
-          // Check if summary is already cached
-          if (summaryCache.has(pdfUrl)) {
-            console.log('Using cached summary for', pdfUrl);
-
-
-            // Get cached data and show in modal
-            const cached = summaryCache.get(pdfUrl);
-            openAISummaryModal(cached.brokerage, cached.html, pdfUrl);
-            return; // Don't fetch again
+          // Create a unique key for the file to cache
+          const cacheKey = file.name + file.size;
+          if (summaryCache.has(cacheKey)) {
+            const cached = summaryCache.get(cacheKey);
+            openAISummaryModal(cached.brokerage, cached.html, null);
+            return;
           }
 
           // Show loading state
+          const originalBtnHtml = btn.innerHTML;
           btn.disabled = true;
           btn.innerHTML = `
             <svg class="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
               <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
               <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
             </svg>
-            <span>Generating AI Summary...</span>
+            <span>Analyzing PDF...</span>
           `;
 
           try {
-            const response = await fetch('/summarize-analyst-pdf', {
+            const formData = new FormData();
+            formData.append('pdf', file);
+            formData.append('brokerage', brokerage);
+
+            const response = await fetch('/upload-analyst-pdf', {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ pdf_url: pdfUrl })
+              body: formData // Note: FormData automatically sets the correct multipart/form-data boundary
             });
 
             const data = await response.json();
@@ -4789,31 +4805,16 @@
 
             // Show summary in modal
             const { html } = renderMarkdownToHtml(data.summary, false);
-            openAISummaryModal(brokerage, html, pdfUrl);
+            openAISummaryModal(brokerage, html, null); // null for pdfUrl since user already has it
 
-            // Cache the summary for instant re-display
-            summaryCache.set(pdfUrl, { html, brokerage });
-            console.log('Cached summary for', pdfUrl);
+            // Cache the summary
+            summaryCache.set(cacheKey, { html, brokerage });
 
             // Reset button
-            btn.innerHTML = `
-              <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                <path d="M10 12a2 2 0 100-4 2 2 0 000 4z"/>
-                <path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd"/>
-              </svg>
-              <span>Get Full AI Summary</span>
-            `;
+            btn.innerHTML = originalBtnHtml;
             btn.disabled = false;
 
           } catch (error) {
-            btn.innerHTML = `
-              <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
-              </svg>
-              <span>Try Again</span>
-            `;
-            btn.disabled = false;
-
             alert(`Error: ${error.message}`);
           }
         };

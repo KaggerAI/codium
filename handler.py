@@ -4130,6 +4130,184 @@ def summarize_analyst_pdf():
         return jsonify({'error': error_msg}), 500
 
 
+@app.route('/upload-analyst-pdf', methods=['POST'])
+def upload_analyst_pdf():
+    """
+    Endpoint to receive uploaded analyst PDF and summarize it via Gemini.
+    Bypasses Trendlyne's Azure IP block by using user-uploaded files.
+    """
+    try:
+        if 'pdf' not in request.files:
+            return jsonify({'error': 'No PDF file uploaded'}), 400
+            
+        pdf_file = request.files['pdf']
+        brokerage = request.form.get('brokerage', 'Broker')
+        
+        if pdf_file.filename == '':
+            return jsonify({'error': 'Empty file selected'}), 400
+            
+        log_progress(f"Processing uploaded analyst PDF from {brokerage}...")
+        
+        # Read file bytes
+        pdf_content = pdf_file.read()
+        
+        if not GOOGLE_API_KEY or not genai_client:
+            return jsonify({'error': 'Google API Key or client is not configured.'}), 500
+            
+        print("INFO: Uploading PDF to Gemini...")
+        
+        # Upload to Gemini
+        gemini_file = genai_client.files.upload(
+            file=BytesIO(pdf_content),
+            config=types.UploadFileConfig(
+                display_name=f"{brokerage}_report.pdf",
+                mime_type="application/pdf"
+            )
+        )
+        
+        prompt = """You are an expert financial analyst. Analyze this brokerage research report and provide a comprehensive, well-structured summary.
+
+**CRITICAL FORMATTING REQUIREMENTS:**
+- Use markdown tables for ALL financial data and metrics
+- Use headers (##, ###) for clear section organization
+- Use bullet points for lists
+- Use **bold** for important numbers and metrics
+- Use > blockquotes for key analyst opinions
+- For revenue, EBITDA, and PAT figures, use crores for INR and millions for USD. Make conversions where required.
+
+**Your output MUST include:**
+
+## 📊 Investment Snapshot
+
+| Metric | Value |
+|--------|-------|
+| **Recommendation** | BUY/SELL/HOLD |
+| **Target Price** | ₹XXX |
+| **Upside/Downside** | XX% |
+| **Time Horizon** | X months |
+| **Risk Rating** | Low/Medium/High |
+
+---
+
+## 💰 Financial Highlights
+
+Create a table with quarterly/annual financial metrics:
+
+| Period | Revenue (Cr) | EBITDA (Cr) | PAT (Cr) | Margins (%) | YoY Growth |
+|--------|--------------|-------------|----------|-------------|------------|
+| FY24 | | | | | |
+| FY25E | | | | | |
+
+**Key Ratios:**
+
+| Ratio | Current | Target | Industry Avg |
+|-------|---------|--------|--------------|
+| P/E | | | |
+| EV/EBITDA | | | |
+| ROE | | | |
+| ROCE | | | |
+
+---
+
+## 📈 Investment Thesis
+
+> **Main Rationale:** [Quote the analyst's core thesis]
+
+**Key Growth Drivers:**
+- Point 1
+- Point 2
+- Point 3
+
+**Catalysts for Re-rating:**
+1. Near-term catalyst
+2. Medium-term opportunity
+3. Long-term structural advantage
+
+---
+
+## 🏢 Business & Operational Updates
+
+- Recent performance highlights
+- New orders/contracts/products
+- Market share changes
+- Management guidance
+
+---
+
+## 🌐 Industry & Competition
+
+| Factor | Status | Impact |
+|--------|--------|--------|
+| Industry Growth | | Positive/Neutral/Negative |
+| Competitive Position | | Strong/Moderate/Weak |
+| Market Share Trend | | Gaining/Stable/Losing |
+
+**Key Industry Trends:**
+- Trend 1
+- Trend 2
+
+---
+
+## ⚠️ Key Risks
+
+| Risk | Probability | Impact | Mitigation |
+|------|------------|--------|------------|
+| Risk 1 | High/Med/Low | Revenue/Margin/Both | What company is doing |
+| Risk 2 | | | |
+
+---
+
+## 🎯 Valuation Analysis
+
+**Valuation Method:**
+- Primary method used (DCF/PE multiple/Sum of parts)
+- Key assumptions
+- Fair value derivation
+
+**Sensitivity Analysis** (if mentioned):
+- Best case scenario
+- Base case
+- Worst case
+
+---
+
+## 📝 Analyst's Final View
+
+> **Key Quote:** [Direct quote from analyst summary]
+
+**Investment Horizon:** X months/quarters
+**Confidence Level:** Based on analyst tone
+**Action:** Accumulate/Buy/Hold at current levels
+
+---
+
+**IMPORTANT:** Extract ACTUAL numbers from the PDF. If data is not available, write "Not disclosed". Use Indian number format (Crores, Lakhs) and ₹ symbol.
+"""
+        response = genai_client.models.generate_content(
+            model='gemini-3-flash-preview',
+            contents=[
+                types.Part.from_text(text=prompt),
+                gemini_file
+            ]
+        )
+        
+        # Cleanup
+        genai_client.files.delete(name=gemini_file.name)
+        
+        log_final_message("Analyst PDF summarized successfully from upload!")
+        
+        return jsonify({
+            'success': True,
+            'summary': response.text
+        })
+        
+    except Exception as e:
+        error_msg = f"Failed to summarize uploaded PDF: {str(e)}"
+        log_final_message(error_msg)
+        traceback.print_exc()
+        return jsonify({'error': error_msg}), 500
+
+
 # =====================================================================
 # ANALYST REPORTS PDF TEXT EXTRACTION (Background Task Support)
 # =====================================================================
