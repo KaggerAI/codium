@@ -4828,7 +4828,15 @@
                     </div>
                   </div>
                   <p class="text-slate-700 leading-relaxed font-medium bg-slate-50 p-4 rounded-lg border border-slate-200">${r.summary}</p>
-                  <div class="mt-4 pt-4 text-right">
+                  ${r.source_url ? `
+                  <div class="mt-3">
+                    <a href="${r.source_url}" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:text-blue-800 text-sm font-medium inline-flex items-center gap-1 hover:underline break-all">
+                      <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
+                      Source Link
+                    </a>
+                  </div>
+                  ` : ''}
+                  <div class="mt-4 pt-4 flex justify-end items-center border-t border-slate-100">
                     <button onclick="openGlobalSummaryModal(${i})" class="inline-flex items-center justify-center px-4 py-2 text-sm font-semibold text-white bg-gradient-to-r from-emerald-500 to-green-600 rounded shadow hover:from-emerald-600 hover:to-green-700 transition-all gap-2">
                       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
                       Read Report Summary

@@ -4350,7 +4350,7 @@ If no reports are found for any of these specific firms, return an empty array [
 Make sure target_price is a clean number string (no symbols, just the value like "2400"). Ensure the JSON is perfectly valid.
 For "summary", provide a crisp 2-3 sentence overview.
 For "detailed_summary", provide a comprehensive 2-3 paragraph detailed summary of the entire report's key thesis, rationale, drivers, and downside risks.
-For "source_citation_index", MUST output the integer index (1, 2, 3...) of the citation/source you used to find this report. You MUST NOT output a URL string."""
+For "source_citation_index", MUST output the integer index (1, 2, 3...) of the citation/source you used to find this report from the search results. You MUST NOT output a URL string."""
 
     try:
         messages = [{"role": "user", "content": prompt}]
@@ -4364,15 +4364,12 @@ For "source_citation_index", MUST output the integer index (1, 2, 3...) of the c
             return_citations=True
         )
         
-        # Clean up response text if it includes markdown formatting
+        # Clean up response text if it includes markdown formatting or conversational preamble
         cleaned_text = response_text.strip()
-        if cleaned_text.startswith("```json"):
-            cleaned_text = cleaned_text[7:]
-        if cleaned_text.startswith("```"):
-            cleaned_text = cleaned_text[3:]
-        if cleaned_text.endswith("```"):
-            cleaned_text = cleaned_text[:-3]
-        cleaned_text = cleaned_text.strip()
+        start_idx = cleaned_text.find('[')
+        end_idx = cleaned_text.rfind(']')
+        if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+            cleaned_text = cleaned_text[start_idx:end_idx+1]
         
         # Parse the JSON
         reports_data = json.loads(cleaned_text)
