@@ -4828,24 +4828,49 @@
                     </div>
                   </div>
                   <p class="text-slate-700 leading-relaxed font-medium bg-slate-50 p-4 rounded-lg border border-slate-200">${r.summary}</p>
-                  ${r.source_url ? `
-                    <div class="mt-4 pt-4 text-right">
-                      <a href="${r.source_url}" target="_blank" rel="noopener noreferrer" class="text-sm text-blue-600 hover:text-blue-800 font-medium inline-flex items-center gap-1 hover:underline">
-                        Read Source Article 
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
-                      </a>
-                    </div>
-                  ` : ''}
+                  <div class="mt-4 pt-4 text-right">
+                    <button onclick="openGlobalSummaryModal(${i})" class="inline-flex items-center justify-center px-4 py-2 text-sm font-semibold text-white bg-gradient-to-r from-emerald-500 to-green-600 rounded shadow hover:from-emerald-600 hover:to-green-700 transition-all gap-2">
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                      Read Report Summary
+                    </button>
+                  </div>
                 </div>`;
             });
 
             tabsHtml += '</div>';
             container.innerHTML = tabsHtml + panelsHtml;
+            window.currentGlobalReports = data.reports;
 
           } catch (error) {
             container.innerHTML = `<p class="text-red-500 italic px-4 py-2 border border-red-200 rounded-lg bg-red-50">Error fetching global reports: ${error.message}</p>`;
             console.error(error);
           }
+        };
+
+        window.openGlobalSummaryModal = function(index) {
+          if (!window.currentGlobalReports || !window.currentGlobalReports[index]) return;
+          const r = window.currentGlobalReports[index];
+          let html = r.detailed_summary || r.summary || "No detailed summary available.";
+          
+          if (typeof renderMarkdownToHtml === 'function') {
+              html = renderMarkdownToHtml(html, false).html;
+          } else {
+              html = `<p>${html.replace(/\n/g, '<br>')}</p>`;
+          }
+          
+          if (r.source_url) {
+            html += `
+              <div class="mt-6 pt-4 border-t border-slate-200">
+                <p class="text-sm text-slate-500 mb-2 font-medium">Original Source Link:</p>
+                <a href="${r.source_url}" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:text-blue-800 font-medium inline-flex items-center gap-1 hover:underline break-all">
+                  ${r.source_url}
+                  <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
+                </a>
+              </div>
+            `;
+          }
+          
+          openAISummaryModal(r.brokerage, html, null);
         };
 
         // AI Summary upload logic

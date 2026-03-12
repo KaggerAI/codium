@@ -4342,11 +4342,14 @@ If no reports are found for any of these specific firms, return an empty array [
     "upside": "15%",
     "date": "15 Feb 2026",
     "summary": "Set a target of Rs. 1435 (15% upside). Expects 15% volume growth and margin recovery in upcoming quarters due to healthy order book of 2.5x FY25E revenue. Notes risk of rising crude prices to put stress on profitability.",
+    "detailed_summary": "In an extensive report, Morgan Stanley maintained their Overweight rating while highlighting three key drivers: 1) structural shift in demand... 2) margin expansion... and 3) declining capex intensity. They foresee the company re-rating significantly over the next two years. Key downside risks include rising crude prices.",
     "source_citation_index": 1
   }}
 ]
 
 Make sure target_price is a clean number string (no symbols, just the value like "2400"). Ensure the JSON is perfectly valid.
+For "summary", provide a crisp 2-3 sentence overview.
+For "detailed_summary", provide a comprehensive 2-3 paragraph detailed summary of the entire report's key thesis, rationale, drivers, and downside risks.
 For "source_citation_index", MUST output the integer index (1, 2, 3...) of the citation/source you used to find this report. You MUST NOT output a URL string."""
 
     try:
