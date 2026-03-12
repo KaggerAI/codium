@@ -128,24 +128,46 @@ async def fetch_analyst_reports_async(ticker: str) -> list[dict]:
                         response = None
                         break
                         
-        # --- PLAYWRIGHT FALLBACK ---
+        # --- PLAYWRIGHT FALLBACK (ENHANCED with stealth + wait_for_selector) ---
         if not html_content:
             log_progress(f"Using browser fallback for Trendlyne Analyst Reports: {ticker}...")
             from playwright.async_api import async_playwright
+            try:
+                from playwright_stealth import stealth_async
+            except ImportError:
+                stealth_async = None
             try:
                 async with async_playwright() as p:
                     browser = await p.chromium.launch(headless=True)
                     context = await browser.new_context(
                         user_agent=headers["User-Agent"],
-                        viewport={'width': 1920, 'height': 1080}
+                        viewport={'width': 1920, 'height': 1080},
+                        java_script_enabled=True,
                     )
                     page = await context.new_page()
-                    # Hit homepage first to grab cookies
+                    
+                    # Apply stealth to bypass fingerprint-based bot detection
+                    if stealth_async:
+                        await stealth_async(page)
+                    
+                    # Hit homepage first to establish cookies/session
                     await page.goto("https://trendlyne.com/", wait_until='domcontentloaded', timeout=30000)
                     await asyncio.sleep(1)
-                    # Now hit actual page
+                    
+                    # Navigate to the actual reports page
                     await page.goto(url, wait_until='networkidle', timeout=45000)
+                    
+                    # Wait for dynamically-loaded report panels (loaded via JS/AJAX after page load)
+                    try:
+                        await page.wait_for_selector('.panel-post', timeout=10000)
+                        print(f"DEBUG: Playwright found .panel-post elements for {ticker}")
+                    except Exception:
+                        # If no panels found after 10s, wait a bit more then grab whatever we have
+                        print(f"DEBUG: No .panel-post found after 10s for {ticker}, waiting 3s more...")
+                        await asyncio.sleep(3)
+                    
                     html_content = await page.content()
+                    print(f"DEBUG: Playwright fetched {len(html_content)} chars for {ticker}")
                     await browser.close()
             except Exception as pw_err:
                 print(f"ERROR: Playwright fallback failed for {ticker}: {pw_err}")
