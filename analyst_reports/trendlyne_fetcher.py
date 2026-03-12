@@ -128,7 +128,9 @@ async def fetch_analyst_reports_async(ticker: str) -> list[dict]:
                         response = None
                         break
                         
-        # --- PLAYWRIGHT FALLBACK (ENHANCED with stealth + wait_for_selector) ---
+        # --- PLAYWRIGHT FALLBACK (Chrome new-headless + stealth) ---
+        # Trendlyne uses CloudFront WAF which detects Playwright's default headless Chromium.
+        # Chrome's own headless mode (channel="chrome") + playwright-stealth bypasses this.
         if not html_content:
             log_progress(f"Using browser fallback for Trendlyne Analyst Reports: {ticker}...")
             from playwright.async_api import async_playwright
@@ -138,7 +140,25 @@ async def fetch_analyst_reports_async(ticker: str) -> list[dict]:
                 stealth_async = None
             try:
                 async with async_playwright() as p:
-                    browser = await p.chromium.launch(headless=True)
+                    # Try Chrome's new headless mode first (bypasses CloudFront WAF)
+                    # Fall back to default Chromium if Chrome isn't installed
+                    anti_detect_args = [
+                        "--disable-blink-features=AutomationControlled",
+                        "--no-sandbox",
+                    ]
+                    try:
+                        browser = await p.chromium.launch(
+                            headless=True,
+                            channel="chrome",
+                            args=anti_detect_args,
+                        )
+                    except Exception:
+                        print(f"DEBUG: Chrome not available, falling back to Chromium for {ticker}")
+                        browser = await p.chromium.launch(
+                            headless=True,
+                            args=anti_detect_args,
+                        )
+                    
                     context = await browser.new_context(
                         user_agent=headers["User-Agent"],
                         viewport={'width': 1920, 'height': 1080},
@@ -150,20 +170,16 @@ async def fetch_analyst_reports_async(ticker: str) -> list[dict]:
                     if stealth_async:
                         await stealth_async(page)
                     
-                    # Hit homepage first to establish cookies/session
-                    await page.goto("https://trendlyne.com/", wait_until='domcontentloaded', timeout=30000)
-                    await asyncio.sleep(1)
+                    # Navigate directly to the reports page
+                    resp = await page.goto(url, wait_until='domcontentloaded', timeout=45000)
+                    print(f"DEBUG: Trendlyne page status: {resp.status if resp else 'None'} for {ticker}")
                     
-                    # Navigate to the actual reports page
-                    await page.goto(url, wait_until='networkidle', timeout=45000)
-                    
-                    # Wait for dynamically-loaded report panels (loaded via JS/AJAX after page load)
+                    # Wait for dynamically-loaded report panels
                     try:
-                        await page.wait_for_selector('.panel-post', timeout=10000)
+                        await page.wait_for_selector('.panel-post', timeout=15000)
                         print(f"DEBUG: Playwright found .panel-post elements for {ticker}")
                     except Exception:
-                        # If no panels found after 10s, wait a bit more then grab whatever we have
-                        print(f"DEBUG: No .panel-post found after 10s for {ticker}, waiting 3s more...")
+                        print(f"DEBUG: No .panel-post found after 15s for {ticker}, waiting 3s more...")
                         await asyncio.sleep(3)
                     
                     html_content = await page.content()
