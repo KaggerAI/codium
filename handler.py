@@ -4342,21 +4342,23 @@ If no reports are found for any of these specific firms, return an empty array [
     "upside": "15%",
     "date": "15 Feb 2026",
     "summary": "Set a target of Rs. 1435 (15% upside). Expects 15% volume growth and margin recovery in upcoming quarters due to healthy order book of 2.5x FY25E revenue. Notes risk of rising crude prices to put stress on profitability.",
-    "source_url": "https://www.moneycontrol.com/..."
+    "source_citation_index": 1
   }}
 ]
 
-Make sure target_price is a clean number string (no symbols, just the value like "2400"). Ensure the JSON is perfectly valid."""
+Make sure target_price is a clean number string (no symbols, just the value like "2400"). Ensure the JSON is perfectly valid.
+For "source_citation_index", MUST output the integer index (1, 2, 3...) of the citation/source you used to find this report. You MUST NOT output a URL string."""
 
     try:
         messages = [{"role": "user", "content": prompt}]
         # Call Perplexity with Pro Search enabled to do deep research
-        response_text = call_perplexity_api(
+        response_text, citations = call_perplexity_api(
             messages, 
             model="sonar-pro", 
             temperature=0.2, 
             timeout=180, 
-            enable_pro_search=True
+            enable_pro_search=True,
+            return_citations=True
         )
         
         # Clean up response text if it includes markdown formatting
@@ -4375,8 +4377,18 @@ Make sure target_price is a clean number string (no symbols, just the value like
         if not isinstance(reports_data, list):
             raise ValueError("Perplexity did not return a JSON array.")
             
+        # Map citations back to URLs to prevent 404 hallucination
+        for report in reports_data:
+            idx = report.get('source_citation_index')
+            report['source_url'] = None
+            if isinstance(idx, int) and 1 <= idx <= len(citations):
+                report['source_url'] = citations[idx - 1]
+            elif citations:
+                # Fallback to the first citation if index is invalid but citations exist
+                report['source_url'] = citations[0]
+            
         log_progress(f"Found {len(reports_data)} global analyst reports for {ticker}.")
-        return jsonify({'reports': reports_data})
+        return jsonify({'reports': reports_data, 'citations': citations})
         
     except json.JSONDecodeError as e:
         print(f"ERROR parsing JSON from Perplexity for global reports: {e}\nRaw response: {response_text}")
@@ -4491,7 +4503,7 @@ def call_openai_api(messages, model="gpt-5-mini", expect_json_format_flag=False,
         print(f"ERROR in call_openai_api: {e}")
         raise
 
-def call_perplexity_api(messages, model="sonar-pro", temperature=1, timeout=120, use_streaming=False, enable_pro_search=False, progress_callback=None):
+def call_perplexity_api(messages, model="sonar-pro", temperature=1, timeout=120, use_streaming=False, enable_pro_search=False, progress_callback=None, return_citations=False):
     """
     Call Perplexity API with optional streaming support and Pro Search.
     Streaming keeps the connection alive for long-running requests (Azure compatibility).
@@ -4499,6 +4511,7 @@ def call_perplexity_api(messages, model="sonar-pro", temperature=1, timeout=120,
     
     Args:
         progress_callback: Optional function(elapsed_seconds, bytes_received) called every 20s during streaming
+        return_citations: If True, returns a tuple of (content, citations_list) in non-streaming mode.
     
     Enhanced with robust error handling and debug logging for Industry Research.
     """
@@ -4628,8 +4641,12 @@ def call_perplexity_api(messages, model="sonar-pro", temperature=1, timeout=120,
             response.raise_for_status()
             
             if response.content.strip():
-                content = response.json()['choices'][0]['message']['content']
-                print(f"API_DEBUG: Non-streaming response received, length: {len(content)}", file=sys.stderr)
+                resp_json = response.json()
+                content = resp_json['choices'][0]['message']['content']
+                citations = resp_json.get('citations', [])
+                print(f"API_DEBUG: Non-streaming response received, length: {len(content)}, citations: {len(citations)}", file=sys.stderr)
+                if return_citations:
+                    return content, citations
                 return content
             else:
                 raise ValueError("Empty response from Perplexity API")
