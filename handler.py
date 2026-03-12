@@ -1142,7 +1142,7 @@ def _run_blog_generation(job_id, topic, article_type):
 
         shared_data = """DATA, QUOTES & EXPERTISE (THIS IS THE BACKBONE OF THE ARTICLE):
 - The article's credibility comes from DATA, not from clever wordplay. Every major claim MUST be backed by a specific number, a named source, or a verifiable fact.
-- Actively search for and cite data from: company annual reports/filings, earnings call transcripts, analyst reports (Goldman Sachs, Morgan Stanley, Jefferies, etc.), industry research (McKinsey, Gartner, BCG, Bain, CRISIL, ICRA), government data/policy documents, and credible news sources.
+- Actively search for and cite data from: company annual reports/filings, earnings call transcripts, analyst reports (Motilal Oswal, HDFC Securities, CLSA, Nuvama, Goldman Sachs, Morgan Stanley, Jefferies, ICICI Securties, Ambit Capital, etc.), industry research (Nielsen India, Kantar India, Ipsos India, NASSCOM, FICCI, IBEF, CMIE, McKinsey, Gartner, BCG, Bain, CRISIL, ICRA), government data/policy documents, and credible news sources.
 - Interweave direct quotes from CEOs, CFOs, industry analysts, or domain experts. Name the person and their role (e.g., 'As Satya Nadella told investors on Microsoft's Q3 earnings call...').
 - Make data tell the story. Instead of vague claims like 'the market is growing rapidly', write 'India's data centre capacity hit 1,100 MW in 2025, up from just 450 MW in 2020, according to JLL's latest India Data Centre Report.'
 - Include at least 5-8 specific data points from reputed sources throughout the article."""
@@ -1176,7 +1176,8 @@ Now, execute your search and write the article."""
 Your task is to write a highly engaging, long-form "Needle in a Haystack" article. The admin has provided a topic describing a regulatory, economic, demographic, or structural change. Your job is to:
 1. Research the change/event/trend deeply using web search.
 2. Identify the RARE company (or rare few companies) — the "needle" — that stands to benefit the MOST from this change. These should NOT be the obvious large-cap names everyone already knows. Dig deeper. Find the under-the-radar, mid-cap, or small-cap plays that have a structural edge.
-3. Build a compelling narrative around WHY these specific companies are uniquely positioned.
+3. Actively search for and cite data from: company annual reports/filings, earnings call transcripts, analyst reports (Motilal Oswal, HDFC Securities, CLSA, Nuvama, Goldman Sachs, Morgan Stanley, Jefferies, ICICI Securties, Ambit Capital, etc.), industry research (Nielsen India, Kantar India, Ipsos India, NASSCOM, FICCI, IBEF, CMIE, McKinsey, Gartner, BCG, Bain, CRISIL, ICRA), government data/policy documents, and credible news sources.
+4. Build a compelling narrative around WHY these specific companies are uniquely positioned.
 
 STEP 1: AUTONOMOUS RESEARCH
 Before you begin writing, use your web search capabilities to fetch the most recent and relevant news, financial data, policy documents, and deep-dive analyses on this topic. Research which companies (especially lesser-known ones) have the most exposure to this change.
@@ -1205,7 +1206,9 @@ Using the real-world data you just fetched, write the article following these st
         elif article_type == 'informative':
             instructions = f"""Act as a seasoned, authoritative, and deeply knowledgeable senior feature writer for a premium, new-age business publication (think a blend of 'The Ken', 'Bloomberg Businessweek', and 'YourStory'). You also have access to real-time web search capabilities.
 
-Your task is to write a highly informative, comprehensive, and data-dense long-form article about the topic provided. This is an INFORMATIVE article — no fluff, no flights of fantasy, no speculative scenarios. Every paragraph must add tangible information or insight.
+Your task is to write a highly informative, comprehensive, and data-dense long-form article about the topic provided. This is an INFORMATIVE article — no fluff, no flights of fantasy, no speculative scenarios. Every paragraph must add tangible information or insight. 
+Actively search for and cite data from: company annual reports/filings, earnings call transcripts, analyst reports (Motilal Oswal, HDFC Securities, CLSA, Nuvama, Goldman Sachs, Morgan Stanley, Jefferies, ICICI Securties, Ambit Capital, etc.), industry research (Nielsen India, Kantar India, Ipsos India, NASSCOM, FICCI, IBEF, CMIE, McKinsey, Gartner, BCG, Bain, CRISIL, ICRA), government data/policy documents, and credible news sources.
+
 
 
 STEP 1: AUTONOMOUS RESEARCH
@@ -1241,6 +1244,8 @@ THINK DEEPLY: You must use the highest level of reasoning effort to critically a
 
 STEP 1: AUTONOMOUS RESEARCH
 Before you begin writing, use your web search capabilities to fetch the most recent and relevant news, financial data, and deep-dive analyses on this topic. You do not need to print out your research notes—simply use the data you find to construct the narrative. 
+Actively search for and cite data from: company annual reports/filings, earnings call transcripts, analyst reports (Motilal Oswal, HDFC Securities, CLSA, Nuvama, Goldman Sachs, Morgan Stanley, Jefferies, ICICI Securties, Ambit Capital, etc.), industry research (Nielsen India, Kantar India, Ipsos India, NASSCOM, FICCI, IBEF, CMIE, McKinsey, Gartner, BCG, Bain, CRISIL, ICRA), government data/policy documents, and credible news sources.
+
 
 STEP 2: DRAFT THE ARTICLE
 Using the real-world data you just fetched, write the article following these strict editorial guidelines:
@@ -1293,9 +1298,11 @@ Using the real-world data you just fetched, write the article following these st
         BLOG_GENERATION_JOBS[job_id]['phase'] = 'checker'
         
         checker_prompt = f"""You are the sharp, rigorous, and brilliant Investigative Head Editor for our premium business publication (think the absolute best editors at 'The Ken' or 'Bloomberg Businessweek'). 
-You have Google Search grounding enabled.
+You have Google Search grounding enabled. 
 
 One of your senior reporters has just submitted a draft blog post on the topic: "{topic}".
+Before proceeding with editing, actively search for data from: company annual reports/filings, earnings call transcripts, analyst reports (Motilal Oswal, HDFC Securities, CLSA, Nuvama, Goldman Sachs, Morgan Stanley, Jefferies, ICICI Securties, Ambit Capital, etc.), industry research (Nielsen India, Kantar India, Ipsos India, NASSCOM, FICCI, IBEF, CMIE, McKinsey, Gartner, BCG, Bain, CRISIL, ICRA), government data/policy documents, and credible news sources, to bolster the article with real-world data and expert insights.
+
 
 Here are the exact editorial guidelines the reporter was given to write this piece. You must understand the spirit, tone, narrative styling, and structure of what we want, and enforce it:
 ---
@@ -4322,7 +4329,7 @@ def api_global_analyst_reports():
         
     log_progress(f"Fetching Global Research for {ticker} using AI search...")
     
-    prompt = f"""Search the web for the latest equity research analyst reports published in the last 6 months for the Indian stock {company_name} ({ticker}) specifically by these global research houses ONLY: Jefferies, CLSA, Nomura, Morgan Stanley, Goldman Sachs, Citigroup, Macquarie, UBS, and BofA Securities.
+    prompt = f"""Search the web for the latest equity research analyst reports published in the last 6 months for the Indian stock {company_name} ({ticker}) specifically by these global research houses ONLY: Jefferies, CLSA, Nomura, Morgan Stanley, Goldman Sachs, Citigroup, Macquarie, UBS, Nuvama, Bernstein, and BofA Securities.
 
 Return the results ONLY as a valid JSON array of objects. Do not include markdown formatting like ```json or explanations outside the JSON array.
 If no reports are found for any of these specific firms, return an empty array [].
@@ -4334,7 +4341,7 @@ If no reports are found for any of these specific firms, return an empty array [
     "target_price": "2400",
     "upside": "15%",
     "date": "15 Feb 2026",
-    "summary": "Expects strong volume recovery and margin expansion in upcoming quarters.",
+    "summary": "Set a target of Rs. 1435 (15% upside). Expects 15% volume growth and margin recovery in upcoming quarters due to healthy order book of 2.5x FY25E revenue. Notes risk of rising crude prices to put stress on profitability.",
     "source_url": "https://www.moneycontrol.com/..."
   }}
 ]
@@ -4511,7 +4518,8 @@ def call_perplexity_api(messages, model="sonar-pro", temperature=1, timeout=120,
         # Enable Pro Search for better research capabilities
         if enable_pro_search:
             payload["web_search_options"] = {
-                "search_type": "pro"  # Enables multi-step reasoning and deeper search
+                "search_type": "pro",  # Enables multi-step reasoning and deeper search
+                "search_context_size": "high"  # Use High mode for comprehensive research
             }
         
         # Enable streaming for long-running models
