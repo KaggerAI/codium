@@ -7,21 +7,21 @@
     <title>My Portfolio — Kagger.AI</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         * {
             font-family: 'Inter', sans-serif;
         }
 
         body {
-            background: #0f172a;
+            background: #0a0e1a;
             color: #e2e8f0;
             min-height: 100vh;
         }
 
         /* Nav */
         .nav-bar {
-            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            background: linear-gradient(135deg, #0a0e1a 0%, #131b2e 100%);
             border-bottom: 1px solid rgba(255, 255, 255, 0.08);
         }
 
@@ -727,6 +727,272 @@
             justify-content: center;
             font-size: 1.5rem;
         }
+
+        /* ============== TERMINAL ENHANCEMENTS ============== */
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
+
+        /* Terminal Header */
+        .terminal-header {
+            background: linear-gradient(180deg, rgba(10, 14, 26, 0.98) 0%, rgba(13, 18, 30, 0.95) 100%);
+            border-bottom: 1px solid rgba(34, 197, 94, 0.12);
+            padding: 0.75rem 0;
+        }
+        .terminal-brand {
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 700;
+            font-size: 1.1rem;
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            color: #22c55e;
+            text-shadow: 0 0 20px rgba(34, 197, 94, 0.3);
+        }
+        .terminal-clock {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            color: #64748b;
+            letter-spacing: 0.05em;
+        }
+        .market-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.65rem;
+            font-weight: 600;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            padding: 0.25rem 0.6rem;
+            border-radius: 6px;
+        }
+        .market-status.open {
+            color: #4ade80;
+            background: rgba(34, 197, 94, 0.1);
+            border: 1px solid rgba(34, 197, 94, 0.2);
+        }
+        .market-status.closed {
+            color: #f87171;
+            background: rgba(239, 68, 68, 0.08);
+            border: 1px solid rgba(239, 68, 68, 0.15);
+        }
+        .status-dot {
+            width: 6px; height: 6px;
+            border-radius: 50%;
+        }
+        .status-dot.open {
+            background: #4ade80;
+            box-shadow: 0 0 6px rgba(74, 222, 128, 0.6);
+            animation: statusPulse 2s infinite;
+        }
+        .status-dot.closed {
+            background: #f87171;
+        }
+        @keyframes statusPulse {
+            0%, 100% { opacity: 1; box-shadow: 0 0 6px rgba(74, 222, 128, 0.6); }
+            50% { opacity: 0.5; box-shadow: 0 0 3px rgba(74, 222, 128, 0.3); }
+        }
+
+        /* Ticker Tape */
+        .ticker-tape {
+            background: rgba(10, 14, 26, 0.95);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+            border-top: 1px solid rgba(255, 255, 255, 0.04);
+            overflow: hidden;
+            white-space: nowrap;
+            position: relative;
+        }
+        .ticker-tape::before, .ticker-tape::after {
+            content: '';
+            position: absolute;
+            top: 0; bottom: 0;
+            width: 60px;
+            z-index: 2;
+            pointer-events: none;
+        }
+        .ticker-tape::before {
+            left: 0;
+            background: linear-gradient(90deg, #0a0e1a, transparent);
+        }
+        .ticker-tape::after {
+            right: 0;
+            background: linear-gradient(270deg, #0a0e1a, transparent);
+        }
+        .ticker-track {
+            display: inline-flex;
+            animation: tickerScroll 40s linear infinite;
+        }
+        .ticker-track:hover {
+            animation-play-state: paused;
+        }
+        .ticker-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 0.4rem 1.2rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.7rem;
+            font-weight: 500;
+            border-right: 1px solid rgba(255, 255, 255, 0.04);
+            cursor: default;
+            transition: background 0.15s;
+        }
+        .ticker-item:hover {
+            background: rgba(255, 255, 255, 0.03);
+        }
+        .ticker-sym {
+            color: #e2e8f0;
+            font-weight: 600;
+        }
+        .ticker-price {
+            color: #94a3b8;
+        }
+        @keyframes tickerScroll {
+            from { transform: translateX(0); }
+            to { transform: translateX(-50%); }
+        }
+
+        /* Hero Section */
+        .hero-value-card {
+            background: linear-gradient(135deg, rgba(13, 18, 30, 0.95) 0%, rgba(20, 30, 50, 0.9) 100%);
+            border: 1px solid rgba(34, 197, 94, 0.1);
+            border-radius: 16px;
+            position: relative;
+            overflow: hidden;
+        }
+        .hero-value-card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, #22c55e, transparent);
+            opacity: 0.6;
+        }
+        .hero-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 2.25rem;
+            font-weight: 700;
+            color: #ffffff;
+            letter-spacing: -0.02em;
+        }
+        .hero-change {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1rem;
+            font-weight: 600;
+        }
+        .hero-label {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.6rem;
+            font-weight: 600;
+            color: #475569;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+        }
+        .hero-metric {
+            text-align: center;
+            padding: 0.75rem 1.25rem;
+        }
+        .hero-metric-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: #e2e8f0;
+        }
+        .hero-metric-label {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.55rem;
+            color: #475569;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            margin-top: 2px;
+        }
+        .hero-divider {
+            width: 1px;
+            align-self: stretch;
+            background: rgba(255, 255, 255, 0.06);
+        }
+
+        /* Semi-circular Gauge */
+        .gauge-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.25rem;
+        }
+        .gauge-svg {
+            overflow: visible;
+        }
+
+        /* Glowing card hover effect */
+        .glass-card:hover, .glass-card-bright:hover {
+            border-color: rgba(34, 197, 94, 0.12);
+            box-shadow: 0 0 20px rgba(34, 197, 94, 0.04);
+        }
+
+        /* Scan-line table effect */
+        .holdings-table tbody tr:nth-child(even) {
+            background: rgba(255, 255, 255, 0.01);
+        }
+
+        /* Monospaced number styling */
+        .num-mono {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* Performance Chart */
+        .perf-chart-container {
+            position: relative;
+        }
+        .perf-timeframe-btns {
+            display: flex;
+            gap: 0.25rem;
+        }
+        .perf-timeframe-btn {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.65rem;
+            font-weight: 600;
+            letter-spacing: 0.05em;
+            padding: 0.3rem 0.6rem;
+            border-radius: 6px;
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            background: transparent;
+            color: #64748b;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .perf-timeframe-btn:hover {
+            border-color: rgba(34, 197, 94, 0.2);
+            color: #94a3b8;
+        }
+        .perf-timeframe-btn.active {
+            border-color: rgba(34, 197, 94, 0.3);
+            background: rgba(34, 197, 94, 0.08);
+            color: #22c55e;
+        }
+
+        /* Staggered animations */
+        .stagger-1 { animation-delay: 0.05s; }
+        .stagger-2 { animation-delay: 0.1s; }
+        .stagger-3 { animation-delay: 0.15s; }
+        .stagger-4 { animation-delay: 0.2s; }
+        .stagger-5 { animation-delay: 0.25s; }
+        .stagger-6 { animation-delay: 0.3s; }
+        .stagger-7 { animation-delay: 0.35s; }
+
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(12px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .fade-in-up {
+            animation: fadeInUp 0.5s ease-out both;
+        }
+
+        /* Count-up number animation */
+        @keyframes countPulse {
+            0% { opacity: 0.5; transform: scale(0.95); }
+            100% { opacity: 1; transform: scale(1); }
+        }
+        .count-up-anim {
+            animation: countPulse 0.3s ease-out;
+        }
     </style>
 </head>
 
@@ -752,14 +1018,33 @@
         </div>
     </nav>
 
+    <!-- ==================== TERMINAL HEADER ==================== -->
+    <div class="terminal-header">
+        <div class="max-w-[90rem] mx-auto px-4 sm:px-6 flex items-center justify-between">
+            <div class="flex items-center gap-4">
+                <span class="terminal-brand">Kagger Terminal</span>
+                <div id="marketStatusBadge" class="market-status closed">
+                    <span id="marketStatusDot" class="status-dot closed"></span>
+                    <span id="marketStatusText">MARKET CLOSED</span>
+                </div>
+            </div>
+            <div class="flex items-center gap-4">
+                <span id="terminalClock" class="terminal-clock">--:--:-- IST</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== TICKER TAPE ==================== -->
+    <div id="tickerTapeContainer" class="ticker-tape" style="display:none;">
+        <div id="tickerTrack" class="ticker-track"></div>
+    </div>
+
     <!-- ==================== MAIN CONTENT ==================== -->
-    <main class="max-w-[90rem] mx-auto px-4 sm:px-6 py-8">
+    <main class="max-w-[90rem] mx-auto px-4 sm:px-6 py-6">
 
         <!-- Header -->
-        <div class="mb-8 fade-in">
-            <h1 class="text-3xl font-extrabold text-white mb-1">My Portfolio</h1>
-            <p class="text-slate-400 text-sm">Track your holdings, monitor performance, and analyze your portfolio
-                health.</p>
+        <div class="mb-6 fade-in">
+            <p class="text-slate-500 text-sm font-mono">Track holdings · Monitor performance · Analyze risk</p>
         </div>
 
         <!-- ==================== TAB NAVIGATION ==================== -->
@@ -781,29 +1066,51 @@
         <!-- ==================== TAB: PORTFOLIO SUMMARY ==================== -->
         <div id="tabSummary">
 
-            <!-- ==================== SUMMARY CARDS ==================== -->
-            <div id="summarySection" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8" style="display:none;">
-                <div id="cardInvested" class="stat-card fade-in">
-                    <p class="text-xs text-slate-400 mb-1 uppercase tracking-wider">Total Invested</p>
-                    <p id="totalInvested" class="text-xl font-bold text-white">—</p>
-                </div>
-                <div id="cardCurrent" class="stat-card fade-in">
-                    <p class="text-xs text-slate-400 mb-1 uppercase tracking-wider">Current Value</p>
-                    <p id="totalCurrent" class="text-xl font-bold text-white">—</p>
-                </div>
-                <div id="cardPnl" class="stat-card fade-in">
-                    <p class="text-xs text-slate-400 mb-1 uppercase tracking-wider">Total P&L</p>
-                    <p id="totalPnl" class="text-xl font-bold">—</p>
-                    <p id="totalPnlPct" class="text-xs mt-0.5">—</p>
-                </div>
-                <div id="cardHoldings" class="stat-card fade-in">
-                    <p class="text-xs text-slate-400 mb-1 uppercase tracking-wider">Holdings</p>
-                    <p id="holdingCount" class="text-xl font-bold text-white">—</p>
+            <!-- ==================== HERO VALUE SECTION ==================== -->
+            <div id="summarySection" class="mb-8 fade-in-up" style="display:none;">
+                <div class="hero-value-card p-6">
+                    <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-4">
+                        <div>
+                            <p class="hero-label mb-1">Portfolio Value</p>
+                            <p id="totalCurrent" class="hero-value">—</p>
+                            <div class="flex items-center gap-3 mt-1">
+                                <span id="totalPnl" class="hero-change text-green-400">—</span>
+                                <span id="totalPnlPct" class="hero-change text-green-400" style="font-size:0.85rem;">—</span>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Compact metrics strip -->
+                    <div class="flex items-center justify-start gap-0 overflow-x-auto border-t border-white/5 pt-3 -mx-2">
+                        <div class="hero-metric">
+                            <div id="totalInvested" class="hero-metric-value">—</div>
+                            <div class="hero-metric-label">Invested</div>
+                        </div>
+                        <div class="hero-divider"></div>
+                        <div class="hero-metric">
+                            <div id="holdingCount" class="hero-metric-value">—</div>
+                            <div class="hero-metric-label">Holdings</div>
+                        </div>
+                        <div class="hero-divider"></div>
+                        <div class="hero-metric">
+                            <div id="heroDayChange" class="hero-metric-value">—</div>
+                            <div class="hero-metric-label">Day Change</div>
+                        </div>
+                        <div class="hero-divider"></div>
+                        <div class="hero-metric">
+                            <div id="heroBeta" class="hero-metric-value">—</div>
+                            <div class="hero-metric-label">Beta</div>
+                        </div>
+                        <div class="hero-divider"></div>
+                        <div class="hero-metric">
+                            <div id="heroAlpha" class="hero-metric-value">—</div>
+                            <div class="hero-metric-label">Alpha</div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            <!-- ==================== PORTFOLIO HEALTH ==================== -->
-            <div id="portfolioHealthSection" class="mb-8 fade-in" style="display:none;">
+            <!-- ==================== PORTFOLIO HEALTH (GAUGES) ==================== -->
+            <div id="portfolioHealthSection" class="mb-8 fade-in-up stagger-2" style="display:none;">
                 <div class="flex items-center gap-2 mb-4">
                     <svg class="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -813,49 +1120,61 @@
                     <span class="text-xs text-slate-500 ml-2">Key risk & return metrics</span>
                 </div>
                 <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <!-- Beta -->
+                    <!-- Beta Gauge -->
                     <div class="glass-card p-4 relative">
-                        <div class="flex items-center justify-between mb-1">
-                            <p class="text-xs text-slate-400 uppercase tracking-wider">Portfolio Beta</p>
+                        <div class="flex items-center justify-between mb-2">
+                            <p class="text-xs text-slate-400 uppercase tracking-wider font-mono">Portfolio Beta</p>
                             <button onclick="showMetricInfo(this, 'beta')"
                                 class="w-5 h-5 rounded-full bg-slate-700 hover:bg-slate-600 text-slate-400 hover:text-white text-xs flex items-center justify-center transition-colors"
                                 title="What is Beta?">i</button>
                         </div>
-                        <p id="metricBeta" class="text-2xl font-bold text-white">—</p>
-                        <p id="metricBetaLabel" class="text-xs text-slate-500 mt-0.5"></p>
+                        <div class="gauge-container">
+                            <svg id="gaugeBeta" class="gauge-svg" width="120" height="68" viewBox="0 0 120 68"></svg>
+                            <p id="metricBeta" class="text-lg font-bold text-white font-mono" style="margin-top:-8px;">—</p>
+                        </div>
+                        <p id="metricBetaLabel" class="text-xs text-slate-500 mt-1 text-center"></p>
                     </div>
-                    <!-- Alpha -->
+                    <!-- Alpha Gauge -->
                     <div class="glass-card p-4 relative">
-                        <div class="flex items-center justify-between mb-1">
-                            <p class="text-xs text-slate-400 uppercase tracking-wider">Alpha (CAPM)</p>
+                        <div class="flex items-center justify-between mb-2">
+                            <p class="text-xs text-slate-400 uppercase tracking-wider font-mono">Alpha (CAPM)</p>
                             <button onclick="showMetricInfo(this, 'alpha')"
                                 class="w-5 h-5 rounded-full bg-slate-700 hover:bg-slate-600 text-slate-400 hover:text-white text-xs flex items-center justify-center transition-colors"
                                 title="What is Alpha?">i</button>
                         </div>
-                        <p id="metricAlpha" class="text-2xl font-bold text-white">—</p>
-                        <p id="metricAlphaLabel" class="text-xs text-slate-500 mt-0.5"></p>
+                        <div class="gauge-container">
+                            <svg id="gaugeAlpha" class="gauge-svg" width="120" height="68" viewBox="0 0 120 68"></svg>
+                            <p id="metricAlpha" class="text-lg font-bold text-white font-mono" style="margin-top:-8px;">—</p>
+                        </div>
+                        <p id="metricAlphaLabel" class="text-xs text-slate-500 mt-1 text-center"></p>
                     </div>
-                    <!-- NIFTY Comparison -->
+                    <!-- NIFTY Comparison Gauge -->
                     <div class="glass-card p-4 relative">
-                        <div class="flex items-center justify-between mb-1">
-                            <p class="text-xs text-slate-400 uppercase tracking-wider">vs NIFTY 50</p>
+                        <div class="flex items-center justify-between mb-2">
+                            <p class="text-xs text-slate-400 uppercase tracking-wider font-mono">vs NIFTY 50</p>
                             <button onclick="showMetricInfo(this, 'nifty')"
                                 class="w-5 h-5 rounded-full bg-slate-700 hover:bg-slate-600 text-slate-400 hover:text-white text-xs flex items-center justify-center transition-colors"
                                 title="Portfolio vs NIFTY">i</button>
                         </div>
-                        <p id="metricNifty" class="text-2xl font-bold text-white">—</p>
-                        <p id="metricNiftyLabel" class="text-xs text-slate-500 mt-0.5"></p>
+                        <div class="gauge-container">
+                            <svg id="gaugeNifty" class="gauge-svg" width="120" height="68" viewBox="0 0 120 68"></svg>
+                            <p id="metricNifty" class="text-lg font-bold text-white font-mono" style="margin-top:-8px;">—</p>
+                        </div>
+                        <p id="metricNiftyLabel" class="text-xs text-slate-500 mt-1 text-center"></p>
                     </div>
-                    <!-- Diversification -->
+                    <!-- Diversification Gauge -->
                     <div class="glass-card p-4 relative">
-                        <div class="flex items-center justify-between mb-1">
-                            <p class="text-xs text-slate-400 uppercase tracking-wider">Diversification</p>
+                        <div class="flex items-center justify-between mb-2">
+                            <p class="text-xs text-slate-400 uppercase tracking-wider font-mono">Diversification</p>
                             <button onclick="showMetricInfo(this, 'diversification')"
                                 class="w-5 h-5 rounded-full bg-slate-700 hover:bg-slate-600 text-slate-400 hover:text-white text-xs flex items-center justify-center transition-colors"
                                 title="Diversification Score">i</button>
                         </div>
-                        <p id="metricDiversification" class="text-2xl font-bold text-white">—</p>
-                        <p id="metricDivLabel" class="text-xs text-slate-500 mt-0.5"></p>
+                        <div class="gauge-container">
+                            <svg id="gaugeDiversification" class="gauge-svg" width="120" height="68" viewBox="0 0 120 68"></svg>
+                            <p id="metricDiversification" class="text-lg font-bold text-white font-mono" style="margin-top:-8px;">—</p>
+                        </div>
+                        <p id="metricDivLabel" class="text-xs text-slate-500 mt-1 text-center"></p>
                     </div>
                 </div>
             </div>
@@ -956,6 +1275,27 @@
                         <tbody id="holdingsTableBody"></tbody>
                     </table>
                 </div>
+            </div>
+
+            <!-- ==================== PERFORMANCE CHART ==================== -->
+            <div id="perfChartSection" class="glass-card p-6 mb-8 fade-in-up stagger-4" style="display:none;">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-base font-semibold text-white flex items-center gap-2">
+                        <svg class="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
+                        </svg>
+                        Performance vs NIFTY 50
+                    </h2>
+                    <div class="perf-timeframe-btns">
+                        <button class="perf-timeframe-btn" onclick="loadPerfChart('1W')">1W</button>
+                        <button class="perf-timeframe-btn" onclick="loadPerfChart('1M')">1M</button>
+                        <button class="perf-timeframe-btn active" onclick="loadPerfChart('3M')">3M</button>
+                        <button class="perf-timeframe-btn" onclick="loadPerfChart('6M')">6M</button>
+                        <button class="perf-timeframe-btn" onclick="loadPerfChart('1Y')">1Y</button>
+                    </div>
+                </div>
+                <div id="perfChart" style="height: 300px;"></div>
             </div>
 
             <!-- ==================== DASHBOARD GRID ==================== -->
@@ -1345,6 +1685,93 @@
         let postmarketLoaded = false;
         let aiChatHistory = [];
         let aiIsLoading = false;
+        let perfChartData = null;
+
+        // ================================================================
+        // TERMINAL UTILITIES (clock, market status, ticker tape, gauges)
+        // ================================================================
+        function startTerminalClock() {
+            function update() {
+                const now = new Date();
+                // IST = UTC + 5:30
+                const ist = new Date(now.getTime() + (5.5 * 60 * 60 * 1000) + (now.getTimezoneOffset() * 60 * 1000));
+                const hh = String(ist.getHours()).padStart(2, '0');
+                const mm = String(ist.getMinutes()).padStart(2, '0');
+                const ss = String(ist.getSeconds()).padStart(2, '0');
+                const day = ist.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
+                document.getElementById('terminalClock').textContent = `${hh}:${mm}:${ss} IST \u00b7 ${day}`;
+
+                // Market status: NSE open 9:15 AM to 3:30 PM IST, Mon-Fri
+                const dayOfWeek = ist.getDay();
+                const timeInMinutes = ist.getHours() * 60 + ist.getMinutes();
+                const isWeekday = dayOfWeek >= 1 && dayOfWeek <= 5;
+                const isMarketHours = timeInMinutes >= 555 && timeInMinutes <= 930; // 9:15=555, 15:30=930
+                const isOpen = isWeekday && isMarketHours;
+
+                const badge = document.getElementById('marketStatusBadge');
+                const dot = document.getElementById('marketStatusDot');
+                const text = document.getElementById('marketStatusText');
+                badge.className = `market-status ${isOpen ? 'open' : 'closed'}`;
+                dot.className = `status-dot ${isOpen ? 'open' : 'closed'}`;
+                text.textContent = isOpen ? 'MARKET OPEN' : 'MARKET CLOSED';
+            }
+            update();
+            setInterval(update, 1000);
+        }
+
+        function populateTickerTape(holdings) {
+            if (!holdings || holdings.length === 0) return;
+            const container = document.getElementById('tickerTapeContainer');
+            const track = document.getElementById('tickerTrack');
+            const items = holdings.map(h => {
+                const chgColor = h.day_change_pct >= 0 ? '#4ade80' : '#f87171';
+                const arrow = h.day_change_pct >= 0 ? '\u25B2' : '\u25BC';
+                return `<div class="ticker-item"><span class="ticker-sym">${h.ticker}</span><span class="ticker-price">\u20B9${h.current_price ? h.current_price.toLocaleString('en-IN') : '\u2014'}</span><span style="color:${chgColor}">${arrow} ${h.day_change_pct >= 0 ? '+' : ''}${h.day_change_pct}%</span></div>`;
+            }).join('');
+            // Duplicate for seamless infinite scroll
+            track.innerHTML = items + items;
+            container.style.display = '';
+            // Adjust speed based on number of items
+            const duration = Math.max(20, holdings.length * 4);
+            track.style.animationDuration = duration + 's';
+        }
+
+        function renderGauge(svgId, value, min, max, color) {
+            const svg = document.getElementById(svgId);
+            if (!svg) return;
+            // Semi-circular gauge: arc from 180° to 0° (left to right)
+            const cx = 60, cy = 60, r = 48;
+            const range = max - min;
+            const clampedVal = Math.max(min, Math.min(max, value));
+            const pct = (clampedVal - min) / range;
+            const angle = Math.PI - (pct * Math.PI); // 180° to 0°
+            const endX = cx + r * Math.cos(angle);
+            const endY = cy - r * Math.sin(angle);
+
+            // Background arc (full semi-circle)
+            const bgStartX = cx - r;
+            const bgEndX = cx + r;
+
+            // Gradient ID
+            const gradId = svgId + 'Grad';
+
+            // Choose gradient colors based on metric type
+            let c1 = '#ef4444', c2 = '#f59e0b', c3 = '#22c55e';
+            if (color === 'reverse') { c1 = '#22c55e'; c2 = '#f59e0b'; c3 = '#ef4444'; }
+
+            svg.innerHTML = `
+                <defs>
+                    <linearGradient id="${gradId}" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" stop-color="${c1}" />
+                        <stop offset="50%" stop-color="${c2}" />
+                        <stop offset="100%" stop-color="${c3}" />
+                    </linearGradient>
+                </defs>
+                <path d="M ${bgStartX} ${cy} A ${r} ${r} 0 0 1 ${bgEndX} ${cy}" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="8" stroke-linecap="round" />
+                <path d="M ${bgStartX} ${cy} A ${r} ${r} 0 0 1 ${endX} ${endY}" fill="none" stroke="url(#${gradId})" stroke-width="8" stroke-linecap="round" />
+                <circle cx="${endX}" cy="${endY}" r="4" fill="${pct > 0.66 ? c3 : pct > 0.33 ? c2 : c1}" />
+            `;
+        }
 
         // ================================================================
         // TAB SWITCHING & BRIEF LOADING
@@ -1560,6 +1987,9 @@
                 const res = await fetch('/api/stocks');
                 allStocks = await res.json();
             } catch (e) { console.warn('Could not load stocks list', e); }
+
+            // Start terminal clock
+            startTerminalClock();
 
             // Setup stock search autocomplete
             setupAutocomplete();
@@ -1834,20 +2264,36 @@
 
             const { holdings, summary, industry_data, technical_health, concentration } = data;
 
-            // --- Summary Cards ---
+            // --- Hero Value Section ---
             document.getElementById('summarySection').style.display = '';
             document.getElementById('totalInvested').textContent = formatCurrency(summary.total_invested);
             document.getElementById('totalCurrent').textContent = formatCurrency(summary.total_current);
 
             const pnlEl = document.getElementById('totalPnl');
             const pnlPctEl = document.getElementById('totalPnlPct');
-            const pnlCard = document.getElementById('cardPnl');
+            const pnlColor = summary.total_pnl >= 0 ? 'text-green-400' : 'text-red-400';
             pnlEl.textContent = `${summary.total_pnl >= 0 ? '+' : ''}${formatCurrency(summary.total_pnl)}`;
-            pnlPctEl.textContent = `${summary.total_pnl_pct >= 0 ? '+' : ''}${summary.total_pnl_pct.toFixed(2)}%`;
-            pnlEl.className = `text-xl font-bold ${summary.total_pnl >= 0 ? 'text-green-400' : 'text-red-400'}`;
-            pnlPctEl.className = `text-xs mt-0.5 ${summary.total_pnl >= 0 ? 'text-green-400' : 'text-red-400'}`;
-            pnlCard.className = `stat-card fade-in ${summary.total_pnl < 0 ? 'loss' : ''}`;
+            pnlPctEl.textContent = `(${summary.total_pnl_pct >= 0 ? '+' : ''}${summary.total_pnl_pct.toFixed(2)}%)`;
+            pnlEl.className = `hero-change ${pnlColor}`;
+            pnlPctEl.className = `hero-change ${pnlColor}`;
+            pnlPctEl.style.fontSize = '0.85rem';
             document.getElementById('holdingCount').textContent = summary.holding_count;
+
+            // Day change for hero metric strip
+            const totalDayPnl = holdings.reduce((acc, h) => {
+                const dayPct = parseFloat(h.day_change_pct) || 0;
+                const currentVal = h.current_value || 0;
+                return acc + (currentVal * dayPct / 100);
+            }, 0);
+            const dayEl = document.getElementById('heroDayChange');
+            if (dayEl) {
+                const dayColor = totalDayPnl >= 0 ? '#4ade80' : '#f87171';
+                dayEl.textContent = `${totalDayPnl >= 0 ? '+' : ''}${formatCurrency(totalDayPnl)}`;
+                dayEl.style.color = dayColor;
+            }
+
+            // Populate ticker tape
+            populateTickerTape(holdings);
 
             // --- Holdings Table ---
             document.getElementById('holdingsTableContainer').style.display = '';
@@ -1892,6 +2338,8 @@
 
             // --- Industry Chart ---
             document.getElementById('dashboardSection').style.display = '';
+            // Show performance chart section
+            document.getElementById('perfChartSection').style.display = '';
             if (industry_data && industry_data.length > 0) {
                 const colors = ['#22c55e', '#3b82f6', '#a855f7', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899', '#84cc16', '#f97316', '#6366f1'];
                 Plotly.newPlot('industryChart', [{
@@ -2456,19 +2904,18 @@
                 const betaLabel = document.getElementById('metricBetaLabel');
                 if (m.portfolio_beta !== null) {
                     betaEl.textContent = m.portfolio_beta.toFixed(2);
-                    if (m.portfolio_beta > 1.2) {
-                        betaEl.className = 'text-2xl font-bold text-red-400';
-                        betaLabel.textContent = 'High volatility vs market';
-                    } else if (m.portfolio_beta < 0.8) {
-                        betaEl.className = 'text-2xl font-bold text-green-400';
-                        betaLabel.textContent = 'Lower volatility than market';
-                    } else {
-                        betaEl.className = 'text-2xl font-bold text-cyan-400';
-                        betaLabel.textContent = 'Market-level volatility';
-                    }
+                    const betaColor = m.portfolio_beta > 1.2 ? 'text-red-400' : m.portfolio_beta < 0.8 ? 'text-green-400' : 'text-cyan-400';
+                    betaEl.className = `text-lg font-bold ${betaColor} font-mono`;
+                    betaEl.style.marginTop = '-8px';
+                    betaLabel.textContent = m.portfolio_beta > 1.2 ? 'High volatility' : m.portfolio_beta < 0.8 ? 'Low volatility' : 'Market-level';
+                    // Draw gauge: Beta range 0 to 2, lower is "better" (safer)
+                    renderGauge('gaugeBeta', m.portfolio_beta, 0, 2, 'reverse');
+                    // Hero strip
+                    const heroBeta = document.getElementById('heroBeta');
+                    if (heroBeta) { heroBeta.textContent = m.portfolio_beta.toFixed(2); heroBeta.style.color = m.portfolio_beta > 1.2 ? '#f87171' : '#4ade80'; }
                 } else {
                     betaEl.textContent = '—';
-                    betaLabel.textContent = 'Beta data unavailable';
+                    betaLabel.textContent = 'Unavailable';
                 }
 
                 // Alpha
@@ -2477,14 +2924,18 @@
                 if (m.alpha !== null) {
                     const sign = m.alpha >= 0 ? '+' : '';
                     alphaEl.textContent = sign + m.alpha.toFixed(2) + '%';
-                    alphaEl.className = m.alpha >= 0
-                        ? 'text-2xl font-bold text-green-400'
-                        : 'text-2xl font-bold text-red-400';
-                    alphaLabel.textContent = m.alpha >= 0 ? 'Outperforming expected return' : 'Underperforming expected return';
+                    alphaEl.className = `text-lg font-bold ${m.alpha >= 0 ? 'text-green-400' : 'text-red-400'} font-mono`;
+                    alphaEl.style.marginTop = '-8px';
+                    alphaLabel.textContent = m.alpha >= 0 ? 'Outperforming' : 'Underperforming';
+                    // Draw gauge: Alpha range -20 to +20
+                    renderGauge('gaugeAlpha', m.alpha, -20, 20, 'normal');
+                    // Hero strip
+                    const heroAlpha = document.getElementById('heroAlpha');
+                    if (heroAlpha) { heroAlpha.textContent = sign + m.alpha.toFixed(1) + '%'; heroAlpha.style.color = m.alpha >= 0 ? '#4ade80' : '#f87171'; }
                 } else if (!m.has_buy_dates) {
                     alphaEl.textContent = '—';
-                    alphaLabel.textContent = 'Add buy dates to enable';
-                    alphaLabel.className = 'text-xs text-amber-400 mt-0.5';
+                    alphaLabel.textContent = 'Add buy dates';
+                    alphaLabel.className = 'text-xs text-amber-400 mt-1 text-center';
                 } else {
                     alphaEl.textContent = '—';
                     alphaLabel.textContent = 'Insufficient data';
@@ -2497,14 +2948,15 @@
                     const diff = m.portfolio_return_pct - m.nifty_return_pct;
                     const sign = diff >= 0 ? '+' : '';
                     niftyEl.textContent = sign + diff.toFixed(1) + '%';
-                    niftyEl.className = diff >= 0
-                        ? 'text-2xl font-bold text-green-400'
-                        : 'text-2xl font-bold text-red-400';
+                    niftyEl.className = `text-lg font-bold ${diff >= 0 ? 'text-green-400' : 'text-red-400'} font-mono`;
+                    niftyEl.style.marginTop = '-8px';
                     niftyLabel.textContent = `You: ${m.portfolio_return_pct.toFixed(1)}% | NIFTY: ${m.nifty_return_pct.toFixed(1)}%`;
+                    // Draw gauge: range -30 to +30
+                    renderGauge('gaugeNifty', diff, -30, 30, 'normal');
                 } else if (!m.has_buy_dates) {
                     niftyEl.textContent = '—';
-                    niftyLabel.textContent = 'Add buy dates to enable';
-                    niftyLabel.className = 'text-xs text-amber-400 mt-0.5';
+                    niftyLabel.textContent = 'Add buy dates';
+                    niftyLabel.className = 'text-xs text-amber-400 mt-1 text-center';
                 } else {
                     niftyEl.textContent = '—';
                     niftyLabel.textContent = 'Calculating...';
@@ -2513,20 +2965,92 @@
                 // Diversification
                 const divEl = document.getElementById('metricDiversification');
                 const divLabel = document.getElementById('metricDivLabel');
-                divEl.textContent = m.diversification_score.toFixed(1) + ' / 10';
-                if (m.diversification_score >= 7) {
-                    divEl.className = 'text-2xl font-bold text-green-400';
-                    divLabel.textContent = `Well diversified (${m.n_industries} industries)`;
-                } else if (m.diversification_score >= 4) {
-                    divEl.className = 'text-2xl font-bold text-amber-400';
-                    divLabel.textContent = `Moderate diversification (${m.n_industries} industries)`;
-                } else {
-                    divEl.className = 'text-2xl font-bold text-red-400';
-                    divLabel.textContent = `Concentrated portfolio (${m.n_industries} industries)`;
-                }
+                divEl.textContent = m.diversification_score.toFixed(1) + '/10';
+                const divColor = m.diversification_score >= 7 ? 'text-green-400' : m.diversification_score >= 4 ? 'text-amber-400' : 'text-red-400';
+                divEl.className = `text-lg font-bold ${divColor} font-mono`;
+                divEl.style.marginTop = '-8px';
+                divLabel.textContent = m.diversification_score >= 7 ? `Well diversified (${m.n_industries} ind.)` : m.diversification_score >= 4 ? `Moderate (${m.n_industries} ind.)` : `Concentrated (${m.n_industries} ind.)`;
+                // Draw gauge: score 0-10
+                renderGauge('gaugeDiversification', m.diversification_score, 0, 10, 'normal');
+
+                // Load performance chart (default 3M)
+                loadPerfChart('3M');
 
             } catch (e) {
                 console.error('Metrics load failed:', e);
+            }
+        }
+
+        // ================================================================
+        // PERFORMANCE CHART (Portfolio vs NIFTY 50)
+        // ================================================================
+        async function loadPerfChart(timeframe) {
+            // Update button active state
+            document.querySelectorAll('.perf-timeframe-btn').forEach(b => {
+                b.classList.toggle('active', b.textContent.trim() === timeframe);
+            });
+
+            try {
+                const res = await fetch(`/api/portfolio/performance-chart?timeframe=${timeframe}`);
+                if (!res.ok) {
+                    document.getElementById('perfChart').innerHTML = '<p class="text-sm text-slate-500 text-center py-8">Performance data unavailable</p>';
+                    return;
+                }
+                const data = await res.json();
+                if (!data.dates || data.dates.length === 0) {
+                    document.getElementById('perfChart').innerHTML = '<p class="text-sm text-slate-500 text-center py-8">Add buy dates to view performance chart</p>';
+                    return;
+                }
+
+                Plotly.newPlot('perfChart', [
+                    {
+                        x: data.dates,
+                        y: data.portfolio_returns,
+                        name: 'Your Portfolio',
+                        type: 'scatter',
+                        mode: 'lines',
+                        line: { color: '#22c55e', width: 2.5 },
+                        fill: 'tozeroy',
+                        fillcolor: 'rgba(34, 197, 94, 0.05)',
+                        hovertemplate: '<b>Portfolio</b><br>%{x}<br>%{y:.2f}%<extra></extra>'
+                    },
+                    {
+                        x: data.dates,
+                        y: data.nifty_returns,
+                        name: 'NIFTY 50',
+                        type: 'scatter',
+                        mode: 'lines',
+                        line: { color: '#64748b', width: 1.5, dash: 'dot' },
+                        hovertemplate: '<b>NIFTY 50</b><br>%{x}<br>%{y:.2f}%<extra></extra>'
+                    }
+                ], {
+                    paper_bgcolor: 'transparent',
+                    plot_bgcolor: 'transparent',
+                    font: { family: 'JetBrains Mono, monospace', color: '#64748b', size: 10 },
+                    margin: { t: 10, b: 40, l: 50, r: 20 },
+                    xaxis: {
+                        gridcolor: 'rgba(255,255,255,0.03)',
+                        linecolor: 'rgba(255,255,255,0.06)',
+                        tickfont: { size: 9 }
+                    },
+                    yaxis: {
+                        gridcolor: 'rgba(255,255,255,0.03)',
+                        linecolor: 'rgba(255,255,255,0.06)',
+                        ticksuffix: '%',
+                        tickfont: { size: 9 },
+                        zeroline: true,
+                        zerolinecolor: 'rgba(255,255,255,0.08)'
+                    },
+                    legend: {
+                        x: 0.02, y: 0.98,
+                        bgcolor: 'transparent',
+                        font: { size: 10 }
+                    },
+                    hovermode: 'x unified'
+                }, { responsive: true, displayModeBar: false });
+            } catch (e) {
+                console.error('Perf chart error:', e);
+                document.getElementById('perfChart').innerHTML = '<p class="text-sm text-slate-500 text-center py-8">Could not load performance data</p>';
             }
         }
 

@@ -2495,6 +2495,98 @@ def api_portfolio_metrics():
         traceback.print_exc()
         return jsonify({'error': f'Metrics failed: {str(e)}'}), 500
 
+@app.route('/api/portfolio/performance-chart', methods=['GET'])
+def api_portfolio_performance_chart():
+    """Return daily portfolio cumulative returns vs NIFTY 50 for charting."""
+    from flask import session as flask_session
+    from datetime import datetime, timedelta
+    user_id = flask_session.get('user_id')
+    if not user_id:
+        return jsonify({'error': 'Authentication required'}), 401
+
+    holdings = Portfolio.get_by_user(user_id)
+    if not holdings:
+        return jsonify({'dates': [], 'portfolio_returns': [], 'nifty_returns': []})
+
+    # Check for buy dates
+    has_buy_dates = any(h.buy_date for h in holdings)
+    if not has_buy_dates:
+        return jsonify({'dates': [], 'portfolio_returns': [], 'nifty_returns': []})
+
+    timeframe = request.args.get('timeframe', '3M')
+    end_date = datetime.now()
+    tf_map = {'1W': 7, '1M': 30, '3M': 90, '6M': 180, '1Y': 365}
+    days = tf_map.get(timeframe, 90)
+    start_date = end_date - timedelta(days=days)
+
+    try:
+        import pandas as pd
+
+        # 1. Fetch NIFTY 50 history
+        nifty = yf.Ticker('^NSEI')
+        nifty_hist = nifty.history(start=start_date.strftime('%Y-%m-%d'), end=end_date.strftime('%Y-%m-%d'))
+        if nifty_hist.empty or len(nifty_hist) < 2:
+            return jsonify({'dates': [], 'portfolio_returns': [], 'nifty_returns': []})
+
+        # Create date index from NIFTY (trading days)
+        trading_dates = nifty_hist.index
+
+        # 2. Compute daily portfolio value
+        # For each holding, fetch its history. If buy_date is after start_date, only include from buy_date.
+        # Portfolio value on each day = sum of (quantity * close_price) for all holdings held on that day.
+        portfolio_daily = pd.Series(0.0, index=trading_dates)
+        initial_capital = 0
+
+        for h in holdings:
+            try:
+                yf_t = yf.Ticker(f"{h.ticker}.NS")
+                hist = yf_t.history(start=start_date.strftime('%Y-%m-%d'), end=end_date.strftime('%Y-%m-%d'))
+                if hist.empty:
+                    continue
+
+                # Reindex to match NIFTY trading days, forward-fill missing
+                hist = hist.reindex(trading_dates, method='ffill')
+
+                # Contribution of this holding
+                holding_values = hist['Close'] * h.quantity
+                holding_values = holding_values.fillna(0)
+                portfolio_daily = portfolio_daily.add(holding_values, fill_value=0)
+
+                # Initial capital contribution (invested amount)
+                initial_capital += h.quantity * h.avg_buy_price
+            except Exception as e:
+                print(f"PERF-CHART: Error fetching {h.ticker}: {e}")
+                # Fallback: use avg_buy_price * quantity as a constant
+                initial_capital += h.quantity * h.avg_buy_price
+
+        if initial_capital == 0 or portfolio_daily.sum() == 0:
+            return jsonify({'dates': [], 'portfolio_returns': [], 'nifty_returns': []})
+
+        # 3. Convert to cumulative returns (%)
+        # Portfolio: return vs initial capital
+        portfolio_returns = ((portfolio_daily / initial_capital) - 1) * 100
+
+        # NIFTY: return vs its starting value
+        nifty_start = nifty_hist['Close'].iloc[0]
+        nifty_returns = ((nifty_hist['Close'] / nifty_start) - 1) * 100
+
+        # 4. Format output
+        dates_str = [d.strftime('%Y-%m-%d') for d in portfolio_returns.index]
+        port_vals = [round(float(v), 2) for v in portfolio_returns.values]
+        nifty_vals = [round(float(v), 2) for v in nifty_returns.reindex(portfolio_returns.index, method='ffill').values]
+
+        return jsonify({
+            'dates': dates_str,
+            'portfolio_returns': port_vals,
+            'nifty_returns': nifty_vals
+        })
+
+    except Exception as e:
+        print(f"PERF-CHART ERROR: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/portfolio/dashboard', methods=['GET'])
 def api_portfolio_dashboard():
     """
