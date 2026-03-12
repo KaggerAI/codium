@@ -4318,8 +4318,8 @@ Create a table with quarterly/annual financial metrics:
 @app.route('/api/global-analyst-reports', methods=['GET'])
 def api_global_analyst_reports():
     """
-    Endpoint to fetch global analyst reports using Perplexity Sonar Pro.
-    Returns a strict JSON array of objects.
+    Endpoint to fetch global analyst reports using Perplexity Search API + Gemini for extraction.
+    Returns a strict JSON array of objects with exact, reliable URLs.
     """
     ticker = request.args.get('ticker', '').upper().strip()
     company_name = request.args.get('company_name', '').strip()
@@ -4327,12 +4327,52 @@ def api_global_analyst_reports():
     if not ticker:
         return jsonify({'error': 'Ticker is required'}), 400
         
-    log_progress(f"Fetching Global Research for {ticker} using AI search...")
+    log_progress(f"Fetching Global Research for {ticker} using AI Search API...")
     
-    prompt = f"""Search the web for the latest equity research analyst reports published in the last 6 months for the Indian stock {company_name} ({ticker}) specifically by these global research houses ONLY: Jefferies, CLSA, Nomura, Morgan Stanley, Goldman Sachs, Citigroup, Macquarie, UBS, Nuvama, Bernstein, and BofA Securities.
+    # 1. Broaden the search query to ensure target prices are captured
+    search_query = f"""latest research reports on {company_name} OR {ticker} stock only by Morgan Stanley, Goldman Sachs, Jefferies, CLSA, Nomura, Macquarie, UBS, Nuvama, Bernstein, BofA target price buy sell rating"""
+    
+    # We strictly enforce domains so Perplexity only extracts targets from reputable financial news and brokers
+    search_domains = [
+        "bloomberg.com", "reuters.com", "cnbc.com", "moneycontrol.com", "trendlyne.com", 
+        "economictimes.indiatimes.com", "livemint.com", "business-standard.com", 
+        "financialexpress.com", "ndtvprofit.com", "bqprime.com", "investing.com",
+        "jefferies.com", "morganstanley.com", "goldmansachs.com", "macquarie.com"
+    ]
 
-Return the results ONLY as a valid JSON array of objects. Do not include markdown formatting like ```json or explanations outside the JSON array.
-If no reports are found for any of these specific firms, return an empty array [].
+    try:
+        # Fetch exact real-time search results directly from Perplexity Search API
+        search_results = call_perplexity_search_api(
+            query=search_query,
+            search_domain_filter=search_domains, # Strictly filter domains
+            max_results=10, # Maximize results to give Gemini plenty of context
+            timeout=120
+        )
+        
+        if not search_results:
+            log_progress(f"No search results found from Perplexity for {ticker}.")
+            return jsonify({'reports': [], 'citations': []})
+            
+        # Format search results into a context block
+        context_block = "SEARCH RESULTS:\n"
+        citations = []
+        for idx, res in enumerate(search_results):
+            context_block += f"[{idx+1}] Title: {res.get('title')}\nURL: {res.get('url')}\nSnippet: {res.get('snippet')}\n\n"
+            if res.get('url'):
+                citations.append(res.get('url'))
+                
+        # 2. Use Gemini to extract the JSON structure from the search results
+        extraction_prompt = f"""You are an elite financial data extraction assistant working with strict JSON structures.
+I will provide you with a list of real-time search results about equity research reports for the Indian stock {company_name} ({ticker}).
+Review these search results carefully and extract EVERY mentioned analyst report from reputable global or global-affiliated research houses. Look for target prices, ratings (Buy/Sell/Hold), and rationales.
+
+CRITICAL INSTRUCTION: You MUST ONLY include reports from the following GLOBAL research houses: Morgan Stanley, Goldman Sachs, Jefferies, CLSA, Nomura, Macquarie, UBS, Nuvama, Bernstein, BofA Securities, Citi, HSBC, JPMorgan.
+DO NOT include any domestic Indian brokerages (e.g., absolutely NO Motilal Oswal, Prabhudas Lilladher, ICICI Securities, HDFC Securities, Kotak Securities, Axis Capital, Sharekhan, Emkay, KRChoksey, Anand Rathi, etc). If a search result only mentions a domestic brokerage, completely ignore it.
+
+{context_block}
+
+Return the extracted reports ONLY as a valid JSON array of objects. Do not include markdown formatting like ```json or explanations.
+If no relevant reports from the APPROVED GLOBAL HOUSES are found in the search results with a clear target price or rating, return an empty array [].
 
 [
   {{
@@ -4343,26 +4383,19 @@ If no reports are found for any of these specific firms, return an empty array [
     "date": "15 Feb 2026",
     "summary": "Set a target of Rs. 1435 (15% upside). Expects 15% volume growth and margin recovery in upcoming quarters due to healthy order book of 2.5x FY25E revenue. Notes risk of rising crude prices to put stress on profitability.",
     "detailed_summary": "In an extensive report, Morgan Stanley maintained their Overweight rating while highlighting three key drivers: 1) structural shift in demand... 2) margin expansion... and 3) declining capex intensity. They foresee the company re-rating significantly over the next two years. Key downside risks include rising crude prices.",
-    "source_citation_index": 1
+    "source_url": "https://example.com/actual-source-link"
   }}
 ]
 
 Make sure target_price is a clean number string (no symbols, just the value like "2400"). Ensure the JSON is perfectly valid.
 For "summary", provide a crisp 2-3 sentence overview.
 For "detailed_summary", provide a comprehensive 2-3 paragraph detailed summary of the entire report's key thesis, rationale, drivers, and downside risks.
-For "source_citation_index", MUST output the integer index (1, 2, 3...) of the citation/source you used to find this report from the search results. You MUST NOT output a URL string."""
+For "source_url", you MUST output the EXACT URL string from the provided Search Results that corresponds to the report. DO NOT hallucinate URLs."""
 
-    try:
-        messages = [{"role": "user", "content": prompt}]
-        # Call Perplexity with Pro Search enabled to do deep research
-        response_text, citations = call_perplexity_api(
-            messages, 
-            model="sonar-pro", 
-            temperature=0.2, 
-            timeout=180, 
-            enable_pro_search=True,
-            return_citations=True
-        )
+        messages = [{"role": "user", "content": extraction_prompt}]
+        
+        # Enforce HIGH thinking mode for perfect extraction
+        response_text = call_gemini_api(messages, model="gemini-3-flash-preview", temperature=0.1, thinking_level="HIGH")
         
         # Clean up response text if it includes markdown formatting or conversational preamble
         cleaned_text = response_text.strip()
@@ -4375,23 +4408,20 @@ For "source_citation_index", MUST output the integer index (1, 2, 3...) of the c
         reports_data = json.loads(cleaned_text)
         
         if not isinstance(reports_data, list):
-            raise ValueError("Perplexity did not return a JSON array.")
+            raise ValueError("Gemini did not return a JSON array.")
             
-        # Map citations back to URLs to prevent 404 hallucination
+        log_progress(f"Found {len(reports_data)} global analyst reports for {ticker} using Search API + Gemini.")
+        
+        # Clean up missing or empty source_urls
         for report in reports_data:
-            idx = report.get('source_citation_index')
-            report['source_url'] = None
-            if isinstance(idx, int) and 1 <= idx <= len(citations):
-                report['source_url'] = citations[idx - 1]
-            elif citations:
-                # Fallback to the first citation if index is invalid but citations exist
+            if not report.get('source_url') and citations:
+                # Absolute fallback so we don't break the frontend if Gemini fails to attach a URL
                 report['source_url'] = citations[0]
-            
-        log_progress(f"Found {len(reports_data)} global analyst reports for {ticker}.")
+                
         return jsonify({'reports': reports_data, 'citations': citations})
         
     except json.JSONDecodeError as e:
-        print(f"ERROR parsing JSON from Perplexity for global reports: {e}\nRaw response: {response_text}")
+        print(f"ERROR parsing JSON from Gemini for global reports: {e}\nRaw response: {response_text}")
         return jsonify({'error': 'Failed to parse AI response into JSON format'}), 500
     except Exception as e:
         print(f"ERROR fetching global analyst reports: {e}")
@@ -4501,6 +4531,47 @@ def call_openai_api(messages, model="gpt-5-mini", expect_json_format_flag=False,
         return response.choices[0].message.content
     except Exception as e:
         print(f"ERROR in call_openai_api: {e}")
+        raise
+
+def call_perplexity_search_api(query, search_domain_filter=None, max_results=10, timeout=120):
+    """
+    Call the Perplexity Search API (/search) instead of the Chat API.
+    This provides highly reliable, exact URLs directly from the structured search response.
+    """
+    if not PERPLEXITY_API_KEY:
+        raise ValueError("Perplexity API key is not configured.")
+        
+    url = "https://api.perplexity.ai/search"
+    payload = {
+        "query": query,
+        "max_results": max_results
+    }
+    
+    if search_domain_filter:
+        payload["search_domain_filter"] = search_domain_filter
+        
+    headers = {
+        "Authorization": f"Bearer {PERPLEXITY_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    
+    print(f"API_DEBUG: Calling Perplexity /search API, timeout={timeout}s, max_results={max_results}", file=sys.stderr)
+    try:
+        response = requests.post(url, headers=headers, json=payload, timeout=timeout)
+        response.raise_for_status()
+        
+        data = response.json()
+        results = data.get('results', [])
+        print(f"API_DEBUG: Perplexity /search returned {len(results)} exact results.", file=sys.stderr)
+        return results
+        
+    except requests.exceptions.JSONDecodeError as jde:
+        print(f"API_ERROR: Non-JSON response from /search: {response.text[:500]}", file=sys.stderr)
+        raise ValueError("Invalid JSON response from Perplexity Search API")
+    except Exception as e:
+        print(f"API_ERROR in call_perplexity_search_api: {type(e).__name__}: {e}", file=sys.stderr)
+        import traceback
+        traceback.print_exc(file=sys.stderr)
         raise
 
 def call_perplexity_api(messages, model="sonar-pro", temperature=1, timeout=120, use_streaming=False, enable_pro_search=False, progress_callback=None, return_citations=False):
@@ -4644,7 +4715,13 @@ def call_perplexity_api(messages, model="sonar-pro", temperature=1, timeout=120,
                 resp_json = response.json()
                 content = resp_json['choices'][0]['message']['content']
                 citations = resp_json.get('citations', [])
+                
+                # ==== DEBUG LOGGING ====
                 print(f"API_DEBUG: Non-streaming response received, length: {len(content)}, citations: {len(citations)}", file=sys.stderr)
+                if not citations:
+                    print(f"API_DEBUG: ZERO CITATIONS RETURNED! First 500 chars of raw json: {json.dumps(resp_json)[:500]}", file=sys.stderr)
+                # =======================
+                
                 if return_citations:
                     return content, citations
                 return content
