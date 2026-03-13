@@ -56,11 +56,20 @@ def fetch_histogram(symbol, exchange, start_date, end_date, max_retries=3, inter
     if raw is None or raw.empty:
         yf_sym = '^NSEI' if symbol.upper()=='NIFTY' and exchange=='NSE' else f"{symbol}.NS"
         try:
-            raw = yf.download(yf_sym,
-                              start=start_date.strftime('%Y-%m-%d'),
-                              end=end_date.strftime('%Y-%m-%d'),
-                              interval=yf_interval, auto_adjust=False)
-        except Exception:
+            ticker_obj = yf.Ticker(yf_sym)
+            raw = ticker_obj.history(start=start_date.strftime('%Y-%m-%d'),
+                                     end=end_date.strftime('%Y-%m-%d'),
+                                     interval=yf_interval)
+            
+            if raw is not None and not raw.empty:
+                # Remove timezone if yfinance attached it
+                if raw.index.tz is not None:
+                    raw.index = raw.index.tz_convert(None)
+            else:
+                return pd.DataFrame()
+                
+        except Exception as e:
+            print(f"WARN: yfinance fallback failed for {yf_sym}: {e}")
             return pd.DataFrame()
     df = raw.copy()
     df = df[(df.index >= pd.to_datetime(start_date)) & (df.index <= pd.to_datetime(end_date))]
@@ -768,7 +777,7 @@ def build_ema_figure(df, ticker, years=1):
     d = df[df.index >= df.index.max() - pd.DateOffset(years=years)]
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=d.index, y=[float(v) for v in d['Close']], mode='lines', name='Close', line=dict(color='#ffffff')))
-    fig.add_trace(go.Scatter(x=d.index, y=[float(v) for v in d['EMA13']], mode='lines', name='EMA13', line=dict(dash='dot', width=1.25, color='blue')))
+    fig.add_trace(go.Scatter(x=d.index, y=[float(v) for v in d['EMA13']], mode='lines', name='EMA13', line=dict(dash='dot', width=1.25, color='#60a5fa')))
     fig.add_trace(go.Scatter(x=d.index, y=[float(v) for v in d['EMA55']], mode='lines', name='EMA55', line=dict(dash='dot', width=1.25, color='red')))
     fig.add_trace(go.Scatter(x=d.index, y=[float(v) for v in d['EMA144']], mode='lines', name='EMA144', line=dict(dash='dot', width=1.25, color='green')))
     fig.update_layout(title=f"{ticker} EMA Stack", height=450, legend=dict(orientation='h', x=0.5, xanchor='center', y=-0.2), hovermode='x unified', xaxis=dict(type='date', showspikes=True, spikemode='across', spikesnap='cursor', spikethickness=1, spikedash='dot', spikecolor='lightgrey'))

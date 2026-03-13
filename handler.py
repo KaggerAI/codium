@@ -2332,6 +2332,7 @@ def api_portfolio_upload_csv():
             # Parse buy_date (optional column — try many common aliases)
             buy_date_raw = (
                 norm_row.get('buy date', '') or
+                norm_row.get('buy date (dd-mm-yyyy)', '') or
                 norm_row.get('buy_date', '') or
                 norm_row.get('purchase date', '') or
                 norm_row.get('purchase_date', '') or
@@ -2342,6 +2343,13 @@ def api_portfolio_upload_csv():
                 norm_row.get('transaction_date', '') or
                 ''
             )
+
+            # Fallback for dynamic template fields or slightly modified columns
+            if not buy_date_raw:
+                for k, v in norm_row.items():
+                    if 'date' in k:
+                        buy_date_raw = v
+                        break
 
             # Convert DD-MM-YYYY or DD/MM/YYYY to YYYY-MM-DD for DB consistency
             buy_date = ''
@@ -2851,7 +2859,7 @@ def api_portfolio_chart():
         # Add RS columns for 'rs' chart
         elif chart_type == 'rs':
             from tech_calculations import calculate_relative_strength
-            nifty_df = fetch_histogram('^NSEI', 'NSE', start_date, end_date, interval='daily')
+            nifty_df = fetch_histogram('NIFTY', 'NSE', start_date, end_date, interval='daily')
             if not nifty_df.empty:
                 df['RS'] = calculate_relative_strength(df, nifty_df, length=55)
             else:
