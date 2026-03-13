@@ -4341,11 +4341,23 @@ def api_global_analyst_reports():
     ]
 
     try:
+        import datetime
+        from dateutil.relativedelta import relativedelta
+        # Calculate exactly 6 months ago
+        six_months_ago = datetime.datetime.now() - relativedelta(months=6)
+        
+        # Perplexity Search API requires date format "MM/DD/YYYY" (NOT YYYY-MM-DD)
+        # See: https://docs.perplexity.ai/api-reference/search-post
+        date_filter = six_months_ago.strftime('%-m/%-d/%Y') if sys.platform != 'win32' else six_months_ago.strftime('%#m/%#d/%Y')
+        
         # Fetch exact real-time search results directly from Perplexity Search API
         search_results = call_perplexity_search_api(
             query=search_query,
-            search_domain_filter=search_domains, # Strictly filter domains
+            search_domain_filter=search_domains,
+            search_after_date_filter=date_filter, # Strictly bound to exact 6 months from today
+            # search_recency_filter="month",  # Additional recency signal for recent reports
             max_results=10, # Maximize results to give Gemini plenty of context
+            max_tokens_per_page=1024,  # Richer content extraction but bounded to prevent Gemini context overload
             timeout=120
         )
         
@@ -4353,13 +4365,20 @@ def api_global_analyst_reports():
             log_progress(f"No search results found from Perplexity for {ticker}.")
             return jsonify({'reports': [], 'citations': []})
             
-        # Format search results into a context block
+        # Format search results into a context block with full metadata
         context_block = "SEARCH RESULTS:\n"
         citations = []
         for idx, res in enumerate(search_results):
-            context_block += f"[{idx+1}] Title: {res.get('title')}\nURL: {res.get('url')}\nSnippet: {res.get('snippet')}\n\n"
+            context_block += f"[{idx+1}] Title: {res.get('title')}\n"
+            context_block += f"URL: {res.get('url')}\n"
+            if res.get('date'):
+                context_block += f"Published Date: {res.get('date')}\n"
+            if res.get('last_updated'):
+                context_block += f"Last Updated: {res.get('last_updated')}\n"
+            context_block += f"Snippet: {res.get('snippet')}\n\n"
             if res.get('url'):
                 citations.append(res.get('url'))
+
                 
         # 2. Use Gemini to extract the JSON structure from the search results
         import datetime
@@ -4374,7 +4393,7 @@ DO NOT include any domestic Indian brokerages (e.g., absolutely NO Motilal Oswal
 
 CRITICAL INSTRUCTION 2: Only include reports published within the LAST 6 MONTHS. The current month is {current_date_str}. Do not include reports from 2023 or 2024.
 
-CRITICAL INSTRUCTION 3: You MUST extract the EXACT PUBLICATION DATE of the report (e.g., "15 Feb 2026"). Do not use vague terms like "recent" or "recently". If the exact day is missing but the month/year is present, use "Feb 2026". If you cannot deduce at least the month and year from the search snippet or URL date stamp, DO NOT INCLUDE THAT REPORT.
+CRITICAL INSTRUCTION 3: You MUST extract the EXACT PUBLICATION DATE of the report (e.g., "15 Feb 2026"). USE the "Published Date" metadata provided with each search result as your SOLE primary source for dates. DO NOT use "Last Updated" metadata, as that often reflects a page refresh rather than the original report publication. If the exact day is missing but the month/year is present, use "Feb 2026". If you cannot deduce at least the month and year from the Published Date metadata, snippet text, or URL date stamp, DO NOT INCLUDE THAT REPORT.
 
 {context_block}
 
@@ -4402,7 +4421,7 @@ For "source_url", you MUST output the EXACT URL string from the provided Search 
         messages = [{"role": "user", "content": extraction_prompt}]
         
         # Enforce HIGH thinking mode for perfect extraction
-        response_text = call_gemini_api(messages, model="gemini-3-flash-preview", temperature=0.1, thinking_level="HIGH")
+        response_text = call_gemini_api(messages, model="gemini-3-flash-preview", temperature=0.1, thinking_level="MEDIUM")
         
         # Clean up response text if it includes markdown formatting or conversational preamble
         cleaned_text = response_text.strip()
@@ -4554,10 +4573,19 @@ def call_openai_api(messages, model="gpt-5-mini", expect_json_format_flag=False,
         print(f"ERROR in call_openai_api: {e}")
         raise
 
-def call_perplexity_search_api(query, search_domain_filter=None, max_results=10, timeout=120):
+def call_perplexity_search_api(query, search_domain_filter=None, search_after_date_filter=None, search_recency_filter=None, max_results=10, max_tokens_per_page=None, timeout=120):
     """
     Call the Perplexity Search API (/search) instead of the Chat API.
     This provides highly reliable, exact URLs directly from the structured search response.
+    
+    Args:
+        query: Search query string
+        search_domain_filter: List of domains to restrict results to
+        search_after_date_filter: Only return results published after this date (format: MM/DD/YYYY)
+        search_recency_filter: Filter by recency - one of "day", "week", "month", "year"
+        max_results: Maximum number of results (1-20)
+        max_tokens_per_page: Max tokens of content to extract per page (higher = richer snippets)
+        timeout: Request timeout in seconds
     """
     if not PERPLEXITY_API_KEY:
         raise ValueError("Perplexity API key is not configured.")
@@ -4569,14 +4597,32 @@ def call_perplexity_search_api(query, search_domain_filter=None, max_results=10,
     }
     
     if search_domain_filter:
-        payload["search_domain_filter"] = search_domain_filter
+        # Note: the Search API expects a list of domains (max 20)
+        if isinstance(search_domain_filter, list):
+            payload["search_domain_filter"] = search_domain_filter
+        else:
+            payload["search_domain_filter"] = [search_domain_filter]
+        
+    if search_after_date_filter:
+        # API requires format: "MM/DD/YYYY" (e.g., "9/13/2025")
+        # See: https://docs.perplexity.ai/api-reference/search-post
+        payload["search_after_date_filter"] = search_after_date_filter
+    
+    if search_recency_filter:
+        # One of: "day", "week", "month", "year"
+        payload["search_recency_filter"] = search_recency_filter
+    
+    if max_tokens_per_page:
+        # Controls how much content is extracted per page (higher = richer snippets)
+        payload["max_tokens_per_page"] = max_tokens_per_page
         
     headers = {
         "Authorization": f"Bearer {PERPLEXITY_API_KEY}",
         "Content-Type": "application/json"
     }
     
-    print(f"API_DEBUG: Calling Perplexity /search API, timeout={timeout}s, max_results={max_results}", file=sys.stderr)
+    print(f"API_DEBUG: Calling Perplexity /search API, timeout={timeout}s, max_results={max_results}, after_date={search_after_date_filter}, recency={search_recency_filter}, tokens_per_page={max_tokens_per_page}", file=sys.stderr)
+    print(f"API_DEBUG: Search query: {query[:200]}...", file=sys.stderr)
     try:
         response = requests.post(url, headers=headers, json=payload, timeout=timeout)
         response.raise_for_status()
@@ -4584,11 +4630,19 @@ def call_perplexity_search_api(query, search_domain_filter=None, max_results=10,
         data = response.json()
         results = data.get('results', [])
         print(f"API_DEBUG: Perplexity /search returned {len(results)} exact results.", file=sys.stderr)
+        
+        # Log result titles and URLs for debugging
+        for i, r in enumerate(results):
+            print(f"API_DEBUG:   [{i+1}] {r.get('title', 'N/A')[:80]} | {r.get('url', 'N/A')[:100]} | date={r.get('date', 'N/A')}", file=sys.stderr)
+        
         return results
         
     except requests.exceptions.JSONDecodeError as jde:
         print(f"API_ERROR: Non-JSON response from /search: {response.text[:500]}", file=sys.stderr)
         raise ValueError("Invalid JSON response from Perplexity Search API")
+    except requests.exceptions.HTTPError as he:
+        print(f"API_ERROR: HTTP {response.status_code} from /search: {response.text[:500]}", file=sys.stderr)
+        raise
     except Exception as e:
         print(f"API_ERROR in call_perplexity_search_api: {type(e).__name__}: {e}", file=sys.stderr)
         import traceback
