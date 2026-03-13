@@ -304,3 +304,10 @@
 2026-03-13 13:34:33.697950 - Failed to extract text from https://trendlyne.com/get-document/report/pdf/93098/: Cookies expired - please re-export cookies from browser
 2026-03-13 13:34:34.189566 - Failed to extract text from https://trendlyne.com/get-document/report/pdf/92236/: Cookies expired - please re-export cookies from browser
 2026-03-13 13:34:34.628748 - Failed to extract text from https://trendlyne.com/get-document/report/pdf/92249/: Cookies expired - please re-export cookies from browser
+2026-03-13 13:53:54.265010 - Failed to extract text from https://trendlyne.com/get-document/report/pdf/94676/: Cookies expired - please re-export cookies from browser
+2026-03-13 13:53:54.917096 - Failed to extract text from https://trendlyne.com/get-document/report/pdf/94654/: Cookies expired - please re-export cookies from browser
+2026-03-13 13:53:55.427103 - Failed to extract text from https://trendlyne.com/get-document/report/pdf/94668/: Cookies expired - please re-export cookies from browser
+2026-03-13 13:53:55.856898 - Failed to extract text from https://trendlyne.com/get-document/report/pdf/93356/: Cookies expired - please re-export cookies from browser
+2026-03-13 13:53:56.316995 - Failed to extract text from https://trendlyne.com/get-document/report/pdf/93098/: Cookies expired - please re-export cookies from browser
+2026-03-13 13:53:56.830602 - Failed to extract text from https://trendlyne.com/get-document/report/pdf/92236/: Cookies expired - please re-export cookies from browser
+2026-03-13 13:53:57.267382 - Failed to extract text from https://trendlyne.com/get-document/report/pdf/92249/: Cookies expired - please re-export cookies from browser

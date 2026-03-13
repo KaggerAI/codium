@@ -2290,7 +2290,8 @@ def api_portfolio_upload_csv():
 
         for i, row in enumerate(reader, start=2):  # start=2 because row 1 is header
             # Normalize column names (case-insensitive)
-            norm_row = {k.strip().lower(): v.strip() for k, v in row.items() if k and v}
+            # Note: keep keys with None/empty values — they may just be optional columns
+            norm_row = {k.strip().lower(): (v.strip() if v else '') for k, v in row.items() if k}
 
             # Extract ticker — try 'ticker' column first, then 'stock name'
             ticker = norm_row.get('ticker', '').upper()
@@ -2328,8 +2329,35 @@ def api_portfolio_upload_csv():
 
             stock_name = ticker_lookup.get(ticker, ticker)
 
-            # Parse buy_date (optional column)
-            buy_date = norm_row.get('buy date', '') or norm_row.get('buy_date', '') or norm_row.get('purchase date', '') or ''
+            # Parse buy_date (optional column — try many common aliases)
+            buy_date_raw = (
+                norm_row.get('buy date', '') or
+                norm_row.get('buy_date', '') or
+                norm_row.get('purchase date', '') or
+                norm_row.get('purchase_date', '') or
+                norm_row.get('date', '') or
+                norm_row.get('buydate', '') or
+                norm_row.get('date of purchase', '') or
+                norm_row.get('transaction date', '') or
+                norm_row.get('transaction_date', '') or
+                ''
+            )
+
+            # Convert DD-MM-YYYY or DD/MM/YYYY to YYYY-MM-DD for DB consistency
+            buy_date = ''
+            if buy_date_raw:
+                try:
+                    import re
+                    # Match DD-MM-YYYY or DD/MM/YYYY
+                    match = re.match(r'(\d{1,2})[-/](\d{1,2})[-/](\d{4})', buy_date_raw)
+                    if match:
+                        d, m, y = match.groups()
+                        buy_date = f"{y}-{int(m):02d}-{int(d):02d}"
+                    else:
+                        # Fallback (e.g., if already YYYY-MM-DD)
+                        buy_date = buy_date_raw
+                except Exception:
+                    buy_date = buy_date_raw
 
             # Fetch sector (best-effort)
             sector = ''
@@ -2539,7 +2567,7 @@ def api_portfolio_performance_chart():
         trading_dates = nifty_hist.index
 
         # 2. Compute daily portfolio value
-        # For each holding, fetch its history. If buy_date is after start_date, only include from buy_date.
+        # For each holding, fetch its history.
         # Portfolio value on each day = sum of (quantity * close_price) for all holdings held on that day.
         portfolio_daily = pd.Series(0.0, index=trading_dates)
         initial_capital = 0
@@ -2559,8 +2587,10 @@ def api_portfolio_performance_chart():
                 holding_values = holding_values.fillna(0)
                 portfolio_daily = portfolio_daily.add(holding_values, fill_value=0)
 
-                # Initial capital contribution (invested amount)
-                initial_capital += h.quantity * h.avg_buy_price
+                # Initial capital contribution (value of quantity at start date)
+                # We use the first valid price in the history window
+                start_price = hist['Close'].dropna().iloc[0] if not hist['Close'].dropna().empty else h.avg_buy_price
+                initial_capital += h.quantity * start_price
             except Exception as e:
                 print(f"PERF-CHART: Error fetching {h.ticker}: {e}")
                 # Fallback: use avg_buy_price * quantity as a constant
@@ -2752,6 +2782,187 @@ def api_portfolio_dashboard():
             'diversification_score': round((1 - hhi) * 10, 1)
         }
     }))
+
+
+# =====================================================================
+# INDIVIDUAL TECHNICAL CHARTS (On-Demand for Portfolio UI)
+# =====================================================================
+
+@app.route('/api/portfolio/chart', methods=['GET'])
+def api_portfolio_chart():
+    """
+    Returns a specific Plotly JSON chart for a given ticker.
+    chart_type: 'pa' (Price Action), 'ms' (Market Structure), 'sent' (Sentiment), 'rs' (vs Nifty), 'vol' (Volume)
+    """
+    from flask import session as flask_session
+    user_id = flask_session.get('user_id')
+    if not user_id:
+        return jsonify({'error': 'Authentication required'}), 401
+
+    ticker = request.args.get('ticker', '').strip().upper()
+    chart_type = request.args.get('chart_type', '').strip().lower()
+
+    if not ticker or not chart_type:
+        return jsonify({'error': 'Missing ticker or chart_type'}), 400
+
+    try:
+        from tech_calculations import (
+            fetch_histogram, build_close_figure, build_ema_figure, 
+            build_rsi_figure, build_rs_figure, build_adl_figure
+        )
+        from datetime import datetime, timedelta
+        
+        # We need historical data to build the charts (~1 year)
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=365)
+        
+        # Always fetch daily data for the 1Y charts in the portfolio popup
+        df = fetch_histogram(ticker, 'NSE', start_date, end_date, interval='daily')
+        if df is None or df.empty or len(df) < 50:
+            return jsonify({'error': 'Insufficient data to generate chart'}), 404
+            
+        # Calculate required indicators based on the chart type
+        import pandas as pd
+        import numpy as np
+        
+        # Calculate ATR for 'pa' chart trendline tolerances
+        if chart_type == 'pa':
+            df['H-L'] = df['High'] - df['Low']
+            df['H-PC'] = abs(df['High'] - df['Close'].shift(1))
+            df['L-PC'] = abs(df['Low'] - df['Close'].shift(1))
+            df['TR'] = df[['H-L', 'H-PC', 'L-PC']].max(axis=1)
+            df['ATR14'] = df['TR'].rolling(14).mean()
+            
+        # Add EMA columns for 'ms' chart
+        elif chart_type == 'ms':
+            import talib
+            close_arr = df['Close'].values
+            df['EMA13'] = talib.EMA(close_arr, timeperiod=13)
+            df['EMA55'] = talib.EMA(close_arr, timeperiod=55)
+            df['EMA144'] = talib.EMA(close_arr, timeperiod=144)
+            
+        # Add RSI columns for 'sent' chart
+        elif chart_type == 'sent':
+            import talib
+            df['RSI14'] = talib.RSI(df['Close'].values, timeperiod=14)
+            rsi_clean = np.nan_to_num(df['RSI14'].values)
+            df['RSI_EMA13'] = talib.EMA(rsi_clean, timeperiod=13)
+            
+        # Add RS columns for 'rs' chart
+        elif chart_type == 'rs':
+            from tech_calculations import calculate_relative_strength
+            nifty_df = fetch_histogram('^NSEI', 'NSE', start_date, end_date, interval='daily')
+            if not nifty_df.empty:
+                df['RS'] = calculate_relative_strength(df, nifty_df, length=55)
+            else:
+                df['RS'] = np.nan
+                
+        # Add ADL columns for 'vol' chart
+        elif chart_type == 'vol':
+            import talib
+            high = df['High'].values
+            low = df['Low'].values
+            close = df['Close'].values
+            vol = np.asarray(df['Volume'].values, dtype='float64')
+            df['ADL'] = talib.AD(high, low, close, vol)
+            adl_clean = np.nan_to_num(df['ADL'].values)
+            df['ADL_EMA'] = talib.EMA(adl_clean, timeperiod=13)
+
+        # Dispatch to the correct chart builder function
+        company_name = ticker  # Using ticker as title for simplicity since we already know the stock
+        line_color = '#3b82f6'  # Blue line for Portfolio charts (looks cleaner on the dark theme than white)
+        years = 1
+
+        if chart_type == 'pa':
+            chart_json = build_close_figure(df, company_name, years=years, line_color=line_color).to_json()
+        elif chart_type == 'ms':
+            chart_json = build_ema_figure(df, company_name, years=years).to_json()
+        elif chart_type == 'sent':
+            chart_json = build_rsi_figure(df, company_name, years=years).to_json()
+        elif chart_type == 'rs':
+            chart_json = build_rs_figure(df, company_name, years=years).to_json()
+        elif chart_type == 'vol':
+            chart_json = build_adl_figure(df, company_name, years=years).to_json()
+        else:
+            return jsonify({'error': 'Invalid chart_type'}), 400
+
+        return jsonify({'chart_json': chart_json})
+
+    except Exception as e:
+        print(f"ERROR in /api/portfolio/chart: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+# =====================================================================
+# LIGHTWEIGHT TICKER PRICES (for auto-refresh every 15 minutes)
+# =====================================================================
+
+@app.route('/api/portfolio/ticker-prices', methods=['GET'])
+def api_portfolio_ticker_prices():
+    """
+    Return only current prices and day change % for all holdings.
+    This is a lightweight endpoint used by the frontend ticker tape auto-refresh
+    (every 15 minutes). It skips technical analysis and all heavy computation.
+    Uses concurrent fetching for minimal latency.
+    """
+    from flask import session as flask_session
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    user_id = flask_session.get('user_id')
+    if not user_id:
+        return jsonify({'error': 'Authentication required'}), 401
+
+    holdings = Portfolio.get_by_user(user_id)
+    if not holdings:
+        return jsonify({'holdings': []})
+
+    def fetch_price(h):
+        """Fetch current price and day change % for a single holding."""
+        current_price = None
+        day_change_pct = 0
+        try:
+            yf_ticker = yf.Ticker(f"{h.ticker}.NS")
+            hist = yf_ticker.history(period="2d")
+            if hist is not None and not hist.empty:
+                current_price = float(hist['Close'].iloc[-1])
+                if len(hist) >= 2:
+                    prev_close = float(hist['Close'].iloc[-2])
+                    if prev_close > 0:
+                        day_change_pct = round(((current_price - prev_close) / prev_close) * 100, 2)
+        except Exception as e:
+            print(f"WARN: Ticker price refresh failed for {h.ticker}: {e}")
+        return {
+            'ticker': h.ticker,
+            'stock_name': h.stock_name,
+            'current_price': round(current_price, 2) if current_price else None,
+            'day_change_pct': day_change_pct
+        }
+
+    # Fetch all prices concurrently (max 10 threads to avoid overwhelming yfinance)
+    ticker_data = []
+    with ThreadPoolExecutor(max_workers=min(10, len(holdings))) as executor:
+        futures = {executor.submit(fetch_price, h): h.ticker for h in holdings}
+        for future in as_completed(futures):
+            try:
+                ticker_data.append(future.result())
+            except Exception as e:
+                ticker_sym = futures[future]
+                print(f"WARN: Concurrent price fetch error for {ticker_sym}: {e}")
+                ticker_data.append({
+                    'ticker': ticker_sym,
+                    'stock_name': '',
+                    'current_price': None,
+                    'day_change_pct': 0
+                })
+
+    # Sort by original holdings order for consistent display
+    ticker_order = {h.ticker: i for i, h in enumerate(holdings)}
+    ticker_data.sort(key=lambda x: ticker_order.get(x['ticker'], 999))
+
+    return jsonify(sanitize_for_json({'holdings': ticker_data}))
+
+
 
 
 # =====================================================================

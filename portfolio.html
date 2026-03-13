@@ -1675,6 +1675,36 @@
     <!-- ==================== TOAST ==================== -->
     <div id="toast" class="toast"></div>
 
+    <!-- ========================================== -->
+    <!-- TECHNICAL CHART MODAL -->
+    <!-- ========================================== -->
+    <div id="techChartModal" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 hidden flex-col items-center justify-center p-4 opacity-0 transition-opacity duration-300">
+        <div class="bg-slate-800 rounded border border-slate-700 w-full max-w-4xl shadow-2xl overflow-hidden transform scale-95 transition-transform duration-300 relative" id="techChartModalInner">
+            
+            <!-- Header -->
+            <div class="flex items-center justify-between p-4 border-b border-slate-700 bg-slate-800/50">
+                <div>
+                    <h3 id="techChartTitle" class="text-lg font-bold text-white">Chart Analysis</h3>
+                    <p id="techChartSubtitle" class="text-xs text-slate-400 mt-1">Fetching data...</p>
+                </div>
+                <button onclick="closeTechChart()" class="text-slate-400 hover:text-white transition-colors p-1 rounded hover:bg-slate-700">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+
+            <!-- Body -->
+            <div class="p-4 relative min-h-[450px] flex items-center justify-center">
+                <!-- Loader -->
+                <div id="techChartLoader" class="absolute inset-0 flex flex-col items-center justify-center bg-slate-800 z-10 transition-opacity">
+                    <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mb-4"></div>
+                    <div class="text-sm text-slate-400 font-mono animate-pulse">Generating chart...</div>
+                </div>
+                <!-- Chart Container -->
+                <div id="techChartContainer" class="w-full h-[450px]"></div>
+            </div>
+        </div>
+    </div>
+
     <script>
         // ================================================================
         // STATE
@@ -1686,6 +1716,8 @@
         let aiChatHistory = [];
         let aiIsLoading = false;
         let perfChartData = null;
+        let tickerRefreshInterval = null;
+        const TICKER_REFRESH_MS = 15 * 60 * 1000; // 15 minutes
 
         // ================================================================
         // TERMINAL UTILITIES (clock, market status, ticker tape, gauges)
@@ -1734,6 +1766,121 @@
             // Adjust speed based on number of items
             const duration = Math.max(20, holdings.length * 4);
             track.style.animationDuration = duration + 's';
+        }
+
+        async function refreshTickerPrices() {
+            // Lightweight refresh: fetch only current prices and day change %
+            try {
+                const res = await fetch('/api/portfolio/ticker-prices');
+                if (!res.ok) return;
+                const data = await res.json();
+                if (!data.holdings || data.holdings.length === 0) return;
+
+                // Update ticker tape
+                populateTickerTape(data.holdings);
+
+                // Update hero day change metric
+                if (dashboardData && dashboardData.holdings) {
+                    // Merge fresh prices into dashboardData
+                    const priceMap = {};
+                    data.holdings.forEach(h => {
+                        priceMap[h.ticker] = { current_price: h.current_price, day_change_pct: h.day_change_pct };
+                    });
+
+                    let totalDayPnl = 0;
+                    dashboardData.holdings.forEach(h => {
+                        const fresh = priceMap[h.ticker];
+                        if (fresh) {
+                            h.current_price = fresh.current_price;
+                            h.day_change_pct = fresh.day_change_pct;
+                            if (fresh.current_price) {
+                                h.current_value = h.quantity * fresh.current_price;
+                                h.pnl = h.current_value - h.invested;
+                                h.pnl_pct = h.invested > 0 ? (h.pnl / h.invested) * 100 : 0;
+                            }
+                        }
+                        const dayPct = parseFloat(h.day_change_pct) || 0;
+                        const currentVal = h.current_value || 0;
+                        totalDayPnl += (currentVal * dayPct / 100);
+                    });
+
+                    // Update hero day change
+                    const dayEl = document.getElementById('heroDayChange');
+                    if (dayEl) {
+                        const dayColor = totalDayPnl >= 0 ? '#4ade80' : '#f87171';
+                        dayEl.textContent = `${totalDayPnl >= 0 ? '+' : ''}${formatCurrency(totalDayPnl)}`;
+                        dayEl.style.color = dayColor;
+                    }
+
+                    // Update total current value and P&L
+                    const totalCurrent = dashboardData.holdings.reduce((a, h) => a + (h.current_value || 0), 0);
+                    const totalInvested = dashboardData.summary.total_invested;
+                    const totalPnl = totalCurrent - totalInvested;
+                    const totalPnlPct = totalInvested > 0 ? (totalPnl / totalInvested) * 100 : 0;
+
+                    document.getElementById('totalCurrent').textContent = formatCurrency(totalCurrent);
+                    const pnlEl = document.getElementById('totalPnl');
+                    const pnlPctEl = document.getElementById('totalPnlPct');
+                    const pnlColor = totalPnl >= 0 ? 'text-green-400' : 'text-red-400';
+                    pnlEl.textContent = `${totalPnl >= 0 ? '+' : ''}${formatCurrency(totalPnl)}`;
+                    pnlPctEl.textContent = `(${totalPnlPct >= 0 ? '+' : ''}${totalPnlPct.toFixed(2)}%)`;
+                    pnlEl.className = `hero-change ${pnlColor}`;
+                    pnlPctEl.className = `hero-change ${pnlColor}`;
+                    pnlPctEl.style.fontSize = '0.85rem';
+
+                    // Update holdings table CMP and day change columns
+                    const rows = document.querySelectorAll('#holdingsTableBody tr');
+                    dashboardData.holdings.forEach((h, idx) => {
+                        if (rows[idx]) {
+                            const cells = rows[idx].querySelectorAll('td');
+                            // CMP is column index 3
+                            if (cells[3]) cells[3].innerHTML = h.current_price ? '₹' + h.current_price.toLocaleString('en-IN') : '—';
+                            // Current value is column index 6
+                            if (cells[6]) cells[6].textContent = formatCurrency(h.current_value);
+                            // P&L is column index 7
+                            if (cells[7]) {
+                                cells[7].textContent = `${h.pnl >= 0 ? '+' : ''}${formatCurrency(h.pnl)}`;
+                                cells[7].className = h.pnl >= 0 ? 'text-green-400 font-medium' : 'text-red-400 font-medium';
+                            }
+                            // P&L % is column index 8
+                            if (cells[8]) {
+                                const badge8 = cells[8].querySelector('.badge') || cells[8];
+                                badge8.textContent = `${h.pnl_pct >= 0 ? '+' : ''}${h.pnl_pct.toFixed(2)}%`;
+                                badge8.className = `badge ${h.pnl_pct >= 0 ? 'badge-green' : 'badge-red'}`;
+                            }
+                            // Day % is column index 9
+                            if (cells[9]) {
+                                const badge9 = cells[9].querySelector('.badge') || cells[9];
+                                badge9.textContent = `${h.day_change_pct >= 0 ? '+' : ''}${h.day_change_pct}%`;
+                                badge9.className = `badge ${h.day_change_pct >= 0 ? 'badge-green' : 'badge-red'}`;
+                            }
+                        }
+                    });
+                }
+
+                console.log('Ticker prices refreshed at', new Date().toLocaleTimeString());
+            } catch (e) {
+                console.warn('Ticker refresh failed:', e);
+            }
+        }
+
+        function startTickerRefresh() {
+            // Clear any existing interval to avoid duplicates
+            if (tickerRefreshInterval) {
+                clearInterval(tickerRefreshInterval);
+                tickerRefreshInterval = null;
+            }
+            // Start 15-minute auto-refresh
+            tickerRefreshInterval = setInterval(refreshTickerPrices, TICKER_REFRESH_MS);
+            console.log('Ticker auto-refresh started (every 15 min)');
+        }
+
+        function stopTickerRefresh() {
+            if (tickerRefreshInterval) {
+                clearInterval(tickerRefreshInterval);
+                tickerRefreshInterval = null;
+                console.log('Ticker auto-refresh stopped');
+            }
         }
 
         function renderGauge(svgId, value, min, max, color) {
@@ -1790,18 +1937,25 @@
             if (tab === 'summary') {
                 document.getElementById('tabSummary').style.display = '';
                 document.getElementById('tabBtnSummary').classList.add('active');
+                // Resume ticker auto-refresh when returning to summary tab
+                if (dashboardData && dashboardData.holdings && dashboardData.holdings.length > 0) {
+                    startTickerRefresh();
+                }
             } else if (tab === 'premarket') {
                 document.getElementById('tabPremarket').style.display = '';
                 document.getElementById('tabBtnPremarket').classList.add('active');
                 if (!premarketLoaded) loadBrief('pre');
+                stopTickerRefresh();
             } else if (tab === 'postmarket') {
                 document.getElementById('tabPostmarket').style.display = '';
                 document.getElementById('tabBtnPostmarket').classList.add('active');
                 if (!postmarketLoaded) loadBrief('post');
+                stopTickerRefresh();
             } else if (tab === 'aimanager') {
                 document.getElementById('tabAIManager').style.display = '';
                 document.getElementById('tabBtnAI').classList.add('active');
                 document.getElementById('aiChatInput').focus();
+                stopTickerRefresh();
             }
         }
 
@@ -2150,7 +2304,7 @@
         // ================================================================
         // CSV TEMPLATE DOWNLOAD
         function downloadCsvTemplate() {
-            const csv = 'Ticker,Quantity,Avg Buy Price,Buy Date\nRELIANCE,10,2450.50,2024-06-15\nTCS,5,3800.00,2024-08-20\n';
+            const csv = 'Ticker,Quantity,Avg Buy Price,Buy Date (DD-MM-YYYY)\nRELIANCE,10,2450.50,15-06-2024\nTCS,5,3800.00,20-08-2024\n';
             const blob = new Blob([csv], { type: 'text/csv' });
             const a = document.createElement('a');
             a.href = URL.createObjectURL(blob);
@@ -2292,8 +2446,9 @@
                 dayEl.style.color = dayColor;
             }
 
-            // Populate ticker tape
+            // Populate ticker tape and start auto-refresh
             populateTickerTape(holdings);
+            startTickerRefresh();
 
             // --- Holdings Table ---
             document.getElementById('holdingsTableContainer').style.display = '';
@@ -2474,6 +2629,23 @@
                         ? `<div class="text-[10px] mt-1 opacity-60">${subParts.join(' · ')}</div>`
                         : '';
 
+                    // Helper to wrap text in a clickable chart trigger if applicable
+                    const clickableCell = (verdict, detail, cssClass, type) => {
+                        if (!verdict || verdict === 'N/A' || verdict === '-') {
+                            return `<div class="${cssClass} font-semibold text-xs">${verdict || 'N/A'}</div><div class="text-[10px] text-slate-400 mt-0.5">${detail || ''}</div>`;
+                        }
+                        return `
+                        <div class="group relative inline-block cursor-pointer" onclick="openTechChart('${t.ticker}', '${type}', '${verdict}')">
+                            <div class="${cssClass} font-semibold text-xs border-b border-dashed border-slate-500 hover:text-blue-400 transition-colors">${verdict}</div>
+                            <div class="text-[10px] text-slate-400 mt-0.5">${detail || ''}</div>
+                            
+                            <!-- Tooltip -->
+                            <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-max px-2 py-1 bg-slate-800 text-white text-[10px] rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 shadow-lg border border-slate-700">
+                                Click to see chart
+                            </div>
+                        </div>`;
+                    };
+
                     return `<tr>
             <td>
               <div class="font-medium text-white text-sm">${t.stock_name}</div>
@@ -2481,12 +2653,12 @@
               ${subInfo}
             </td>
             <td><span class="badge ${sigClass}">${t.signal}</span></td>
-            <td>${cell(paVerdict, paDetail, paClass)}</td>
+            <td>${clickableCell(paVerdict, paDetail, paClass, 'pa')}</td>
             <td>${cell(fibVerdict, fibDetail, fibClass)}</td>
-            <td>${cell(msVerdict, msDetail, msClass)}</td>
-            <td>${cell(sentVerdict, sentDetail, sentClass)}</td>
-            <td class="${rsClass} text-xs font-medium">${t.relative_strength || 'N/A'}</td>
-            <td class="${volClass} text-xs font-medium">${t.volume || 'N/A'}</td>
+            <td>${clickableCell(msVerdict, msDetail, msClass, 'ms')}</td>
+            <td>${clickableCell(sentVerdict, sentDetail, sentClass, 'sent')}</td>
+            <td>${clickableCell(t.relative_strength, '', rsClass, 'rs')}</td>
+            <td>${clickableCell(t.volume, '', volClass, 'vol')}</td>
           </tr>`;
                 }).join('');
             }
@@ -2532,6 +2704,114 @@
                 tip.classList.remove('active');
             }
         });
+
+        // ================================================================
+        // TECHNICAL CHART MODAL FUNCTIONS (On-Demand Loading)
+        // ================================================================
+        async function openTechChart(ticker, type, currentVerdict) {
+            const modal = document.getElementById('techChartModal');
+            const loader = document.getElementById('techChartLoader');
+            const container = document.getElementById('techChartContainer');
+            const titleEl = document.getElementById('techChartTitle');
+            const subtitleEl = document.getElementById('techChartSubtitle');
+
+            // Map chart types to readable titles
+            const titleMap = {
+                'pa': 'Price Action (Pivots & Trendlines)',
+                'ms': 'Market Structure (EMA Stack)',
+                'sent': 'Market Sentiment (RSI)',
+                'rs': 'Relative Strength (vs Nifty 50)',
+                'vol': 'Volume Flow (ADL)'
+            };
+
+            // Set UI texts
+            titleEl.textContent = `${ticker} — ${titleMap[type] || 'Technical Chart'}`;
+            subtitleEl.textContent = currentVerdict !== 'N/A' && currentVerdict !== '-' ? `Current Status: ${currentVerdict}` : '';
+
+            // Reset UI state
+            container.innerHTML = '';
+            loader.style.opacity = '1';
+            loader.style.display = 'flex';
+            
+            // Show modal with animation
+            modal.classList.remove('hidden');
+            // Trigger reflow
+            void modal.offsetWidth;
+            modal.classList.add('opacity-100');
+            document.getElementById('techChartModalInner').classList.remove('scale-95');
+            document.getElementById('techChartModalInner').classList.add('scale-100');
+
+            try {
+                // Fetch chart config from backend
+                const response = await fetch(`/api/portfolio/chart?ticker=${ticker}&chart_type=${type}`);
+                
+                if (!response.ok) {
+                    throw new Error(`Server returned ${response.status}`);
+                }
+                
+                const data = await response.json();
+                
+                if (data.error) throw new Error(data.error);
+                if (!data.chart_json) throw new Error("No chart data received");
+
+                const fig = JSON.parse(data.chart_json);
+                
+                // Hide loader
+                loader.style.opacity = '0';
+                setTimeout(() => loader.style.display = 'none', 300); // Wait for transition
+
+                // Apply Deepmind Dark Theme equivalent from AI Analysis section
+                const darkTemplate = {
+                    paper_bgcolor: 'rgba(0,0,0,0)',
+                    plot_bgcolor: 'rgba(0,0,0,0)',
+                    font: { color: '#e2e8f0' },
+                    xaxis: { gridcolor: 'rgba(255,255,255,0.1)', linecolor: 'rgba(255,255,255,0.2)' },
+                    yaxis: { gridcolor: 'rgba(255,255,255,0.1)', linecolor: 'rgba(255,255,255,0.2)' },
+                    legend: { orientation: 'h', x: 0.5, xanchor: 'center', y: -0.24, yanchor: 'top' },
+                    margin: { b: 100 },
+                    hoverlabel: {
+                        bgcolor: '#1e293b',
+                        bordercolor: '#475569',
+                        font: { color: '#f1f5f9', size: 13 }
+                    }
+                };
+
+                // Merge the layout configs
+                fig.layout = { ...fig.layout, ...darkTemplate };
+
+                // Render plotly
+                Plotly.newPlot('techChartContainer', fig.data, fig.layout, { responsive: true, displayModeBar: false });
+
+            } catch (err) {
+                console.error("Chart load failed:", err);
+                // Update loader with error state instead of hiding
+                loader.innerHTML = `
+                    <div class="text-red-400 mb-2">
+                        <svg class="w-10 h-10 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    </div>
+                    <div class="text-sm text-slate-300 font-mono text-center">Failed to load chart<br><span class="text-xs text-slate-500">${err.message}</span></div>
+                `;
+            }
+        }
+
+        function closeTechChart() {
+            const modal = document.getElementById('techChartModal');
+            const inner = document.getElementById('techChartModalInner');
+            
+            // Animate out
+            modal.classList.remove('opacity-100');
+            inner.classList.remove('scale-100');
+            inner.classList.add('scale-95');
+            
+            setTimeout(() => {
+                modal.classList.add('hidden');
+                // Cleanup Plotly to prevent memory leaks
+                const container = document.getElementById('techChartContainer');
+                if (container.data) {
+                    Plotly.purge(container);
+                }
+            }, 300); // match transition duration
+        }
 
         // ================================================================
         // WHAT-IF SIMULATOR
@@ -3002,28 +3282,70 @@
                     return;
                 }
 
-                Plotly.newPlot('perfChart', [
-                    {
-                        x: data.dates,
-                        y: data.portfolio_returns,
+                const traces = [];
+
+                // 1. NIFTY 50
+                traces.push({
+                    x: data.dates,
+                    y: data.nifty_returns,
+                    name: 'NIFTY 50',
+                    type: 'scatter',
+                    mode: 'lines',
+                    line: { color: '#64748b', width: 1.5, dash: 'dot' },
+                    hovertemplate: '<b>NIFTY 50</b><br>%{x}<br>%{y:.2f}%<extra></extra>'
+                });
+
+                // 2. Segmented Portfolio for red/green lines and fills without gaps
+                let currentMode = null;
+                let currentSegment = { x: [], y: [] };
+                let segments = [];
+
+                for (let i = 0; i < data.portfolio_returns.length; i++) {
+                    const p = data.portfolio_returns[i];
+                    const n = data.nifty_returns[i];
+                    // If p >= n it's green (outperforming), else red
+                    const mode = p >= n ? 'green' : 'red';
+                    
+                    if (currentMode !== mode) {
+                        if (currentMode !== null) {
+                            // Add crossover point to close the segment smoothly
+                            currentSegment.x.push(data.dates[i]);
+                            currentSegment.y.push(p);
+                            segments.push({ mode: currentMode, ...currentSegment });
+                            // Start new segment overlapping
+                            currentSegment = { x: [data.dates[i]], y: [p] };
+                        } else {
+                            currentSegment.x.push(data.dates[i]);
+                            currentSegment.y.push(p);
+                        }
+                        currentMode = mode;
+                    } else {
+                        currentSegment.x.push(data.dates[i]);
+                        currentSegment.y.push(p);
+                    }
+                }
+                if (currentSegment.x.length > 0) {
+                    segments.push({ mode: currentMode, ...currentSegment });
+                }
+
+                segments.forEach((seg, idx) => {
+                    const color = seg.mode === 'green' ? '#22c55e' : '#ef4444';
+                    const fillcolor = seg.mode === 'green' ? 'rgba(34, 197, 94, 0.05)' : 'rgba(239, 68, 68, 0.05)';
+                    traces.push({
+                        x: seg.x,
+                        y: seg.y,
                         name: 'Your Portfolio',
                         type: 'scatter',
                         mode: 'lines',
-                        line: { color: '#22c55e', width: 2.5 },
+                        line: { color: color, width: 2.5 },
                         fill: 'tozeroy',
-                        fillcolor: 'rgba(34, 197, 94, 0.05)',
+                        fillcolor: fillcolor,
+                        showlegend: idx === 0, // only show first in legend
                         hovertemplate: '<b>Portfolio</b><br>%{x}<br>%{y:.2f}%<extra></extra>'
-                    },
-                    {
-                        x: data.dates,
-                        y: data.nifty_returns,
-                        name: 'NIFTY 50',
-                        type: 'scatter',
-                        mode: 'lines',
-                        line: { color: '#64748b', width: 1.5, dash: 'dot' },
-                        hovertemplate: '<b>NIFTY 50</b><br>%{x}<br>%{y:.2f}%<extra></extra>'
-                    }
-                ], {
+                    });
+                });
+
+                Plotly.newPlot('perfChart', traces, {
                     paper_bgcolor: 'transparent',
                     plot_bgcolor: 'transparent',
                     font: { family: 'JetBrains Mono, monospace', color: '#64748b', size: 10 },
