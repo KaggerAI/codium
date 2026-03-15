@@ -816,21 +816,25 @@ def build_rs_figure(df, ticker, years=1):
 # 3) Main Orchestration and Summary Functions
 # -------------------------------------------------------------------
 
-def evaluate_ticker_signal(ticker, in_position=False, price_pattern="", left_price=6, right_price=4, recency_candles=3, interval='daily', force_yf=False):
+def evaluate_ticker_signal(ticker, in_position=False, price_pattern="", left_price=6, right_price=4, recency_candles=3, interval='daily', force_yf=False, years=5, idx_df=None):
     """
     Evaluate ticker signal with optional interval selection.
     
     Args:
         interval: 'daily' (default) or 'weekly' for 5-year charts
         force_yf: If True, bypass TradingView and use yfinance directly
+        years: Number of years of historical data to fetch (default 5)
+        idx_df: Pre-fetched NIFTY index DataFrame. If provided, skips the
+                redundant NIFTY download (useful when batch-processing multiple tickers).
     """
     end = datetime.today()
-    start = end - pd.DateOffset(years=5)
+    start = end - pd.DateOffset(years=years)
     sym = ticker.replace('.NS','')
     df = fetch_histogram(sym, 'NSE', start, end, interval=interval, force_yf=force_yf)
     if df.empty:
         return {"Ticker": ticker, "Signal": "NO DATA", "Data": df}
-    idx_df = fetch_histogram('NIFTY', 'NSE', start, end, interval=interval, force_yf=force_yf)
+    if idx_df is None:
+        idx_df = fetch_histogram('NIFTY', 'NSE', start, end, interval=interval, force_yf=force_yf)
     df, idx_df = align_data_indices(df, idx_df)
     if len(df) < left_price + right_price + 1:
         return {"Ticker": ticker, "Signal": "INSUFFICIENT DATA", "Data": df}

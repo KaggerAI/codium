@@ -2637,8 +2637,15 @@ def api_portfolio_dashboard():
     """
     Return complete dashboard data: P&L, sector weights, technical health for all holdings.
     This is the main data source for the portfolio dashboard UI.
+
+    Performance optimizations (v2):
+    - Pre-fetches NIFTY index data ONCE and shares it across all technical calculations
+    - Fetches current prices for all stocks in parallel (max 3 threads to avoid yfinance blocking)
+    - Uses 2-year data lookback instead of 5-year (dashboard only shows 1-year charts)
+    - Caches technical health signals for 1 hour to avoid redundant re-computation on page refresh
     """
     from flask import session as flask_session
+    from concurrent.futures import ThreadPoolExecutor, as_completed
     user_id = flask_session.get('user_id')
     if not user_id:
         return jsonify({'error': 'Authentication required'}), 401
@@ -2647,17 +2654,13 @@ def api_portfolio_dashboard():
     if not holdings:
         return jsonify({'holdings': [], 'summary': {}, 'sector_data': [], 'technical_health': []})
 
-    enriched_holdings = []
-    industry_map = {}  # industry -> total current value
-    total_invested = 0
-    total_current = 0
-    technical_health = []
-
-    for h in holdings:
+    # ------------------------------------------------------------------
+    # PHASE 1: Fetch current prices in parallel (lightweight, fast)
+    # ------------------------------------------------------------------
+    def fetch_price(h):
+        """Fetch current price and day change % for a single holding."""
         current_price = None
         day_change_pct = 0
-
-        # Fetch current price from yfinance
         try:
             yf_ticker = yf.Ticker(f"{h.ticker}.NS")
             hist = yf_ticker.history(period="2d")
@@ -2669,6 +2672,38 @@ def api_portfolio_dashboard():
                         day_change_pct = round(((current_price - prev_close) / prev_close) * 100, 2)
         except Exception as e:
             print(f"WARN: Price fetch failed for {h.ticker}: {e}")
+        return {
+            'ticker': h.ticker,
+            'current_price': current_price,
+            'day_change_pct': day_change_pct
+        }
+
+    # Use max 3 threads — conservative to avoid yfinance rate-limiting/blocking
+    price_map = {}
+    num_workers = min(3, len(holdings))
+    with ThreadPoolExecutor(max_workers=num_workers) as executor:
+        futures = {executor.submit(fetch_price, h): h.ticker for h in holdings}
+        for future in as_completed(futures):
+            try:
+                result = future.result()
+                price_map[result['ticker']] = result
+            except Exception as e:
+                ticker_sym = futures[future]
+                print(f"WARN: Concurrent price fetch error for {ticker_sym}: {e}")
+                price_map[ticker_sym] = {'ticker': ticker_sym, 'current_price': None, 'day_change_pct': 0}
+
+    # ------------------------------------------------------------------
+    # PHASE 2: Build enriched holdings from fetched prices
+    # ------------------------------------------------------------------
+    enriched_holdings = []
+    industry_map = {}  # industry -> total current value
+    total_invested = 0
+    total_current = 0
+
+    for h in holdings:
+        price_data = price_map.get(h.ticker, {})
+        current_price = price_data.get('current_price')
+        day_change_pct = price_data.get('day_change_pct', 0)
 
         invested = h.quantity * h.avg_buy_price
         current_val = h.quantity * current_price if current_price else invested
@@ -2698,11 +2733,48 @@ def api_portfolio_dashboard():
             'buy_date': h.buy_date
         })
 
-        # Technical health — full analysis via generate_summary() from tech_calculations
+    # ------------------------------------------------------------------
+    # PHASE 3: Technical health — pre-fetch NIFTY once, use 2-year lookback
+    # ------------------------------------------------------------------
+    # Simple in-memory cache: { ticker: { 'data': health_entry, 'timestamp': float } }
+    if not hasattr(api_portfolio_dashboard, '_tech_cache'):
+        api_portfolio_dashboard._tech_cache = {}
+    tech_cache = api_portfolio_dashboard._tech_cache
+    CACHE_TTL = 3600  # 1 hour
+
+    technical_health = []
+    tickers_needing_refresh = []
+
+    # Check cache first for each holding
+    now_ts = time.time()
+    for h in holdings:
+        cached = tech_cache.get(h.ticker)
+        if cached and (now_ts - cached['timestamp']) < CACHE_TTL:
+            technical_health.append(cached['data'])
+        else:
+            tickers_needing_refresh.append(h)
+            technical_health.append(None)  # placeholder
+
+    # Only fetch NIFTY data if we have tickers to refresh
+    nifty_df = None
+    if tickers_needing_refresh:
         try:
-            tech_res = evaluate_ticker_signal(h.ticker, interval='daily', force_yf=True)
+            from tech_calculations import fetch_histogram
+            end_date = datetime.today()
+            start_date = end_date - pd.DateOffset(years=2)
+            nifty_df = fetch_histogram('NIFTY', 'NSE', start_date, end_date, interval='daily', force_yf=True)
+        except Exception as e:
+            print(f"WARN: NIFTY pre-fetch failed: {e}")
+
+    # Process tickers that need fresh technical data (sequentially with shared NIFTY data)
+    refresh_results = {}
+    for h in tickers_needing_refresh:
+        try:
+            tech_res = evaluate_ticker_signal(
+                h.ticker, interval='daily', force_yf=True,
+                years=2, idx_df=nifty_df
+            )
             if tech_res and tech_res.get('Signal') not in ['NO DATA', 'INSUFFICIENT DATA']:
-                # Use generate_summary() to extract all FM-grade indicators in one pass
                 summary_rows = generate_summary(tech_res)
                 summary_dict = {row['key']: row['value'] for row in summary_rows}
 
@@ -2734,23 +2806,42 @@ def api_portfolio_dashboard():
                     'support': summary_dict.get('Support Zone', None),
                     'resistance': summary_dict.get('Resistance Zone', None)
                 }
-                technical_health.append(health_entry)
+                refresh_results[h.ticker] = health_entry
+                # Update cache
+                tech_cache[h.ticker] = {'data': health_entry, 'timestamp': now_ts}
             else:
-                technical_health.append({
+                fallback = {
                     'ticker': h.ticker, 'stock_name': h.stock_name, 'signal': 'N/A',
                     'price_action': 'N/A', 'fib_strength': 'N/A', 'market_structure': 'N/A',
                     'sentiment': 'N/A', 'rsi_divergence': 'N/A', 'relative_strength': 'N/A',
                     'volume': 'N/A', 'support': None, 'resistance': None
-                })
+                }
+                refresh_results[h.ticker] = fallback
+                tech_cache[h.ticker] = {'data': fallback, 'timestamp': now_ts}
         except Exception as e:
             print(f"WARN: Tech signal failed for {h.ticker}: {e}")
-            technical_health.append({
+            fallback = {
+                'ticker': h.ticker, 'stock_name': h.stock_name, 'signal': 'N/A',
+                'price_action': 'N/A', 'fib_strength': 'N/A', 'market_structure': 'N/A',
+                'sentiment': 'N/A', 'rsi_divergence': 'N/A', 'relative_strength': 'N/A',
+                'volume': 'N/A', 'support': None, 'resistance': None
+            }
+            refresh_results[h.ticker] = fallback
+            tech_cache[h.ticker] = {'data': fallback, 'timestamp': now_ts}
+
+    # Fill in the None placeholders in technical_health with refreshed data
+    for i, h in enumerate(holdings):
+        if technical_health[i] is None:
+            technical_health[i] = refresh_results.get(h.ticker, {
                 'ticker': h.ticker, 'stock_name': h.stock_name, 'signal': 'N/A',
                 'price_action': 'N/A', 'fib_strength': 'N/A', 'market_structure': 'N/A',
                 'sentiment': 'N/A', 'rsi_divergence': 'N/A', 'relative_strength': 'N/A',
                 'volume': 'N/A', 'support': None, 'resistance': None
             })
 
+    # ------------------------------------------------------------------
+    # PHASE 4: Compute summary metrics
+    # ------------------------------------------------------------------
     total_pnl = total_current - total_invested
     total_pnl_pct = (total_pnl / total_invested * 100) if total_invested > 0 else 0
 
@@ -3917,9 +4008,27 @@ def api_portfolio_peer_swaps():
                     del LOCAL_PEER_CACHE[cache_key]
 
             try:
-                peer_data = loop.run_until_complete(
-                    fetch_peer_comparison_from_screener_async(ticker, h.stock_name)
-                )
+                # --- OPTIMIZATION: Check Redis light cache for peer data first ---
+                peer_data = None
+                try:
+                    import pickle, zlib
+                    stock_cache_key = f"stock_analysis_{ticker}"
+                    cached_blob = cache.get(stock_cache_key)
+                    if cached_blob:
+                        cached_obj = pickle.loads(zlib.decompress(cached_blob))
+                        cached_peers = cached_obj.get('peer_comparison')
+                        if cached_peers and cached_peers.get('company') and cached_peers.get('peers'):
+                            peer_data = cached_peers
+                            print(f"PEER-SWAP: {ticker} - Light cache HIT ✓")
+                except Exception as cache_err:
+                    print(f"PEER-SWAP: {ticker} - Light cache lookup failed (non-fatal): {cache_err}")
+
+                # Fallback: live scrape from Screener.in
+                if not peer_data:
+                    print(f"PEER-SWAP: {ticker} - Light cache MISS, fetching live...")
+                    peer_data = loop.run_until_complete(
+                        fetch_peer_comparison_from_screener_async(ticker, h.stock_name)
+                    )
 
                 if not peer_data or not peer_data.get('company'):
                     continue
@@ -9742,7 +9851,7 @@ def refresh_section():
             try:
                 from screener_fetcher import fetch_consolidated
                 log_progress(f"Fetching {ticker} fundamentals...")
-                tables, _, top_ratios, is_consolidated_screener = fetch_consolidated(ticker)
+                tables, _, top_ratios, is_consolidated_screener, _ = fetch_consolidated(ticker)
                 
                 # Get Financial Ratios table
                 ratios_table = tables.get('Financial Ratios')
@@ -10275,7 +10384,7 @@ def run_batch_precache(job_id, tickers):
                 from screener_fetcher import fetch_consolidated, fetch_latest_documents
                 
                 # Fetch tables (returns dict of DataFrames), company description, and top ratios
-                tables_from_screener, company_description, top_ratios, is_consolidated_screener = fetch_consolidated(ticker)
+                tables_from_screener, company_description, top_ratios, is_consolidated_screener, peer_data_from_screener = fetch_consolidated(ticker)
                 
                 # Parse the fundamentals - convert DataFrames to JSON for frontend
                 fund_data_for_frontend = {}
@@ -10314,6 +10423,7 @@ def run_batch_precache(job_id, tickers):
                 latest_documents = []
                 key_metrics = {}
                 company_description = ""
+                peer_data_from_screener = None
             
             # ============================================================
             # STEP 2: Generate AI Summary from fundamentals
@@ -10354,7 +10464,7 @@ def run_batch_precache(job_id, tickers):
                 'ai_scores': [],
                 'metric_charts': {},
                 'scanx_data': None,
-                'peer_comparison': {'company': {}, 'peers': []},
+                'peer_comparison': peer_data_from_screener if peer_data_from_screener and peer_data_from_screener.get('peers') else {'company': {}, 'peers': []},
                 'analyst_reports': []
             }
             

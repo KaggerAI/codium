@@ -364,7 +364,7 @@ async def fetch_latest_quarter_header_async(ticker: str, consolidated: bool = Fa
 #         tables["Growth Patterns"] = merged
 #     return tables, description
 
-def fetch_consolidated(ticker: str) -> tuple[dict[str, pd.DataFrame], str, dict, bool]:
+def fetch_consolidated(ticker: str) -> tuple[dict[str, pd.DataFrame], str, dict, bool, dict]:
     is_consolidated = False
     standalone_url = f"https://www.screener.in/company/{ticker}/"
     consolidated_url = standalone_url + "consolidated/"
@@ -456,7 +456,16 @@ def fetch_consolidated(ticker: str) -> tuple[dict[str, pd.DataFrame], str, dict,
         merged.index.name = ""
         tables["Growth Patterns"] = merged
 
-    return tables, description, top_ratios, is_consolidated
+    # --- Peer comparison extraction (free — reuses the already-downloaded soup) ---
+    peer_data = {'company': {}, 'peers': []}
+    try:
+        peer_data = _parse_peer_table(soup, ticker)
+        if peer_data and peer_data.get('peers'):
+            log_progress(f"Extracted {len(peer_data['peers'])} peers for {ticker} from page (no extra request).")
+    except Exception as e:
+        log_progress(f"WARN: Peer extraction failed for {ticker}: {e}")
+
+    return tables, description, top_ratios, is_consolidated, peer_data
 
 async def get_company_id_async(ticker: str) -> int:
     url = "https://www.screener.in/api/company/search/"
