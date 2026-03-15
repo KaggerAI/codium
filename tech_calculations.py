@@ -27,12 +27,13 @@ else:
 # 1) Data Fetching and Technical Calculation Helpers
 # -------------------------------------------------------------------
 
-def fetch_histogram(symbol, exchange, start_date, end_date, max_retries=3, interval='daily'):
+def fetch_histogram(symbol, exchange, start_date, end_date, max_retries=3, interval='daily', force_yf=False):
     """
     Fetch historical price data from TradingView or yfinance.
     
     Args:
         interval: 'daily' (default) or 'weekly'
+        force_yf: Skip TradingView completely and fetch straight from yfinance to avoid rate limits
     """
     # Determine TradingView interval
     tv_interval = Interval.in_weekly if interval == 'weekly' else Interval.in_daily
@@ -45,14 +46,16 @@ def fetch_histogram(symbol, exchange, start_date, end_date, max_retries=3, inter
         n_bars = max(1100, (end_date - start_date).days + 5)
     
     raw = None
-    for _ in range(max_retries):
-        try:
-            raw = tv.get_hist(symbol=symbol, exchange=exchange,
-                              interval=tv_interval, n_bars=n_bars)
-            if raw is not None and not raw.empty:
-                break
-        except Exception:
-            time.sleep(1)
+    if not force_yf:
+        for _ in range(max_retries):
+            try:
+                raw = tv.get_hist(symbol=symbol, exchange=exchange,
+                                  interval=tv_interval, n_bars=n_bars)
+                if raw is not None and not raw.empty:
+                    break
+            except Exception:
+                time.sleep(1)
+                
     if raw is None or raw.empty:
         yf_sym = '^NSEI' if symbol.upper()=='NIFTY' and exchange=='NSE' else f"{symbol}.NS"
         try:
@@ -813,20 +816,21 @@ def build_rs_figure(df, ticker, years=1):
 # 3) Main Orchestration and Summary Functions
 # -------------------------------------------------------------------
 
-def evaluate_ticker_signal(ticker, in_position=False, price_pattern="", left_price=6, right_price=4, recency_candles=3, interval='daily'):
+def evaluate_ticker_signal(ticker, in_position=False, price_pattern="", left_price=6, right_price=4, recency_candles=3, interval='daily', force_yf=False):
     """
     Evaluate ticker signal with optional interval selection.
     
     Args:
         interval: 'daily' (default) or 'weekly' for 5-year charts
+        force_yf: If True, bypass TradingView and use yfinance directly
     """
     end = datetime.today()
     start = end - pd.DateOffset(years=5)
     sym = ticker.replace('.NS','')
-    df = fetch_histogram(sym, 'NSE', start, end, interval=interval)
+    df = fetch_histogram(sym, 'NSE', start, end, interval=interval, force_yf=force_yf)
     if df.empty:
         return {"Ticker": ticker, "Signal": "NO DATA", "Data": df}
-    idx_df = fetch_histogram('NIFTY', 'NSE', start, end, interval=interval)
+    idx_df = fetch_histogram('NIFTY', 'NSE', start, end, interval=interval, force_yf=force_yf)
     df, idx_df = align_data_indices(df, idx_df)
     if len(df) < left_price + right_price + 1:
         return {"Ticker": ticker, "Signal": "INSUFFICIENT DATA", "Data": df}

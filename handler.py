@@ -2700,7 +2700,7 @@ def api_portfolio_dashboard():
 
         # Technical health — full analysis via generate_summary() from tech_calculations
         try:
-            tech_res = evaluate_ticker_signal(h.ticker, interval='daily')
+            tech_res = evaluate_ticker_signal(h.ticker, interval='daily', force_yf=True)
             if tech_res and tech_res.get('Signal') not in ['NO DATA', 'INSUFFICIENT DATA']:
                 # Use generate_summary() to extract all FM-grade indicators in one pass
                 summary_rows = generate_summary(tech_res)
@@ -4204,6 +4204,21 @@ def _build_portfolio_context(user_id):
         pass
 
     context_text = "\n".join(lines)
+    
+    # --- Inject Portfolio Stock Research Data ---
+    context_text += "\n\n" + "=" * 60 + "\n"
+    context_text += "RESEARCH DATA FOR PORTFOLIO STOCKS\n"
+    context_text += "=" * 60 + "\n"
+    
+    for h in holdings:
+        ticker = h.ticker
+        if ticker:
+            try:
+                research_data = get_stock_research(ticker)
+                if research_data:
+                    context_text += f"\n--- RESEARCH DATA FOR {ticker} ---\n{research_data}\n-----------------------------------\n"
+            except Exception as e:
+                print(f"WARN: Failed to pre-fetch research for {ticker}: {e}", file=sys.stderr)
 
     # Cache it
     _PORTFOLIO_CONTEXT_CACHE[user_id] = {"text": context_text, "timestamp": time.time()}
@@ -4235,16 +4250,27 @@ def api_portfolio_ai_chat():
         traceback.print_exc()
         portfolio_context = "Could not load portfolio data."
 
+    mentioned_companies = data.get('mentioned_companies', [])
+    
+    # Append mentioned companies emphasis to system context if applicable
+    mention_context = ""
+    if mentioned_companies:
+        mention_context = f"\n\n**CRITICAL INSTRUCTION - FOCUS ON THESE SPECIFIC COMPANIES:**\nThe user has explicitly @mentioned the following companies in their query:\n"
+        for mc in mentioned_companies:
+            ticker = mc.get('ticker', '')
+            mention_context += f"- {mc.get('name', '')} ({ticker})\n"
+        mention_context += "\nYou MUST prioritize your analysis and discussion around these specific companies using the provided research data. Use your Google Search to provide current market information if needed."
+
     # System prompt with portfolio context
     system_prompt = f"""You are Kagger AI Portfolio Manager — a senior, highly experienced portfolio analyst working exclusively for this investor.
 
-You have FULL ACCESS to the investor's live portfolio data below. Use this data to answer questions with precision and confidence, citing exact numbers (P&L, weights, returns, etc.) from their portfolio.
+You have FULL ACCESS to the investor's live portfolio data below, including the latest broker research for their holdings. Use this data to answer questions with precision and confidence, citing exact numbers (P&L, weights, returns, etc.) from their portfolio. It is up to you to synthesize the provided research data or use your Google Search capability if you need more current context. 
 
 YOUR CAPABILITIES:
 - Deep analysis of the investor's current holdings, P&L, sector allocation, and concentration risk
 - Technical analysis interpretation (price action, market structure, RSI, EMA stack, relative strength vs Nifty)
 - Risk assessment and diversification recommendations
-- Stock-level commentary: hold/sell signals, momentum shifts, volume anomalies
+- Stock-level commentary: hold/sell signals, momentum shifts, volume anomalies, analyst upgrades/downgrades
 - Portfolio-level insights: beta exposure, alpha generation, sector tilts
 - Market context via web search (you have Google Search access for real-time market data, news, and analyst opinions)
 
@@ -4258,7 +4284,7 @@ RESPONSE STYLE:
 - Use ₹ for Indian currency. Format large numbers in Lakhs (L) or Crores (Cr) as appropriate
 - If the investor asks about something outside their portfolio, use your Google Search to provide current market information
 
-{portfolio_context}
+{portfolio_context}{mention_context}
 """
 
     # Get or create conversation history
@@ -4271,7 +4297,7 @@ RESPONSE STYLE:
     messages = [{"role": "user", "content": system_prompt + "\n\nPlease acknowledge you have loaded the portfolio. Do not list all the holdings — just confirm you're ready."}]
     # If no history, add a synthetic assistant greeting
     if not history:
-        messages.append({"role": "model", "content": "Portfolio loaded. I have full visibility into your holdings, P&L, sector allocation, technical signals, and risk metrics. How can I help you today?"})
+        messages.append({"role": "model", "content": "Portfolio loaded. I have full visibility into your holdings, P&L, sector allocation, technical signals, risk metrics, and the latest analyst research. How can I help you today?"})
 
     # Add conversation history
     for msg in history:
@@ -5034,7 +5060,63 @@ def call_perplexity_api(messages, model="sonar-pro", temperature=1, timeout=120,
 
 
 
-def call_gemini_api(messages, model="gemini-3-flash-preview", temperature=1, use_google_search=False, thinking_level=None):
+def get_stock_research(ticker: str) -> str:
+    """
+    Fetches comprehensive research data for a given stock ticker, including:
+    1. Light Cache Data (company summary, key metrics, etc.)
+    2. Domestic Research Analyst Reports (from Trendlyne)
+    
+    Args:
+        ticker: The stock ticker symbol (e.g., RELIANCE, TCS).
+    """
+    import json
+    
+    print(f"INFO: RAG Tool `get_stock_research` called for ticker: {ticker}", file=sys.stderr)
+    result_parts = []
+    
+    # 1. Fetch Light Cache Data
+    try:
+        light_cache_key = f"light_cache_{ticker}"
+        light_data_bytes = cache.get(light_cache_key)
+        if light_data_bytes:
+            if isinstance(light_data_bytes, bytes):
+                import zlib
+                try:
+                    light_data = json.loads(zlib.decompress(light_data_bytes).decode('utf-8'))
+                    summary_html = light_data.get('company_summary_html', '')
+                    if summary_html:
+                        # Clean basic HTML tags for LLM readability
+                        import re
+                        clean_text = re.sub('<[^<]+>', '', summary_html)
+                        result_parts.append(f"### Company Overview & Light Cache Data for {ticker}\n{clean_text}")
+                except Exception as e:
+                    print(f"WARN: Failed to decompress/parse light cache for {ticker}: {e}", file=sys.stderr)
+    except Exception as e:
+        print(f"WARN: Error fetching light cache: {e}", file=sys.stderr)
+
+    # 2. Fetch Trendlyne Analyst Reports
+    try:
+        from analyst_reports.trendlyne_fetcher import _load_reports_from_cache
+        reports = _load_reports_from_cache(ticker)
+        if reports:
+            reports_text = f"### Recent Analyst Reports for {ticker}\n"
+            for r in reports[:5]:  # Limit to top 5 to save context
+                reports_text += f"- **{r.get('Broker', 'Unknown')}** ({r.get('Date', '')}): {r.get('Reco', '')} | Target: {r.get('Target', 'N/A')} | CMP: {r.get('CMP', 'N/A')}\n"
+                if r.get('summary'):
+                    reports_text += f"  Summary: {r.get('summary')}\n"
+            result_parts.append(reports_text)
+        else:
+            result_parts.append(f"### Recent Analyst Reports for {ticker}\nNo recent analyst reports found.")
+    except Exception as e:
+        print(f"WARN: Error fetching analyst reports: {e}", file=sys.stderr)
+
+    if not result_parts:
+        return f"No extensive research data or analyst reports could be found for {ticker}."
+    
+    return "\n\n".join(result_parts)
+
+
+def call_gemini_api(messages, model="gemini-3-flash-preview", temperature=1, use_google_search=False, thinking_level=None, tools=None):
     """
     Call the Gemini API with optional thinking mode for deeper reasoning.
     Includes exponential backoff retries for 503/429 errors and model fallback.
@@ -5065,9 +5147,15 @@ def call_gemini_api(messages, model="gemini-3-flash-preview", temperature=1, use
                     ]
                 }
                 
-                # Tools (Google Search)
+                # Tools (Google Search and Custom Tools)
+                gemini_tools = []
                 if use_google_search:
-                    config_args["tools"] = [types.Tool(google_search=types.GoogleSearch())]
+                    gemini_tools.append(types.Tool(google_search=types.GoogleSearch()))
+                if tools:
+                    gemini_tools.extend(tools)
+                    
+                if gemini_tools:
+                    config_args["tools"] = gemini_tools
                     
                 # Thinking Config
                 if thinking_level and "gemini-3" in current_model:
@@ -5078,7 +5166,8 @@ def call_gemini_api(messages, model="gemini-3-flash-preview", temperature=1, use
                 
                 gemini_contents = []
                 for msg in messages:
-                    role = "user" if msg["role"] == "user" else "model"
+                    # Map 'assistant' to 'model' for Gemini
+                    role = "user" if msg["role"] == "user" else ("model" if msg["role"] in ["assistant", "model"] else "user")
                     gemini_contents.append(types.Content(role=role, parts=[types.Part.from_text(text=msg["content"])]))
 
                 response = genai_client.models.generate_content(
@@ -5087,6 +5176,37 @@ def call_gemini_api(messages, model="gemini-3-flash-preview", temperature=1, use
                     config=gen_config
                 )
                 
+                # Handle possible tool calls
+                if hasattr(response, 'function_calls') and response.function_calls:
+                    print(f"INFO: Gemini initiated {len(response.function_calls)} function call(s).", file=sys.stderr)
+                    # We only handle the first one for simplicity, or we could loop
+                    # Append assistant's function call request to messages
+                    gemini_contents.append(response.candidates[0].content)
+                    
+                    tool_responses_parts = []
+                    for call in response.function_calls:
+                        if call.name == "get_stock_research":
+                            ticker_arg = call.args.get('ticker')
+                            if ticker_arg:
+                                tool_result = get_stock_research(ticker_arg)
+                                tool_responses_parts.append(types.Part.from_function_response(
+                                    name=call.name,
+                                    response={"result": tool_result}
+                                ))
+                    
+                    if tool_responses_parts:
+                        # Append the tool's response to the conversation
+                        gemini_contents.append(types.Content(role="user", parts=tool_responses_parts))
+                        
+                        # Call API again with the tool output
+                        print("INFO: Sending tool execution results back to Gemini...", file=sys.stderr)
+                        second_response = genai_client.models.generate_content(
+                            model=current_model,
+                            contents=gemini_contents,
+                            config=gen_config
+                        )
+                        return second_response.text
+
                 return response.text
                 
             except (ServerError, APIError) as e:
