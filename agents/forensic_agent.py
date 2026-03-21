@@ -24,7 +24,7 @@ from agents.base import (
 from agents.prompts.forensic_prompts import (
     FORENSIC_ANALYSIS_PROMPT, FORENSIC_CHAT_PROMPT, FORENSIC_NO_DATA_MSG
 )
-from fund_calculations import calculate_altman_zscore, calculate_beneish_mscore
+from calculations.fund_calculations import calculate_altman_zscore, calculate_beneish_mscore
 
 
 # =====================================================================
@@ -518,7 +518,7 @@ def register_forensic_routes(app, call_gemini_api_fn, call_perplexity_api_fn,
             # If stale, invalidate cache to trigger the full analysis fallback below.
             if cached_data and get_full_analysis_fn:
                 try:
-                    from screener_fetcher import fetch_latest_quarter_header_async
+                    from fetchers.screener_fetcher import fetch_latest_quarter_header_async
                     cached_fund = cached_data.get('fundamentals', {})
                     cached_is_consolidated = cached_data.get('is_consolidated', False)
                     

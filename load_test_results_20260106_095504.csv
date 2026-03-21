@@ -1,6 +1,0 @@
-request_id,ticker,success,response_time,status_code,error
-0,RELIANCE,True,93.55,200,
-1,TCS,True,72.66,200,
-2,HDFCBANK,False,73.90,500,HTTP 500
-3,INFY,False,8.50,500,HTTP 500
-4,ICICIBANK,True,135.44,200,

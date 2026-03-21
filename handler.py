@@ -67,21 +67,21 @@ import json
 import re
 
 # Import the calculation registry from calculations.py
-from fund_calculations import CALCULATION_REGISTRY, _get_metric_from_table # _get_metric_from_table might be useful here too
+from calculations.fund_calculations import CALCULATION_REGISTRY, _get_metric_from_table # _get_metric_from_table might be useful here too
 
 import requests
 from bs4 import BeautifulSoup
 import pdfplumber
 from io import BytesIO
 
-from progress_logger import progress_queue, log_progress, log_final_message
+from progress_logger import get_queue, log_progress, log_final_message
 
 from scores.AIScores import AIScores
 from analyst_reports.trendlyne_fetcher import fetch_analyst_reports_async
 # Use cookie-based authentication (easier than programmatic login)
 from analyst_reports.pdf_summarizer_cookies import summarize_analyst_pdf_async, download_analyst_pdf_with_cookies
 
-from tech_calculations import (
+from calculations.tech_calculations import (
     evaluate_ticker_signal,
     generate_summary,
     generate_per_chart_summaries,
@@ -2759,7 +2759,7 @@ def api_portfolio_dashboard():
     nifty_df = None
     if tickers_needing_refresh:
         try:
-            from tech_calculations import fetch_histogram
+            from calculations.tech_calculations import fetch_histogram
             end_date = datetime.today()
             start_date = end_date - pd.DateOffset(years=2)
             nifty_df = fetch_histogram('NIFTY', 'NSE', start_date, end_date, interval='daily', force_yf=True)
@@ -2905,7 +2905,7 @@ def api_portfolio_chart():
         return jsonify({'error': 'Missing ticker or chart_type'}), 400
 
     try:
-        from tech_calculations import (
+        from calculations.tech_calculations import (
             fetch_histogram, build_close_figure, build_ema_figure, 
             build_rsi_figure, build_rs_figure, build_adl_figure
         )
@@ -2949,7 +2949,7 @@ def api_portfolio_chart():
             
         # Add RS columns for 'rs' chart
         elif chart_type == 'rs':
-            from tech_calculations import calculate_relative_strength
+            from calculations.tech_calculations import calculate_relative_strength
             nifty_df = fetch_histogram('NIFTY', 'NSE', start_date, end_date, interval='daily')
             if not nifty_df.empty:
                 df['RS'] = calculate_relative_strength(df, nifty_df, length=55)
@@ -3193,7 +3193,7 @@ def fetch_index_data():
 
     # --- GIFT Nifty via tvDatafeed (best-effort, non-blocking) ---
     try:
-        from tech_calculations import tv as tv_global
+        from calculations.tech_calculations import tv as tv_global
         from tvDatafeed import Interval
         gift_df = None
         for attempt in range(2):  # Only 2 attempts, quick timeout
@@ -3362,7 +3362,7 @@ def _gather_stock_data_for_brief(holding, brief_type='post'):
     # --- Quarterly Results (post-market only) ---
     if brief_type == 'post':
         try:
-            from screener_fetcher import fetch_consolidated_async
+            from fetchers.screener_fetcher import fetch_consolidated_async
             loop = asyncio.new_event_loop()
             tables, desc, _, _ = loop.run_until_complete(fetch_consolidated_async(ticker))
             loop.close()
@@ -3978,7 +3978,7 @@ def api_portfolio_peer_swaps():
     Returns metrics comparison for "peer swap" suggestions.
     """
     from flask import session as flask_session
-    from screener_fetcher import fetch_peer_comparison_from_screener_async
+    from fetchers.screener_fetcher import fetch_peer_comparison_from_screener_async
     user_id = flask_session.get('user_id')
     if not user_id:
         return jsonify({'error': 'Authentication required'}), 401
@@ -6364,7 +6364,7 @@ def industry_research():
             try:
                 job_start_time = time.time()
                 print(f"INDUSTRY_RESEARCH_DEBUG: Job {job_id} started for industry '{industry}'", file=sys.stderr)
-                log_progress(f"Starting deep research for {industry} industry...")
+                log_progress(f"Starting deep research for {industry} industry...", channel="industry")
                 
                 # Build the prompt with user inputs
                 prompt = INDUSTRY_RESEARCH_PROMPT.format(
@@ -7320,7 +7320,7 @@ def print_full_schema():
 #======================================================================#
 
 import requests
-from screener_fetcher import (
+from fetchers.screener_fetcher import (
     fetch_consolidated_async,
     get_company_id_async,
     fetch_chart_data_async,
@@ -7330,7 +7330,7 @@ from screener_fetcher import (
     fetch_latest_document_dates_async
 )
 
-from scanx_fetcher import scrape_scanx_company_async
+from fetchers.scanx_fetcher import scrape_scanx_company_async
 
 # Initialize TradingView datafeed (authenticated if credentials provided)
 _tv_user = os.environ.get('TV_USERNAME', '')
@@ -8171,10 +8171,11 @@ def generate_ai_scores(ticker, last_analysis):
 @app.route('/progress-stream')
 def progress_stream():
     """Streams progress messages to the client."""
+    channel = request.args.get('channel', 'company')
     def generate():
         while True:
             # Wait for a message from the queue
-            message = progress_queue.get()
+            message = get_queue(channel).get()
             if message == "__END__":
                 # Send the final signal and stop
                 yield f"data: {message}\n\n"
@@ -8345,7 +8346,7 @@ async def get_analysis_for_ticker_async(tick, skip_ai_summary=False):
                 return parsed_data, charts_data
 
             # --- Peer Fetching (Moved below valuation definition) ---
-            from screener_fetcher import fetch_peer_comparison_from_screener_async
+            from fetchers.screener_fetcher import fetch_peer_comparison_from_screener_async
             peer_data_task = fetch_peer_comparison_from_screener_async(tick, company_name)
             
             valuation_task = fetch_all_valuation_data(is_consolidated_flag=is_consolidated)
@@ -8724,7 +8725,7 @@ def analyze():
                             # Use evaluate_ticker_signal to process data with all derived indicators
                             # This adds EMA, RSI, ADL, etc. required for chart functions
                             # Returns: {"Ticker": ..., "Signal": ..., "Data": df}
-                            from tech_calculations import evaluate_ticker_signal
+                            from calculations.tech_calculations import evaluate_ticker_signal
                             tech_result = evaluate_ticker_signal(tick)
                             
                             if not tech_result or tech_result.get("Signal") in ["NO DATA", "INSUFFICIENT DATA"]:
@@ -8817,7 +8818,7 @@ def analyze():
                             metric_charts = {}
                             parsed_valuation_data = {}
                             try:
-                                from screener_fetcher import get_company_id, fetch_chart_data, parse_chart_json
+                                from fetchers.screener_fetcher import get_company_id, fetch_chart_data, parse_chart_json
                                 import plotly.graph_objects as go
                                 
                                 comp_id = get_company_id(tick)
@@ -8874,7 +8875,7 @@ def analyze():
                             # ============================================================
                             log_progress("Fetching peer comparison data...")
                             try:
-                                from screener_fetcher import fetch_peer_comparison_from_screener
+                                from fetchers.screener_fetcher import fetch_peer_comparison_from_screener
                                 # Use sync wrapper because analyze() is a sync Flask route
                                 screener_peer_data = fetch_peer_comparison_from_screener(tick, company_name)
                                 peer_comparison_data = screener_peer_data.get('peers', [])
@@ -9502,7 +9503,7 @@ def refresh_section():
             # =====================================================
             # STEP 2: Screener.in Direct Crawl (with company_name for matching)
             # =====================================================
-            from screener_fetcher import fetch_peer_comparison_from_screener
+            from fetchers.screener_fetcher import fetch_peer_comparison_from_screener
             
             log_progress(f"Fetching peer data...")
             screener_data = fetch_peer_comparison_from_screener(ticker, company_name)
@@ -9795,7 +9796,7 @@ def refresh_section():
             # Updates: P/E, P/B, Div Yield, ROCE, ROE, Sales Growth, NPM
             # =====================================================
             try:
-                from screener_fetcher import fetch_peer_comparison_from_screener
+                from fetchers.screener_fetcher import fetch_peer_comparison_from_screener
                 
                 # Get company name for fuzzy matching
                 company_name = ticker
@@ -9849,7 +9850,7 @@ def refresh_section():
             # STEP 1: Try to fill N/A gaps from Screener.in fundamentals
             # =====================================================
             try:
-                from screener_fetcher import fetch_consolidated
+                from fetchers.screener_fetcher import fetch_consolidated
                 log_progress(f"Fetching {ticker} fundamentals...")
                 tables, _, top_ratios, is_consolidated_screener, _ = fetch_consolidated(ticker)
                 
@@ -10095,7 +10096,7 @@ def add_peer():
         # =====================================================
         # STEP 1: Try to get data from Screener.in
         # =====================================================
-        from screener_fetcher import fetch_peer_comparison_from_screener
+        from fetchers.screener_fetcher import fetch_peer_comparison_from_screener
         
         peer_data = {}
         try:
@@ -10381,7 +10382,7 @@ def run_batch_precache(job_id, tickers):
             # ============================================================
             is_consolidated_screener = False  # Default before try block
             try:
-                from screener_fetcher import fetch_consolidated, fetch_latest_documents
+                from fetchers.screener_fetcher import fetch_consolidated, fetch_latest_documents
                 
                 # Fetch tables (returns dict of DataFrames), company description, and top ratios
                 tables_from_screener, company_description, top_ratios, is_consolidated_screener, peer_data_from_screener = fetch_consolidated(ticker)
@@ -11112,14 +11113,18 @@ def serve_agents_page():
 
 # Register Concall Agent routes
 from agents.concall_agent import register_concall_routes
-from screener_fetcher import fetch_latest_documents_async, get_text_from_pdf_url_async, fetch_forensic_documents_async
+from fetchers.screener_fetcher import fetch_latest_documents_async, get_text_from_pdf_url_async, fetch_forensic_documents_async
 register_concall_routes(app, call_gemini_api, fetch_latest_documents_async, get_text_from_pdf_url_async)
 
 # Register Forensic Agent routes
 from agents.forensic_agent import register_forensic_routes
 register_forensic_routes(app, call_gemini_api, call_perplexity_api, get_any_cache, fetch_forensic_documents_async, get_analysis_for_ticker)
 
-print("INFO: Agent Marketplace routes registered (Concall Agent, Forensic Agent)", file=sys.stderr)
+# Register Analyst Report Agent routes
+from agents.analyst_agent import register_analyst_routes
+register_analyst_routes(app, call_gemini_api, call_perplexity_search_api, fetch_analyst_reports_async)
+
+print("INFO: Agent Marketplace routes registered (Concall Agent, Forensic Agent, Analyst Agent)", file=sys.stderr)
 
 # =====================================================================
 # END: Agent Marketplace

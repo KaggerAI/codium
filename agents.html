@@ -1012,14 +1012,16 @@
             border-radius: 999px;
             cursor: pointer;
             transition: all 0.2s ease;
-            border: 1px solid rgba(139,92,246,0.3);
+            border: 1px solid rgba(139, 92, 246, 0.3);
             background: transparent;
             font-family: inherit;
             color: var(--accent-violet);
         }
+
         .kagger-history-toggle:hover {
-            background: rgba(139,92,246,0.1);
+            background: rgba(139, 92, 246, 0.1);
         }
+
         .kagger-history-panel {
             max-height: 0;
             overflow: hidden;
@@ -1027,11 +1029,13 @@
             opacity: 0;
             border-radius: 0.75rem;
         }
+
         .kagger-history-panel.open {
             max-height: 400px;
             opacity: 1;
             padding: 0.5rem 0;
         }
+
         .kagger-history-list {
             list-style: none;
             padding: 0;
@@ -1039,6 +1043,7 @@
             max-height: 280px;
             overflow-y: auto;
         }
+
         .kagger-history-item {
             display: flex;
             align-items: center;
@@ -1049,9 +1054,11 @@
             transition: background 0.15s ease;
             gap: 0.75rem;
         }
+
         .kagger-history-item:hover {
-            background: rgba(255,255,255,0.06);
+            background: rgba(255, 255, 255, 0.06);
         }
+
         .kagger-history-item-query {
             font-size: 0.85rem;
             font-weight: 500;
@@ -1061,30 +1068,34 @@
             overflow: hidden;
             text-overflow: ellipsis;
         }
+
         .kagger-history-item-time {
             font-size: 0.7rem;
             color: var(--text-muted);
             white-space: nowrap;
             flex-shrink: 0;
         }
+
         .kagger-history-empty {
             text-align: center;
             padding: 1.25rem 1rem;
             font-size: 0.8rem;
             color: var(--text-muted);
         }
+
         .kagger-history-clear-btn {
             font-size: 0.7rem;
             padding: 0.25rem 0.6rem;
             border-radius: 999px;
             cursor: pointer;
-            border: 1px solid rgba(139,92,246,0.3);
+            border: 1px solid rgba(139, 92, 246, 0.3);
             background: transparent;
             font-family: inherit;
             color: var(--text-muted);
             transition: all 0.2s ease;
             opacity: 0.6;
         }
+
         .kagger-history-clear-btn:hover {
             opacity: 1;
             color: var(--accent-violet);
@@ -1114,7 +1125,7 @@
                 } catch (e) { console.error('[KaggerHistory] Save error:', e); }
             },
             clear(module) {
-                try { localStorage.removeItem(this._key(module)); } catch (e) {}
+                try { localStorage.removeItem(this._key(module)); } catch (e) { }
             },
             timeAgo(ts) {
                 const diff = Date.now() - ts;
@@ -1208,6 +1219,15 @@
                 </div>
                 <span class="agent-badge badge-live">Live</span>
             </button>
+            <button class="agent-tab" onclick="switchAgent('analyst')" role="tab" aria-selected="false"
+                id="tab-analyst">
+                <span class="agent-tab-icon">📄</span>
+                <div class="agent-tab-info">
+                    <div class="agent-tab-name">Analyst Agent</div>
+                    <div class="agent-tab-desc">Domestic & global brokerage research</div>
+                </div>
+                <span class="agent-badge badge-live">Live</span>
+            </button>
             <button class="agent-tab" onclick="switchAgent('forecasting')" role="tab" aria-selected="false"
                 id="tab-forecasting">
                 <span class="agent-tab-icon">📊</span>
@@ -1241,8 +1261,10 @@
                 </div>
                 <!-- Concall History Panel -->
                 <div class="mt-4" style="display:flex;align-items:center;justify-content:space-between;">
-                    <button class="kagger-history-toggle" onclick="toggleHistoryPanel('concall')">🕐 Recent Analyses</button>
-                    <button class="kagger-history-clear-btn" onclick="KaggerHistory.clear('concall');renderConcallHistory();" title="Clear">Clear</button>
+                    <button class="kagger-history-toggle" onclick="toggleHistoryPanel('concall')">🕐 Recent
+                        Analyses</button>
+                    <button class="kagger-history-clear-btn"
+                        onclick="KaggerHistory.clear('concall');renderConcallHistory();" title="Clear">Clear</button>
                 </div>
                 <div id="concallHistoryPanel" class="kagger-history-panel">
                     <ul id="concallHistoryList" class="kagger-history-list"></ul>
@@ -1344,8 +1366,10 @@
                 </div>
                 <!-- Forensic History Panel -->
                 <div class="mt-4" style="display:flex;align-items:center;justify-content:space-between;">
-                    <button class="kagger-history-toggle" onclick="toggleHistoryPanel('forensic')">🕐 Recent Scans</button>
-                    <button class="kagger-history-clear-btn" onclick="KaggerHistory.clear('forensic');renderForensicHistory();" title="Clear">Clear</button>
+                    <button class="kagger-history-toggle" onclick="toggleHistoryPanel('forensic')">🕐 Recent
+                        Scans</button>
+                    <button class="kagger-history-clear-btn"
+                        onclick="KaggerHistory.clear('forensic');renderForensicHistory();" title="Clear">Clear</button>
                 </div>
                 <div id="forensicHistoryPanel" class="kagger-history-panel">
                     <ul id="forensicHistoryList" class="kagger-history-list"></ul>
@@ -1403,6 +1427,94 @@
                         placeholder="Ask about the forensic report..." autocomplete="off" />
                     <button class="chat-send-btn" id="forensicChatSendBtn"
                         onclick="sendForensicChatMessage()">Send</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- =============================== -->
+        <!-- ANALYST REPORT AGENT WORKSPACE   -->
+        <!-- =============================== -->
+        <div class="agent-workspace" id="workspace-analyst">
+
+            <!-- Ticker Input -->
+            <div class="ticker-card">
+                <h2>📄 Analyst Report Agent</h2>
+                <p class="subtitle">Enter a stock ticker to fetch and analyze domestic & global brokerage research
+                    reports</p>
+                <div class="ticker-input-row">
+                    <div class="ticker-input-wrapper">
+                        <input type="text" class="ticker-input" id="analystTickerInput"
+                            placeholder="Type a stock name or ticker... (e.g. Reliance, TCS, INFY)"
+                            autocomplete="off" />
+                        <div class="ticker-dropdown" id="analystTickerDropdown"></div>
+                    </div>
+                    <button class="analyze-btn" id="analystAnalyzeBtn" onclick="startAnalystAnalysis()">
+                        <span id="analystBtnText">Analyze Reports</span>
+                    </button>
+                </div>
+                <!-- Analyst History Panel -->
+                <div class="mt-4" style="display:flex;align-items:center;justify-content:space-between;">
+                    <button class="kagger-history-toggle" onclick="toggleHistoryPanel('analyst')">🕐 Recent
+                        Analyses</button>
+                    <button class="kagger-history-clear-btn"
+                        onclick="KaggerHistory.clear('analyst');renderAnalystHistory();" title="Clear">Clear</button>
+                </div>
+                <div id="analystHistoryPanel" class="kagger-history-panel">
+                    <ul id="analystHistoryList" class="kagger-history-list"></ul>
+                </div>
+            </div>
+
+            <!-- Error -->
+            <div class="error-card" id="analystError">
+                <h4>⚠️ Analysis Error</h4>
+                <p id="analystErrorText"></p>
+            </div>
+
+            <!-- Progress -->
+            <div class="progress-card" id="analystProgress">
+                <div class="progress-status">
+                    <div class="progress-dot"></div>
+                    <span id="analystProgressText">Starting analysis...</span>
+                </div>
+                <div class="progress-timer" id="analystProgressTimer">Elapsed: 0s</div>
+                <div class="progress-bar-container">
+                    <div class="progress-bar"></div>
+                </div>
+            </div>
+
+            <!-- Analysis Results -->
+            <div class="analysis-card" id="analystAnalysis">
+                <div class="analysis-header">
+                    <div class="analysis-header-left">
+                        <span style="font-size: 1.25rem;">📄</span>
+                        <div>
+                            <h3 id="analystAnalysisTitle">Analyst Report Analysis</h3>
+                            <div class="analysis-meta" id="analystAnalysisMeta"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="analysis-body" id="analystAnalysisBody"></div>
+            </div>
+
+            <!-- Chat -->
+            <div class="chat-card" id="analystChat">
+                <div class="chat-header">
+                    <h3>💬 Ask about these Reports</h3>
+                </div>
+                <div class="chat-messages" id="analystChatMessages">
+                    <div class="chat-message assistant">
+                        <div class="chat-bubble">
+                            I've analyzed the analyst reports. Ask me anything — compare brokerage views,
+                            drill into specific target prices, explore catalysts, or request deeper analysis
+                            on any section.
+                        </div>
+                    </div>
+                </div>
+                <div class="chat-input-row">
+                    <input type="text" class="chat-input" id="analystChatInput"
+                        placeholder="Ask about the analyst reports..." autocomplete="off" />
+                    <button class="chat-send-btn" id="analystChatSendBtn"
+                        onclick="sendAnalystChatMessage()">Send</button>
                 </div>
             </div>
         </div>
@@ -1512,6 +1624,8 @@
             if (!e.target.closest('.ticker-input-wrapper')) {
                 concallDropdown.classList.remove('show');
                 if (forensicDropdown) forensicDropdown.classList.remove('show');
+                const analystDd = document.getElementById('analystTickerDropdown');
+                if (analystDd) analystDd.classList.remove('show');
             }
         });
 
@@ -2175,6 +2289,295 @@
         }
 
         // =====================================================
+        // ANALYST AGENT: TICKER AUTOCOMPLETE
+        // =====================================================
+        const analystInput = document.getElementById('analystTickerInput');
+        const analystDropdown = document.getElementById('analystTickerDropdown');
+        let analystSelectedTicker = '';
+        let analystSelectedName = '';
+        let analystSelectedIndex = -1;
+
+        analystInput.addEventListener('input', () => {
+            const val = analystInput.value.trim();
+            if (val.length < 1) { analystDropdown.classList.remove('show'); return; }
+            const matches = filterAgentStocks(val);
+            if (!matches.length) { analystDropdown.classList.remove('show'); return; }
+            analystSelectedIndex = -1;
+            analystDropdown.innerHTML = matches.map((s, i) => `
+        <div class="ticker-option ${i === analystSelectedIndex ? 'highlighted' : ''}"
+             data-ticker="${s.ticker}" data-name="${s.name}"
+             onclick="selectAnalystTicker('${s.ticker}', '${s.name.replace(/'/g, "\\\\'")}')">\
+          <span class="ticker-option-name">${s.name}</span>
+          <span class="ticker-option-ticker">${s.ticker}</span>
+        </div>
+      `).join('');
+            analystDropdown.classList.add('show');
+        });
+
+        analystInput.addEventListener('keydown', (e) => {
+            const items = analystDropdown.querySelectorAll('.ticker-option');
+            if (!items.length) {
+                if (e.key === 'Enter') { e.preventDefault(); startAnalystAnalysis(); }
+                return;
+            }
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                analystSelectedIndex = Math.min(analystSelectedIndex + 1, items.length - 1);
+                items.forEach((el, i) => el.classList.toggle('highlighted', i === analystSelectedIndex));
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                analystSelectedIndex = Math.max(analystSelectedIndex - 1, 0);
+                items.forEach((el, i) => el.classList.toggle('highlighted', i === analystSelectedIndex));
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                if (analystSelectedIndex >= 0 && items[analystSelectedIndex]) {
+                    items[analystSelectedIndex].click();
+                } else {
+                    startAnalystAnalysis();
+                }
+            } else if (e.key === 'Escape') {
+                analystDropdown.classList.remove('show');
+            }
+        });
+
+        function selectAnalystTicker(ticker, name) {
+            analystSelectedTicker = ticker;
+            analystSelectedName = name;
+            analystInput.value = `${name} (${ticker})`;
+            analystDropdown.classList.remove('show');
+        }
+
+        // =====================================================
+        // ANALYST AGENT: ANALYSIS
+        // =====================================================
+        let analystJobId = null;
+        let analystPollTimer = null;
+        let analystStartTime = null;
+        let analystTimerInterval = null;
+        let currentAnalystData = null;
+
+        function startAnalystAnalysis() {
+            const ticker = analystSelectedTicker || analystInput.value.replace(/\s*\(.*\)\s*$/, '').trim().toUpperCase();
+            if (!ticker) return;
+
+            // Reset UI
+            hideEl('analystError');
+            hideEl('analystAnalysis');
+            hideEl('analystChat');
+            showEl('analystProgress');
+            document.getElementById('analystProgressText').textContent = 'Starting analyst report analysis...';
+            document.getElementById('analystAnalyzeBtn').disabled = true;
+            document.getElementById('analystBtnText').innerHTML = '<span class="spinner"></span> Analyzing...';
+
+            // Save to history
+            KaggerHistory.add('analyst', { query: ticker, name: analystSelectedName || ticker });
+            renderAnalystHistory();
+
+            // Start timer
+            analystStartTime = Date.now();
+            if (analystTimerInterval) clearInterval(analystTimerInterval);
+            analystTimerInterval = setInterval(() => {
+                const elapsed = Math.floor((Date.now() - analystStartTime) / 1000);
+                document.getElementById('analystProgressTimer').textContent = `Elapsed: ${elapsed}s`;
+            }, 1000);
+
+            // Start analysis
+            fetch('/agent/analyst/analyze', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ticker })
+            })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.status === 'complete') {
+                        onAnalystComplete(data.result);
+                    } else if (data.job_id) {
+                        analystJobId = data.job_id;
+                        pollAnalystStatus();
+                    } else if (data.error) {
+                        onAnalystError(data.error);
+                    }
+                })
+                .catch(err => {
+                    onAnalystError(`Network error: ${err.message}`);
+                });
+        }
+
+        function pollAnalystStatus() {
+            if (!analystJobId) return;
+
+            fetch(`/agent/analyst/${analystJobId}/status`)
+                .then(r => r.json())
+                .then(data => {
+                    if (data.status === 'processing') {
+                        document.getElementById('analystProgressText').textContent = data.progress || 'Analyzing...';
+                        analystPollTimer = setTimeout(pollAnalystStatus, 2500);
+                    } else if (data.status === 'complete') {
+                        onAnalystComplete(data.result);
+                    } else if (data.status === 'error') {
+                        onAnalystError(data.error);
+                    }
+                })
+                .catch(err => {
+                    onAnalystError(`Polling error: ${err.message}`);
+                });
+        }
+
+        function onAnalystComplete(result) {
+            if (analystTimerInterval) clearInterval(analystTimerInterval);
+            if (analystPollTimer) clearTimeout(analystPollTimer);
+
+            currentAnalystData = result;
+
+            const btn = document.getElementById('analystAnalyzeBtn');
+            btn.disabled = false;
+            document.getElementById('analystBtnText').textContent = 'Analyze Reports';
+
+            hideEl('analystProgress');
+            showEl('analystAnalysis');
+            showEl('analystChat');
+
+            const ticker = result.ticker || analystSelectedTicker;
+            const companyName = result.company_name || ticker;
+            document.getElementById('analystAnalysisTitle').textContent = `Analyst Reports — ${companyName} (${ticker})`;
+
+            const meta = [];
+            if (result.domestic_count !== undefined) meta.push(`${result.domestic_count} domestic`);
+            if (result.global_count !== undefined) meta.push(`${result.global_count} global`);
+            if (result.pdfs_analyzed) meta.push(`${result.pdfs_analyzed} PDFs analyzed`);
+            if (result.analysis_time_seconds) meta.push(`${result.analysis_time_seconds}s`);
+            document.getElementById('analystAnalysisMeta').textContent = meta.join(' · ');
+
+            const analysisHtml = marked.parse(result.analysis || 'No analysis available.');
+            document.getElementById('analystAnalysisBody').innerHTML = analysisHtml;
+
+            // Reset chat
+            const chatMessages = document.getElementById('analystChatMessages');
+            chatMessages.innerHTML = `
+        <div class="chat-message assistant">
+          <div class="chat-bubble">
+            I've analyzed <strong>${result.domestic_count || 0} domestic</strong> and <strong>${result.global_count || 0} global</strong> analyst reports for <strong>${companyName} (${ticker})</strong>. Ask me anything — compare brokerage views, explore target prices, discuss key themes, or dive deeper into any section.
+          </div>
+        </div>
+      `;
+        }
+
+        function onAnalystError(errorMsg) {
+            if (analystTimerInterval) clearInterval(analystTimerInterval);
+            if (analystPollTimer) clearTimeout(analystPollTimer);
+
+            hideEl('analystProgress');
+            showEl('analystError');
+            document.getElementById('analystErrorText').textContent = errorMsg;
+
+            const btn = document.getElementById('analystAnalyzeBtn');
+            btn.disabled = false;
+            document.getElementById('analystBtnText').textContent = 'Analyze Reports';
+        }
+
+        // =====================================================
+        // ANALYST AGENT: CHAT
+        // =====================================================
+        let analystChatLoading = false;
+
+        document.getElementById('analystChatInput').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendAnalystChatMessage();
+            }
+        });
+
+        function sendAnalystChatMessage() {
+            if (analystChatLoading) return;
+            const input = document.getElementById('analystChatInput');
+            const question = input.value.trim();
+            if (!question || !currentAnalystData) return;
+
+            analystChatLoading = true;
+            document.getElementById('analystChatSendBtn').disabled = true;
+
+            const chatMessages = document.getElementById('analystChatMessages');
+            chatMessages.innerHTML += `
+        <div class="chat-message user">
+          <div class="chat-bubble">${escapeHtml(question)}</div>
+        </div>
+      `;
+            input.value = '';
+
+            const loadingId = 'analyst-chat-loading-' + Date.now();
+            chatMessages.innerHTML += `
+        <div class="chat-message assistant" id="${loadingId}">
+          <div class="chat-bubble" style="display: flex; align-items: center; gap: 0.5rem;">
+            <span class="spinner" style="width: 14px; height: 14px; border-width: 2px;"></span>
+            Thinking...
+          </div>
+        </div>
+      `;
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+
+            // Build domestic/global reports text for context
+            let domesticText = '';
+            if (currentAnalystData.domestic_reports) {
+                domesticText = currentAnalystData.domestic_reports.map(r =>
+                    `${r.brokerage}: ${r.recommendation} | Target: ₹${r.target_price} | ${r.date} | ${r.summary || ''}`
+                ).join('\n');
+            }
+            let globalText = '';
+            if (currentAnalystData.global_reports) {
+                globalText = currentAnalystData.global_reports.map(r =>
+                    `${r.brokerage}: ${r.recommendation} | Target: ₹${r.target_price} | ${r.date} | ${r.summary || ''}`
+                ).join('\n');
+            }
+
+            fetch('/agent/analyst/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    ticker: currentAnalystData.ticker,
+                    question: question,
+                    company_name: analystSelectedName || currentAnalystData.company_name || currentAnalystData.ticker,
+                    analysis_context: currentAnalystData.analysis,
+                    domestic_reports_text: domesticText,
+                    global_reports_text: globalText
+                })
+            })
+                .then(r => r.json())
+                .then(data => {
+                    const loadingEl = document.getElementById(loadingId);
+                    if (loadingEl) loadingEl.remove();
+
+                    if (data.answer) {
+                        const answerHtml = marked.parse(data.answer);
+                        chatMessages.innerHTML += `
+            <div class="chat-message assistant">
+              <div class="chat-bubble">${answerHtml}</div>
+            </div>
+          `;
+                    } else if (data.error) {
+                        chatMessages.innerHTML += `
+            <div class="chat-message assistant">
+              <div class="chat-bubble" style="color: #f87171;">Error: ${escapeHtml(data.error)}</div>
+            </div>
+          `;
+                    }
+                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                })
+                .catch(err => {
+                    const loadingEl = document.getElementById(loadingId);
+                    if (loadingEl) loadingEl.remove();
+                    chatMessages.innerHTML += `
+          <div class="chat-message assistant">
+            <div class="chat-bubble" style="color: #f87171;">Network error: ${escapeHtml(err.message)}</div>
+          </div>
+        `;
+                })
+                .finally(() => {
+                    analystChatLoading = false;
+                    document.getElementById('analystChatSendBtn').disabled = false;
+                });
+        }
+
+        // =====================================================
         // UTILITY FUNCTIONS
         // =====================================================
         function showEl(id) { document.getElementById(id).classList.add('show'); }
@@ -2230,7 +2633,26 @@
                     sessionStorage.setItem('kagger_agents_forensic_chat', forensicChatMsgs.innerHTML);
                     sessionStorage.setItem('kagger_agents_forensic_chat_visible', '1');
                 }
-                console.log('[AGENTS STATE] Saved:', { concallBody: !!(concallBody && concallBody.innerHTML.trim()), concallShow: !!(concallCard && concallCard.classList.contains('show')), forensicBody: !!(forensicBody && forensicBody.innerHTML.trim()), forensicShow: !!(forensicCard && forensicCard.classList.contains('show')) });
+
+                // Save analyst analysis body + visibility + chat + meta
+                const analystBody = document.getElementById('analystAnalysisBody');
+                const analystCard = document.getElementById('analystAnalysis');
+                const analystChatMsgs = document.getElementById('analystChatMessages');
+                const analystChatCard = document.getElementById('analystChat');
+                const analystTitle = document.getElementById('analystAnalysisTitle');
+                const analystMeta = document.getElementById('analystAnalysisMeta');
+
+                if (analystBody && analystBody.innerHTML.trim()) {
+                    sessionStorage.setItem('kagger_agents_analyst_body', analystBody.innerHTML);
+                    sessionStorage.setItem('kagger_agents_analyst_visible', analystCard && analystCard.classList.contains('show') ? '1' : '0');
+                    if (analystTitle) sessionStorage.setItem('kagger_agents_analyst_title', analystTitle.textContent);
+                    if (analystMeta) sessionStorage.setItem('kagger_agents_analyst_meta', analystMeta.innerHTML);
+                }
+                if (analystChatMsgs && analystChatMsgs.innerHTML.trim() && analystChatCard && analystChatCard.classList.contains('show')) {
+                    sessionStorage.setItem('kagger_agents_analyst_chat', analystChatMsgs.innerHTML);
+                    sessionStorage.setItem('kagger_agents_analyst_chat_visible', '1');
+                }
+                console.log('[AGENTS STATE] Saved:', { concallBody: !!(concallBody && concallBody.innerHTML.trim()), concallShow: !!(concallCard && concallCard.classList.contains('show')), forensicBody: !!(forensicBody && forensicBody.innerHTML.trim()), forensicShow: !!(forensicCard && forensicCard.classList.contains('show')), analystBody: !!(analystBody && analystBody.innerHTML.trim()) });
             } catch (e) { console.error('[AGENTS STATE] Save error:', e); }
         }
 
@@ -2272,11 +2694,28 @@
                     showEl('forensicChat');
                 }
 
+                // Restore analyst analysis
+                const aBody = sessionStorage.getItem('kagger_agents_analyst_body');
+                if (aBody) {
+                    const el = document.getElementById('analystAnalysisBody');
+                    if (el) el.innerHTML = aBody;
+                    if (sessionStorage.getItem('kagger_agents_analyst_visible') === '1') showEl('analystAnalysis');
+                    const aTitle = sessionStorage.getItem('kagger_agents_analyst_title');
+                    const aMeta = sessionStorage.getItem('kagger_agents_analyst_meta');
+                    if (aTitle) { const t = document.getElementById('analystAnalysisTitle'); if (t) t.textContent = aTitle; }
+                    if (aMeta) { const m = document.getElementById('analystAnalysisMeta'); if (m) m.innerHTML = aMeta; }
+                }
+                if (sessionStorage.getItem('kagger_agents_analyst_chat_visible') === '1') {
+                    const aChat = sessionStorage.getItem('kagger_agents_analyst_chat');
+                    if (aChat) { const el = document.getElementById('analystChatMessages'); if (el) el.innerHTML = aChat; }
+                    showEl('analystChat');
+                }
+
                 // Restore active tab
                 if (savedTab) {
                     switchAgent(savedTab);
                 }
-                console.log('[AGENTS STATE] Restored:', { tab: savedTab, concall: !!cBody, forensic: !!fBody });
+                console.log('[AGENTS STATE] Restored:', { tab: savedTab, concall: !!cBody, forensic: !!fBody, analyst: !!aBody });
             } catch (e) { console.error('[AGENTS STATE] Restore error:', e); }
         }
 
@@ -2305,6 +2744,7 @@
             if (panel.classList.contains('open')) {
                 if (module === 'concall') renderConcallHistory();
                 else if (module === 'forensic') renderForensicHistory();
+                else if (module === 'analyst') renderAnalystHistory();
             }
         }
 
@@ -2340,10 +2780,28 @@
             });
         }
 
+        function renderAnalystHistory() {
+            const listEl = document.getElementById('analystHistoryList');
+            if (!listEl) return;
+            KaggerHistory.renderList('analyst', listEl, {
+                emptyText: 'No analyst report analyses yet',
+                labelFn: item => (item.name && item.name !== item.query ? item.name + ' (' + item.query + ')' : item.query),
+                onSelect: item => {
+                    analystSelectedTicker = item.query;
+                    analystSelectedName = item.name || item.query;
+                    const analystInp = document.getElementById('analystTickerInput');
+                    if (analystInp) analystInp.value = item.name && item.name !== item.query ? item.name + ' (' + item.query + ')' : item.query;
+                    toggleHistoryPanel('analyst');
+                    startAnalystAnalysis();
+                }
+            });
+        }
+
         // Auto-render on page load
         document.addEventListener('DOMContentLoaded', () => {
             renderConcallHistory();
             renderForensicHistory();
+            renderAnalystHistory();
         });
     </script>
 </body>

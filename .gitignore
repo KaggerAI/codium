@@ -131,3 +131,22 @@ kagger.db
 
 # Budget persistent data
 budget_session_*.json
+
+# Debug and test files (prevent future accumulation)
+debug_*.py
+debug_*.txt
+debug_*.html
+debug_*.json
+debug_files/
+test_*.py
+verify_*.py
+check_*.py
+load_test*.py
+load_test_results_*.csv
+locustfile.py
+setup_load_testing.py
+diagnostic_*.json
+*_debug_out.txt
+*_debug_safe.txt
+*_output.txt
+*.log
