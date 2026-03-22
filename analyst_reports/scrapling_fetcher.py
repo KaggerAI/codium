@@ -200,12 +200,16 @@ def _download_pdf_intercept(pdf_url: str) -> bytes | None:
         return None
 
     cookies = _load_trendlyne_cookies()
-    cookie_str = "; ".join(f"{len(v)} chars" for k, v in cookies.items())
-    print(f"SCRAPLING: Validating Azure Cookies: Found {len(cookies)} cookies. Lengths: {cookie_str}", file=sys.stderr)
+    proxy_url = os.environ.get("RESIDENTIAL_PROXY_URL")
+    proxies = {"http": proxy_url, "https": proxy_url} if proxy_url else None
+
+    if proxy_url:
+        print(f"SCRAPLING: Using Residential Proxy for {pdf_url}", file=sys.stderr)
+    else:
+        print(f"SCRAPLING: No proxy found, using direct connection for {pdf_url}", file=sys.stderr)
 
     try:
-        print(f"SCRAPLING: Capturing redirect for {pdf_url} using curl_cffi", file=sys.stderr)
-        session = requests.Session(impersonate="chrome110")
+        session = requests.Session(impersonate="chrome110", proxies=proxies)
         for k, v in cookies.items():
             session.cookies.set(k, v.strip(), domain=".trendlyne.com")
             
@@ -221,20 +225,19 @@ def _download_pdf_intercept(pdf_url: str) -> bytes | None:
         
         final_url = r.url
         if r.status_code == 200 and r.content and r.content[:5] == b"%PDF-":
-            print(f"SCRAPLING: PDF downloaded via curl_cffi ({len(r.content)} bytes from {final_url[:60]})", file=sys.stderr)
+            print(f"SCRAPLING: PDF downloaded via residential proxy ({len(r.content)} bytes)", file=sys.stderr)
             return r.content
 
-        print(f"SCRAPLING: curl_cffi Status {r.status_code}, URL: {final_url[:60]}", file=sys.stderr)
-        print(f"SCRAPLING: Response body dump: {r.text[:300]!r}", file=sys.stderr)
+        print(f"SCRAPLING: Failed to get PDF. Status {r.status_code}, URL: {final_url[:60]}", file=sys.stderr)
         return _download_pdf_httpx(pdf_url, cookies)
 
     except Exception as e:
-        print(f"SCRAPLING: curl_cffi error: {e}, falling back to httpx", file=sys.stderr)
+        print(f"SCRAPLING: Proxy/CFFI error: {e}, falling back to httpx", file=sys.stderr)
         return _download_pdf_httpx(pdf_url, cookies)
 
 
 async def download_pdf_with_scrapling(pdf_url: str) -> bytes | None:
-    """Async wrapper: download a PDF via curl_cffi redirect interception."""
+    """Async wrapper: download a PDF via curl_cffi (with optional residential proxy)."""
     return await asyncio.to_thread(_download_pdf_intercept, pdf_url)
 
 def _download_pdf_httpx(pdf_url: str, cookies: dict) -> bytes | None:
