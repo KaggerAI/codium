@@ -192,57 +192,52 @@ def _scrape_reports_page(url: str, ticker: str) -> list[dict]:
         traceback.print_exc(file=sys.stderr)
         return []
 
-
 def _download_pdf_intercept(pdf_url: str) -> bytes | None:
     """
-    Synchronous function: download a PDF from Trendlyne using Scrapling's
-    StealthyFetcher (compatible with older versions) to bypass WAF. 
-    It captures the AWS S3 redirect URL from `page.url` to avoid Playwright's 
-    PDF viewer, fetching the raw bytes directly from S3 with httpx.
+    Synchronous function: download a PDF from Trendlyne using `curl_cffi` to 
+    perfectly impersonate a real Chrome browser's TLS signature and headers.
+    This seamlessly bypasses Cloudflare's datacenter headless blocks, natively
+    follows the AWS S3 redirect, and downloads the raw PDF bytes.
     """
-    import httpx
     try:
-        from scrapling.fetchers import StealthyFetcher
+        from curl_cffi import requests
     except ImportError as e:
-        print(f"SCRAPLING: Error importing scrapling: {e}", file=sys.stderr)
+        print(f"SCRAPLING: Error importing curl_cffi: {e}", file=sys.stderr)
         return None
 
     cookies = _load_trendlyne_cookies()
 
     try:
-        print(f"SCRAPLING: Capturing redirect for {pdf_url}", file=sys.stderr)
-        # Using StealthyFetcher which is available in all Scrapling versions
-        page = StealthyFetcher.fetch(
+        print(f"SCRAPLING: Capturing redirect for {pdf_url} using curl_cffi", file=sys.stderr)
+        session = requests.Session(impersonate="chrome110")
+        for k, v in cookies.items():
+            session.cookies.set(k, v, domain=".trendlyne.com")
+            
+        r = session.get(
             pdf_url,
-            headless=True,
-            google_search=False,
-            extra_headers={
-                "Cookie": "; ".join(f"{k}={v}" for k, v in cookies.items()),
+            headers={
                 "Referer": "https://trendlyne.com/",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8"
             },
-            timeout=30000
+            allow_redirects=True,
+            timeout=30
         )
-
-        # page.url contains the final resolved URL after 301/302 redirects
-        final_url = page.url
         
-        if "s3" in final_url or "trendlyne-media" in final_url:
-            print(f"SCRAPLING: Directly fetching S3 URL: {final_url[:60]}...", file=sys.stderr)
-            r = httpx.get(final_url, timeout=30)
-            if r.content and r.content[:5] == b"%PDF-":
-                print(f"SCRAPLING: PDF downloaded ({len(r.content)} bytes)", file=sys.stderr)
-                return r.content
+        final_url = r.url
+        if r.status_code == 200 and r.content and r.content[:5] == b"%PDF-":
+            print(f"SCRAPLING: PDF downloaded via curl_cffi ({len(r.content)} bytes from {final_url[:60]})", file=sys.stderr)
+            return r.content
 
-        print(f"SCRAPLING: Did not redirect to S3 (URL: {final_url[:50]}), falling back to httpx", file=sys.stderr)
+        print(f"SCRAPLING: curl_cffi did not return PDF (Status {r.status_code}, URL: {final_url[:50]}), falling back to httpx", file=sys.stderr)
         return _download_pdf_httpx(pdf_url, cookies)
 
     except Exception as e:
-        print(f"SCRAPLING: Fetcher error: {e}, falling back to httpx", file=sys.stderr)
+        print(f"SCRAPLING: curl_cffi error: {e}, falling back to httpx", file=sys.stderr)
         return _download_pdf_httpx(pdf_url, cookies)
 
 
 async def download_pdf_with_scrapling(pdf_url: str) -> bytes | None:
-    """Async wrapper: download a PDF via Playwright redirect interception."""
+    """Async wrapper: download a PDF via curl_cffi redirect interception."""
     return await asyncio.to_thread(_download_pdf_intercept, pdf_url)
 
 def _download_pdf_httpx(pdf_url: str, cookies: dict) -> bytes | None:
