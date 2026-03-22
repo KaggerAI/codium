@@ -368,8 +368,26 @@ def _run_analyst_analysis(
             print(f"ANALYST_AGENT: Global reports failed: {global_err}", file=sys.stderr)
 
         # ── Step 4: Synthesise everything ───────────────────────────
-        update_agent_job(job_id, {"progress": "Synthesizing all analyst reports with AI..."})
+        update_agent_job(job_id, {"progress": "Fetching live CMP and synthesizing reports..."})
         print(f"ANALYST_AGENT: Step 4 — Synthesising", file=sys.stderr)
+
+        # Fetch current market price (CMP) using yfinance
+        cmp_text = "Not available"
+        try:
+            import yfinance as yf
+            yf_ticker = ticker if (ticker.endswith(".NS") or ticker.endswith(".BO")) else f"{ticker}.NS"
+            ticker_obj = yf.Ticker(yf_ticker)
+            hist = ticker_obj.history(period="1d")
+            if not hist.empty:
+                cmp_val = float(hist['Close'].iloc[-1])
+                cmp_text = f"₹{cmp_val:,.2f}"
+            else:
+                # Fallback to info
+                info = ticker_obj.info
+                if info and "currentPrice" in info:
+                    cmp_text = f"₹{float(info['currentPrice']):,.2f}"
+        except Exception as e:
+            print(f"ANALYST_AGENT: Error fetching CMP for {ticker}: {e}", file=sys.stderr)
 
         # Build context for synthesis
         domestic_context = ""
@@ -409,6 +427,7 @@ def _run_analyst_analysis(
         synthesis_input = f"""{ANALYST_SYNTHESIS_PROMPT}
 
 ## Company: {company_name} ({ticker})
+## Current Market Price (CMP): {cmp_text}
 
 ## DOMESTIC RESEARCH REPORTS:
 {domestic_context if domestic_context else "No domestic reports found."}

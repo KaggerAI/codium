@@ -18,7 +18,7 @@ You will receive:
 | **Average Target (Domestic)** | ₹XXX |
 | **Average Target (Global)** | ₹XXX |
 | **Combined Consensus Target** | ₹XXX |
-| **Upside from CMP** | XX% |
+| **Upside from CMP** | XX% (Calculate from the provided Current Market Price) |
 | **# Reports Analyzed** | X domestic + X global |
 
 ---
