@@ -193,55 +193,59 @@ def _scrape_reports_page(url: str, ticker: str) -> list[dict]:
         return []
 
 
-def _download_pdf_bytes(pdf_url: str) -> bytes | None:
+async def download_pdf_with_scrapling(pdf_url: str) -> bytes | None:
     """
-    Synchronous function: download a PDF from Trendlyne using Scrapling's
-    StealthyFetcher to bypass WAF/auth, with cookies for paywall access.
-
-    Returns PDF bytes or None on failure.
+    Async function: download a PDF from Trendlyne using Scrapling's
+    AsyncStealthySession to bypass WAF, catching the AWS S3 redirect
+    to avoid Playwright's PDF viewer wrapper.
     """
+    import httpx
     try:
-        from scrapling.fetchers import StealthyFetcher
+        from scrapling.fetchers import AsyncStealthySession
     except ImportError:
         print("SCRAPLING: scrapling not installed; cannot download PDF", file=sys.stderr)
         return None
 
     cookies = _load_trendlyne_cookies()
+    pw_cookies = [{"name": k, "value": v, "domain": ".trendlyne.com", "path": "/"} for k, v in cookies.items()]
 
+    final_pdf_url = None
     try:
-        print(f"SCRAPLING: Downloading PDF from {pdf_url}", file=sys.stderr)
-        page = StealthyFetcher.fetch(
-            pdf_url,
-            headless=True,
-            block_images=True,
-            google_search=False,
-            extra_headers={
-                "Cookie": "; ".join(f"{k}={v}" for k, v in cookies.items()),
-                "Referer": "https://trendlyne.com/",
-            },
-            timeout=60000,
-        )
-
-        # StealthyFetcher returns parsed HTML; for PDF, we need the raw bytes.
-        # Check if the response content looks like a PDF
-        raw = None
-        if hasattr(page, 'raw_content'):
-            raw = page.raw_content
-        elif hasattr(page, 'body'):
-            raw = page.body
-
-        # If Scrapling doesn't expose raw bytes, fall back to httpx with cookies
-        if raw and isinstance(raw, bytes) and raw[:5] == b'%PDF-':
-            print(f"SCRAPLING: PDF downloaded ({len(raw)} bytes)", file=sys.stderr)
-            return raw
-
-        print("SCRAPLING: StealthyFetcher didn't return PDF bytes, falling back to httpx", file=sys.stderr)
-        return _download_pdf_httpx(pdf_url, cookies)
+        print(f"SCRAPLING: Capturing API redirect for {pdf_url}", file=sys.stderr)
+        async with AsyncStealthySession(headless=True) as session:
+            await session.context.add_cookies(pw_cookies)
+            page = await session.context.new_page()
+            
+            async def handle_response(response):
+                nonlocal final_pdf_url
+                if response.status in (301, 302, 307) and "trendlyne.com/get-document" in response.url:
+                    final_pdf_url = response.headers.get("location")
+                elif "application/pdf" in response.headers.get("content-type", ""):
+                    final_pdf_url = response.url
+                    
+            page.on("response", handle_response)
+            
+            try:
+                await page.goto(pdf_url, referer="https://trendlyne.com/", wait_until="commit", timeout=20000)
+            except Exception:
+                pass # Playwright might abort navigation if it senses a download
+                
+            await asyncio.sleep(1.5) # Wait for redirects to fire
+            
+            if final_pdf_url:
+                print(f"SCRAPLING: Directly fetching S3 URL: {final_pdf_url[:60]}...", file=sys.stderr)
+                async with httpx.AsyncClient() as client:
+                    r = await client.get(final_pdf_url)
+                    if r.content and r.content[:5] == b"%PDF-":
+                        print(f"SCRAPLING: PDF downloaded ({len(r.content)} bytes)", file=sys.stderr)
+                        return r.content
+            
+            print("SCRAPLING: Interception failed or empty, falling back to httpx cookie fetch", file=sys.stderr)
+            return _download_pdf_httpx(pdf_url, cookies)
 
     except Exception as e:
-        print(f"SCRAPLING: PDF download failed: {e}, falling back to httpx", file=sys.stderr)
+        print(f"SCRAPLING: Interception error: {e}, falling back to httpx", file=sys.stderr)
         return _download_pdf_httpx(pdf_url, cookies)
-
 
 def _download_pdf_httpx(pdf_url: str, cookies: dict) -> bytes | None:
     """Fallback: download PDF with httpx using Trendlyne cookies."""
@@ -287,8 +291,3 @@ async def fetch_reports_with_scrapling(ticker: str, post_url: str) -> list[dict]
     return await asyncio.to_thread(_scrape_reports_page, post_url, ticker)
 
 
-async def download_pdf_with_scrapling(pdf_url: str) -> bytes | None:
-    """
-    Async wrapper: download a PDF from Trendlyne via Scrapling.
-    """
-    return await asyncio.to_thread(_download_pdf_bytes, pdf_url)
