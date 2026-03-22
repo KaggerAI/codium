@@ -285,55 +285,55 @@ def _run_analyst_analysis(
             })
             print(f"ANALYST_AGENT: Step 2 — Processing {len(pdfs_to_process)} PDFs", file=sys.stderr)
 
-            for i, report in enumerate(pdfs_to_process, 1):
+            async def process_single_pdf(i, report, total):
                 brokerage = report.get("brokerage", f"Broker_{i}")
                 pdf_url = report["pdf_url"]
-                update_agent_job(job_id, {
-                    "progress": f"Analyzing PDF {i}/{len(pdfs_to_process)}: {brokerage}..."
-                })
+                
+                # We can't safely call `update_agent_job` from multiple async tasks concurrently without race conditions 
+                # causing flickering in the UI. We'll just emit prints.
+                print(f"ANALYST_AGENT: Analyzing PDF {i}/{total}: {brokerage}...", file=sys.stderr)
 
                 try:
-                    # Try Scrapling PDF download first, then httpx fallback
                     pdf_bytes = None
                     try:
                         from analyst_reports.scrapling_fetcher import download_pdf_with_scrapling
-                        pdf_bytes = loop.run_until_complete(
-                            download_pdf_with_scrapling(pdf_url)
-                        )
+                        pdf_bytes = await download_pdf_with_scrapling(pdf_url)
                     except Exception as scrape_pdf_err:
                         print(f"ANALYST_AGENT: Scrapling PDF failed for {brokerage}: {scrape_pdf_err}", file=sys.stderr)
 
-                    # Fallback: use existing cookie-based downloader
                     if not pdf_bytes:
                         try:
                             from analyst_reports.pdf_summarizer_cookies import download_analyst_pdf_with_cookies
-                            pdf_bytes = loop.run_until_complete(
-                                download_analyst_pdf_with_cookies(pdf_url)
-                            )
+                            # download_analyst_pdf_with_cookies is synchronous, so run in thread if we make it async
+                            # Wait, the current version in master says it's an async fn if it was awaited via run_until_complete?
+                            # Let's wrap it in to_thread just in case to be perfectly safe, since we are in an async context.
+                            from analyst_reports.pdf_summarizer_cookies import download_analyst_pdf_with_cookies
+                            if asyncio.iscoroutinefunction(download_analyst_pdf_with_cookies):
+                                pdf_bytes = await download_analyst_pdf_with_cookies(pdf_url)
+                            else:
+                                pdf_bytes = await asyncio.to_thread(download_analyst_pdf_with_cookies, pdf_url)
                         except Exception as cookie_err:
                             print(f"ANALYST_AGENT: Cookie PDF download failed for {brokerage}: {cookie_err}", file=sys.stderr)
 
                     if pdf_bytes and len(pdf_bytes) > 1000:
-                        # Save PDF locally for user access
                         import os
                         local_filename = f"report_{ticker}_{slugify(brokerage)}.pdf"
                         local_dir = os.path.join(os.getcwd(), "temp_reports")
                         if not os.path.exists(local_dir):
-                            os.makedirs(local_dir)
+                            os.makedirs(local_dir, exist_ok=True)
                         
                         local_path = os.path.join(local_dir, local_filename)
                         with open(local_path, "wb") as f:
                             f.write(pdf_bytes)
                         
-                        # Update the report URL to the local one so synthesis links point here
                         report["pdf_url"] = f"/temp_reports/{local_filename}"
 
-                        summary = await_in_thread(
+                        summary = await asyncio.to_thread(
                             _summarise_pdf_bytes, pdf_bytes, brokerage, ticker
                         )
                         if summary and not summary.startswith("Error"):
-                            pdf_summaries[brokerage] = summary
                             print(f"ANALYST_AGENT: PDF summary done for {brokerage} ({len(summary)} chars)", file=sys.stderr)
+                            return brokerage, summary
                         else:
                             print(f"ANALYST_AGENT: PDF summary failed for {brokerage}: {summary[:100] if summary else 'empty'}", file=sys.stderr)
                     else:
@@ -341,6 +341,18 @@ def _run_analyst_analysis(
 
                 except Exception as pdf_err:
                     print(f"ANALYST_AGENT: PDF processing error for {brokerage}: {pdf_err}", file=sys.stderr)
+                
+                return brokerage, None
+
+            update_agent_job(job_id, {"progress": f"Downloading & concurrently analyzing {len(pdfs_to_process)} domestic report PDFs..."})
+            
+            # Run all PDF downloads and summaries CONCURRENTLY
+            tasks = [process_single_pdf(i, r, len(pdfs_to_process)) for i, r in enumerate(pdfs_to_process, 1)]
+            results = loop.run_until_complete(asyncio.gather(*tasks))
+            
+            for brokr, summ in results:
+                if summ:
+                    pdf_summaries[brokr] = summ
 
         # ── Step 3: Global reports via Perplexity ───────────────────
         update_agent_job(job_id, {"progress": f"Fetching global research reports for {ticker}..."})
