@@ -397,6 +397,11 @@ def build_rsi_divergence_figure(df, ticker, years=1, line_color='#ffffff'):
                    mode='lines', name='Close', line=dict(color=line_color)),
         row=1, col=1
     )
+    if 'SMA20' in d.columns:
+        fig.add_trace(
+            go.Scatter(x=list(d.index), y=[float(v) for v in d['SMA20']], mode='lines', name='SMA-20', line=dict(color='#fbbf24', width=1.5, dash='dot')),
+            row=1, col=1
+        )
     
     # Add swing high markers
     highs = sp[sp['Type'] == 'High']
@@ -655,6 +660,10 @@ def build_close_figure(df, ticker, years=1, line_color='#ffffff'):
     # Price line
     fig.add_trace(go.Scatter(x=list(d_original_index.index), y=[float(v) for v in d_original_index['Close']], mode='lines', name='Close', line=dict(color=line_color)))
     
+    # SMA-20
+    if 'SMA20' in d_original_index.columns:
+        fig.add_trace(go.Scatter(x=list(d_original_index.index), y=[float(v) for v in d_original_index['SMA20']], mode='lines', name='SMA-20', line=dict(color='#fbbf24', width=1.5, dash='dot')))
+    
     # Swing highs
     highs = sp[sp['Type']=='High']
     if not highs.empty:
@@ -699,7 +708,7 @@ def build_close_figure(df, ticker, years=1, line_color='#ffffff'):
             showlegend=(i == 0)  # Only show legend for first resistance line
         ))
     
-    fig.update_layout(title=f"{ticker} Price Pivots", height=450, legend=dict(orientation='h', x=0.5, xanchor='center', y=-0.2), hovermode='x unified', xaxis=dict(type='date', showspikes=True, spikemode='across', spikesnap='cursor', spikethickness=1, spikedash='dot', spikecolor='lightgrey'))
+    fig.update_layout(title=f"{ticker} Price Pivots", height=515, margin=dict(t=40, b=80), legend=dict(orientation='h', x=0.5, xanchor='center', y=-0.15), hovermode='x unified', xaxis=dict(type='date', showspikes=True, spikemode='across', spikesnap='cursor', spikethickness=1, spikedash='dot', spikecolor='lightgrey'))
     return fig
 
 
@@ -731,6 +740,10 @@ def build_hl_figure(df, ticker, years=1, line_color='#ffffff'):
     
     # Price line
     fig.add_trace(go.Scatter(x=d_original_index.index, y=[float(v) for v in d_original_index['Close']], mode='lines', name='Close', line=dict(color=line_color)))
+    
+    # SMA-20
+    if 'SMA20' in d_original_index.columns:
+        fig.add_trace(go.Scatter(x=list(d_original_index.index), y=[float(v) for v in d_original_index['SMA20']], mode='lines', name='SMA-20', line=dict(color='#fbbf24', width=1.5, dash='dot')))
     
     # Swing highs
     if not sh.empty:
@@ -772,7 +785,7 @@ def build_hl_figure(df, ticker, years=1, line_color='#ffffff'):
             showlegend=(i == 0)
         ))
     
-    fig.update_layout(title=f"{ticker} High/Low Pivots", height=450, legend=dict(orientation='h', x=0.5, xanchor='center', y=-0.2), hovermode='x unified', xaxis=dict(type='date', showspikes=True, spikemode='across', spikesnap='cursor', spikethickness=1, spikedash='dot', spikecolor='lightgrey'))
+    fig.update_layout(title=f"{ticker} High/Low Pivots", height=515, margin=dict(t=40, b=80), legend=dict(orientation='h', x=0.5, xanchor='center', y=-0.15), hovermode='x unified', xaxis=dict(type='date', showspikes=True, spikemode='across', spikesnap='cursor', spikethickness=1, spikedash='dot', spikecolor='lightgrey'))
     return fig
 
 
@@ -783,33 +796,175 @@ def build_ema_figure(df, ticker, years=1):
     fig.add_trace(go.Scatter(x=d.index, y=[float(v) for v in d['EMA13']], mode='lines', name='EMA13', line=dict(dash='dot', width=1.25, color='#60a5fa')))
     fig.add_trace(go.Scatter(x=d.index, y=[float(v) for v in d['EMA55']], mode='lines', name='EMA55', line=dict(dash='dot', width=1.25, color='red')))
     fig.add_trace(go.Scatter(x=d.index, y=[float(v) for v in d['EMA144']], mode='lines', name='EMA144', line=dict(dash='dot', width=1.25, color='green')))
-    fig.update_layout(title=f"{ticker} EMA Stack", height=450, legend=dict(orientation='h', x=0.5, xanchor='center', y=-0.2), hovermode='x unified', xaxis=dict(type='date', showspikes=True, spikemode='across', spikesnap='cursor', spikethickness=1, spikedash='dot', spikecolor='lightgrey'))
+    fig.update_layout(title=f"{ticker} EMA Stack", height=515, margin=dict(t=40, b=80), legend=dict(orientation='h', x=0.5, xanchor='center', y=-0.15), hovermode='x unified', xaxis=dict(type='date', showspikes=True, spikemode='across', spikesnap='cursor', spikethickness=1, spikedash='dot', spikecolor='lightgrey'))
     return fig
 
 
 def build_rsi_figure(df, ticker, years=1):
-    d=df[df.index>=df.index.max()-pd.DateOffset(years=years)]
-    fig=go.Figure()
-    fig.add_trace(go.Scatter(x=d.index, y=[float(v) for v in d['RSI14']], mode='lines', name='RSI'))
-    fig.add_trace(go.Scatter(x=d.index, y=[float(v) for v in d['RSI_EMA13']], mode='lines', name='RSI EMA-13', line=dict(dash='dot', width=1)))
-    fig.update_layout(title=f'{ticker} RSI', height=450, hovermode='x unified', xaxis=dict(type='date', showspikes=True, spikemode='across', spikesnap='cursor', spikethickness=1, spikedash='dot', spikecolor='lightgrey'))
+    d = df[df.index >= df.index.max() - pd.DateOffset(years=years)]
+    fig = go.Figure()
+
+    # RSI zone background bands
+    zones = [
+        (80, 100, 'Overbought',   'rgba(239,68,68,0.15)'),   # red
+        (55,  80, 'Bullish',      'rgba(34,197,94,0.08)'),    # green
+        (45,  55, 'No Trade<br>Zone', 'rgba(148,163,184,0.08)'),  # grey (wrapped)
+        (20,  45, 'Bearish',      'rgba(239,68,68,0.08)'),    # red
+        ( 0,  20, 'Oversold',     'rgba(34,197,94,0.15)'),    # green (user requested)
+    ]
+    for y0, y1, label, color in zones:
+        fig.add_hrect(y0=y0, y1=y1, fillcolor=color, line_width=0, layer='below')
+        # Zone label on the right margin
+        fig.add_annotation(
+            x=1.02, y=(y0 + y1) / 2, xref='paper', yref='y',
+            text=label, showarrow=False,
+            font=dict(size=9, color='#94a3b8'),
+            xanchor='left'
+        )
+
+    # RSI line
+    fig.add_trace(go.Scatter(x=d.index, y=[float(v) for v in d['RSI14']], mode='lines', name='RSI', line=dict(color='#22d3ee', width=1.5)))
+    # RSI EMA-13
+    fig.add_trace(go.Scatter(x=d.index, y=[float(v) for v in d['RSI_EMA13']], mode='lines', name='RSI EMA-13', line=dict(dash='dot', width=1, color='#fbbf24')))
+
+    fig.update_layout(
+        title=f'{ticker} RSI', height=515,
+        yaxis=dict(range=[0, 100]),
+        legend=dict(orientation='h', x=0.5, xanchor='center', y=-0.15),
+        hovermode='x unified',
+        margin=dict(t=40, b=80, r=100),  # room for zone labels, title up, legend down
+        xaxis=dict(type='date', showspikes=True, spikemode='across', spikesnap='cursor', spikethickness=1, spikedash='dot', spikecolor='lightgrey')
+    )
     return fig
 
 
 def build_adl_figure(df, ticker, years=1):
-    d=df[df.index>=df.index.max()-pd.DateOffset(years=years)]
-    fig=go.Figure()
-    fig.add_trace(go.Scatter(x=d.index, y=[float(v) for v in d['ADL']], mode='lines', name='ADL'))
-    fig.add_trace(go.Scatter(x=d.index, y=[float(v) for v in d['ADL_EMA']], mode='lines', name='ADL EMA', line=dict(dash='dot', width=1.25, color='orange')))
-    fig.update_layout(title=f'{ticker} ADL', height=450, hovermode='x unified', xaxis=dict(type='date', showspikes=True, spikemode='across', spikesnap='cursor', spikethickness=1, spikedash='dot', spikecolor='lightgrey'))
+    from plotly.subplots import make_subplots
+    d = df[df.index >= df.index.max() - pd.DateOffset(years=years)].copy()
+    sp = identify_swing_points(d, 6, 4, 'Close')
+
+    # Create 2-row subplots: top for price+SMA20, bottom for ADL+Volume
+    # Bottom slightly taller as per user request (0.45 top, 0.55 bottom)
+    fig = make_subplots(
+        rows=2, cols=1,
+        shared_xaxes=True,
+        vertical_spacing=0.08,
+        row_heights=[0.45, 0.55],
+        subplot_titles=(f'{ticker} Price', 'ADL & Volume'),
+        specs=[
+            [{"secondary_y": False}],  # Top pane (Price)
+            [{"secondary_y": True}]    # Bottom pane (ADL/Volume)
+        ]
+    )
+
+    # === TOP PANE (Row 1): Close Price + SMA 20 ===
+    fig.add_trace(
+        go.Scatter(x=d.index, y=[float(v) for v in d['Close']], mode='lines', name='Close', line=dict(color='#ffffff')),
+        row=1, col=1
+    )
+    if 'SMA20' in d.columns:
+        fig.add_trace(
+            go.Scatter(x=d.index, y=[float(v) for v in d['SMA20']], mode='lines', name='SMA-20', line=dict(color='#fbbf24', width=1.5, dash='dot')),
+            row=1, col=1
+        )
+
+    # Add swing high markers
+    highs = sp[sp['Type'] == 'High']
+    if not highs.empty:
+        fig.add_trace(
+            go.Scatter(x=d.index[highs['Index']], y=[float(v) for v in highs['Value']], 
+                       mode='markers', name='Swing High', 
+                       marker=dict(symbol='triangle-up', size=10, color='red')),
+            row=1, col=1
+        )
+    
+    # Add swing low markers
+    lows = sp[sp['Type'] == 'Low']
+    if not lows.empty:
+        fig.add_trace(
+            go.Scatter(x=d.index[lows['Index']], y=[float(v) for v in lows['Value']], 
+                       mode='markers', name='Swing Low', 
+                       marker=dict(symbol='triangle-down', size=10, color='green')),
+            row=1, col=1
+        )
+
+    # === BOTTOM PANE (Row 2): Volume & ADL ===
+    # --- Volume bars (background, secondary_y=False) ---
+    price_change = d['Close'].diff()
+    vol_colors = ['rgba(34,197,94,0.55)' if pc >= 0 else 'rgba(239,68,68,0.55)' for pc in price_change.fillna(0)]
+    fig.add_trace(
+        go.Bar(x=d.index, y=[float(v) for v in d['Volume']], name='Volume',
+               marker=dict(color=vol_colors, line=dict(width=0)), showlegend=True),
+        secondary_y=False, row=2, col=1
+    )
+
+    # --- ADL & ADL EMA lines (secondary_y=True, on top) ---
+    fig.add_trace(
+        go.Scatter(x=d.index, y=[float(v) for v in d['ADL']], mode='lines', name='ADL',
+                   line=dict(color='#3b82f6', width=1.5)),
+        secondary_y=True, row=2, col=1
+    )
+    fig.add_trace(
+        go.Scatter(x=d.index, y=[float(v) for v in d['ADL_EMA']], mode='lines', name='ADL EMA',
+                   line=dict(dash='dot', width=1.25, color='orange')),
+        secondary_y=True, row=2, col=1
+    )
+
+    # --- Axes Configuration ---
+    fig.update_yaxes(title_text='Price', showgrid=True, row=1, col=1)
+    # Hide Volume tick labels and grid
+    fig.update_yaxes(title_text='', showticklabels=False, showgrid=False, secondary_y=False, row=2, col=1)
+    # Put ADL labels on the left, but do not show overlapping grid
+    fig.update_yaxes(title_text='ADL', secondary_y=True, side='left', showgrid=False, row=2, col=1)
+
+    fig.update_layout(
+        height=800,
+        margin=dict(t=60, b=80),
+        hovermode='x unified',
+        legend=dict(orientation='h', x=0.5, xanchor='center', y=-0.15),
+        xaxis=dict(showspikes=True, spikemode='across', spikesnap='cursor',
+                   spikethickness=1, spikedash='dot', spikecolor='lightgrey'),
+        xaxis2=dict(type='date', showspikes=True, spikemode='across', spikesnap='cursor',
+                    spikethickness=1, spikedash='dot', spikecolor='lightgrey')
+    )
     return fig
 
 
 def build_rs_figure(df, ticker, years=1):
     d = df[df.index >= df.index.max() - pd.DateOffset(years=years)]
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=d.index, y=[float(v) for v in d['RS']], mode='lines', name='Relative Strength'))
-    fig.update_layout(title=f"{ticker} Relative Strength vs Nifty", height=450, legend=dict(orientation='h', x=0.5, xanchor='center', y=-0.2), yaxis=dict(tickformat='.2%'), hovermode='x unified', xaxis=dict(type='date', showspikes=True, spikemode='across', spikesnap='cursor', spikethickness=1, spikedash='dot', spikecolor='lightgrey'))
+
+    rs_vals = np.array([float(v) for v in d['RS']])
+    dates = list(d.index)
+
+    # Positive RS (green): clip negatives to zero for fill
+    rs_pos = np.where(rs_vals >= 0, rs_vals, 0)
+    fig.add_trace(go.Scatter(
+        x=dates, y=rs_pos.tolist(), mode='lines', name='RS (Outperforming)',
+        line=dict(color='rgba(34,197,94,0.9)', width=1.5),
+        fill='tozeroy', fillcolor='rgba(34,197,94,0.15)'
+    ))
+
+    # Negative RS (red): clip positives to zero for fill
+    rs_neg = np.where(rs_vals < 0, rs_vals, 0)
+    fig.add_trace(go.Scatter(
+        x=dates, y=rs_neg.tolist(), mode='lines', name='RS (Underperforming)',
+        line=dict(color='rgba(239,68,68,0.9)', width=1.5),
+        fill='tozeroy', fillcolor='rgba(239,68,68,0.15)'
+    ))
+
+    # Zero reference line
+    fig.add_hline(y=0, line_dash='dash', line_color='rgba(148,163,184,0.5)', line_width=1)
+
+    fig.update_layout(
+        title=f"{ticker} Relative Strength vs Nifty", height=515,
+        margin=dict(t=40, b=80),
+        legend=dict(orientation='h', x=0.5, xanchor='center', y=-0.15),
+        yaxis=dict(tickformat='.2%'),
+        hovermode='x unified',
+        xaxis=dict(type='date', showspikes=True, spikemode='across', spikesnap='cursor',
+                   spikethickness=1, spikedash='dot', spikecolor='lightgrey')
+    )
     return fig
 
 # -------------------------------------------------------------------
@@ -843,6 +998,8 @@ def evaluate_ticker_signal(ticker, in_position=False, price_pattern="", left_pri
     df['RS']     = calculate_relative_strength(df, idx_df)
     df['ATR14']  = talib.ATR(df.High, df.Low, df.Close, timeperiod=14)
     df['EMA13']  = talib.EMA(df.Close, timeperiod=13)
+    df['SMA20']  = talib.SMA(df.Close, timeperiod=20)
+    df['EMA21']  = talib.EMA(df.Close, timeperiod=21)
     df['EMA55']  = talib.EMA(df.Close, timeperiod=55)
     df['EMA144'] = talib.EMA(df.Close, timeperiod=144)
     df['RSI14']  = talib.RSI(df.Close, timeperiod=14)

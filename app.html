@@ -4722,7 +4722,7 @@
                   <p class="text-slate-600 leading-relaxed">${r.summary}</p>
                   ${r.pdf_url ? `
                     <div class="mt-4 flex flex-col gap-2">
-                      <p class="text-xs text-slate-500 mb-1">Trendlyne blocks automated bot downloads. Please click "Download PDF" to save it manually, then click "Upload for AI Summary" to generate the insights.</p>
+                      <p class="text-xs text-slate-500 mb-1">Please click "Download PDF" to save it manually, then click "Upload for AI Summary" to generate the insights.</p>
                       <div class="flex gap-2">
                         <a href="${r.pdf_url}" target="_blank" rel="noopener noreferrer" class="bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 px-4 py-2 rounded-lg flex items-center justify-center space-x-2 transition-all text-sm font-medium shadow-sm flex-1">
                           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
@@ -4783,7 +4783,7 @@
         };
 
         // Fetch Global Analyst Reports
-        window.fetchGlobalAnalystReports = async function(ticker, companyName) {
+        window.fetchGlobalAnalystReports = async function (ticker, companyName) {
           const container = document.getElementById('global-research-container');
           if (!container) return;
 
@@ -4859,17 +4859,17 @@
           }
         };
 
-        window.openGlobalSummaryModal = function(index) {
+        window.openGlobalSummaryModal = function (index) {
           if (!window.currentGlobalReports || !window.currentGlobalReports[index]) return;
           const r = window.currentGlobalReports[index];
           let html = r.detailed_summary || r.summary || "No detailed summary available.";
-          
+
           if (typeof renderMarkdownToHtml === 'function') {
-              html = renderMarkdownToHtml(html, false).html;
+            html = renderMarkdownToHtml(html, false).html;
           } else {
-              html = `<p>${html.replace(/\n/g, '<br>')}</p>`;
+            html = `<p>${html.replace(/\n/g, '<br>')}</p>`;
           }
-          
+
           if (r.source_url) {
             html += `
               <div class="mt-6 pt-4 border-t border-slate-200">
@@ -4881,14 +4881,14 @@
               </div>
             `;
           }
-          
+
           openAISummaryModal(r.brokerage, html, null);
         };
 
         // AI Summary upload logic
         const summaryCache = new Map(); // Cache for storing generated summaries
 
-        window.triggerAnalystPdfUpload = function(brokerage, index) {
+        window.triggerAnalystPdfUpload = function (brokerage, index) {
           const input = document.createElement('input');
           input.type = 'file';
           input.accept = 'application/pdf';
@@ -6261,8 +6261,8 @@
         messageDiv.classList.add('max-w-full', 'bg-red-100', 'text-red-700', 'self-center', 'w-full', 'text-center');
         messageDiv.textContent = text;
       }
-      const activeContainer = currentMode === 'company' 
-        ? document.getElementById('companyChatContainer') 
+      const activeContainer = currentMode === 'company'
+        ? document.getElementById('companyChatContainer')
         : document.getElementById('industryChatContainer');
       activeContainer.appendChild(messageDiv);
       chatLog.scrollTop = chatLog.scrollHeight;
@@ -6277,9 +6277,9 @@
     function clearAndRestoreChatHistory(newMode) {
       const companyContainer = document.getElementById('companyChatContainer');
       const industryContainer = document.getElementById('industryChatContainer');
-      
+
       if (!companyContainer || !industryContainer) return;
-      
+
       if (newMode === 'company') {
         companyContainer.classList.remove('hidden');
         industryContainer.classList.add('hidden');
@@ -7118,7 +7118,7 @@
             <div id="chartTabHl" class="chart-panel hidden" style="height:500px;"></div>
             <div id="chartTabEma" class="chart-panel hidden" style="height:500px;"></div>
             <div id="chartTabRsi" class="chart-panel hidden" style="height:500px;"></div>
-            <div id="chartTabAdl" class="chart-panel hidden" style="height:500px;"></div>
+            <div id="chartTabAdl" class="chart-panel hidden" style="height:800px;"></div>
             <div id="chartTabRs" class="chart-panel hidden" style="height:500px;"></div>
             <div id="chartTabRsiDiv" class="chart-panel hidden" style="height:800px;"></div>
           </div>
@@ -7278,18 +7278,18 @@
         { json: data.chart_hl_json, container: isPopout ? 'chartPopoutHl' : 'chartTabHl' },
         { json: data.chart_ema_json, container: isPopout ? 'chartPopoutEma' : 'chartTabEma' },
         { json: data.chart_rsi_json, container: isPopout ? 'chartPopoutRsi' : 'chartTabRsi' },
-        { json: data.chart_adl_json, container: isPopout ? 'chartPopoutAdl' : 'chartTabAdl' },
+        { json: data.chart_adl_json, container: isPopout ? 'chartPopoutAdl' : 'chartTabAdl', isSubplot: true },
         { json: data.chart_rs_json, container: isPopout ? 'chartPopoutRs' : 'chartTabRs' },
-        { json: data.chart_rsi_divergence_json, container: isPopout ? 'chartPopoutRsiDiv' : 'chartTabRsiDiv', isRsiDivergence: true }
+        { json: data.chart_rsi_divergence_json, container: isPopout ? 'chartPopoutRsiDiv' : 'chartTabRsiDiv', isSubplot: true }
       ];
 
-      charts.forEach(({ json, container, isRsiDivergence }) => {
+      charts.forEach(({ json, container, isSubplot }) => {
         if (json) {
           try {
             const parsed = typeof json === 'string' ? JSON.parse(json) : json;
 
-            // For RSI Divergence chart, carefully merge to preserve subplot domains
-            if (isRsiDivergence) {
+            // For Subplot charts, carefully merge to preserve subplot domains
+            if (isSubplot) {
               // Update trace colors for dark background visibility
               parsed.data.forEach(trace => {
                 // Change black price line to white
@@ -7335,15 +7335,65 @@
                 parsed.layout.yaxis2.linecolor = 'rgba(255,255,255,0.2)';
                 parsed.layout.yaxis2.titlefont = { color: '#e2e8f0' };
               }
+              if (parsed.layout.yaxis3) {
+                parsed.layout.yaxis3.gridcolor = 'rgba(255,255,255,0.1)';
+                parsed.layout.yaxis3.linecolor = 'rgba(255,255,255,0.2)';
+                parsed.layout.yaxis3.titlefont = { color: '#e2e8f0' };
+              }
+              if (parsed.layout.yaxis4) {
+                parsed.layout.yaxis4.gridcolor = 'rgba(255,255,255,0.1)';
+                parsed.layout.yaxis4.linecolor = 'rgba(255,255,255,0.2)';
+                parsed.layout.yaxis4.titlefont = { color: '#e2e8f0' };
+              }
 
-              parsed.layout.legend = { orientation: 'h', x: 0.5, xanchor: 'center', y: -0.20, yanchor: 'top' };
-              parsed.layout.margin = { ...parsed.layout.margin, b: 100 };
+              parsed.layout.legend = { orientation: 'h', x: 0.5, xanchor: 'center', y: -0.15, yanchor: 'top' };
+              parsed.layout.margin = { ...parsed.layout.margin, b: 80 };
 
-              Plotly.newPlot(container, parsed.data, parsed.layout, plotConfig);
+              Plotly.newPlot(container, parsed.data, parsed.layout, plotConfig).then(function(gd) {
+                gd.addEventListener('mousemove', function(e) {
+                  requestAnimationFrame(() => {
+                    const hovertexts = gd.querySelectorAll('.hoverlayer .hovertext');
+                    hovertexts.forEach(hovertext => {
+                      const transform = hovertext.getAttribute('transform');
+                      if (transform && transform.includes('translate')) {
+                        const match = transform.match(/translate\(([^,]+),([^)]+)\)/);
+                        if (match && match.length === 3) {
+                          const currentX = parseFloat(match[1]);
+                          const rect = gd.getBoundingClientRect();
+                          let newY = e.clientY - rect.top;
+                          // Optional: subtract a small offset so the mouse doesn't block the text
+                          newY = newY - 20;
+                          hovertext.setAttribute('transform', `translate(${currentX}, ${newY})`);
+                        }
+                      }
+                    });
+                  });
+                });
+              });
             } else {
               // Standard charts - apply dark theme normally
               parsed.layout = { ...parsed.layout, ...darkTemplate };
-              Plotly.newPlot(container, parsed.data, parsed.layout, plotConfig);
+              Plotly.newPlot(container, parsed.data, parsed.layout, plotConfig).then(function(gd) {
+                gd.addEventListener('mousemove', function(e) {
+                  requestAnimationFrame(() => {
+                    const hovertexts = gd.querySelectorAll('.hoverlayer .hovertext');
+                    hovertexts.forEach(hovertext => {
+                      const transform = hovertext.getAttribute('transform');
+                      if (transform && transform.includes('translate')) {
+                        const match = transform.match(/translate\(([^,]+),([^)]+)\)/);
+                        if (match && match.length === 3) {
+                          const currentX = parseFloat(match[1]);
+                          const rect = gd.getBoundingClientRect();
+                          let newY = e.clientY - rect.top;
+                          // Optional: subtract a small offset so the mouse doesn't block the text
+                          newY = newY - 20;
+                          hovertext.setAttribute('transform', `translate(${currentX}, ${newY})`);
+                        }
+                      }
+                    });
+                  });
+                });
+              });
             }
           } catch (e) {
             console.error(`Failed to render chart for ${container}:`, e);
