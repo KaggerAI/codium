@@ -150,3 +150,4 @@ diagnostic_*.json
 *_debug_safe.txt
 *_output.txt
 *.log
+temp_reports/

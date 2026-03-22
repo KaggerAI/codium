@@ -14,6 +14,11 @@ import asyncio
 import threading
 import traceback
 import json
+import re
+
+def slugify(text):
+    text = text.lower()
+    return re.sub(r'[^a-z0-9]', '_', text)
 import datetime
 from io import BytesIO
 
@@ -309,6 +314,20 @@ def _run_analyst_analysis(
                             print(f"ANALYST_AGENT: Cookie PDF download failed for {brokerage}: {cookie_err}", file=sys.stderr)
 
                     if pdf_bytes and len(pdf_bytes) > 1000:
+                        # Save PDF locally for user access
+                        import os
+                        local_filename = f"report_{ticker}_{slugify(brokerage)}.pdf"
+                        local_dir = os.path.join(os.getcwd(), "temp_reports")
+                        if not os.path.exists(local_dir):
+                            os.makedirs(local_dir)
+                        
+                        local_path = os.path.join(local_dir, local_filename)
+                        with open(local_path, "wb") as f:
+                            f.write(pdf_bytes)
+                        
+                        # Update the report URL to the local one so synthesis links point here
+                        report["pdf_url"] = f"/temp_reports/{local_filename}"
+
                         summary = await_in_thread(
                             _summarise_pdf_bytes, pdf_bytes, brokerage, ticker
                         )

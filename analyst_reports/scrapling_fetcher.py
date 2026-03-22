@@ -66,8 +66,10 @@ def _scrape_reports_page(url: str, ticker: str) -> list[dict]:
             block_images=True,
             hide_canvas=True,
             disable_webgl=True,
+            google_search=False,
             extra_headers={
                 "Cookie": "; ".join(f"{k}={v}" for k, v in cookies.items()),
+                "Referer": "https://trendlyne.com/",
             },
             wait_selector=".panel-post",
             timeout=45000,
@@ -212,8 +214,10 @@ def _download_pdf_bytes(pdf_url: str) -> bytes | None:
             pdf_url,
             headless=True,
             block_images=True,
+            google_search=False,
             extra_headers={
                 "Cookie": "; ".join(f"{k}={v}" for k, v in cookies.items()),
+                "Referer": "https://trendlyne.com/",
             },
             timeout=60000,
         )
