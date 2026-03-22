@@ -195,65 +195,49 @@ def _scrape_reports_page(url: str, ticker: str) -> list[dict]:
 
 def _download_pdf_intercept(pdf_url: str) -> bytes | None:
     """
-    Synchronous function: download a PDF from Trendlyne using raw Playwright
-    (installed via 'scrapling install') to bypass WAF. Intercepts the AWS S3
-    redirect URL and fetches the raw PDF bytes directly with httpx.
+    Synchronous function: download a PDF from Trendlyne using Scrapling's
+    StealthyFetcher (compatible with older versions) to bypass WAF. 
+    It captures the AWS S3 redirect URL from `page.url` to avoid Playwright's 
+    PDF viewer, fetching the raw bytes directly from S3 with httpx.
     """
     import httpx
     try:
-        from playwright.sync_api import sync_playwright
+        from scrapling.fetchers import StealthyFetcher
     except ImportError as e:
-        print(f"SCRAPLING: Playwright not available: {e}", file=sys.stderr)
+        print(f"SCRAPLING: Error importing scrapling: {e}", file=sys.stderr)
         return None
 
     cookies = _load_trendlyne_cookies()
-    pw_cookies = [{"name": k, "value": v, "domain": ".trendlyne.com", "path": "/"} for k, v in cookies.items()]
 
-    final_pdf_url = None
     try:
         print(f"SCRAPLING: Capturing redirect for {pdf_url}", file=sys.stderr)
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                           "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-            )
-            context.add_cookies(pw_cookies)
-            page = context.new_page()
+        # Using StealthyFetcher which is available in all Scrapling versions
+        page = StealthyFetcher.fetch(
+            pdf_url,
+            headless=True,
+            google_search=False,
+            extra_headers={
+                "Cookie": "; ".join(f"{k}={v}" for k, v in cookies.items()),
+                "Referer": "https://trendlyne.com/",
+            },
+            timeout=30000
+        )
 
-            def handle_response(response):
-                nonlocal final_pdf_url
-                url = response.url
-                ct = response.headers.get("content-type", "")
-                if response.status in (301, 302, 307) and "trendlyne.com/get-document" in url:
-                    final_pdf_url = response.headers.get("location")
-                elif "application/pdf" in ct:
-                    final_pdf_url = url
-
-            page.on("response", handle_response)
-
-            try:
-                page.goto(pdf_url, referer="https://trendlyne.com/", wait_until="commit", timeout=20000)
-            except Exception:
-                pass  # Navigation may abort on download trigger
-
-            import time
-            time.sleep(1.5)  # Wait for redirect chain to complete
-
-            browser.close()
-
-        if final_pdf_url:
-            print(f"SCRAPLING: Fetching S3 URL: {final_pdf_url[:60]}...", file=sys.stderr)
-            r = httpx.get(final_pdf_url, timeout=30)
+        # page.url contains the final resolved URL after 301/302 redirects
+        final_url = page.url
+        
+        if "s3" in final_url or "trendlyne-media" in final_url:
+            print(f"SCRAPLING: Directly fetching S3 URL: {final_url[:60]}...", file=sys.stderr)
+            r = httpx.get(final_url, timeout=30)
             if r.content and r.content[:5] == b"%PDF-":
                 print(f"SCRAPLING: PDF downloaded ({len(r.content)} bytes)", file=sys.stderr)
                 return r.content
 
-        print("SCRAPLING: Redirect interception failed, falling back to httpx", file=sys.stderr)
+        print(f"SCRAPLING: Did not redirect to S3 (URL: {final_url[:50]}), falling back to httpx", file=sys.stderr)
         return _download_pdf_httpx(pdf_url, cookies)
 
     except Exception as e:
-        print(f"SCRAPLING: Playwright error: {e}, falling back to httpx", file=sys.stderr)
+        print(f"SCRAPLING: Fetcher error: {e}, falling back to httpx", file=sys.stderr)
         return _download_pdf_httpx(pdf_url, cookies)
 
 
