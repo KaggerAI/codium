@@ -52,8 +52,8 @@ def _scrape_reports_page(url: str, ticker: str) -> list[dict]:
     """
     try:
         from scrapling.fetchers import StealthyFetcher
-    except ImportError:
-        print("SCRAPLING: scrapling not installed; cannot fetch", file=sys.stderr)
+    except ImportError as e:
+        print(f"SCRAPLING: Error importing scrapling: {e}", file=sys.stderr)
         return []
 
     cookies = _load_trendlyne_cookies()
@@ -202,8 +202,8 @@ async def download_pdf_with_scrapling(pdf_url: str) -> bytes | None:
     import httpx
     try:
         from scrapling.fetchers import AsyncStealthySession
-    except ImportError:
-        print("SCRAPLING: scrapling not installed; cannot download PDF", file=sys.stderr)
+    except ImportError as e:
+        print(f"SCRAPLING: Error importing scrapling: {e}", file=sys.stderr)
         return None
 
     cookies = _load_trendlyne_cookies()
