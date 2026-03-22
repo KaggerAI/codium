@@ -195,16 +195,15 @@ def _scrape_reports_page(url: str, ticker: str) -> list[dict]:
 
 def _download_pdf_intercept(pdf_url: str) -> bytes | None:
     """
-    Synchronous function: download a PDF from Trendlyne using Scrapling's
-    StealthySession to bypass WAF, catching the AWS S3 redirect URL
-    to avoid Playwright's PDF viewer wrapper, then fetching the raw
-    PDF bytes directly from the S3 URL with httpx.
+    Synchronous function: download a PDF from Trendlyne using raw Playwright
+    (installed via 'scrapling install') to bypass WAF. Intercepts the AWS S3
+    redirect URL and fetches the raw PDF bytes directly with httpx.
     """
     import httpx
     try:
-        from scrapling.fetchers import StealthySession
+        from playwright.sync_api import sync_playwright
     except ImportError as e:
-        print(f"SCRAPLING: Error importing scrapling: {e}", file=sys.stderr)
+        print(f"SCRAPLING: Playwright not available: {e}", file=sys.stderr)
         return None
 
     cookies = _load_trendlyne_cookies()
@@ -212,45 +211,54 @@ def _download_pdf_intercept(pdf_url: str) -> bytes | None:
 
     final_pdf_url = None
     try:
-        print(f"SCRAPLING: Capturing API redirect for {pdf_url}", file=sys.stderr)
-        with StealthySession(headless=True) as session:
-            session.context.add_cookies(pw_cookies)
-            page = session.context.new_page()
+        print(f"SCRAPLING: Capturing redirect for {pdf_url}", file=sys.stderr)
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            context = browser.new_context(
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                           "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+            )
+            context.add_cookies(pw_cookies)
+            page = context.new_page()
 
             def handle_response(response):
                 nonlocal final_pdf_url
-                if response.status in (301, 302, 307) and "trendlyne.com/get-document" in response.url:
+                url = response.url
+                ct = response.headers.get("content-type", "")
+                if response.status in (301, 302, 307) and "trendlyne.com/get-document" in url:
                     final_pdf_url = response.headers.get("location")
-                elif "application/pdf" in response.headers.get("content-type", ""):
-                    final_pdf_url = response.url
+                elif "application/pdf" in ct:
+                    final_pdf_url = url
 
             page.on("response", handle_response)
 
             try:
                 page.goto(pdf_url, referer="https://trendlyne.com/", wait_until="commit", timeout=20000)
             except Exception:
-                pass  # Playwright might abort navigation on download
+                pass  # Navigation may abort on download trigger
 
             import time
-            time.sleep(1.5)  # Wait for redirects to fire
+            time.sleep(1.5)  # Wait for redirect chain to complete
 
-            if final_pdf_url:
-                print(f"SCRAPLING: Directly fetching S3 URL: {final_pdf_url[:60]}...", file=sys.stderr)
-                r = httpx.get(final_pdf_url, timeout=30)
-                if r.content and r.content[:5] == b"%PDF-":
-                    print(f"SCRAPLING: PDF downloaded ({len(r.content)} bytes)", file=sys.stderr)
-                    return r.content
+            browser.close()
 
-            print("SCRAPLING: Interception failed or empty, falling back to httpx cookie fetch", file=sys.stderr)
-            return _download_pdf_httpx(pdf_url, cookies)
+        if final_pdf_url:
+            print(f"SCRAPLING: Fetching S3 URL: {final_pdf_url[:60]}...", file=sys.stderr)
+            r = httpx.get(final_pdf_url, timeout=30)
+            if r.content and r.content[:5] == b"%PDF-":
+                print(f"SCRAPLING: PDF downloaded ({len(r.content)} bytes)", file=sys.stderr)
+                return r.content
+
+        print("SCRAPLING: Redirect interception failed, falling back to httpx", file=sys.stderr)
+        return _download_pdf_httpx(pdf_url, cookies)
 
     except Exception as e:
-        print(f"SCRAPLING: Interception error: {e}, falling back to httpx", file=sys.stderr)
+        print(f"SCRAPLING: Playwright error: {e}, falling back to httpx", file=sys.stderr)
         return _download_pdf_httpx(pdf_url, cookies)
 
 
 async def download_pdf_with_scrapling(pdf_url: str) -> bytes | None:
-    """Async wrapper: download a PDF via Scrapling redirect interception."""
+    """Async wrapper: download a PDF via Playwright redirect interception."""
     return await asyncio.to_thread(_download_pdf_intercept, pdf_url)
 
 def _download_pdf_httpx(pdf_url: str, cookies: dict) -> bytes | None:
