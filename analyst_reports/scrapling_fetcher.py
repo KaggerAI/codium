@@ -193,12 +193,6 @@ def _scrape_reports_page(url: str, ticker: str) -> list[dict]:
         return []
 
 def _download_pdf_intercept(pdf_url: str) -> bytes | None:
-    """
-    Synchronous function: download a PDF from Trendlyne using `curl_cffi` to 
-    perfectly impersonate a real Chrome browser's TLS signature and headers.
-    This seamlessly bypasses Cloudflare's datacenter headless blocks, natively
-    follows the AWS S3 redirect, and downloads the raw PDF bytes.
-    """
     try:
         from curl_cffi import requests
     except ImportError as e:
@@ -206,12 +200,14 @@ def _download_pdf_intercept(pdf_url: str) -> bytes | None:
         return None
 
     cookies = _load_trendlyne_cookies()
+    cookie_str = "; ".join(f"{len(v)} chars" for k, v in cookies.items())
+    print(f"SCRAPLING: Validating Azure Cookies: Found {len(cookies)} cookies. Lengths: {cookie_str}", file=sys.stderr)
 
     try:
         print(f"SCRAPLING: Capturing redirect for {pdf_url} using curl_cffi", file=sys.stderr)
         session = requests.Session(impersonate="chrome110")
         for k, v in cookies.items():
-            session.cookies.set(k, v, domain=".trendlyne.com")
+            session.cookies.set(k, v.strip(), domain=".trendlyne.com")
             
         r = session.get(
             pdf_url,
@@ -228,7 +224,8 @@ def _download_pdf_intercept(pdf_url: str) -> bytes | None:
             print(f"SCRAPLING: PDF downloaded via curl_cffi ({len(r.content)} bytes from {final_url[:60]})", file=sys.stderr)
             return r.content
 
-        print(f"SCRAPLING: curl_cffi did not return PDF (Status {r.status_code}, URL: {final_url[:50]}), falling back to httpx", file=sys.stderr)
+        print(f"SCRAPLING: curl_cffi Status {r.status_code}, URL: {final_url[:60]}", file=sys.stderr)
+        print(f"SCRAPLING: Response body dump: {r.text[:300]!r}", file=sys.stderr)
         return _download_pdf_httpx(pdf_url, cookies)
 
     except Exception as e:
