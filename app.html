@@ -363,6 +363,17 @@
       display: flex;
       gap: 0;
       border-bottom: 2px solid #e2e8f0;
+      overflow-x: auto;
+      scrollbar-width: none;
+      /* Firefox */
+      -ms-overflow-style: none;
+      /* IE/Edge */
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .analyst-tabs::-webkit-scrollbar {
+      display: none;
+      /* Chrome/Safari */
     }
 
     .analyst-tab {
@@ -376,6 +387,8 @@
       border-bottom: 2px solid transparent;
       margin-bottom: -2px;
       font-size: 0.875rem;
+      flex-shrink: 0;
+      white-space: nowrap;
     }
 
     .analyst-tab.active {
@@ -1575,7 +1588,7 @@
 
       /* === ANALYST TABS === */
       .analyst-tabs {
-        flex-wrap: wrap;
+        flex-wrap: nowrap;
         gap: 0.25rem;
       }
 
@@ -1647,8 +1660,8 @@
       }
 
       #backToTopBtn {
-        bottom: 1rem;
-        right: 4.5rem;
+        bottom: 4.5rem;
+        right: 1rem;
         padding: 0.5rem;
       }
 
@@ -1763,13 +1776,10 @@
     }
 
     .main-content {
-      width: 100%;
-      max-width: 1000px;
-      transition: all 0.5s ease-in-out;
-    }
-
-    .main-content.expanded {
+      flex: 1;
+      min-width: 0;
       max-width: 1600px;
+      transition: all 0.5s ease-in-out;
     }
 
     .chat-sidebar {
@@ -1777,13 +1787,14 @@
       position: sticky;
       top: 6rem;
       /* Adjusted to sit below the sticky navbar */
-      height: calc(100vh - 7rem);
+      height: calc(100vh - 6rem);
       background: white;
-      border-radius: 1.25rem;
+      border-radius: 1.25rem 1.25rem 0 0;
       box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
       display: flex;
       flex-direction: column;
       border: 1px solid #e2e8f0;
+      border-bottom: none;
       transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
       z-index: 40;
     }
@@ -2287,6 +2298,7 @@
     }
   </style>
 
+  <script src="scale_ui.js"></script>
 </head>
 
 <body class="bg-slate-100 text-slate-800 antialiased">
@@ -2541,7 +2553,8 @@
             </div>
           </div>
         </div>
-      </div>
+      </div> <!-- End single-stock-panel -->
+
     </main>
   </div>
   <!-- NAVBAR -->
@@ -2662,6 +2675,8 @@
       .then(data => {
         if (data.is_admin) {
           document.getElementById('admin-link').classList.remove('hidden');
+          const adminScreenerBtn = document.getElementById('adminForceScreenerBtn');
+          if (adminScreenerBtn) adminScreenerBtn.classList.remove('hidden');
         }
       })
       .catch(() => { });
@@ -4693,7 +4708,9 @@
           if (!reports || reports.length === 0) {
             domesticHtml = '<p class="text-slate-500 italic">No domestic reports available for this stock.</p>';
           } else {
-            let tabsHtml = '<div class="analyst-tabs">';
+            let tabsHtml = `
+              <div class="relative group">
+                <div class="analyst-tabs no-scrollbar" id="domestic-tabs-scroll">`;
             let panelsHtml = '';
 
             reports.forEach((r, i) => {
@@ -4738,7 +4755,12 @@
                   ` : ''}
                 </div>`;
             });
-            tabsHtml += '</div>';
+            tabsHtml += `
+                </div>
+                <button onclick="scrollTabs('domestic-tabs-scroll', 1)" class="absolute right-0 top-0 bottom-0 bg-gradient-to-l from-white via-white/80 to-transparent pl-10 pr-2 flex items-center text-slate-400 hover:text-green-600 transition-all z-10 opacity-0 group-hover:opacity-100" title="Scroll right">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+                </button>
+              </div>`;
             domesticHtml = tabsHtml + panelsHtml;
           }
 
@@ -4771,6 +4793,17 @@
           </div>`;
         }
 
+        // Helper to scroll tab containers
+        window.scrollTabs = function (id, direction) {
+          const el = document.getElementById(id);
+          if (el) {
+            el.scrollBy({
+              left: direction * 200,
+              behavior: 'smooth'
+            });
+          }
+        };
+
         // Tab switching function for Analyst Reports
         window.switchAnalystTab = function (index) {
           document.querySelectorAll('.analyst-tab').forEach((t, i) => t.classList.toggle('active', i === index));
@@ -4798,7 +4831,9 @@
               return;
             }
 
-            let tabsHtml = '<div class="analyst-tabs mb-4">';
+            let tabsHtml = `
+              <div class="relative group mb-4">
+                <div class="analyst-tabs no-scrollbar" id="global-tabs-scroll">`;
             let panelsHtml = '';
 
             data.reports.forEach((r, i) => {
@@ -4849,7 +4884,12 @@
                 </div>`;
             });
 
-            tabsHtml += '</div>';
+            tabsHtml += `
+                </div>
+                <button onclick="scrollTabs('global-tabs-scroll', 1)" class="absolute right-0 top-0 bottom-0 bg-gradient-to-l from-white via-white/80 to-transparent pl-10 pr-2 flex items-center text-slate-400 hover:text-green-600 transition-all z-10 opacity-0 group-hover:opacity-100" title="Scroll right">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+                </button>
+              </div>`;
             container.innerHTML = tabsHtml + panelsHtml;
             window.currentGlobalReports = data.reports;
 
@@ -5858,7 +5898,7 @@
                   ...chart1Data.layout,
                   autosize: true,
                   margin: { l: 50, r: 30, t: 50, b: 50 }
-                }, { responsive: true });
+                }, { responsive: true, displayModeBar: false });
                 btn.innerHTML = 'Hide Chart <span class="ml-1">▲</span>';
               } else {
                 btn.innerHTML = 'Show Chart <span class="ml-1">▼</span>';
@@ -5926,7 +5966,7 @@
               const btn = e.currentTarget;
               const isHidden = chartRow.classList.toggle('hidden');
               if (!isHidden) {
-                Plotly.newPlot(id, JSON.parse(json).data, JSON.parse(json).layout, { responsive: true });
+                Plotly.newPlot(id, JSON.parse(json).data, JSON.parse(json).layout, { responsive: true, displayModeBar: false });
                 btn.innerHTML = 'Hide Chart <span class="ml-1 text-xs">▲</span>';
               } else {
                 btn.innerHTML = 'Expand Chart <span class="ml-1 text-xs">▼</span>';
@@ -5982,7 +6022,7 @@
             const isHidden = chartRow.classList.toggle('hidden');
             if (!isHidden) {
               const fig = JSON.parse(btn.dataset.chartJson);
-              Plotly.newPlot(btn.dataset.chartId, fig.data, fig.layout, { responsive: true });
+              Plotly.newPlot(btn.dataset.chartId, fig.data, fig.layout, { responsive: true, displayModeBar: false });
               btn.innerHTML = 'Hide Chart <span class="ml-1 text-xs">▲</span>';
             } else {
               btn.innerHTML = 'Expand Chart <span class="ml-1 text-xs">▼</span>';
@@ -6094,17 +6134,27 @@
       const shouldShow = force !== null ? force : isCollapsed;
       const mainContent = document.querySelector('.main-content');
 
+      const backToTopBtn = document.getElementById('backToTopBtn');
+
       if (shouldShow) {
         chatSidebar.classList.remove('collapsed');
         chatSidebar.classList.add('active');
         if (mainContent) mainContent.classList.remove('expanded');
         chatBtn.classList.add('opacity-0', 'pointer-events-none');
+        if (backToTopBtn) {
+          backToTopBtn.classList.remove('right-24');
+          backToTopBtn.classList.add('right-6');
+        }
         setTimeout(() => chatInput.focus(), 400);
       } else {
         chatSidebar.classList.add('collapsed');
         chatSidebar.classList.remove('active');
         if (mainContent) mainContent.classList.add('expanded');
         chatBtn.classList.remove('opacity-0', 'pointer-events-none');
+        if (backToTopBtn) {
+          backToTopBtn.classList.remove('right-6');
+          backToTopBtn.classList.add('right-24');
+        }
       }
     }
 
@@ -6761,59 +6811,177 @@
         </button>
       </div>
 
-      <!-- Search Form -->
-      <div class="glass-card rounded-2xl p-6 mb-8">
-        <div class="relative">
-          <input type="text" id="chartStockInput" placeholder="Enter stock ticker (e.g., RELIANCE, TCS, INFY...)"
-            class="w-full bg-white/5 border border-white/10 rounded-xl px-5 py-4 text-white placeholder-slate-400 focus:outline-none focus:border-emerald-500 transition-all text-lg"
-            autocomplete="off">
-          <div id="chartStockDropdown"
-            class="absolute top-full left-0 right-0 bg-slate-800 border border-white/10 rounded-lg mt-1 max-h-60 overflow-y-auto hidden z-50">
+      <!-- Chart Modes Tabs -->
+      <div class="flex gap-4 mb-6 border-b border-white/10 pb-4">
+        <button onclick="toggleChartMode('single')" id="mode-btn-single"
+          class="text-white font-medium px-5 py-2 bg-emerald-500/90 hover:bg-emerald-500 rounded-lg transition-all shadow-[0_0_15px_rgba(16,185,129,0.3)]">Single
+          Stock</button>
+        <button onclick="toggleChartMode('screener')" id="mode-btn-screener"
+          class="text-slate-400 font-medium px-5 py-2 hover:bg-white/10 rounded-lg transition-all flex items-center gap-2">
+          <svg class="w-4 h-4 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+          </svg>
+          Advanced Screeners
+        </button>
+      </div>
+
+      <!-- Advanced Screeners Panel -->
+      <div id="screener-panel" class="hidden">
+
+        <!-- Dynamic Strategy Tabs -->
+        <div class="flex flex-wrap gap-2 mb-4 bg-slate-900/50 p-1.5 rounded-xl border border-white/5 inline-flex">
+          <button onclick="setScreenerStrategy('momentum')" id="strat-btn-momentum"
+            class="px-4 py-2 rounded-lg text-sm font-bold transition-all bg-purple-500 text-white shadow-[0_0_10px_rgba(168,85,247,0.4)]">Momentum
+            Breakouts</button>
+          <button onclick="setScreenerStrategy('divergence')" id="strat-btn-divergence"
+            class="px-4 py-2 rounded-lg text-sm font-bold transition-all bg-transparent text-slate-400 hover:text-white hover:bg-white/5">Divergence
+            Bottoms</button>
+          <button onclick="setScreenerStrategy('wyckoff')" id="strat-btn-wyckoff"
+            class="px-4 py-2 rounded-lg text-sm font-bold transition-all bg-transparent text-slate-400 hover:text-white hover:bg-white/5">Wyckoff
+            Inst. Base</button>
+        </div>
+
+        <div class="glass-card rounded-2xl p-6 mb-8 border-purple-500/30" id="screener-desc-wrapper">
+          <div class="flex justify-between items-start flex-col gap-5 md:flex-row md:gap-0">
+            <div class="max-w-3xl" id="screener-desc-content">
+              <!-- Injected via JavaScript based on Active Strategy Tab -->
+            </div>
+            <div class="flex flex-col gap-3 w-full md:w-auto">
+              <button onclick="runSelectedScreener()" id="runScreenerBtn"
+                class="px-6 py-4 bg-gradient-to-r from-purple-500 to-indigo-600 rounded-xl font-semibold text-white hover:opacity-90 transition-all flex items-center justify-center gap-3 shadow-[0_0_20px_rgba(168,85,247,0.4)] hover:shadow-[0_0_30px_rgba(168,85,247,0.6)] hover:-translate-y-0.5">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                Run Market Scan
+              </button>
+              <button onclick="forceRunAdminScreener()" id="adminForceScreenerBtn"
+                class="hidden px-4 py-2 border border-red-500/30 bg-red-500/10 text-red-400 rounded-lg text-xs font-bold uppercase tracking-wider hover:bg-red-500/20 transition-all flex items-center justify-center gap-2 w-full">
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z">
+                  </path>
+                </svg>
+                Admin: Force Background Run
+              </button>
+            </div>
+          </div>
+
+          <div id="screenerProgress" class="hidden mt-6 bg-slate-900/50 rounded-lg p-4 border border-white/5">
+            <div class="flex justify-between items-center mb-2">
+              <div class="text-purple-300 text-sm font-medium" id="screenerProgressText">Initiating vector scan...</div>
+              <div class="text-slate-400 text-xs" id="screenerProgressDetails">Gathering universe</div>
+            </div>
+            <div class="w-full bg-white/5 rounded-full h-2">
+              <div class="bg-gradient-to-r from-purple-500 to-indigo-500 h-2 rounded-full transition-all duration-300"
+                style="width: 5%" id="screenerProgressBar"></div>
+            </div>
           </div>
         </div>
 
-        <!-- Duration Selector -->
-        <div class="flex items-center gap-3 mt-4">
-          <span class="text-slate-400 text-sm">Duration:</span>
-          <div class="flex gap-2">
-            <button onclick="setChartDuration(1)" id="chartDur1Y"
-              class="chart-duration-btn active px-4 py-2 rounded-lg text-sm font-medium transition-all bg-emerald-500 text-white">
-              1Y (Daily)
-            </button>
-            <button onclick="setChartDuration(3)" id="chartDur3Y"
-              class="chart-duration-btn px-4 py-2 rounded-lg text-sm font-medium transition-all bg-white/10 text-slate-300 hover:bg-white/20">
-              3Y (Daily)
-            </button>
-            <button onclick="setChartDuration(5)" id="chartDur5Y"
-              class="chart-duration-btn px-4 py-2 rounded-lg text-sm font-medium transition-all bg-white/10 text-slate-300 hover:bg-white/20">
-              5Y (Weekly)
-            </button>
-          </div>
-        </div>
+        <!-- Screener Results Feed -->
+        <div id="screenerResultsContainer" class="hidden">
 
-        <div class="flex gap-4 mt-4">
-          <button onclick="runChartAnalysis()" id="chartAnalyzeBtn"
-            class="flex-1 px-6 py-4 bg-gradient-to-r from-emerald-500 to-teal-600 rounded-xl font-semibold text-white hover:opacity-90 transition-all disabled:opacity-50 flex items-center justify-center gap-2">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-            </svg>
-            Analyze Charts
-          </button>
-        </div>
-        <div id="chartProgressContainer" class="hidden mt-4">
-          <div class="text-emerald-400 text-sm" id="chartProgressText">Starting analysis...</div>
-          <div class="w-full bg-white/10 rounded-full h-1.5 mt-2">
-            <div class="bg-gradient-to-r from-emerald-500 to-teal-500 h-1.5 rounded-full animate-pulse" style="width:0%"
-              id="chartProgressBar"></div>
+          <div class="flex justify-between items-center mb-4 px-1">
+            <div
+              class="text-[11px] uppercase tracking-wide font-bold text-slate-400 bg-black/20 px-3 py-1.5 rounded border border-white/5 flex gap-5 shadow-inner">
+              <span id="screenerLastAnalyzed">Last Analyzed: --</span>
+              <span id="screenerNextRun" class="text-purple-400">Next Run: --</span>
+            </div>
+          </div>
+
+          <!-- Filter Bar & Sector Heat -->
+          <div
+            class="glass-card bg-slate-800/40 border border-white/5 rounded-xl p-5 mb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div class="flex items-center gap-3 w-full md:w-auto">
+              <div class="text-sm text-slate-400 font-medium whitespace-nowrap">Filter by:</div>
+              <select id="screenerSectorFilter" onchange="renderScreenerFeed()"
+                class="bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-500 flex-1 md:w-40 max-w-[180px] text-ellipsis">
+                <option value="All">All Sectors</option>
+              </select>
+              <select id="screenerIndustryFilter" onchange="renderScreenerFeed()"
+                class="bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-500 flex-1 md:w-48 max-w-[200px] text-ellipsis">
+                <option value="All">All Industries</option>
+              </select>
+            </div>
+            <div class="flex flex-col gap-1.5 items-start md:items-end w-full md:w-auto">
+              <div class="text-[10px] uppercase tracking-wider text-slate-500 font-bold flex items-center gap-1">
+                <svg class="w-3 h-3 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
+                </svg>
+                Sector Heat (Top 3)
+              </div>
+              <div id="screenerTopSectors" class="flex flex-wrap gap-2">
+                <!-- badges injected here -->
+              </div>
+            </div>
+          </div>
+
+          <h4
+            class="text-xl font-medium text-white mb-6 border-b border-white/10 pb-3 flex items-center justify-between">
+            <div><span id="screenerMatchCount" class="text-emerald-400 font-bold">0</span> Matches Found</div>
+          </h4>
+          <div id="screenerChartFeed" class="grid grid-cols-1 md:grid-cols-2 gap-8 object-contain">
+            <!-- Dynamic charts injected here -->
           </div>
         </div>
       </div>
 
-      <!-- Results Container (cached independently) -->
-      <div id="chartAnalysisResults" class="chart-results-container">
-        <!-- Chart analysis results rendered here -->
-      </div>
+      <!-- Search Form (Single Stock) -->
+      <div id="single-stock-panel">
+        <div class="glass-card rounded-2xl p-6 mb-8">
+          <div class="relative">
+            <input type="text" id="chartStockInput" placeholder="Enter stock ticker (e.g., RELIANCE, TCS, INFY...)"
+              class="w-full bg-white/5 border border-white/10 rounded-xl px-5 py-4 text-white placeholder-slate-400 focus:outline-none focus:border-emerald-500 transition-all text-lg"
+              autocomplete="off">
+            <div id="chartStockDropdown"
+              class="absolute top-full left-0 right-0 bg-slate-800 border border-white/10 rounded-lg mt-1 max-h-60 overflow-y-auto hidden z-50">
+            </div>
+          </div>
+
+          <!-- Duration Selector -->
+          <div class="flex items-center gap-3 mt-4">
+            <span class="text-slate-400 text-sm">Duration:</span>
+            <div class="flex gap-2">
+              <button onclick="setChartDuration(1)" id="chartDur1Y"
+                class="chart-duration-btn active px-4 py-2 rounded-lg text-sm font-medium transition-all bg-emerald-500 text-white">
+                1Y (Daily)
+              </button>
+              <button onclick="setChartDuration(3)" id="chartDur3Y"
+                class="chart-duration-btn px-4 py-2 rounded-lg text-sm font-medium transition-all bg-white/10 text-slate-300 hover:bg-white/20">
+                3Y (Daily)
+              </button>
+              <button onclick="setChartDuration(5)" id="chartDur5Y"
+                class="chart-duration-btn px-4 py-2 rounded-lg text-sm font-medium transition-all bg-white/10 text-slate-300 hover:bg-white/20">
+                5Y (Weekly)
+              </button>
+            </div>
+          </div>
+
+          <div class="flex gap-4 mt-4">
+            <button onclick="runChartAnalysis()" id="chartAnalyzeBtn"
+              class="flex-1 px-6 py-4 bg-gradient-to-r from-emerald-500 to-teal-600 rounded-xl font-semibold text-white hover:opacity-90 transition-all disabled:opacity-50 flex items-center justify-center gap-2">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+              </svg>
+              Analyze Charts
+            </button>
+          </div>
+          <div id="chartProgressContainer" class="hidden mt-4">
+            <div class="text-emerald-400 text-sm" id="chartProgressText">Starting analysis...</div>
+            <div class="w-full bg-white/10 rounded-full h-1.5 mt-2">
+              <div class="bg-gradient-to-r from-emerald-500 to-teal-500 h-1.5 rounded-full animate-pulse"
+                style="width:0%" id="chartProgressBar"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Results Container (cached independently) -->
+        <div id="chartAnalysisResults" class="chart-results-container">
+          <!-- Chart analysis results rendered here -->
+        </div>
     </main>
   </div>
 
@@ -7349,8 +7517,8 @@
               parsed.layout.legend = { orientation: 'h', x: 0.5, xanchor: 'center', y: -0.15, yanchor: 'top' };
               parsed.layout.margin = { ...parsed.layout.margin, b: 80 };
 
-              Plotly.newPlot(container, parsed.data, parsed.layout, plotConfig).then(function(gd) {
-                gd.addEventListener('mousemove', function(e) {
+              Plotly.newPlot(container, parsed.data, parsed.layout, plotConfig).then(function (gd) {
+                gd.addEventListener('mousemove', function (e) {
                   requestAnimationFrame(() => {
                     const hovertexts = gd.querySelectorAll('.hoverlayer .hovertext');
                     hovertexts.forEach(hovertext => {
@@ -7373,8 +7541,8 @@
             } else {
               // Standard charts - apply dark theme normally
               parsed.layout = { ...parsed.layout, ...darkTemplate };
-              Plotly.newPlot(container, parsed.data, parsed.layout, plotConfig).then(function(gd) {
-                gd.addEventListener('mousemove', function(e) {
+              Plotly.newPlot(container, parsed.data, parsed.layout, plotConfig).then(function (gd) {
+                gd.addEventListener('mousemove', function (e) {
                   requestAnimationFrame(() => {
                     const hovertexts = gd.querySelectorAll('.hoverlayer .hovertext');
                     hovertexts.forEach(hovertext => {
@@ -8026,6 +8194,401 @@
           stable stock price, meaning less risk of sudden deep drawdowns. It considers metrics like Beta, Implied
           Volatility (IV), Historical Volatility (HV), Average True Range (ATR), and market-wide VIX.</p>
       </div>
+    </div>
+  </div>
+  <script>
+    // Advanced Screeners Logic
+    function toggleChartMode(mode) {
+      if (mode === 'single') {
+        document.getElementById('mode-btn-single').className = "text-white font-medium px-5 py-2 bg-emerald-500/90 hover:bg-emerald-500 rounded-lg transition-all shadow-[0_0_15px_rgba(16,185,129,0.3)]";
+        document.getElementById('mode-btn-screener').className = "text-slate-400 font-medium px-5 py-2 hover:bg-white/10 rounded-lg transition-all flex items-center gap-2";
+        document.getElementById('single-stock-panel').classList.remove('hidden');
+        document.getElementById('screener-panel').classList.add('hidden');
+      } else {
+        document.getElementById('mode-btn-screener').className = "text-white font-medium px-5 py-2 bg-purple-600/90 hover:bg-purple-600 rounded-lg transition-all flex items-center gap-2 shadow-[0_0_15px_rgba(168,85,247,0.3)]";
+        document.getElementById('mode-btn-single').className = "text-slate-400 font-medium px-5 py-2 hover:bg-white/10 rounded-lg transition-all";
+        document.getElementById('single-stock-panel').classList.add('hidden');
+        document.getElementById('screener-panel').classList.remove('hidden');
+      }
+    }
+
+    function calculateNextRunIST() {
+      const raw = new Date();
+      const utcTime = raw.getTime() + (raw.getTimezoneOffset() * 60000);
+      const istTime = new Date(utcTime + (3600000 * 5.5)); // +5:30
+
+      let nextRun = new Date(istTime.getTime());
+      let nextHour = '03:00 pm'; // Default
+
+      if (istTime.getHours() < 15) {
+        nextHour = '03:00 pm';
+      } else if (istTime.getHours() >= 15 && istTime.getHours() < 16) {
+        nextHour = '04:00 pm';
+      } else {
+        nextRun.setDate(nextRun.getDate() + 1);
+        nextHour = '03:00 pm';
+      }
+
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      return `${nextRun.getDate()} ${months[nextRun.getMonth()]}, ${nextHour}`;
+    }
+
+    async function forceRunAdminScreener() {
+      const btn = document.getElementById('adminForceScreenerBtn');
+      btn.disabled = true;
+      btn.innerHTML = 'Dispatching...';
+      try {
+        const res = await fetch('/api/admin/screener/force_run', { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+          btn.innerHTML = 'Dispatched (Check Console)';
+          btn.classList.add('bg-green-500/20', 'text-green-400', 'border-green-500/50');
+          btn.classList.remove('bg-red-500/10', 'text-red-400', 'border-red-500/30');
+          setTimeout(() => {
+            btn.disabled = false;
+            btn.innerHTML = `<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg> Admin: Force Background Run`;
+            btn.classList.remove('bg-green-500/20', 'text-green-400', 'border-green-500/50');
+            btn.classList.add('bg-red-500/10', 'text-red-400', 'border-red-500/30');
+          }, 3000);
+        } else {
+          alert("Auth Error: " + data.error);
+          btn.disabled = false;
+          btn.innerHTML = 'Error Dispatching';
+        }
+      } catch (e) {
+        btn.disabled = false;
+        btn.innerHTML = 'Network Error';
+      }
+    }
+
+    window.currentScreenerStrategy = 'momentum';
+
+    function setScreenerStrategy(strat) {
+      window.currentScreenerStrategy = strat;
+
+      // Reset tabs visually
+      document.getElementById('strat-btn-momentum').className = "px-4 py-2 rounded-lg text-sm font-bold transition-all bg-transparent text-slate-400 hover:text-white hover:bg-white/5";
+      document.getElementById('strat-btn-divergence').className = "px-4 py-2 rounded-lg text-sm font-bold transition-all bg-transparent text-slate-400 hover:text-white hover:bg-white/5";
+      document.getElementById('strat-btn-wyckoff').className = "px-4 py-2 rounded-lg text-sm font-bold transition-all bg-transparent text-slate-400 hover:text-white hover:bg-white/5";
+
+      // Set active tab visually
+      document.getElementById(`strat-btn-${strat}`).className = "px-4 py-2 rounded-lg text-sm font-bold transition-all bg-purple-500 text-white shadow-[0_0_10px_rgba(168,85,247,0.4)]";
+
+      // Define Strategy Content dynamically
+      const contentArea = document.getElementById('screener-desc-content');
+      if (strat === 'momentum') {
+        contentArea.innerHTML = `
+                <h3 class="text-2xl text-white font-bold mb-2 flex items-center gap-2">
+                    <span class="text-purple-400">⚡</span> Short-Term Momentum Swing
+                </h3>
+                <p class="text-slate-400 text-sm mb-1 leading-relaxed">
+                    Scans <span class="text-white font-medium">2000+ NSE stocks</span> to show stocks with explosive breakout potential, ideal for short-term (1-3 months) swing trading. 
+                </p>
+                <ul class="text-slate-500 text-xs mt-3 space-y-1.5 list-disc pl-4">
+                    <li><strong class="text-slate-300">High Liquidity:</strong> 20 & 50-day Avg Traded Value &gt; ₹5 Cr</li>
+                    <li><strong class="text-slate-300">Trend Alignment:</strong> 10 SMA &gt; 20 SMA &ge; 50 SMA</li>
+                    <li><strong class="text-slate-300">Price Action:</strong> Close &gt; Y'day Close</li>
+                    <li><strong class="text-slate-300">Volatility Breakout:</strong> ATR(1) &gt; 60% of ATR(20)</li>
+                </ul>
+            `;
+      } else if (strat === 'divergence') {
+        contentArea.innerHTML = `
+                <h3 class="text-2xl text-white font-bold mb-2 flex items-center gap-2">
+                    <span class="text-emerald-400">🎯</span> Divergence Bottoms
+                </h3>
+                <p class="text-slate-400 text-sm mb-1 leading-relaxed">
+                    Scans highly liquid stocks for <span class="text-white font-medium">Hidden Bullish Divergences</span> for early detection of stock bottoming out. Ideal for medium-term (3-6 months) investors.
+                </p>
+                <ul class="text-slate-500 text-xs mt-3 space-y-1.5 list-disc pl-4">
+                    <li><strong class="text-slate-300">Pattern Recognition:</strong> Matches complex Price/RSI structural footprints algorithmically</li>
+                    <li><strong class="text-slate-300">Swing Exhaustion:</strong> Seeks "Higher Highs" intersecting with extreme RSI decoupling</li>
+                    <li><strong class="text-slate-300">Institutional ADL:</strong> Filters for positive Accumulation/Distribution slopes backing the bounce</li>
+                    <li><strong class="text-slate-300">Expiries:</strong> Validates signals strictly within a rolling historical window</li>
+                </ul>
+            `;
+      } else if (strat === 'wyckoff') {
+        contentArea.innerHTML = `
+                <h3 class="text-2xl text-white font-bold mb-2 flex items-center gap-2">
+                    <span class="text-blue-400">🦅</span> Wyckoff Institutional Base
+                </h3>
+                <p class="text-slate-400 text-sm mb-1 leading-relaxed">
+                    Scans 10-year data of Nifty 1000 stocks mapping structural Wave Analysis to hunt for <span class="text-white font-medium">multi-year Accumulation bases</span> ready for Markup/Rally. Ideal for long term investors.
+                </p>
+                <ul class="text-slate-500 text-xs mt-3 space-y-1.5 list-disc pl-4">
+                    <li><strong class="text-slate-300">Cycle Analytics:</strong> Maps structural Markdown, AR, SC, Phase C & D natively on historical action.</li>
+                    <li><strong class="text-slate-300">Moving Average Confluence:</strong> Validates Phase D support strictness to institutional SMA 100 behaviors.</li>
+                    <li><strong class="text-slate-300">Live Triggers:</strong> Actively pinpoints emerging LPS signals and confirmed Phase E Markups.</li>
+                    <li><strong class="text-slate-300">Risk Aversion:</strong> Excludes over-extended patterns protecting from late distribution entries.</li>
+                </ul>
+            `;
+      }
+
+      // Hide previous loaded results if shifting Strategy
+      document.getElementById('screenerResultsContainer').classList.add('hidden');
+    }
+
+    // Initialize UI on load
+    document.addEventListener("DOMContentLoaded", () => {
+      if (document.getElementById('strat-btn-momentum')) {
+        setScreenerStrategy('momentum');
+      }
+    });
+
+    async function runSelectedScreener() {
+      const btn = document.getElementById('runScreenerBtn');
+      const resultsCont = document.getElementById('screenerResultsContainer');
+      const chartFeed = document.getElementById('screenerChartFeed');
+
+      // Hide standard heavy progress loader since it's instant now
+      document.getElementById('screenerProgress').classList.add('hidden');
+
+      btn.disabled = true;
+      btn.classList.add('opacity-50', 'cursor-not-allowed');
+      btn.innerHTML = `<svg class="animate-spin h-5 w-5" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Fetching Scan...`;
+
+      resultsCont.classList.add('hidden');
+      chartFeed.innerHTML = '';
+
+      try {
+        const res = await fetch(`/api/screener/${window.currentScreenerStrategy}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({})
+        });
+
+        const data = await res.json();
+
+        if (data.error) {
+          alert(`Screener Update: ${data.error}`);
+          throw new Error(data.error);
+        }
+
+        // Map Timestamps correctly onto the UI cleanly
+        if (data.last_analyzed) {
+          document.getElementById('screenerLastAnalyzed').innerText = `Last Analyzed: ${data.last_analyzed}`;
+        }
+        document.getElementById('screenerNextRun').innerText = `Next Run: ${calculateNextRunIST()}`;
+
+        // Render Results
+        resultsCont.classList.remove('hidden');
+
+        window._screenerRawResults = data.results;
+        populateScreenerFilters(data.results);
+        renderScreenerFeed();
+
+      } catch (err) {
+        console.error(err);
+      } finally {
+        btn.disabled = false;
+        btn.classList.remove('opacity-50', 'cursor-not-allowed');
+        btn.innerHTML = `<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                  Run Market Scan`;
+      }
+    }
+
+    function populateScreenerFilters(results) {
+      const sectorSet = new Set();
+      const industrySet = new Set();
+      const sectorCounts = {};
+
+      results.forEach(r => {
+        let sName = (r.sector_name && r.sector_name !== 'Unknown' && String(r.sector_name) !== 'NaN' && String(r.sector_name) !== 'nan') ? r.sector_name : 'Uncategorized';
+        r.sector_name_clean = sName;
+        sectorSet.add(sName);
+        if (sName !== 'Uncategorized') {
+          sectorCounts[sName] = (sectorCounts[sName] || 0) + 1;
+        }
+
+        let iName = (r.industry_name && r.industry_name !== 'Unknown' && String(r.industry_name) !== 'NaN' && String(r.industry_name) !== 'nan') ? r.industry_name : 'Uncategorized';
+        r.industry_name_clean = iName;
+        industrySet.add(iName);
+      });
+
+      const secSelect = document.getElementById('screenerSectorFilter');
+      secSelect.innerHTML = '<option value="All">All Sectors</option>';
+      [...sectorSet].sort().forEach(s => {
+        secSelect.innerHTML += `<option value="${s}">${s}</option>`;
+      });
+
+      const indSelect = document.getElementById('screenerIndustryFilter');
+      indSelect.innerHTML = '<option value="All">All Industries</option>';
+      [...industrySet].sort().forEach(i => {
+        indSelect.innerHTML += `<option value="${i}">${i}</option>`;
+      });
+
+      const sortedSectors = Object.entries(sectorCounts).sort((a, b) => b[1] - a[1]).slice(0, 3);
+      const topSectorsDiv = document.getElementById('screenerTopSectors');
+      if (sortedSectors.length > 0) {
+        topSectorsDiv.innerHTML = sortedSectors.map(s =>
+          `<span class="px-2.5 py-1 bg-purple-500/20 text-purple-300 border border-purple-500/40 rounded-md text-[10px] font-bold tracking-wide cursor-pointer hover:bg-purple-500/40 transition-all" onclick="document.getElementById('screenerSectorFilter').value='${s[0]}'; renderScreenerFeed();">${s[0]} <span class="bg-purple-500/40 px-1.5 py-0.5 rounded text-white ml-1">${s[1]}</span></span>`
+        ).join('');
+      } else {
+        topSectorsDiv.innerHTML = '<span class="text-[10px] text-slate-600">Not enough data</span>';
+      }
+    }
+
+    function renderScreenerFeed() {
+      if (!window._screenerRawResults) return;
+
+      const chartFeed = document.getElementById('screenerChartFeed');
+      const filterSector = document.getElementById('screenerSectorFilter').value;
+      const filterIndustry = document.getElementById('screenerIndustryFilter').value;
+
+      const filtered = window._screenerRawResults.filter(r => {
+        let pass = true;
+        if (filterSector !== 'All' && r.sector_name_clean !== filterSector) pass = false;
+        if (filterIndustry !== 'All' && r.industry_name_clean !== filterIndustry) pass = false;
+        return pass;
+      });
+
+      document.getElementById('screenerMatchCount').innerText = filtered.length;
+      chartFeed.innerHTML = '';
+      window._screenerMatches = {};
+
+      if (filtered.length === 0) {
+        chartFeed.innerHTML = `<div class="col-span-1 md:col-span-2 border border-white/10 rounded-xl p-8 text-center text-slate-400 bg-white/5">
+                No stocks matched the highly rigorous momentum criteria or the selected filters.
+            </div>`;
+      } else {
+        filtered.forEach((match, idx) => {
+          const cardId = `screener-chart-${idx}`;
+
+          const card = document.createElement('div');
+          card.className = "flex flex-col glass-card rounded-xl border border-white/5 overflow-hidden transition-all hover:border-purple-500/30 hover:shadow-[0_0_20px_rgba(168,85,247,0.1)] group";
+
+          let tagBadges = '';
+          if (match.sector_name_clean) {
+            tagBadges += `<span class="text-[9px] uppercase tracking-wider font-bold text-slate-400 bg-black/20 px-1.5 py-0.5 rounded border border-white/5 mt-1 mr-1 inline-block">${match.sector_name_clean}</span>`;
+          }
+          if (match.signal) {
+            tagBadges += `<span class="text-[10px] tracking-wide font-bold text-blue-300 bg-blue-500/20 px-2 py-0.5 rounded border border-blue-500/30 mt-1 mr-1 inline-block">${match.signal}</span>`;
+          }
+
+          card.innerHTML = `
+                    <div class="px-5 py-4 border-b border-white/5 flex justify-between items-center bg-white/5">
+                        <div>
+                            <h5 class="text-white font-bold text-lg">${match.company_name}</h5>
+                            <span class="text-xs text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded font-mono font-medium">${match.ticker}</span>
+                            ${tagBadges}
+                        </div>
+                        <div class="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                            <button onclick="openScreenerExpandedChart('${idx}')" class="px-3 py-1.5 text-xs font-semibold bg-white/10 text-slate-300 rounded hover:bg-white/20 transition-all flex items-center gap-1 cursor-pointer">
+                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path></svg>
+                                Expand
+                            </button>
+                            <button onclick="expandScreenerStock('${match.ticker}')" class="px-3 py-1.5 text-xs font-semibold bg-emerald-500/20 text-emerald-400 rounded hover:bg-emerald-500 hover:text-white transition-all flex items-center gap-1 cursor-pointer">
+                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+                                Full Analysis
+                            </button>
+                        </div>
+                    </div>
+                    <div class="p-1 h-[400px] w-full" id="${cardId}"></div>
+                `;
+          chartFeed.appendChild(card);
+
+          requestAnimationFrame(() => {
+            const chartData = JSON.parse(match.chart_json);
+            if (chartData.layout) {
+              chartData.layout.paper_bgcolor = 'rgba(0,0,0,0)';
+              chartData.layout.plot_bgcolor = 'rgba(0,0,0,0)';
+              chartData.layout.font = { color: '#94a3b8' };
+              chartData.layout.margin = { t: 30, b: 100, l: 40, r: 40 };
+              chartData.layout.title = null;
+              chartData.layout.height = null;
+
+              // Enforce Legend visibility
+              chartData.layout.showlegend = true;
+              chartData.layout.legend = {
+                orientation: "h",
+                yanchor: "top",
+                y: -0.15,
+                xanchor: "center",
+                x: 0.5
+              };
+
+              chartData.layout.xaxis = chartData.layout.xaxis || {};
+              chartData.layout.yaxis = chartData.layout.yaxis || {};
+
+              Object.keys(chartData.layout).forEach(k => {
+                if (k.startsWith('xaxis') || k.startsWith('yaxis')) {
+                  chartData.layout[k] = chartData.layout[k] || {};
+                  chartData.layout[k].showgrid = false;
+                  chartData.layout[k].zeroline = false;
+                }
+              });
+            }
+
+            window._screenerMatches[idx] = { match, chartData };
+            Plotly.react(cardId, chartData.data, chartData.layout, { responsive: true, displayModeBar: false });
+          });
+        });
+      }
+    }
+
+    function expandScreenerStock(ticker) {
+      // Switch back to single stock mode
+      toggleChartMode('single');
+      // Populate inputs
+      document.getElementById('chartStockInput').value = ticker;
+      // Trigger run
+      runChartAnalysis();
+      // Scroll to top
+      document.getElementById('chart-section').scrollTop = 0;
+    }
+
+    function openScreenerExpandedChart(idx) {
+      const item = window._screenerMatches[idx];
+      if (!item) return;
+
+      document.getElementById('screenerExpandedTitle').innerText = item.match.company_name;
+      document.getElementById('screenerExpandedTicker').innerText = item.match.ticker;
+
+      const modal = document.getElementById('screenerChartExpandModal');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+
+      const layoutCopy = JSON.parse(JSON.stringify(item.chartData.layout));
+      layoutCopy.margin = { t: 40, b: 60, l: 50, r: 50 };
+      layoutCopy.height = null;
+      layoutCopy.showlegend = true;
+      layoutCopy.legend = {
+        orientation: "h",
+        yanchor: "top",
+        y: -0.1,
+        xanchor: "center",
+        x: 0.5
+      };
+
+      Plotly.react('screenerExpandedChartCanvas', item.chartData.data, layoutCopy, {
+        responsive: true,
+        displayModeBar: false,
+        modeBarButtonsToRemove: ['zoom2d', 'pan2d', 'select2d', 'lasso2d', 'zoomIn2d', 'zoomOut2d', 'autoScale2d', 'resetScale2d'],
+        displaylogo: false
+      });
+    }
+
+    function closeScreenerExpandedModal() {
+      const modal = document.getElementById('screenerChartExpandModal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+  </script>
+  <div id="screenerChartExpandModal"
+    class="hidden fixed inset-0 z-[200] bg-black/90 flex-col justify-center items-center p-4 md:p-8 backdrop-blur-sm">
+    <div
+      class="w-full max-w-7xl h-[85vh] bg-slate-900 rounded-2xl border border-white/10 flex flex-col overflow-hidden relative">
+      <div class="flex justify-between items-center p-4 border-b border-white/10 bg-slate-800">
+        <div class="flex items-center gap-3">
+          <h3 id="screenerExpandedTitle" class="text-xl font-bold text-white">Expanded Chart</h3>
+          <span id="screenerExpandedTicker"
+            class="text-sm text-slate-400 bg-black/20 px-2 py-0.5 rounded border border-white/10 font-mono"></span>
+        </div>
+        <button onclick="closeScreenerExpandedModal()"
+          class="text-slate-400 hover:text-white p-2 text-2xl leading-none transition-all">&times;</button>
+      </div>
+      <div id="screenerExpandedChartCanvas" class="flex-1 w-full p-2"></div>
     </div>
   </div>
 </body>
