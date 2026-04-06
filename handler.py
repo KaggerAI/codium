@@ -10454,6 +10454,11 @@ def run_batch_precache(job_id, tickers):
     }
     
     for i, ticker in enumerate(tickers):
+        if precache_jobs[job_id].get('status') == 'stopping':
+            print(f"LIGHT PRE-CACHE JOB {job_id} STOPPED BY USER")
+            precache_jobs[job_id]['status'] = 'stopped'
+            break
+            
         try:
             # Track timing for this stock
             stock_start_time = time.time()
@@ -10588,14 +10593,17 @@ def run_batch_precache(job_id, tickers):
             print(f"LIGHT PRE-CACHE: Waiting 15 seconds before next ticker...")
             time.sleep(15)
     
-    # Mark job as complete
-    precache_jobs[job_id] = {
-        'status': 'complete',
-        'total': total,
-        'completed': total,
-        'current': None,
-        'results': results
-    }
+    if precache_jobs[job_id].get('status') == 'stopped':
+        precache_jobs[job_id]['results'] = results
+    else:
+        # Mark job as complete
+        precache_jobs[job_id] = {
+            'status': 'complete',
+            'total': total,
+            'completed': total,
+            'current': None,
+            'results': results
+        }
     
     # Also store in Redis cache for persistence (24 hours)
     try:
@@ -10605,6 +10613,18 @@ def run_batch_precache(job_id, tickers):
     
     success_count = len([r for r in results if r['status'] == 'success'])
     print(f"PRE-CACHE JOB COMPLETE: {job_id} - {success_count}/{total} successful")
+
+
+@app.route('/admin/batch-precache/stop/<job_id>', methods=['POST'])
+@admin_required
+def stop_batch_precache(job_id):
+    """
+    Admin endpoint to stop an ongoing pre-caching job.
+    """
+    if job_id in precache_jobs and precache_jobs[job_id]['status'] == 'running':
+        precache_jobs[job_id]['status'] = 'stopping'
+        return jsonify({'success': True, 'message': 'Stopping job...'})
+    return jsonify({'success': False, 'error': 'Job not found or not running'}), 400
 
 
 @app.route('/admin/batch-precache', methods=['POST'])

@@ -236,8 +236,9 @@ async def fetch_consolidated_async(ticker: str) -> tuple[dict[str, pd.DataFrame]
         "Balance Sheet": "#balance-sheet",
         "Cash Flow": "#cash-flow",
         "Financial Ratios": "#ratios",
-        "Quarterly Shareholding Pattern": "#shareholding",
     }
+
+    import io
 
     for label, selector in SECTIONS_TO_FIND.items():
         section_div = soup.select_one(selector)
@@ -246,7 +247,7 @@ async def fetch_consolidated_async(ticker: str) -> tuple[dict[str, pd.DataFrame]
             table_html = section_div.select_one(".data-table")
             if table_html:
                 try:
-                    df_list = await asyncio.to_thread(pd.read_html, str(table_html))
+                    df_list = await asyncio.to_thread(pd.read_html, io.StringIO(str(table_html)))
                     if df_list:
                         tables[label] = clean_df(df_list[0])
                 except Exception as e:
@@ -255,6 +256,25 @@ async def fetch_consolidated_async(ticker: str) -> tuple[dict[str, pd.DataFrame]
                 log_progress(f"Found section for '{label}' but no data-table inside for {ticker}.")
         else:
              log_progress(f"Could not find section with selector '{selector}' for {ticker}.")
+
+    # Parse Shareholding Pattern explicitly (can contain Quarterly and Annual)
+    shareholding_div = soup.select_one("#shareholding")
+    if shareholding_div:
+        sh_tables = shareholding_div.select(".data-table")
+        if len(sh_tables) > 0:
+            try:
+                df_list = await asyncio.to_thread(pd.read_html, io.StringIO(str(sh_tables[0])))
+                if df_list:
+                    tables["Quarterly Shareholding Pattern"] = clean_df(df_list[0])
+            except Exception as e:
+                log_progress(f"Could not parse Quarterly Shareholding for {ticker}: {e}")
+        if len(sh_tables) > 1:
+            try:
+                df_list = await asyncio.to_thread(pd.read_html, io.StringIO(str(sh_tables[1])))
+                if df_list:
+                    tables["Annual Shareholding Pattern"] = clean_df(df_list[0])
+            except Exception as e:
+                log_progress(f"Could not parse Annual Shareholding for {ticker}: {e}")
 
     # The old "Growth Patterns" came from tables we are no longer using.
     # The primary financial tables are the priority and are now correctly fetched.
@@ -438,8 +458,27 @@ def fetch_consolidated(ticker: str) -> tuple[dict[str, pd.DataFrame], str, dict,
     top_ratios = scrape_top_ratios(soup)
 
     # --- Main financial tables ---
-    raw = pd.read_html(text)
+    import io
+    raw = pd.read_html(io.StringIO(text))
     tables = {LABELS.get(i): clean_df(df) for i, df in enumerate(raw, start=1) if LABELS.get(i)}
+
+    shareholding_div = soup.select_one("#shareholding")
+    if shareholding_div:
+        sh_tables = shareholding_div.select(".data-table")
+        if len(sh_tables) > 0:
+            try:
+                df_list = pd.read_html(io.StringIO(str(sh_tables[0])))
+                if df_list:
+                    tables["Quarterly Shareholding Pattern"] = clean_df(df_list[0])
+            except Exception as e:
+                log_progress(f"Could not parse Quarterly Shareholding for {ticker}: {e}")
+        if len(sh_tables) > 1:
+            try:
+                df_list = pd.read_html(io.StringIO(str(sh_tables[1])))
+                if df_list:
+                    tables["Annual Shareholding Pattern"] = clean_df(df_list[0])
+            except Exception as e:
+                log_progress(f"Could not parse Annual Shareholding for {ticker}: {e}")
 
     series_list = []
     for p in PATTERNS:

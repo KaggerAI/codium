@@ -17,7 +17,7 @@
             background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
         }
     </style>
-  <script src="scale_ui.js"></script>
+    <script src="scale_ui.js"></script>
 </head>
 
 <body class="gradient-bg min-h-screen text-white">
@@ -922,6 +922,9 @@
                     } else if (data.status === 'complete') {
                         clearInterval(precachePollingInterval);
                         progressDiv.innerHTML = `<p class="text-green-300">✅ Complete! ${data.total} stocks processed.</p>`;
+                    } else if (data.status === 'stopped' || data.status === 'stopping') {
+                        clearInterval(precachePollingInterval);
+                        progressDiv.innerHTML = `<p class="text-red-300">🛑 Job stopped. ${data.completed} stocks processed.</p>`;
                     }
                 } catch (e) { }
             }, 5000);
@@ -941,15 +944,35 @@
                         <div class="p-3 bg-slate-900/50 rounded-lg flex items-center justify-between">
                             <div>
                                 <span class="font-mono text-sm">${job.job_id}</span>
-                                <span class="ml-2 px-2 py-0.5 rounded text-xs ${job.status === 'running' ? 'bg-blue-500/20 text-blue-400' : 'bg-green-500/20 text-green-400'}">${job.status}</span>
+                                <span class="ml-2 px-2 py-0.5 rounded text-xs ${job.status === 'running' ? 'bg-blue-500/20 text-blue-400' : (job.status === 'stopped' || job.status === 'stopping' ? 'bg-red-500/20 text-red-400' : 'bg-green-500/20 text-green-400')}">${job.status}</span>
                             </div>
-                            <div class="text-sm text-slate-400">${job.completed}/${job.total} stocks</div>
+                            <div class="flex items-center gap-3">
+                                <span class="text-sm text-slate-400">${job.completed}/${job.total} stocks</span>
+                                ${job.status === 'running' ? `<button onclick="stopPrecacheJob('${job.job_id}')" class="text-xs bg-red-500/20 hover:bg-red-500/30 text-red-400 px-2 py-1 rounded transition-colors">Stop</button>` : ''}
+                            </div>
                         </div>
                     `).join('');
                 } else {
                     jobsContainer.classList.add('hidden');
                 }
             } catch (e) { }
+        }
+
+        async function stopPrecacheJob(jobId) {
+            if (!confirm('Stop this pre-caching job?')) return;
+            try {
+                const response = await fetch(`/admin/batch-precache/stop/${jobId}`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                if (data.success) {
+                    refreshPrecacheJobs();
+                } else {
+                    alert('Error: ' + data.error);
+                }
+            } catch (error) {
+                alert('Connection failed');
+            }
         }
         async function loadInsights() {
             const feed = document.getElementById('recent-activity-feed');
