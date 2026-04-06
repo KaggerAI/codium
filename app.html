@@ -8278,8 +8278,11 @@
       const contentArea = document.getElementById('screener-desc-content');
       if (strat === 'momentum') {
         contentArea.innerHTML = `
-                <h3 class="text-2xl text-white font-bold mb-2 flex items-center gap-2">
-                    <span class="text-purple-400">⚡</span> Short-Term Momentum Swing
+                <h3 class="text-2xl text-white font-bold mb-2 flex items-center gap-2 flex-wrap">
+                    <div><span class="text-purple-400">⚡</span> Short-Term Momentum Swing</div>
+                    <button onclick="openScreenerInfo('momentum')" class="ml-2 text-[10px] uppercase font-bold tracking-wider px-2.5 py-1 rounded-full border border-purple-500/50 text-purple-300 hover:bg-purple-500/20 transition-all flex items-center gap-1.5">
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg> How to trade this
+                    </button>
                 </h3>
                 <p class="text-slate-400 text-sm mb-1 leading-relaxed">
                     Scans <span class="text-white font-medium">2000+ NSE stocks</span> to show stocks with explosive breakout potential, ideal for short-term (1-3 months) swing trading. 
@@ -8293,8 +8296,11 @@
             `;
       } else if (strat === 'divergence') {
         contentArea.innerHTML = `
-                <h3 class="text-2xl text-white font-bold mb-2 flex items-center gap-2">
-                    <span class="text-emerald-400">🎯</span> Divergence Bottoms
+                <h3 class="text-2xl text-white font-bold mb-2 flex items-center gap-2 flex-wrap">
+                    <div><span class="text-emerald-400">🎯</span> Divergence Bottoms</div>
+                    <button onclick="openScreenerInfo('divergence')" class="ml-2 text-[10px] uppercase font-bold tracking-wider px-2.5 py-1 rounded-full border border-emerald-500/50 text-emerald-300 hover:bg-emerald-500/20 transition-all flex items-center gap-1.5">
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg> How to trade this
+                    </button>
                 </h3>
                 <p class="text-slate-400 text-sm mb-1 leading-relaxed">
                     Scans highly liquid stocks for <span class="text-white font-medium">Hidden Bullish Divergences</span> for early detection of stock bottoming out. Ideal for medium-term (3-6 months) investors.
@@ -8308,8 +8314,11 @@
             `;
       } else if (strat === 'wyckoff') {
         contentArea.innerHTML = `
-                <h3 class="text-2xl text-white font-bold mb-2 flex items-center gap-2">
-                    <span class="text-blue-400">🦅</span> Wyckoff Institutional Base
+                <h3 class="text-2xl text-white font-bold mb-2 flex items-center gap-2 flex-wrap">
+                    <div><span class="text-blue-400">🦅</span> Wyckoff Institutional Base</div>
+                    <button onclick="openScreenerInfo('wyckoff')" class="ml-2 text-[10px] uppercase font-bold tracking-wider px-2.5 py-1 rounded-full border border-blue-500/50 text-blue-300 hover:bg-blue-500/20 transition-all flex items-center gap-1.5">
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg> How to trade this
+                    </button>
                 </h3>
                 <p class="text-slate-400 text-sm mb-1 leading-relaxed">
                     Scans 10-year data of Nifty 1000 stocks mapping structural Wave Analysis to hunt for <span class="text-white font-medium">multi-year Accumulation bases</span> ready for Markup/Rally. Ideal for long term investors.
@@ -8574,6 +8583,64 @@
       modal.classList.add('hidden');
       modal.classList.remove('flex');
     }
+
+    function openScreenerInfo(strat) {
+      const modal = document.getElementById('screenerGuideModal');
+      const titleEl = document.getElementById('sg-title');
+      const whatEl = document.getElementById('sg-what');
+      const howEl = document.getElementById('sg-how');
+      const tradeEl = document.getElementById('sg-trade');
+      
+      if (strat === 'momentum') {
+        titleEl.innerHTML = '<span class="text-purple-400">⚡</span> Short-Term Momentum Breakout';
+        whatEl.innerHTML = 'A highly reactive screener designed to catch stocks that are currently in a strong uptrend and experiencing an explosive, high-volume move. Best suited for short-term swing traders looking to ride immediate momentum for 1 to 3 months.';
+        howEl.innerHTML = `
+          <li><strong class="text-white">Liquidity & Trend:</strong> Ensures the stock has high daily traded value (>₹5 Cr) and that all short-term moving averages are stacked bullishly (10 SMA > 20 SMA > 50 SMA).</li>
+          <li><strong class="text-white">Volatility Expansion:</strong> Looks for a daily price range (ATR) that is significantly larger than the 20-day average, indicating a sudden surge in interest.</li>
+          <li><strong class="text-white">Strong Closes:</strong> Confirms the stock closes higher than yesterday and finishes in the top 60% of its daily range (no heavy intraday selling).</li>
+        `;
+        tradeEl.innerHTML = `
+          <li><strong class="text-emerald-400">Entry:</strong> Look at the chart to verify the stock is breaking out of a recent consolidation block or crossing a prior resistance line. A long green candle breaking resistance is an ideal entry.</li>
+          <li><strong class="text-red-400">Stop Loss:</strong> Keep a tight stop loss just below the 20-day SMA or below the low of the breakout candle. Momentum stocks should not retrace heavily.</li>
+          <li><strong class="text-blue-400">Exit Strategy:</strong> Trail your stop loss using the 10-day SMA. If the stock closes below the 10-day SMA, it often signals the short-term burst is over.</li>
+        `;
+      } else if (strat === 'divergence') {
+        titleEl.innerHTML = '<span class="text-emerald-400">🎯</span> Divergence Bottoms';
+        whatEl.innerHTML = `A robust reversal screener that leverages structural divergence to detect when a stock's downtrend is losing steam. It hints that "smart money" is stepping in while retail panic-sells. Best for medium-term traders (3 to 6 months) looking to catch the exact bottom.`;
+        howEl.innerHTML = `
+          <li><strong class="text-white">Hidden Divergence:</strong> Algorithmic detection of "Lower Lows" in the price chart accompanied by "Higher Lows" on the 14-period RSI over a 2-year window.</li>
+          <li><strong class="text-white">Institutional Accumulation:</strong> Validates that the Accumulation/Distribution Line (ADL) is sloping upwards despite the falling prices, proving that volume is flowing *into* the stock.</li>
+          <li><strong class="text-white">Timeliness:</strong> Ensures the structural signal has flashed within the last two trading sessions.</li>
+        `;
+        tradeEl.innerHTML = `
+          <li><strong class="text-emerald-400">Entry:</strong> A divergence is a warning, not an immediate buy signal. Wait for a "confirmation candle" — a strong bullish daily close that breaks above the high of the prior red candle.</li>
+          <li><strong class="text-red-400">Stop Loss:</strong> Place a hard stop loss just beneath the absolute swing low. If the divergence fails and price makes a new lower low, the thesis is invalidated.</li>
+          <li><strong class="text-blue-400">Exit Strategy:</strong> Aim for mean reversion. First take-profit targets should be the 50-day or 200-day moving averages, or major prior structural swing highs.</li>
+        `;
+      } else if (strat === 'wyckoff') {
+        titleEl.innerHTML = '<span class="text-blue-400">🦅</span> Wyckoff Institutional Base';
+        whatEl.innerHTML = 'A deep-scan analytical engine looking for multi-year "Accumulation Bases". It tracks the footprints of massive institutional buying using the Wyckoff Market Cycle theory. This is designed for long-term investors aiming for massive multi-year rallies.';
+        howEl.innerHTML = `
+          <li><strong class="text-white">Cycle Mapping:</strong> Scans 6-10 years of price waves to identify a prolonged Markdown phase (mostly below the 100-day SMA).</li>
+          <li><strong class="text-white">Wyckoff Phases:</strong> It detects the Selling Climax (panic bottom), the Automatic Rally, and the subsequent "Phase C" test/spring where weak hands are shaken out.</li>
+          <li><strong class="text-white">Sign of Strength:</strong> It triggers when the stock crosses above the 100 SMA on higher volume (SOS) and then prints a Last Point of Support (LPS) - a shallow dip that proves supply has dried up entirely.</li>
+        `;
+        tradeEl.innerHTML = `
+          <li><strong class="text-emerald-400">Entry:</strong> The screener primarily highlights stocks in "Phase D" (forming a Last Point of Support) or "Phase E" (Mark-up). Enter near the 100-day SMA when the price shows respectful bounces (LPS) without heavy selling volume.</li>
+          <li><strong class="text-red-400">Stop Loss:</strong> Place your stop loss below the "Phase C" bottom (the absolute lowest point of the base).</li>
+          <li><strong class="text-blue-400">Exit Strategy:</strong> These bases often result in extended, multi-year bull runs. Ride the trend using long-term moving averages (like the 100-day or 200-day SMA) and only scale out when the price becomes severely over-extended or parabolic.</li>
+        `;
+      }
+      
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+    
+    function closeScreenerInfo() {
+      const modal = document.getElementById('screenerGuideModal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
   </script>
   <div id="screenerChartExpandModal"
     class="hidden fixed inset-0 z-[200] bg-black/90 flex-col justify-center items-center p-4 md:p-8 backdrop-blur-sm">
@@ -8591,6 +8658,43 @@
       <div id="screenerExpandedChartCanvas" class="flex-1 w-full p-2"></div>
     </div>
   </div>
+
+  <!-- Screener Info Guide Modal -->
+  <div id="screenerGuideModal" class="hidden fixed inset-0 z-[300] bg-black/80 flex-col justify-center items-center p-4 md:p-8 backdrop-blur-md transition-all">
+    <div class="w-full max-w-3xl bg-slate-900 rounded-2xl border border-white/10 flex flex-col overflow-hidden relative shadow-[0_0_50px_rgba(0,0,0,0.8)] max-h-[90vh]">
+      <div class="flex justify-between items-center p-5 border-b border-white/10 bg-slate-800/80">
+        <h3 id="sg-title" class="text-2xl font-bold text-white flex items-center gap-3"></h3>
+        <button onclick="closeScreenerInfo()" class="text-slate-400 hover:text-white p-2 text-2xl leading-none transition-all bg-white/5 rounded-full hover:bg-white/10 w-8 h-8 flex items-center justify-center">&times;</button>
+      </div>
+      <div class="flex-1 overflow-y-auto p-6 text-slate-300 space-y-6 custom-scrollbar">
+        
+        <div>
+          <h4 class="text-xs uppercase tracking-widest font-bold text-slate-500 mb-2">What it is</h4>
+          <p id="sg-what" class="text-sm leading-relaxed text-slate-300 bg-slate-800/50 p-4 rounded-xl border border-white/5"></p>
+        </div>
+
+        <div>
+          <h4 class="text-xs uppercase tracking-widest font-bold text-slate-500 mb-3 border-b border-white/5 pb-2">How it limits the universe</h4>
+          <ul id="sg-how" class="space-y-3 text-sm flex flex-col gap-1 list-none pl-1"></ul>
+        </div>
+
+        <div>
+          <h4 class="text-xs uppercase tracking-widest font-bold text-slate-500 mb-3 border-b border-white/5 pb-2">Trading Guide (How to play it)</h4>
+          <ul id="sg-trade" class="space-y-3 text-sm flex flex-col gap-1 bg-gradient-to-br from-indigo-900/20 to-purple-900/20 p-5 rounded-xl border border-indigo-500/20 list-none pl-1"></ul>
+        </div>
+
+      </div>
+      <div class="p-4 border-t border-white/10 bg-slate-900 flex justify-end">
+        <button onclick="closeScreenerInfo()" class="px-5 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-lg font-medium transition-all text-sm">Got it, thanks</button>
+      </div>
+    </div>
+  </div>
+  
+  <style>
+    #screenerGuideModal .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+    #screenerGuideModal .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+    #screenerGuideModal .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.2); border-radius: 4px; }
+  </style>
 </body>
 
 </html>

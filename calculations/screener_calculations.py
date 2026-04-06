@@ -638,8 +638,8 @@ def build_wyckoff_plotly_figure(df, waves, setup, ticker):
     # 3. Wyckoff TR Bounds
     if setup['SC']['end_idx'] < len(df):
         sc_date = df.index[setup['SC']['end_idx']]
-        fig.add_trace(go.Scatter(x=[sc_date, df.index[-1]], y=[setup['Ice'], setup['Ice']], mode='lines', name='Ice (Support)', line=dict(color='red', width=1.5, dash='dash')))
-        fig.add_trace(go.Scatter(x=[sc_date, df.index[-1]], y=[setup['Creek'], setup['Creek']], mode='lines', name='Creek (Resistance)', line=dict(color='green', width=1.5, dash='dash')))
+        fig.add_trace(go.Scatter(x=[sc_date, df.index[-1]], y=[setup['Ice'], setup['Ice']], mode='lines', name='Support', line=dict(color='red', width=1.5, dash='dash')))
+        fig.add_trace(go.Scatter(x=[sc_date, df.index[-1]], y=[setup['Creek'], setup['Creek']], mode='lines', name='Resistance', line=dict(color='green', width=1.5, dash='dash')))
 
     # 4. ZigZag Waves
     for w in waves:
