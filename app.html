@@ -3028,6 +3028,25 @@
 
     const MONTH_MAP = { "Jan": 1, "Feb": 2, "Mar": 3, "Apr": 4, "May": 5, "Jun": 6, "Jul": 7, "Aug": 8, "Sept": 9, "Oct": 10, "Nov": 11, "Dec": 12 };
 
+    window.toggleChildRows = function (parentId, btnElem) {
+      const children = document.querySelectorAll('.child-of-' + parentId);
+      const icon = btnElem.querySelector('.toggle-icon');
+
+      let isHidden = true;
+      children.forEach(child => {
+        if (child.classList.contains('hidden')) {
+          child.classList.remove('hidden');
+          isHidden = false;
+        } else {
+          child.classList.add('hidden');
+        }
+      });
+
+      if (icon) {
+        icon.textContent = isHidden ? '+' : '-';
+      }
+    };
+
     function parseDateString(dateStr) {
       if (!dateStr) return new Date(0);
       const parts = dateStr.split(' ');
@@ -3105,10 +3124,31 @@
         // dataRows[period_idx] gives us all values for that period
         // So we need to iterate through metric indices and build rows
 
-        for (let metricIdx = 0; metricIdx < metricNames.length; metricIdx++) {
-          const metricName = metricNames[metricIdx];
+        let activeParentId = null;
 
-          html += `<tr class="even:bg-slate-50 hover:bg-slate-100 transition-colors duration-150"><td class="px-4 py-3 border-b border-slate-200 font-medium text-sm text-slate-700 text-left">${metricName}</td>`;
+        for (let metricIdx = 0; metricIdx < metricNames.length; metricIdx++) {
+          let metricName = metricNames[metricIdx];
+          const isChild = metricName.toString().startsWith("CHILD_ROW:");
+
+          let displayName = metricName;
+          if (isChild) {
+            displayName = displayName.replace("CHILD_ROW:", "").trim();
+            html += `<tr class="hidden child-of-${activeParentId} bg-slate-50/50 hover:bg-slate-100 text-sm transition-colors duration-150"><td class="px-4 py-3 border-b border-slate-200 font-medium text-slate-500 text-left pl-8">${displayName}</td>`;
+          } else {
+            activeParentId = `parent_${tableName.replace(/\W+/g, '')}_${metricIdx}`;
+
+            let hasChildren = false;
+            if (metricIdx + 1 < metricNames.length && metricNames[metricIdx + 1].toString().startsWith("CHILD_ROW:")) {
+              hasChildren = true;
+            }
+
+            displayName = displayName.toString().replace(/\\+$/, "").trim();
+            if (hasChildren) {
+              displayName = `<button type="button" onclick="event.preventDefault(); window.toggleChildRows('${activeParentId}', this)" class="focus:outline-none flex items-center text-left font-medium text-slate-700 w-full">${displayName} <span class="ml-1 text-xs text-blue-500 font-bold toggle-icon">+</span></button>`;
+            }
+
+            html += `<tr class="even:bg-slate-50 hover:bg-slate-100 transition-colors duration-150"><td class="px-4 py-3 border-b border-slate-200 font-medium text-sm text-slate-700 text-left">${displayName}</td>`;
+          }
 
           // Add data cells for each period
           dataRows.forEach((periodData, periodIndex) => {

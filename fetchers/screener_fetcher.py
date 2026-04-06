@@ -22,6 +22,7 @@ import asyncio
 import pandas_market_calendars as mcal
 from playwright.async_api import async_playwright
 from difflib import SequenceMatcher  # For fuzzy name matching in peer comparison
+import urllib.parse
 
 # import os
 # import openai
@@ -101,6 +102,144 @@ def clean_df(df: pd.DataFrame) -> pd.DataFrame:
     if df.index.dtype == object:
         df.index = df.index.astype(str).str.strip().str.replace("+", "", regex=False)
     return df
+
+def _inject_schedules_sync(tables: dict, soup: BeautifulSoup, cid: str):
+    """Fetches hidden schedule rows from Screener API and injects them into the parsed DataFrames."""
+    SECTION_MAP = {
+        "quarters": "Quarterly Results",
+        "profit-loss": "Annual Results",
+        "balance-sheet": "Balance Sheet",
+        "cash-flow": "Cash Flow",
+        "ratios": "Financial Ratios"
+    }
+    
+    buttons = soup.select("button[onclick*='showSchedule']")
+    for btn in buttons:
+        try:
+            onclick = btn.get('onclick', '')
+            m = re.search(r"showSchedule\('([^']+)',\s*'([^']+)'", onclick)
+            if not m: continue
+            
+            parent_name = m.group(1)
+            section_id = m.group(2)
+            
+            table_label = SECTION_MAP.get(section_id)
+            if not table_label or table_label not in tables:
+                continue
+                
+            df = tables[table_label]
+            if df.empty: continue
+            first_col_name = df.columns[0]
+            
+            api_url = f"https://www.screener.in/api/company/{cid}/schedules/?parent={urllib.parse.quote(parent_name)}&section={section_id}"
+            
+            resp = requests.get(api_url, headers=HEADERS, timeout=10)
+            if resp.status_code != 200: continue
+            
+            schedule_data = resp.json()
+            if not schedule_data: continue
+            
+            parent_idx_list = df.index[df[first_col_name].astype(str).str.contains(parent_name, regex=False, na=False)].tolist()
+            if not parent_idx_list: continue
+            
+            insert_idx = parent_idx_list[0]
+            row_pos = df.index.get_loc(insert_idx)
+            
+            child_df = pd.DataFrame.from_dict(schedule_data, orient='index')
+            if child_df.empty: continue
+            child_df.reset_index(inplace=True)
+            child_df.rename(columns={'index': first_col_name}, inplace=True)
+            child_df[first_col_name] = "CHILD_ROW:" + child_df[first_col_name].astype(str)
+            
+            for c in df.columns:
+                if c not in child_df.columns:
+                    child_df[c] = ""
+            child_df = child_df[df.columns]
+            
+            df_top = df.iloc[:row_pos+1]
+            df_bottom = df.iloc[row_pos+1:]
+            
+            tables[table_label] = pd.concat([df_top, child_df, df_bottom], ignore_index=True)
+            
+        except Exception as e:
+            # Silent fail to ensure no scraping breakage
+            pass
+
+async def _inject_schedules_async(tables: dict, soup: BeautifulSoup, cid: str):
+    """Async version of schedule injector to ensure lightning-fast background jobs."""
+    SECTION_MAP = {
+        "quarters": "Quarterly Results",
+        "profit-loss": "Annual Results",
+        "balance-sheet": "Balance Sheet",
+        "cash-flow": "Cash Flow",
+        "ratios": "Financial Ratios"
+    }
+    
+    tasks = []
+    buttons = soup.select("button[onclick*='showSchedule']")
+    for btn in buttons:
+        onclick = btn.get('onclick', '')
+        m = re.search(r"showSchedule\('([^']+)',\s*'([^']+)'", onclick)
+        if not m: continue
+        
+        parent_name = m.group(1)
+        section_id = m.group(2)
+        
+        table_label = SECTION_MAP.get(section_id)
+        if not table_label or table_label not in tables:
+            continue
+            
+        tasks.append((parent_name, section_id, table_label))
+        
+    if not tasks: return
+
+    # Fetch concurrently
+    async def fetch_one(parent_name, section_id, table_label):
+        try:
+            api_url = f"https://www.screener.in/api/company/{cid}/schedules/?parent={urllib.parse.quote(parent_name)}&section={section_id}"
+            async with httpx.AsyncClient() as client:
+                resp = await client.get(api_url, headers=HEADERS, timeout=10.0)
+                if resp.status_code != 200: return None
+                return (parent_name, table_label, resp.json())
+        except:
+            return None
+            
+    results = await asyncio.gather(*[fetch_one(p, s, t) for p, s, t in tasks], return_exceptions=True)
+    
+    for res in results:
+        if not res or isinstance(res, Exception): continue
+        parent_name, table_label, schedule_data = res
+        if not schedule_data: continue
+        
+        try:
+            df = tables[table_label]
+            if df.empty: continue
+            first_col_name = df.columns[0]
+            
+            parent_idx_list = df.index[df[first_col_name].astype(str).str.contains(parent_name, regex=False, na=False)].tolist()
+            if not parent_idx_list: continue
+            
+            insert_idx = parent_idx_list[0]
+            row_pos = df.index.get_loc(insert_idx)
+            
+            child_df = pd.DataFrame.from_dict(schedule_data, orient='index')
+            if child_df.empty: continue
+            child_df.reset_index(inplace=True)
+            child_df.rename(columns={'index': first_col_name}, inplace=True)
+            child_df[first_col_name] = "CHILD_ROW:" + child_df[first_col_name].astype(str)
+            
+            for c in df.columns:
+                if c not in child_df.columns:
+                    child_df[c] = ""
+            child_df = child_df[df.columns]
+            
+            df_top = df.iloc[:row_pos+1]
+            df_bottom = df.iloc[row_pos+1:]
+            
+            tables[table_label] = pd.concat([df_top, child_df, df_bottom], ignore_index=True)
+        except:
+            pass
+
 
 async def fetch_consolidated_async(ticker: str) -> tuple[dict[str, pd.DataFrame], str, dict, bool]:
     """
@@ -278,6 +417,12 @@ async def fetch_consolidated_async(ticker: str) -> tuple[dict[str, pd.DataFrame]
 
     # The old "Growth Patterns" came from tables we are no longer using.
     # The primary financial tables are the priority and are now correctly fetched.
+
+    # Inject hidden child rows using Screener API
+    cid_elem = soup.select_one('[data-company-id]')
+    if cid_elem:
+        cid = cid_elem.get('data-company-id')
+        await _inject_schedules_async(tables, soup, cid)
 
     return tables, description, top_ratios, is_consolidated
 
@@ -494,6 +639,12 @@ def fetch_consolidated(ticker: str) -> tuple[dict[str, pd.DataFrame], str, dict,
         merged = pd.concat(series_list, axis=1).T
         merged.index.name = ""
         tables["Growth Patterns"] = merged
+
+    # Inject hidden child rows using Screener API
+    cid_elem = soup.select_one('[data-company-id]')
+    if cid_elem:
+        cid = cid_elem.get('data-company-id')
+        _inject_schedules_sync(tables, soup, cid)
 
     # --- Peer comparison extraction (free — reuses the already-downloaded soup) ---
     peer_data = {'company': {}, 'peers': []}
