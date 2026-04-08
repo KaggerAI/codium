@@ -2557,6 +2557,814 @@
 
     </main>
   </div>
+  <!-- WATCHLIST OVERLAY SECTION -->
+  <style id="watchlistStyles">
+    .wl-card {
+      background: rgba(22, 22, 31, 0.9);
+      border: 1px solid rgba(139, 92, 246, 0.15);
+      border-radius: 1rem;
+      padding: 1.25rem;
+      transition: all .3s ease;
+      backdrop-filter: blur(10px)
+    }
+
+    .wl-card:hover {
+      border-color: rgba(139, 92, 246, 0.4);
+      box-shadow: 0 8px 32px rgba(139, 92, 246, 0.1);
+      transform: translateY(-2px)
+    }
+
+    .wl-ticker-badge {
+      background: linear-gradient(135deg, #7c3aed, #6366f1);
+      color: #fff;
+      padding: .2rem .6rem;
+      border-radius: .375rem;
+      font-weight: 700;
+      font-size: .75rem;
+      letter-spacing: .5px
+    }
+
+    .wl-card-name {
+      color: #e2e8f0;
+      font-weight: 600;
+      font-size: .95rem;
+      margin-top: .75rem;
+      line-height: 1.3
+    }
+
+    .wl-card-date {
+      color: #6b7280;
+      font-size: .7rem;
+      margin-top: .25rem
+    }
+
+    .wl-dock {
+      display: flex;
+      gap: .4rem;
+      margin-top: 1rem;
+      padding-top: 1rem;
+      border-top: 1px solid rgba(255, 255, 255, 0.06)
+    }
+
+    .wl-dock-btn {
+      flex: 1;
+      height: 36px;
+      border-radius: .5rem;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(255, 255, 255, 0.03);
+      cursor: pointer;
+      font-size: .95rem;
+      transition: all .2s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center
+    }
+
+    .wl-dock-btn:hover {
+      background: rgba(139, 92, 246, 0.2);
+      border-color: rgba(139, 92, 246, 0.4);
+      transform: scale(1.12);
+      z-index: 2
+    }
+
+    .wl-remove-btn {
+      background: none;
+      border: none;
+      color: #6b7280;
+      cursor: pointer;
+      font-size: .8rem;
+      padding: .25rem;
+      border-radius: .25rem;
+      transition: all .2s;
+      line-height: 1
+    }
+
+    .wl-remove-btn:hover {
+      color: #ef4444;
+      background: rgba(239, 68, 68, 0.1)
+    }
+
+    .wl-modal-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 200;
+      background: rgba(0, 0, 0, 0.85);
+      backdrop-filter: blur(8px);
+      display: none;
+      overflow-y: auto;
+      padding: 2rem 1rem
+    }
+
+    .wl-modal-overlay.active {
+      display: flex;
+      align-items: flex-start;
+      justify-content: center
+    }
+
+    .wl-modal {
+      background: #111118;
+      border: 1px solid rgba(139, 92, 246, 0.25);
+      border-radius: 1rem;
+      width: 100%;
+      max-width: 1200px;
+      color: #f0f0f5;
+      margin-top: 1rem
+    }
+
+    .wl-modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1.25rem 1.5rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08)
+    }
+
+    .wl-modal-header h2 {
+      font-size: 1.1rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: .5rem
+    }
+
+    .wl-modal-close {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: #a0a0b8;
+      width: 36px;
+      height: 36px;
+      border-radius: .5rem;
+      cursor: pointer;
+      font-size: 1.1rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all .2s
+    }
+
+    .wl-modal-close:hover {
+      background: rgba(239, 68, 68, 0.2);
+      color: #ef4444;
+      border-color: rgba(239, 68, 68, 0.3)
+    }
+
+    .wl-modal-body {
+      padding: 1.5rem;
+      max-height: 75vh;
+      overflow-y: auto
+    }
+
+    .wl-modal-body::-webkit-scrollbar {
+      width: 6px
+    }
+
+    .wl-modal-body::-webkit-scrollbar-thumb {
+      background: rgba(139, 92, 246, 0.3);
+      border-radius: 3px
+    }
+
+    .wl-modal-body::-webkit-scrollbar-track {
+      background: transparent
+    }
+
+    .wl-progress-bar {
+      height: 3px;
+      background: rgba(139, 92, 246, 0.15);
+      border-radius: 2px;
+      overflow: hidden;
+      margin: 1rem 0
+    }
+
+    .wl-progress-bar-inner {
+      height: 100%;
+      background: linear-gradient(90deg, #7c3aed, #6366f1, #3b82f6);
+      animation: wlPulse 2s ease-in-out infinite;
+      width: 40%;
+      border-radius: 2px
+    }
+
+    @keyframes wlPulse {
+
+      0%,
+      100% {
+        transform: translateX(-100%)
+      }
+
+      50% {
+        transform: translateX(300%)
+      }
+    }
+
+    .wl-search-wrap {
+      position: relative;
+      max-width: 500px
+    }
+
+    .wl-search-input {
+      width: 100%;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: .75rem;
+      padding: .75rem 1rem .75rem 2.75rem;
+      color: #f0f0f5;
+      font-size: .875rem;
+      font-family: inherit;
+      outline: none;
+      transition: all .2s
+    }
+
+    .wl-search-input:focus {
+      border-color: rgba(139, 92, 246, 0.5);
+      box-shadow: 0 0 20px rgba(139, 92, 246, 0.1)
+    }
+
+    .wl-search-input::placeholder {
+      color: #6b7280
+    }
+
+    .wl-search-dropdown {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      background: #1e1e2e;
+      border: 1px solid rgba(139, 92, 246, 0.3);
+      border-radius: .75rem;
+      margin-top: .25rem;
+      overflow: hidden;
+      z-index: 20;
+      display: none
+    }
+
+    .wl-search-dropdown.show {
+      display: block
+    }
+
+    .wl-search-item {
+      padding: .6rem 1rem;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      transition: background .15s
+    }
+
+    .wl-search-item:hover {
+      background: rgba(139, 92, 246, 0.15)
+    }
+
+    .wl-chat-input-row {
+      display: flex;
+      gap: .5rem;
+      padding: 1rem 1.5rem;
+      border-top: 1px solid rgba(255, 255, 255, 0.08)
+    }
+
+    .wl-chat-input {
+      flex: 1;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: .5rem;
+      padding: .6rem 1rem;
+      color: #f0f0f5;
+      font-size: .85rem;
+      font-family: inherit;
+      outline: none
+    }
+
+    .wl-chat-input:focus {
+      border-color: rgba(139, 92, 246, 0.5)
+    }
+
+    .wl-chat-send {
+      background: linear-gradient(135deg, #7c3aed, #6366f1);
+      border: none;
+      color: #fff;
+      padding: .6rem 1.25rem;
+      border-radius: .5rem;
+      font-weight: 600;
+      font-size: .8rem;
+      cursor: pointer;
+      font-family: inherit;
+      transition: opacity .2s
+    }
+
+    .wl-chat-send:hover {
+      opacity: .9
+    }
+
+    .wl-chat-send:disabled {
+      opacity: .5;
+      cursor: not-allowed
+    }
+
+    .wl-fin-tabs {
+      display: flex;
+      gap: .25rem;
+      padding: 0 1.5rem;
+      overflow-x: auto;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08)
+    }
+
+    .wl-fin-tabs::-webkit-scrollbar {
+      display: none
+    }
+
+    .wl-fin-tab {
+      padding: .6rem 1rem;
+      font-size: .78rem;
+      font-weight: 500;
+      color: #6b7280;
+      border: none;
+      background: none;
+      cursor: pointer;
+      white-space: nowrap;
+      border-bottom: 2px solid transparent;
+      transition: all .2s;
+      font-family: inherit
+    }
+
+    .wl-fin-tab:hover {
+      color: #a78bfa
+    }
+
+    .wl-fin-tab.active {
+      color: #a78bfa;
+      border-bottom-color: #7c3aed
+    }
+
+    .wl-fin-panel {
+      display: none;
+      padding: 1.5rem
+    }
+
+    .wl-fin-panel.active {
+      display: block
+    }
+
+    .wl-md h1,
+    .wl-md h2,
+    .wl-md h3 {
+      color: #e2e8f0;
+      margin: 1.25rem 0 .5rem
+    }
+
+    .wl-md h1 {
+      font-size: 1.3rem
+    }
+
+    .wl-md h2 {
+      font-size: 1.1rem
+    }
+
+    .wl-md h3 {
+      font-size: .95rem
+    }
+
+    .wl-md p {
+      color: #a0a0b8;
+      font-size: .875rem;
+      line-height: 1.6;
+      margin-bottom: .75rem
+    }
+
+    .wl-md ul,
+    .wl-md ol {
+      color: #a0a0b8;
+      font-size: .875rem;
+      padding-left: 1.5rem;
+      margin-bottom: .75rem
+    }
+
+    .wl-md li {
+      margin-bottom: .25rem
+    }
+
+    .wl-md strong {
+      color: #e2e8f0
+    }
+
+    .wl-md table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1rem 0;
+      font-size: .8rem
+    }
+
+    .wl-md th {
+      background: rgba(139, 92, 246, 0.15);
+      padding: .5rem;
+      text-align: left;
+      color: #a78bfa;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1)
+    }
+
+    .wl-md td {
+      padding: .5rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      color: #a0a0b8
+    }
+
+    .wl-md tr:hover td {
+      background: rgba(255, 255, 255, 0.03)
+    }
+
+    .nav-btn-watchlist {
+      color: white !important;
+      background: linear-gradient(135deg, #f59e0b, #d97706) !important;
+      border-color: #d97706 !important;
+    }
+
+    .nav-btn-watchlist:hover {
+      box-shadow: 0 4px 12px rgba(245, 158, 11, 0.25);
+    }
+  </style>
+  <div id="watchlistSection"
+    style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:linear-gradient(135deg,#0a0a1a 0%,#0f172a 50%,#020617 100%);z-index:100;overflow-y:auto;">
+    <header class="fixed top-0 left-0 right-0 z-[110] backdrop-blur-md"
+      style="background:rgba(10,10,26,0.85);border-bottom:1px solid rgba(139,92,246,0.2);">
+      <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div
+            class="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center">
+            <span class="text-xl">👀</span>
+          </div>
+          <div>
+            <h1 class="text-xl font-bold text-white">My Watchlist</h1>
+            <p class="text-xs text-slate-400">Your personal stock research command center</p>
+          </div>
+        </div>
+        <button onclick="showSection('analyze')"
+          class="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 transition-all text-sm font-medium text-white flex items-center gap-2">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+          </svg>
+          Back to Analyze
+        </button>
+      </div>
+    </header>
+    <main class="pt-24 pb-6 px-4">
+      <div class="max-w-7xl mx-auto">
+        <div class="mb-8 flex items-center gap-3">
+          <div class="wl-search-wrap flex-1">
+            <svg class="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" fill="none"
+              stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <input type="text" id="wlSearchInput" class="wl-search-input"
+              placeholder="Search and add stocks to your watchlist..." autocomplete="off" />
+            <div id="wlSearchDropdown" class="wl-search-dropdown"></div>
+          </div>
+        </div>
+        <div id="wlLoading" class="hidden text-center py-12">
+          <div class="inline-block w-8 h-8 border-2 border-purple-500/30 border-t-purple-500 rounded-full animate-spin">
+          </div>
+          <p class="text-slate-400 text-sm mt-3">Loading watchlist...</p>
+        </div>
+        <div id="watchlistGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5"></div>
+        <div id="watchlistEmpty" class="hidden text-center py-20">
+          <div
+            class="w-20 h-20 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-amber-500/10 to-orange-600/10 flex items-center justify-center">
+            <span class="text-4xl">👀</span></div>
+          <h3 class="text-xl font-bold text-white mb-2">Your watchlist is empty</h3>
+          <p class="text-slate-400 max-w-md mx-auto">Search for stocks above to add them. Once added, you can launch any
+            of 7 AI agents on each stock instantly.</p>
+        </div>
+      </div>
+    </main>
+  </div>
+  <!-- Financials Modal -->
+  <div id="wlFinancialsModal" class="wl-modal-overlay" onclick="if(event.target===this)wlCloseFinancialsModal()">
+    <div class="wl-modal">
+      <div class="wl-modal-header">
+        <h2 id="wlFinTitle">🏦 Financials Agent</h2>
+        <button class="wl-modal-close" onclick="wlCloseFinancialsModal()">✕</button>
+      </div>
+      <div class="wl-fin-tabs" id="wlFinTabs"></div>
+      <div id="wlFinBody" class="wl-modal-body"></div>
+    </div>
+  </div>
+  <!-- Agent Modal (Concall / Forensic / Analyst) -->
+  <div id="wlAgentModal" class="wl-modal-overlay" onclick="if(event.target===this)wlCloseAgentModal()">
+    <div class="wl-modal">
+      <div class="wl-modal-header">
+        <h2 id="wlAgentTitle">🎤 Agent</h2>
+        <button class="wl-modal-close" onclick="wlCloseAgentModal()">✕</button>
+      </div>
+      <div id="wlAgentBody" class="wl-modal-body wl-md">
+        <div id="wlAgentProgress" class="hidden">
+          <p class="text-slate-400 text-sm" id="wlAgentProgressText">Starting analysis...</p>
+          <div class="wl-progress-bar">
+            <div class="wl-progress-bar-inner"></div>
+          </div>
+        </div>
+        <div id="wlAgentResult"></div>
+      </div>
+      <div class="wl-chat-input-row" id="wlAgentChatRow" style="display:none">
+        <input type="text" class="wl-chat-input" id="wlAgentChatInput" placeholder="Ask a follow-up question..."
+          autocomplete="off" />
+        <button class="wl-chat-send" id="wlAgentChatBtn" onclick="wlAgentChat()">Send</button>
+      </div>
+    </div>
+  </div>
+  <script>
+    // =======================================================================
+    // WATCHLIST: Complete JavaScript Logic
+    // =======================================================================
+    window._launchedFromWatchlist = false;
+    let _wlAgentType = null, _wlAgentTicker = null, _wlAgentJobId = null, _wlAgentPollTimer = null;
+
+    // --- CORE: Load, Add, Remove ---
+    async function wlLoadWatchlist() {
+      const grid = document.getElementById('watchlistGrid');
+      const empty = document.getElementById('watchlistEmpty');
+      const loading = document.getElementById('wlLoading');
+      grid.innerHTML = ''; empty.classList.add('hidden');
+      loading.classList.remove('hidden');
+      try {
+        const r = await fetch('/api/watchlist'); const d = await r.json();
+        loading.classList.add('hidden');
+        if (!d.items || d.items.length === 0) { empty.classList.remove('hidden'); return; }
+        wlRenderCards(d.items, grid);
+      } catch (e) { loading.classList.add('hidden'); empty.classList.remove('hidden'); console.error('WL load error:', e); }
+    }
+
+    async function wlAddStock(ticker, name) {
+      try {
+        const r = await fetch('/api/watchlist/add', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ticker, stock_name: name })
+        });
+        const d = await r.json();
+        if (r.status === 409) { /* already exists */ }
+        document.getElementById('wlSearchInput').value = '';
+        document.getElementById('wlSearchDropdown').classList.remove('show');
+        wlLoadWatchlist();
+      } catch (e) { console.error('WL add error:', e); }
+    }
+
+    async function wlRemoveStock(ticker) {
+      if (!confirm('Remove ' + ticker + ' from watchlist?')) return;
+      try {
+        await fetch('/api/watchlist/remove/' + encodeURIComponent(ticker), { method: 'DELETE' });
+        wlLoadWatchlist();
+      } catch (e) { console.error('WL remove error:', e); }
+    }
+
+    function wlTimeAgo(dateStr) {
+      if (!dateStr) return '';
+      const diff = Date.now() - new Date(dateStr).getTime();
+      const mins = Math.floor(diff / 60000);
+      if (mins < 1) return 'just now'; if (mins < 60) return mins + 'm ago';
+      const hrs = Math.floor(mins / 60);
+      if (hrs < 24) return hrs + 'h ago';
+      const days = Math.floor(hrs / 24);
+      if (days < 7) return days + 'd ago';
+      return new Date(dateStr).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+    }
+
+    function wlRenderCards(items, grid) {
+      grid.innerHTML = items.map(item => {
+        const t = item.ticker;
+        const n = (item.stock_name || t).replace(/'/g, "\\'");
+        return `<div class="wl-card" id="wl-card-${t}">
+          <div class="flex items-center justify-between">
+            <span class="wl-ticker-badge">${t}</span>
+            <button class="wl-remove-btn" onclick="wlRemoveStock('${t}')" title="Remove">✕</button>
+          </div>
+          <div class="wl-card-name">${item.stock_name || t}</div>
+          <div class="wl-card-date">Added ${wlTimeAgo(item.added_at)}</div>
+          <div class="wl-dock">
+            <button class="wl-dock-btn" onclick="wlLaunchFinancials('${t}','${n}')" title="Financials">🏦</button>
+            <button class="wl-dock-btn" onclick="wlLaunchChart('${t}')" title="Chart Analysis">📈</button>
+            <button class="wl-dock-btn" onclick="wlLaunchNews('${t}')" title="News Agent">📰</button>
+            <button class="wl-dock-btn" onclick="wlLaunchDeepResearch('${t}')" title="Deep Research">🌌</button>
+            <button class="wl-dock-btn" onclick="wlLaunchAgent('concall','${t}')" title="Concall Agent">🎤</button>
+            <button class="wl-dock-btn" onclick="wlLaunchAgent('forensic','${t}')" title="Forensic Agent">🔍</button>
+            <button class="wl-dock-btn" onclick="wlLaunchAgent('analyst','${t}')" title="Analyst Agent">📄</button>
+          </div>
+        </div>`;
+      }).join('');
+    }
+
+    // --- SEARCH AUTOCOMPLETE ---
+    (function () {
+      const inp = document.getElementById('wlSearchInput');
+      const dd = document.getElementById('wlSearchDropdown');
+      if (!inp || !dd) return;
+      inp.addEventListener('input', function () {
+        const q = inp.value.trim();
+        if (q.length < 1 || typeof allStocks === 'undefined' || !allStocks.length) { dd.classList.remove('show'); return; }
+        const ql = q.toLowerCase();
+        const matches = allStocks.filter(s => s.ticker.toLowerCase().startsWith(ql) || s.name.toLowerCase().includes(ql)).slice(0, 8);
+        if (!matches.length) { dd.classList.remove('show'); return; }
+        dd.innerHTML = matches.map(s => `<div class="wl-search-item" onclick="wlAddStock('${s.ticker}','${s.name.replace(/'/g, "\\'")}')"><span style="color:#e2e8f0;font-size:.85rem">${s.name}</span><span style="color:#7c3aed;font-size:.75rem;font-weight:600">${s.ticker}</span></div>`).join('');
+        dd.classList.add('show');
+      });
+      inp.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') dd.classList.remove('show');
+      });
+      document.addEventListener('click', function (e) {
+        if (!e.target.closest('.wl-search-wrap')) dd.classList.remove('show');
+      });
+    })();
+
+    // --- AGENT LAUNCHERS ---
+    async function wlLaunchFinancials(ticker, name) {
+      const modal = document.getElementById('wlFinancialsModal');
+      const title = document.getElementById('wlFinTitle');
+      const tabs = document.getElementById('wlFinTabs');
+      const body = document.getElementById('wlFinBody');
+      title.innerHTML = '🏦 Financials — ' + ticker;
+      tabs.innerHTML = ''; body.innerHTML = '<div class="text-center py-12"><div class="inline-block w-8 h-8 border-2 border-purple-500/30 border-t-purple-500 rounded-full animate-spin"></div><p class="text-slate-400 text-sm mt-3">Loading financial data for ' + ticker + '...</p></div>';
+      modal.classList.add('active');
+      try {
+        const r = await fetch('/analyze', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ticker }) });
+        const p = await r.json();
+        if (!r.ok) throw new Error(p.error || 'Analysis failed');
+        const tabNames = ['Summary', 'Key Metrics', 'Peer Comparison'];
+        const orderPref = ["Quarterly Results", "Annual Results", "Growth Patterns", "Balance Sheet", "Cash Flow", "Financial Ratios", "Quarterly Shareholding Pattern", "Annual Shareholding Pattern"];
+        let fundKeys = [];
+        if (p.fundamentals) {
+          orderPref.forEach(name => {
+            if (p.fundamentals[name]) fundKeys.push(name);
+          });
+          Object.keys(p.fundamentals).forEach(k => {
+            if (!fundKeys.includes(k)) fundKeys.push(k);
+          });
+        }
+        fundKeys.forEach(k => tabNames.push(k));
+        tabs.innerHTML = tabNames.map((t, i) => `<button class="wl-fin-tab${i === 0 ? ' active' : ''}" onclick="wlSwitchFinTab(${i})">${t}</button>`).join('');
+        let formatSummary = p.company_summary_html || '<p style="color:#6b7280">No summary available.</p>';
+        if (p.company_summary_html) {
+          if (typeof marked !== 'undefined' && marked.parse) {
+            formatSummary = marked.parse(p.company_summary_html);
+          } else {
+            formatSummary = p.company_summary_html.replace(/\n/g, '<br>');
+          }
+        }
+        let panels = '<div class="wl-fin-panel active wl-md summary-content prose prose-invert max-w-none text-slate-300" style="white-space: pre-wrap;" data-fin-idx="0">' + formatSummary + '</div>';
+        panels += '<div class="wl-fin-panel" data-fin-idx="1">' + wlRenderKeyMetrics(p.key_metrics) + '</div>';
+        panels += '<div class="wl-fin-panel" data-fin-idx="2">' + wlRenderPeerTable(p.peer_comparison) + '</div>';
+        fundKeys.forEach((k, i) => {
+          try {
+            panels += '<div class="wl-fin-panel" data-fin-idx="' + (i + 3) + '">' + renderFundTable(JSON.parse(p.fundamentals[k]), k, true) + '</div>';
+          } catch (e) {
+            panels += '<div class="wl-fin-panel" data-fin-idx="' + (i + 3) + '"><p style="color:#ef4444;">Failed to render ' + k + '</p></div>';
+          }
+        });
+        body.innerHTML = panels;
+      } catch (e) {
+        body.innerHTML = '<div class="text-center py-12"><p class="text-red-400">❌ ' + e.message + '</p></div>';
+      }
+    }
+
+    function wlSwitchFinTab(idx) {
+      document.querySelectorAll('.wl-fin-tab').forEach((t, i) => t.classList.toggle('active', i === idx));
+      document.querySelectorAll('.wl-fin-panel').forEach(p => p.classList.toggle('active', parseInt(p.dataset.finIdx) === idx));
+    }
+
+    function wlRenderKeyMetrics(m) {
+      if (!m || !Object.keys(m).length) return '<p style="color:#6b7280">No metrics available.</p>';
+      const keys = [{ l: 'Market Cap', k: 'market_cap' }, { l: 'Industry', k: 'industry' }, { l: 'Sector', k: 'sector' }, { l: 'Current Price', k: 'current_price' }, { l: 'P/E Ratio', k: 'pe_ratio' }, { l: 'P/B Ratio', k: 'pb_ratio' }, { l: 'Dividend Yield', k: 'dividend_yield' }, { l: 'ROCE', k: 'roce' }, { l: 'ROE', k: 'roe' }, { l: 'Sales Growth', k: 'sales_growth_yoy' }, { l: 'EBITDA Growth', k: 'ebitda_growth_yoy' }, { l: 'Net Profit Margin', k: 'npm' }];
+      return '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:.75rem">' + keys.map(x => {
+        const v = m[x.k] || 'N/A';
+        return '<div style="background:rgba(139,92,246,0.08);border:1px solid rgba(139,92,246,0.15);border-radius:.75rem;padding:.75rem 1rem"><div style="font-size:.7rem;color:#6b7280;margin-bottom:.25rem">' + x.l + '</div><div style="font-size:.9rem;font-weight:700;color:#e2e8f0">' + v + '</div></div>';
+      }).join('') + '</div>';
+    }
+
+    function wlRenderPeerTable(pd) {
+      if (!pd) return '<p style="color:#6b7280">No peer data.</p>';
+      const co = pd.company || {}; const peers = pd.peers || [];
+      if (!Object.keys(co).length && !peers.length) return '<p style="color:#6b7280">No peer data available.</p>';
+      const all = [co, ...peers];
+      const cols = ['Name', 'CMP', 'Mkt Cap', 'P/E', 'P/B', 'Div Yield', 'ROCE', 'ROE', 'Sales Gr.', 'NP Gr.', 'NPM'];
+      const ckeys = ['name', 'cmp', 'market_cap', 'pe_ratio', 'pb_ratio', 'dividend_yield', 'roce', 'roe', 'sales_growth_yoy', 'net_profit_growth', 'npm'];
+      let h = '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:.78rem"><thead><tr>';
+      cols.forEach(c => { h += '<th style="padding:.5rem;text-align:left;color:#a78bfa;background:rgba(139,92,246,0.1);border-bottom:1px solid rgba(255,255,255,0.1)">' + c + '</th>'; });
+      h += '</tr></thead><tbody>';
+      all.forEach((row, idx) => {
+        const bg = idx === 0 ? 'background:rgba(139,92,246,0.1);' : '';
+        h += '<tr style="' + bg + '">';
+        ckeys.forEach(k => { h += '<td style="padding:.4rem .5rem;color:' + (idx === 0 ? '#e2e8f0' : '#a0a0b8') + ';border-bottom:1px solid rgba(255,255,255,0.04)">' + (row[k] || 'N/A') + '</td>'; });
+        h += '</tr>';
+      });
+      h += '</tbody></table></div>';
+      return h;
+    }
+
+
+
+    function wlCloseFinancialsModal() { document.getElementById('wlFinancialsModal').classList.remove('active'); }
+
+    // --- CHART / NEWS / DEEP RESEARCH LAUNCHERS ---
+    function wlLaunchChart(ticker) {
+      window._launchedFromWatchlist = true;
+      showSection('chart');
+      const inp = document.getElementById('chartStockInput');
+      if (inp) { inp.value = ticker; setTimeout(() => { if (typeof runChartAnalysis === 'function') runChartAnalysis(); }, 300); }
+    }
+
+    function wlLaunchNews(ticker) {
+      window._launchedFromWatchlist = true;
+      showSection('news');
+      const inp = document.getElementById('newsQuestionInput');
+      if (inp) { inp.value = '@' + ticker + ' '; inp.focus(); }
+    }
+
+    function wlLaunchDeepResearch(ticker) {
+      window._launchedFromWatchlist = true;
+      showSection('unanswerable');
+      const inp = document.getElementById('unanswerableInput');
+      if (inp) { inp.value = 'Deep analysis of ' + ticker; inp.focus(); }
+    }
+
+    // --- ADVANCED AGENT MODAL (Concall / Forensic / Analyst) ---
+    function wlLaunchAgent(type, ticker) {
+      const icons = { concall: '🎤', forensic: '🔍', analyst: '📄' };
+      const labels = { concall: 'Concall Agent', forensic: 'Forensic Agent', analyst: 'Analyst Agent' };
+      _wlAgentType = type; _wlAgentTicker = ticker; _wlAgentJobId = null;
+      if (_wlAgentPollTimer) { clearTimeout(_wlAgentPollTimer); _wlAgentPollTimer = null; }
+      document.getElementById('wlAgentTitle').innerHTML = (icons[type] || '🤖') + ' ' + (labels[type] || type) + ' — ' + ticker;
+      document.getElementById('wlAgentResult').innerHTML = '';
+      document.getElementById('wlAgentProgress').classList.remove('hidden');
+      document.getElementById('wlAgentProgressText').textContent = 'Starting ' + (labels[type] || type) + '...';
+      document.getElementById('wlAgentChatRow').style.display = 'none';
+      document.getElementById('wlAgentModal').classList.add('active');
+      fetch('/agent/' + type + '/analyze', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ticker })
+      }).then(r => r.json()).then(data => {
+        if (data.status === 'complete') { wlAgentComplete(data.result); }
+        else if (data.job_id) { _wlAgentJobId = data.job_id; wlPollAgent(); }
+        else if (data.error) { wlAgentError(data.error); }
+      }).catch(e => wlAgentError(e.message));
+    }
+
+    function wlPollAgent() {
+      if (!_wlAgentJobId || !_wlAgentType) return;
+      fetch('/agent/' + _wlAgentType + '/' + _wlAgentJobId + '/status')
+        .then(r => r.json()).then(data => {
+          if (data.status === 'processing') {
+            document.getElementById('wlAgentProgressText').textContent = data.progress || 'Analyzing...';
+            _wlAgentPollTimer = setTimeout(wlPollAgent, 2000);
+          } else if (data.status === 'complete') { wlAgentComplete(data.result); }
+          else if (data.status === 'error') { wlAgentError(data.error); }
+        }).catch(e => wlAgentError(e.message));
+    }
+
+    function wlAgentComplete(result) {
+      document.getElementById('wlAgentProgress').classList.add('hidden');
+      const md = result.analysis || 'No analysis available.';
+      const html = (typeof marked !== 'undefined' && marked.parse) ? marked.parse(md) : '<pre>' + md + '</pre>';
+      document.getElementById('wlAgentResult').innerHTML = html;
+      document.getElementById('wlAgentChatRow').style.display = 'flex';
+      document.getElementById('wlAgentChatInput').value = '';
+    }
+
+    function wlAgentError(msg) {
+      document.getElementById('wlAgentProgress').classList.add('hidden');
+      document.getElementById('wlAgentResult').innerHTML = '<div class="text-center py-8"><p class="text-red-400">❌ ' + (msg || 'Unknown error') + '</p></div>';
+    }
+
+    function wlCloseAgentModal() {
+      document.getElementById('wlAgentModal').classList.remove('active');
+      if (_wlAgentPollTimer) { clearTimeout(_wlAgentPollTimer); _wlAgentPollTimer = null; }
+    }
+
+    async function wlAgentChat() {
+      const inp = document.getElementById('wlAgentChatInput');
+      const btn = document.getElementById('wlAgentChatBtn');
+      const q = inp.value.trim();
+      if (!q || !_wlAgentType || !_wlAgentTicker) return;
+      btn.disabled = true; btn.textContent = '...';
+      const resultDiv = document.getElementById('wlAgentResult');
+      resultDiv.innerHTML += '<div style="margin-top:1.5rem;padding-top:1rem;border-top:1px solid rgba(255,255,255,0.08)"><p style="color:#7c3aed;font-weight:600;font-size:.85rem;margin-bottom:.5rem">You: ' + q.replace(/</g, '&lt;') + '</p><p style="color:#6b7280;font-size:.8rem">Thinking...</p></div>';
+      try {
+        const r = await fetch('/agent/' + _wlAgentType + '/chat', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ticker: _wlAgentTicker, question: q })
+        });
+        const d = await r.json();
+        const answer = d.response || d.answer || 'No response.';
+        const answerHtml = (typeof marked !== 'undefined' && marked.parse) ? marked.parse(answer) : '<p>' + answer + '</p>';
+        const thinkingP = resultDiv.querySelector('div:last-child p:last-child');
+        if (thinkingP && thinkingP.textContent === 'Thinking...') thinkingP.outerHTML = answerHtml;
+        else resultDiv.innerHTML += answerHtml;
+      } catch (e) {
+        resultDiv.innerHTML += '<p style="color:#ef4444">Error: ' + e.message + '</p>';
+      }
+      inp.value = ''; btn.disabled = false; btn.textContent = 'Send';
+      const body = document.getElementById('wlAgentBody');
+      body.scrollTop = body.scrollHeight;
+    }
+
+    // Allow Enter key in agent chat
+    document.getElementById('wlAgentChatInput')?.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); wlAgentChat(); }
+    });
+  </script>
   <!-- NAVBAR -->
   <nav class="bg-white/95 backdrop-blur-md shadow-sm sticky top-0 z-50 border-b border-slate-200/80">
     <div class="container mx-auto px-6 py-2.5 flex items-center justify-between">
@@ -2579,6 +3387,9 @@
         <button onclick="showSection('unanswerable')" id="unanswerable-tab-btn" class="nav-link-slim nav-btn-cosmic">🌌
           Ask the
           Unanswerable</button>
+        <!-- My Watchlist -->
+        <button onclick="showSection('watchlist')" id="watchlist-tab-btn" class="nav-link-slim nav-btn-watchlist">👀
+          Watchlist</button>
         <!-- My Portfolio -->
         <a href="/portfolio" class="nav-link-slim nav-btn-portfolio" onclick="saveAppState()">📁 My Portfolio (beta)</a>
         <!-- Blog -->
@@ -3058,38 +3869,27 @@
       return new Date(0);
     }
 
-    function renderFundTable(fundData, tableName) {
-      // The data structure is: fundData.data = [[row0_data...], [row1_data...], ...]
-      // After transposing in backend:
-      // - Row 0: Serial numbers (0, 1, 2, ...) - SKIP THIS
-      // - R1: Metric names (Sales, Expenses, ...) - USE AS ROW HEADERS  
-      // - Row 2+: Quarterly data (Sep 2022, Dec 2022, ...)
-
+    function renderFundTable(fundData, tableName, isDarkTheme = false) {
       if (!fundData || !fundData.data || !fundData.index || fundData.data.length < 2) {
         return '<p class="text-slate-500">No data available</p>';
       }
 
-      // Extract data rows
-      const serialNumbers = fundData.data[0]; // Skip this row  
-      const metricNames = fundData.data[1];   // Use as row headers
-      const dataRows = fundData.data.slice(2);  // Actual quarterly data
+      const serialNumbers = fundData.data[0];
+      const metricNames = fundData.data[1];
+      const dataRows = fundData.data.slice(2);
 
-      // YoY highlighting logic for Quarterly Results
       const isQuarterlyResults = tableName === "Quarterly Results";
       let yoyHighlightIndices = new Set();
 
       if (isQuarterlyResults && fundData.index && fundData.index.length > 2) {
         const dateHeaders = fundData.index.slice(2);
-        // Extract just the month part (Sep, Dec, Mar, Jun) from each header
         const quarters = dateHeaders.map(header => {
           const match = header.match(/^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)/);
           return match ? match[1] : null;
         });
 
-        // Find the latest quarter (rightmost/last column)
         const latestQuarter = quarters[quarters.length - 1];
 
-        // Find all columns with the same quarter for YoY comparison
         if (latestQuarter) {
           quarters.forEach((quarter, index) => {
             if (quarter === latestQuarter) {
@@ -3099,31 +3899,29 @@
         }
       }
 
-      // Build table HTML
-      let html = `<div class="overflow-x-auto"><table class="w-full bg-white rounded-lg shadow-md mx-auto mb-8 border border-slate-200"><thead class="bg-slate-200 text-slate-700"><tr><th class="px-4 py-3 border-b border-slate-300 text-left text-sm font-semibold">Particulars</th>`;
+      const tableClasses = isDarkTheme ? "w-full bg-transparent mx-auto mb-4" : "w-full bg-white rounded-lg shadow-md mx-auto mb-8 border border-slate-200";
+      const theadClasses = isDarkTheme ? "bg-white/5 text-purple-200" : "bg-slate-200 text-slate-700";
+      const thBorder = isDarkTheme ? "border-white/10" : "border-slate-300";
+      const trHover = isDarkTheme ? "hover:bg-white/5" : "hover:bg-slate-100";
+      const trEven = isDarkTheme ? "even:bg-white/[0.02]" : "even:bg-slate-50";
+      const tdBorder = isDarkTheme ? "border-white/5" : "border-slate-200";
+      const tdText = isDarkTheme ? "text-slate-200" : "text-slate-700";
+      const tdTextDim = isDarkTheme ? "text-slate-400" : "text-slate-500";
+      const yoyBg = isDarkTheme ? "bg-purple-500/10" : "bg-blue-50";
 
-      // Add column headers (date periods) - skip first two headers which correspond to serial # and metric name columns
+      let html = `<div class="overflow-x-auto"><table class="${tableClasses}"><thead class="${theadClasses}"><tr><th class="px-4 py-3 border-b ${thBorder} text-left text-sm font-semibold">Particulars</th>`;
+
       if (fundData.index && fundData.index.length > 2) {
         const dateHeaders = fundData.index.slice(2);
         dateHeaders.forEach((periodLabel, index) => {
-          const highlightClass = yoyHighlightIndices.has(index) ? 'bg-blue-50' : '';
-          html += `<th class="px-4 py-3 border-b border-slate-300 text-sm font-semibold text-right ${highlightClass}">${periodLabel}</th>`;
+          const highlightClass = yoyHighlightIndices.has(index) ? yoyBg : '';
+          html += `<th class="px-4 py-3 border-b ${thBorder} text-sm font-semibold text-right ${highlightClass}">${periodLabel}</th>`;
         });
       }
 
       html += `</tr></thead><tbody>`;
 
-      // If we have metric names and data rows, render them
       if (metricNames && metricNames.length > 0 && dataRows && dataRows.length > 0) {
-        // Each data row corresponds to one time period
-        // We need to transpose the view: each metricNames[i] becomes a row header
-        // and we collect dataRows[period][i] for each period
-
-        // Actually, after looking at the structure more carefully:
-        // metricNames array has the list of metric names
-        // dataRows[period_idx] gives us all values for that period
-        // So we need to iterate through metric indices and build rows
-
         let activeParentId = null;
 
         for (let metricIdx = 0; metricIdx < metricNames.length; metricIdx++) {
@@ -3133,9 +3931,9 @@
           let displayName = metricName;
           if (isChild) {
             displayName = displayName.replace("CHILD_ROW:", "").trim();
-            html += `<tr class="hidden child-of-${activeParentId} bg-slate-50/50 hover:bg-slate-100 text-sm transition-colors duration-150"><td class="px-4 py-3 border-b border-slate-200 font-medium text-slate-500 text-left pl-8">${displayName}</td>`;
+            html += `<tr class="hidden child-of-${activeParentId} ${trHover} text-sm transition-colors duration-150"><td class="px-4 py-3 border-b ${tdBorder} font-medium ${tdTextDim} text-left pl-8">${displayName}</td>`;
           } else {
-            activeParentId = `parent_${tableName.replace(/\W+/g, '')}_${metricIdx}`;
+            activeParentId = `parent_${tableName.replace(/\\W+/g, '')}_${metricIdx}`;
 
             let hasChildren = false;
             if (metricIdx + 1 < metricNames.length && metricNames[metricIdx + 1].toString().startsWith("CHILD_ROW:")) {
@@ -3144,13 +3942,13 @@
 
             displayName = displayName.toString().replace(/\\+$/, "").trim();
             if (hasChildren) {
-              displayName = `<button type="button" onclick="event.preventDefault(); window.toggleChildRows('${activeParentId}', this)" class="focus:outline-none flex items-center text-left font-medium text-slate-700 w-full">${displayName} <span class="ml-1 text-xs text-blue-500 font-bold toggle-icon">+</span></button>`;
+              const iconColor = isDarkTheme ? "text-purple-400" : "text-blue-500";
+              displayName = `<button type="button" onclick="event.preventDefault(); window.toggleChildRows('${activeParentId}', this)" class="focus:outline-none flex items-center text-left font-medium ${tdText} w-full">${displayName} <span class="ml-1 text-xs ${iconColor} font-bold toggle-icon">+</span></button>`;
             }
 
-            html += `<tr class="even:bg-slate-50 hover:bg-slate-100 transition-colors duration-150"><td class="px-4 py-3 border-b border-slate-200 font-medium text-sm text-slate-700 text-left">${displayName}</td>`;
+            html += `<tr class="${trEven} ${trHover} transition-colors duration-150"><td class="px-4 py-3 border-b ${tdBorder} font-medium text-sm ${tdText} text-left">${displayName}</td>`;
           }
 
-          // Add data cells for each period
           dataRows.forEach((periodData, periodIndex) => {
             let v = periodData[metricIdx];
             let displayValue = 'N/A', cellClass = 'text-right';
@@ -3175,8 +3973,8 @@
               cellClass = 'text-center';
             }
 
-            const highlightClass = yoyHighlightIndices.has(periodIndex) ? 'bg-blue-50' : '';
-            html += `<td class="px-4 py-3 border-b border-slate-200 text-sm ${cellClass} ${highlightClass}">${displayValue}</td>`;
+            const highlightClass = yoyHighlightIndices.has(periodIndex) ? yoyBg : '';
+            html += `<td class="px-4 py-3 border-b ${tdBorder} text-sm ${cellClass} ${highlightClass} ${isDarkTheme ? 'text-slate-300' : ''}">${displayValue}</td>`;
           });
 
           html += `</tr>`;
@@ -3185,18 +3983,19 @@
 
       html += `</tbody></table></div>`;
 
-      // Add Ask AI button for Tables
-      html += `
-        <div class="flex justify-center mb-10">
-          <button onclick="askAI('Analyze the ${tableName} table for ${window.currentCompanyName || ''} and highlight any significant trends or anomalies.')" 
-                  class="ask-ai-btn !mt-0">
-            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
-            </svg>
-            Ask AI to Analyze This Table
-          </button>
-        </div>
-      `;
+      if (!isDarkTheme) {
+        html += `
+          <div class="flex justify-center mb-10">
+            <button onclick="askAI('Analyze the ${tableName} table for ${window.currentCompanyName || ''} and highlight any significant trends or anomalies.')" 
+                    class="ask-ai-btn !mt-0">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+              </svg>
+              Ask AI to Analyze This Table
+            </button>
+          </div>
+        `;
+      }
 
       return html;
     }
@@ -6589,16 +7388,23 @@
       const chartSection = document.getElementById('chart-section');
       const unanswerableSection = document.getElementById('unanswerableSection');
       const budgetSection = document.getElementById('budget-section');
+      const watchlistSection = document.getElementById('watchlistSection');
 
       // Hide all overlay sections first
       if (newsSection) newsSection.style.display = 'none';
       if (chartSection) chartSection.style.display = 'none';
       if (unanswerableSection) unanswerableSection.style.display = 'none';
       if (budgetSection) budgetSection.style.display = 'none';
+      if (watchlistSection) watchlistSection.style.display = 'none';
 
       document.body.style.overflow = '';
 
-      if (s === 'news' && newsSection) {
+      if (s === 'watchlist' && watchlistSection) {
+        watchlistSection.style.display = 'block';
+        document.body.style.overflow = 'hidden';
+        window._launchedFromWatchlist = false;
+        if (typeof wlLoadWatchlist === 'function') wlLoadWatchlist();
+      } else if (s === 'news' && newsSection) {
         newsSection.style.display = 'block';
         document.body.style.overflow = 'hidden';
         setTimeout(() => document.getElementById('newsQuestionInput')?.focus(), 100);
@@ -6614,7 +7420,16 @@
         document.body.style.overflow = 'hidden';
         checkUnanswerablePersistence();
       }
-      // 'analyze' just closes overlays (default case - no special action needed)
+
+      // Back-to-Watchlist intelligence: if user came from watchlist, return there
+      if (s === 'analyze' && window._launchedFromWatchlist) {
+        window._launchedFromWatchlist = false;
+        if (watchlistSection) {
+          watchlistSection.style.display = 'block';
+          document.body.style.overflow = 'hidden';
+          if (typeof wlLoadWatchlist === 'function') wlLoadWatchlist();
+        }
+      }
     }
     let newsConversationHistory = [], newsIsLoading = false;
     // Unanswerable event source declaration hoisted

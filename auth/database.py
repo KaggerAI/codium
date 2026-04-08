@@ -101,6 +101,19 @@ def init_db():
             )
         ''')
 
+        # Watchlist items table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS watchlist_items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                ticker TEXT NOT NULL,
+                stock_name TEXT NOT NULL DEFAULT '',
+                added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users (id),
+                UNIQUE(user_id, ticker)
+            )
+        ''')
+
         # Migration: add buy_date column if not exists (for existing DBs)
         try:
             cursor.execute("ALTER TABLE portfolio_holdings ADD COLUMN buy_date TEXT DEFAULT ''")
@@ -448,6 +461,73 @@ class Portfolio:
             cursor = conn.cursor()
             cursor.execute('SELECT DISTINCT user_id FROM portfolio_holdings')
             return [row[0] for row in cursor.fetchall()]
+
+
+class Watchlist:
+    """Model class for user watchlist items."""
+    def __init__(self, id, user_id, ticker, stock_name='', added_at=None, **kwargs):
+        self.id = id
+        self.user_id = user_id
+        self.ticker = ticker
+        self.stock_name = stock_name or ''
+        self.added_at = added_at
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'ticker': self.ticker,
+            'stock_name': self.stock_name,
+            'added_at': str(self.added_at) if self.added_at else ''
+        }
+
+    @classmethod
+    def get_by_user(cls, user_id):
+        """Get all watchlist items for a user."""
+        with get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                'SELECT * FROM watchlist_items WHERE user_id = ? ORDER BY added_at DESC',
+                (user_id,)
+            )
+            rows = cursor.fetchall()
+            return [cls(**dict(row)) for row in rows]
+
+    @classmethod
+    def add_item(cls, user_id, ticker, stock_name=''):
+        """Add a ticker to the user's watchlist. Returns True if added, False if already exists."""
+        with get_db() as conn:
+            cursor = conn.cursor()
+            try:
+                cursor.execute('''
+                    INSERT INTO watchlist_items (user_id, ticker, stock_name)
+                    VALUES (?, ?, ?)
+                ''', (user_id, ticker.upper(), stock_name))
+                return True
+            except Exception:
+                # UNIQUE constraint violation - already in watchlist
+                return False
+
+    @classmethod
+    def remove_item(cls, user_id, ticker):
+        """Remove a ticker from the user's watchlist. Returns True if deleted."""
+        with get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                'DELETE FROM watchlist_items WHERE user_id = ? AND ticker = ?',
+                (user_id, ticker.upper())
+            )
+            return cursor.rowcount > 0
+
+    @classmethod
+    def has_item(cls, user_id, ticker):
+        """Check if a ticker is in the user's watchlist."""
+        with get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                'SELECT 1 FROM watchlist_items WHERE user_id = ? AND ticker = ?',
+                (user_id, ticker.upper())
+            )
+            return cursor.fetchone() is not None
 
 
 # Initialize database on module import

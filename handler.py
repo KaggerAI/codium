@@ -663,7 +663,7 @@ def api_ask_unanswerable():
         print(f"INFO: Using original question for Parallel: {question[:100]}...", file=sys.stderr)
         # expansion_prompt = get_unanswerable_expansion_prompt(question)
         # expanded_question = call_generative_ai_model(
-        #     model="gpt-5-mini",
+        #     model="gpt-5.4-mini",
         #     messages=[{"role": "user", "content": expansion_prompt}],
         #     temperature=1
         # )
@@ -4903,10 +4903,10 @@ def convert_to_gemini_format(messages):
             gemini_messages.append({'role': role, 'parts': [msg["content"]]})
     return gemini_messages
 
-def call_openai_api(messages, model="gpt-5-mini", expect_json_format_flag=False, temperature=1, timeout=180):
+def call_openai_api(messages, model="gpt-5.4-mini", expect_json_format_flag=False, temperature=1, timeout=180):
     """
     Call OpenAI API with configurable timeout.
-    Default timeout is 180 seconds (3 minutes) for slower models like gpt-5-mini.
+    Default timeout is 180 seconds (3 minutes) for slower models like gpt-5.4-mini.
     """
     if not openai.api_key:
         raise ValueError("OpenAI API key is not configured.")
@@ -5367,7 +5367,7 @@ def call_generative_ai_model(model, messages, temperature=1, timeout=180, thinki
         else:
             # Default to a reliable, cheap model if the selection is unknown
             print(f"WARN: Unknown model '{model}', defaulting to 5-mini'.")
-            return call_openai_api(messages, model='gpt-5-mini', temperature=temperature, timeout=timeout)
+            return call_openai_api(messages, model='gpt-5.4-mini', temperature=temperature, timeout=timeout)
     except Exception as e:
         # Catch errors from any of the specific API call functions
         error_message = f"An error occurred while calling the AI model '{model}': {str(e)}"
@@ -5790,7 +5790,7 @@ def ai_news_chat():
     """
     AI-Enhanced News endpoint - the world's most advanced financial research engine.
     Uses two-stage processing:
-    1. Intent Enhancement: GPT-5-mini deciphers hidden intent
+    1. Intent Enhancement: GPT-5.4-mini deciphers hidden intent
     2. Research: Perplexity sonar-pro with Pro Search answers the enhanced query
     """
     try:
@@ -5938,7 +5938,7 @@ def ai_news_chat():
         ]
         
         print("INFO: Stage 1 - Enhancing user intent...")
-        enhanced_question = call_generative_ai_model("gpt-5-mini", enhancement_messages, temperature=1)
+        enhanced_question = call_generative_ai_model("gpt-5.4-mini", enhancement_messages, temperature=1)
         enhanced_question = enhanced_question.strip().strip('"')  # Clean up quotes if any
         print(f"INFO: Enhanced question: {enhanced_question[:2000]}")
         
@@ -6689,7 +6689,7 @@ def chat():
 
         if is_best_fast_mode:
             # --- FAST MODE: MERGED STAGE 1+2 ---
-            # Combines Central Brain + Tactical Planner into ONE GPT-5-mini call
+            # Combines Central Brain + Tactical Planner into ONE GPT-5.4-mini call
             log_progress("Fast Mode: Unified Planner creating strategy & data plan...")
             print("INFO: Fast Mode - Merged Planner running...", file=sys.stderr)
             fast_start_time = time.time()
@@ -6760,7 +6760,7 @@ def chat():
                 {"role": "user", "content": (f"Company: {company_name} ({ticker})\n\n" if company_name and ticker else "") + f"User Question: \"{user_question}\""}
             ]
             
-            central_brain_response_str = call_generative_ai_model("gpt-5-mini", brain_messages, temperature=1)
+            central_brain_response_str = call_generative_ai_model("gpt-5.4-mini", brain_messages, temperature=1)
             stage1_elapsed = time.time() - stage1_start_time
 
             try:
@@ -7004,11 +7004,11 @@ def chat():
 """
                 
                 eia_messages = [{"role": "user", "content": eia_prompt}]
-                # Use Gemini Flash for best-fast mode, GPT-5-mini otherwise
+                # Use Gemini Flash for best-fast mode, GPT-5.4-mini otherwise
                 if is_best_fast_mode:
                     result = await asyncio.to_thread(call_gemini_api, eia_messages, 'gemini-3-flash-preview', 1, False, 'HIGH')
                 else:
-                    result = await asyncio.to_thread(call_openai_api, eia_messages, 'gpt-5-mini', False, 1, 180)
+                    result = await asyncio.to_thread(call_openai_api, eia_messages, 'gpt-5.4-mini', False, 1, 180)
                 elapsed = time.time() - stage3_start_time
                 print(f"INFO: ✓ EIA (Earnings) completed in {elapsed:.1f}s ({len(result)} chars)", file=sys.stderr)
                 log_progress(f"✓ Earnings analysis ready ({elapsed:.1f}s)")
@@ -7072,11 +7072,11 @@ def chat():
             {"role": "user", "content": f"Please synthesize an answer based on: {json.dumps(final_context_for_answer, indent=2, default=str)[:100000]}"}
         ]
         
-        # Use Gemini Flash for best-fast mode, GPT-5-mini for best mode
+        # Use Gemini Flash for best-fast mode, GPT-5.4-mini for best mode
         if is_best_fast_mode:
             answerer_model = 'gemini-3-flash-preview'
         elif is_best_mode:
-            answerer_model = 'gpt-5-mini'
+            answerer_model = 'gpt-5.4-mini'
         else:
             answerer_model = selected_model
         final_answer = call_generative_ai_model(
@@ -7982,7 +7982,7 @@ You must follow these writing rules exactly. Any failure to follow a negative di
         ]
         
         # Use OpenAI for summary generation
-        summary_html = call_openai_api(messages, model="gpt-5-mini", temperature=1)
+        summary_html = call_openai_api(messages, model="gpt-5.4-mini", temperature=1)
         return summary_html
 
     except Exception as e:
@@ -10929,7 +10929,7 @@ except Exception as _e:
 
 @app.route('/api/budget/chat', methods=['POST'])
 def api_budget_chat():
-    """AI Chatbot for the Budget section using gpt-5-mini"""
+    """AI Chatbot for the Budget section using gpt-5.4-mini"""
     try:
         data = request.get_json(force=True)
         user_question = data.get('question', '').strip()
@@ -10980,7 +10980,7 @@ def api_budget_chat():
         except Exception as research_error:
             print(f"WARN: Budget Research failed: {research_error}. Proceeding with local context only.", file=sys.stderr)
 
-        # STEP 2: Synthesis Phase (GPT-5-Mini)
+        # STEP 2: Synthesis Phase (GPT-5.4-Mini)
         system_prompt = get_budget_chat_prompt(budget_context, web_results=web_results)
         
         if history:
@@ -10993,9 +10993,9 @@ def api_budget_chat():
                 {"role": "user", "content": user_question}
             ]
         
-        print(f"INFO: Calling GPT-5-Mini for Budget Synthesis...", file=sys.stderr)
+        print(f"INFO: Calling GPT-5.4-Mini for Budget Synthesis...", file=sys.stderr)
         answer = call_generative_ai_model(
-            model="gpt-5-mini",
+            model="gpt-5.4-mini",
             messages=synthesis_messages,
             temperature=1
         )
@@ -11236,6 +11236,77 @@ print("INFO: Agent Marketplace routes registered (Concall Agent, Forensic Agent,
 
 # =====================================================================
 # END: Agent Marketplace
+# =====================================================================
+
+# =====================================================================
+# START: Watchlist API
+# =====================================================================
+
+from auth.database import Watchlist
+
+@app.route('/api/watchlist', methods=['GET'])
+def api_watchlist_get():
+    """Return all watchlist items for the logged-in user."""
+    from flask import session as flask_session
+    user_id = flask_session.get('user_id')
+    if not user_id:
+        return jsonify({'error': 'Authentication required'}), 401
+    items = Watchlist.get_by_user(user_id)
+    return jsonify({'items': [item.to_dict() for item in items]})
+
+
+@app.route('/api/watchlist/add', methods=['POST'])
+def api_watchlist_add():
+    """Add a stock to the user's watchlist."""
+    from flask import session as flask_session
+    user_id = flask_session.get('user_id')
+    if not user_id:
+        return jsonify({'error': 'Authentication required'}), 401
+
+    data = request.get_json(force=True)
+    ticker = (data.get('ticker') or '').strip().upper()
+    stock_name = (data.get('stock_name') or '').strip()
+
+    if not ticker:
+        return jsonify({'error': 'Ticker is required'}), 400
+
+    added = Watchlist.add_item(user_id, ticker, stock_name)
+    if added:
+        return jsonify({'success': True, 'message': f'{ticker} added to watchlist'})
+    else:
+        return jsonify({'success': False, 'message': f'{ticker} is already in your watchlist'}), 409
+
+
+@app.route('/api/watchlist/remove/<ticker>', methods=['DELETE'])
+def api_watchlist_remove(ticker):
+    """Remove a stock from the user's watchlist."""
+    from flask import session as flask_session
+    user_id = flask_session.get('user_id')
+    if not user_id:
+        return jsonify({'error': 'Authentication required'}), 401
+
+    ticker = ticker.strip().upper()
+    removed = Watchlist.remove_item(user_id, ticker)
+    if removed:
+        return jsonify({'success': True, 'message': f'{ticker} removed from watchlist'})
+    else:
+        return jsonify({'success': False, 'message': f'{ticker} not found in watchlist'}), 404
+
+
+@app.route('/api/watchlist/check/<ticker>', methods=['GET'])
+def api_watchlist_check(ticker):
+    """Check if a stock is in the user's watchlist."""
+    from flask import session as flask_session
+    user_id = flask_session.get('user_id')
+    if not user_id:
+        return jsonify({'error': 'Authentication required'}), 401
+
+    ticker = ticker.strip().upper()
+    in_watchlist = Watchlist.has_item(user_id, ticker)
+    return jsonify({'in_watchlist': in_watchlist, 'ticker': ticker})
+
+# =====================================================================
+# END: Watchlist API
 # =====================================================================
 
 # Mount Azure-Safe Scheduled Screener Daemon
