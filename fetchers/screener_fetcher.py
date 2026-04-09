@@ -663,6 +663,16 @@ async def get_company_id_async(ticker: str) -> int:
         resp = await client.get(url, params={"q": ticker}, timeout=30.0)
         resp.raise_for_status()
         data = resp.json()
+        
+        if not data and '-' in ticker:
+            resp = await client.get(url, params={"q": ticker.replace('-', ' ')}, timeout=30.0)
+            resp.raise_for_status()
+            data = resp.json()
+            if not data:
+                resp = await client.get(url, params={"q": ticker.replace('-', '')}, timeout=30.0)
+                resp.raise_for_status()
+                data = resp.json()
+                
     if not data: raise ValueError(f"No company found for ticker '{ticker}'")
     return data[0]["id"]
 
@@ -671,6 +681,16 @@ def get_company_id(ticker: str) -> int:
     resp = requests.get(url, params={"q": ticker})
     resp.raise_for_status()
     data = resp.json()
+    
+    if not data and '-' in ticker:
+        resp = requests.get(url, params={"q": ticker.replace('-', ' ')})
+        resp.raise_for_status()
+        data = resp.json()
+        if not data:
+            resp = requests.get(url, params={"q": ticker.replace('-', '')})
+            resp.raise_for_status()
+            data = resp.json()
+            
     if not data:
         raise ValueError(f"No company found for ticker '{ticker}'")
     return data[0]["id"]

@@ -8222,7 +8222,8 @@ async def get_analysis_for_ticker_async(tick, skip_ai_summary=False):
     # Function to fetch futures volume data using ticker1! naming convention
     def get_futures_volume(ticker):
         try:
-            futures_symbol = f"{ticker}1!"  # e.g., RELIANCE1!
+            tv_ticker = ticker.replace('-', '_')
+            futures_symbol = f"{tv_ticker}1!"  # e.g., RELIANCE1!
             print(f"DEBUG: Attempting to fetch futures volume for {futures_symbol}...")
             futures_data = tv.get_hist(symbol=futures_symbol, exchange="NSE", interval=Interval.in_daily, n_bars=1000)
             print(f"DEBUG: Futures data result: type={type(futures_data)}, is None={futures_data is None}")
@@ -8715,9 +8716,10 @@ def analyze():
                             # Reuse global tv instance (already authenticated)
                             
                             # Main price data
-                            res = tv.get_hist(symbol=tick, exchange='NSE', interval=Interval.in_daily, n_bars=1000)
+                            tv_tick = tick.replace('-', '_')
+                            res = tv.get_hist(symbol=tv_tick, exchange='NSE', interval=Interval.in_daily, n_bars=1000)
                             if res is None or res.empty:
-                                res = tv.get_hist(symbol=tick, exchange='BSE', interval=Interval.in_daily, n_bars=1000)
+                                res = tv.get_hist(symbol=tv_tick, exchange='BSE', interval=Interval.in_daily, n_bars=1000)
                             
                             if res is None or res.empty:
                                 raise Exception(f"No price data for {tick}")

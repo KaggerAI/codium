@@ -47,9 +47,10 @@ def fetch_histogram(symbol, exchange, start_date, end_date, max_retries=3, inter
     
     raw = None
     if not force_yf:
+        tv_symbol = symbol.replace('-', '_')
         for _ in range(max_retries):
             try:
-                raw = tv.get_hist(symbol=symbol, exchange=exchange,
+                raw = tv.get_hist(symbol=tv_symbol, exchange=exchange,
                                   interval=tv_interval, n_bars=n_bars)
                 if raw is not None and not raw.empty:
                     break
