@@ -3933,14 +3933,14 @@
             displayName = displayName.replace("CHILD_ROW:", "").trim();
             html += `<tr class="hidden child-of-${activeParentId} ${trHover} text-sm transition-colors duration-150"><td class="px-4 py-3 border-b ${tdBorder} font-medium ${tdTextDim} text-left pl-8">${displayName}</td>`;
           } else {
-            activeParentId = `parent_${tableName.replace(/\\W+/g, '')}_${metricIdx}`;
+            activeParentId = `parent_${tableName.replace(/\W+/g, '')}_${metricIdx}`;
 
             let hasChildren = false;
             if (metricIdx + 1 < metricNames.length && metricNames[metricIdx + 1].toString().startsWith("CHILD_ROW:")) {
               hasChildren = true;
             }
 
-            displayName = displayName.toString().replace(/\\+$/, "").trim();
+            displayName = displayName.toString().replace(/\+$/, "").trim();
             if (hasChildren) {
               const iconColor = isDarkTheme ? "text-purple-400" : "text-blue-500";
               displayName = `<button type="button" onclick="event.preventDefault(); window.toggleChildRows('${activeParentId}', this)" class="focus:outline-none flex items-center text-left font-medium ${tdText} w-full">${displayName} <span class="ml-1 text-xs ${iconColor} font-bold toggle-icon">+</span></button>`;
