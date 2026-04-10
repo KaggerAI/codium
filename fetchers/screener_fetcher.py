@@ -415,8 +415,36 @@ async def fetch_consolidated_async(ticker: str) -> tuple[dict[str, pd.DataFrame]
             except Exception as e:
                 log_progress(f"Could not parse Annual Shareholding for {ticker}: {e}")
 
-    # The old "Growth Patterns" came from tables we are no longer using.
-    # The primary financial tables are the priority and are now correctly fetched.
+    # Parse Growth Patterns explicitly from ranges-tables
+    ranges_tables = soup.select("table.ranges-table")
+    series_list = []
+    for table_html in ranges_tables:
+        try:
+            df_list = await asyncio.to_thread(pd.read_html, io.StringIO(str(table_html)))
+            if df_list and len(df_list) > 0:
+                df = clean_df(df_list[0])
+                if not df.empty and len(df.columns) >= 2:
+                    p = df.columns[0]
+                    idx, val = df.columns[:2]
+                    s = df.set_index(idx)[val]
+                    s.name = p
+                    series_list.append(s)
+        except Exception as e:
+            log_progress(f"Could not parse ranges-table for {ticker}: {e}")
+
+    if series_list:
+        merged = pd.concat(series_list, axis=1).T
+        
+        # Reorder columns to be logical: 10Y, 5Y, 3Y, 1Y, Last Year, TTM
+        preferred_order = ["10 Years:", "5 Years:", "3 Years:", "1 Year:", "Last Year:", "TTM:"]
+        existing_cols = [c for c in preferred_order if c in merged.columns]
+        other_cols = [c for c in merged.columns if c not in preferred_order]
+        merged = merged[existing_cols + other_cols]
+        
+        merged.index.name = "Particulars"
+        merged = merged.reset_index() # Puts metric names into a column
+        merged = merged.fillna("")
+        tables["Growth Patterns"] = merged
 
     # Inject hidden child rows using Screener API
     cid_elem = soup.select_one('[data-company-id]')
@@ -625,19 +653,35 @@ def fetch_consolidated(ticker: str) -> tuple[dict[str, pd.DataFrame], str, dict,
             except Exception as e:
                 log_progress(f"Could not parse Annual Shareholding for {ticker}: {e}")
 
+    # Parse Growth Patterns explicitly from ranges-tables
+    ranges_tables = soup.select("table.ranges-table")
     series_list = []
-    for p in PATTERNS:
-        df = tables.pop(p, None)
-        if df is not None:
-            # Handle cases where the table might not have 2 columns
-            if len(df.columns) >= 2:
-                idx, val = df.columns[:2]
-                s = df.set_index(idx)[val]
-                s.name = p
-                series_list.append(s)
+    for table_html in ranges_tables:
+        try:
+            df_list = pd.read_html(io.StringIO(str(table_html)))
+            if df_list and len(df_list) > 0:
+                df = clean_df(df_list[0])
+                if not df.empty and len(df.columns) >= 2:
+                    p = df.columns[0]
+                    idx, val = df.columns[:2]
+                    s = df.set_index(idx)[val]
+                    s.name = p
+                    series_list.append(s)
+        except Exception as e:
+            log_progress(f"Could not parse ranges-table for {ticker}: {e}")
+
     if series_list:
         merged = pd.concat(series_list, axis=1).T
-        merged.index.name = ""
+        
+        # Reorder columns to be logical: 10Y, 5Y, 3Y, 1Y, Last Year, TTM
+        preferred_order = ["10 Years:", "5 Years:", "3 Years:", "1 Year:", "Last Year:", "TTM:"]
+        existing_cols = [c for c in preferred_order if c in merged.columns]
+        other_cols = [c for c in merged.columns if c not in preferred_order]
+        merged = merged[existing_cols + other_cols]
+        
+        merged.index.name = "Particulars"
+        merged = merged.reset_index() # Puts metric names into a column
+        merged = merged.fillna("")
         tables["Growth Patterns"] = merged
 
     # Inject hidden child rows using Screener API
@@ -1261,10 +1305,393 @@ async def fetch_latest_documents_async(ticker: str) -> list[dict]:
                 doc_info['content_summary'] = summary
             final_docs.append(doc_info)
         
+        # --- Also find the latest Annual Report URL (link-only, no download at this stage) ---
+        try:
+            annual_links = soup.select('a[class*="Annual+Report"]')
+            if annual_links:
+                ar_link = annual_links[0]
+                ar_href = ar_link.get('href', '').strip().replace(' ', '%20')
+                if ar_href:
+                    ar_date_div = ar_link.find('div')
+                    ar_date = ar_date_div.text.strip() if ar_date_div else ''
+                    ar_date_text = f"({ar_date})" if ar_date else ''
+                    final_docs.append({
+                        "type": "Annual Report",
+                        "text": f"Annual Report {ar_date_text}",
+                        "link": ar_href,
+                        "date": ar_date,
+                        # No content_summary — this is link-only at initial load
+                    })
+                    print(f"INFO: Found Annual Report URL for {ticker}: {ar_href}")
+        except Exception as ar_err:
+            print(f"WARN: Could not find Annual Report link for {ticker}: {ar_err}")
+
         return final_docs
     except Exception as e:
         print(f"ERROR (async): Could not fetch documents for {ticker}. Reason: {e}")
         return []
+
+
+# =====================================================================
+# Segment Revenue Extraction (On-Demand, AI-Powered)
+# =====================================================================
+
+def _find_segment_pages(pdf_bytes: bytes, max_pages: int = 60) -> list[int]:
+    """
+    Quick scan of an Annual Report PDF to find pages containing segment,
+    geography, or export data. Returns a list of page indices (0-based).
+    
+    Uses a two-tier keyword system:
+    - HIGH-confidence keywords (segment tables in Notes to Financial Statements)
+    - LOW-confidence keywords (generic mentions that may appear anywhere)
+    
+    Prioritises dense clusters of keyword hits over scattered mentions.
+    """
+    # Tier 1: High-confidence — these almost always appear ON the actual segment data pages
+    high_keywords = [
+        'segment information', 'segment reporting', 'segmental information',
+        'reportable segment', 'operating segment', 'business segment',
+        'segment result', 'segment revenue', 'segment asset',
+        'geographical segment', 'geographic segment',
+        'revenue from external customer',
+        'inter-segment', 'inter segment',
+        'segment wise', 'segment-wise', 'segmentwise',
+    ]
+    
+    # Tier 2: Lower-confidence — useful as supporting evidence but prone to false positives
+    low_keywords = [
+        'management discussion', 'md&a', 'management analysis',
+        'financial highlights',
+        'revenue breakdown', 'revenue by',
+        'ebitda by', 'profit by segment',
+        'domestic port', 'international port',
+        'product wise', 'product-wise', 'vertical wise', 'vertical-wise',
+        'sector wise', 'sector-wise',
+        'geography wise', 'geography-wise', 'region wise', 'region-wise',
+    ]
+    
+    # Tier 3: Very generic — only count if near high-confidence pages
+    generic_keywords = ['domestic', 'export', 'overseas']
+    
+    high_pages = set()
+    low_pages = set()
+    generic_pages = set()
+    
+    try:
+        with pdfplumber.open(BytesIO(pdf_bytes)) as pdf:
+            total_pages = len(pdf.pages)
+            
+            for i, page in enumerate(pdf.pages):
+                text = (page.extract_text() or '').lower()
+                if not text or len(text.strip()) < 50:
+                    continue
+                    
+                if any(kw in text for kw in high_keywords):
+                    high_pages.add(i)
+                elif any(kw in text for kw in low_keywords):
+                    low_pages.add(i)
+                elif any(kw in text for kw in generic_keywords):
+                    generic_pages.add(i)
+            
+            print(f"INFO: _find_segment_pages scan: {len(high_pages)} high, {len(low_pages)} low, {len(generic_pages)} generic hits out of {total_pages} pages")
+            
+            # Build the final page set with context windows
+            target_pages = set()
+            
+            # High-confidence pages get wide context (±3 pages for multi-page tables)
+            for p in high_pages:
+                for j in range(max(0, p - 3), min(total_pages, p + 6)):
+                    target_pages.add(j)
+            
+            # Low-confidence pages get medium context (±2 pages)
+            for p in low_pages:
+                for j in range(max(0, p - 2), min(total_pages, p + 4)):
+                    target_pages.add(j)
+            
+            # Generic pages only included if they're within 10 pages of a high/low hit
+            high_low_combined = high_pages | low_pages
+            for p in generic_pages:
+                if any(abs(p - hp) <= 10 for hp in high_low_combined):
+                    for j in range(max(0, p - 1), min(total_pages, p + 3)):
+                        target_pages.add(j)
+            
+            # If we have high-confidence hits, prioritize those clusters
+            if high_pages and len(target_pages) > max_pages:
+                # Too many pages — trim to prioritize high-confidence clusters
+                # Score each page by proximity to high-confidence hits
+                page_scores = {}
+                for p in target_pages:
+                    min_dist = min(abs(p - hp) for hp in high_pages)
+                    page_scores[p] = min_dist
+                # Sort by proximity to high-confidence hits, take top max_pages
+                sorted_pages = sorted(target_pages, key=lambda p: page_scores[p])
+                target_pages = set(sorted_pages[:max_pages])
+            
+            # If no keyword pages found at all, fallback to latter half of document
+            if not target_pages:
+                if total_pages > 20:
+                    # Segment notes are typically in the last 30% of Annual Reports
+                    start = int(total_pages * 0.6)
+                    for j in range(start, min(total_pages, start + 40)):
+                        target_pages.add(j)
+                    print(f"INFO: No segment keywords found. Using pages {start}-{min(total_pages, start + 40)} as fallback")
+                    
+    except Exception as e:
+        print(f"WARN: _find_segment_pages failed: {e}")
+        return []
+    
+    result = sorted(target_pages)[:max_pages]
+    print(f"INFO: _find_segment_pages returning {len(result)} pages out of {total_pages} total")
+    return result
+
+
+def _create_trimmed_pdf(pdf_bytes: bytes, page_indices: list[int]) -> bytes:
+    """
+    Creates a new PDF containing only the specified pages from the original PDF.
+    Uses PyPDF2/pypdf if available, otherwise falls back to returning full PDF.
+    """
+    try:
+        from pypdf import PdfReader, PdfWriter
+    except ImportError:
+        try:
+            from PyPDF2 import PdfReader, PdfWriter
+        except ImportError:
+            print("WARN: Neither pypdf nor PyPDF2 available. Using full PDF.")
+            return pdf_bytes
+    
+    try:
+        reader = PdfReader(BytesIO(pdf_bytes))
+        writer = PdfWriter()
+        for idx in page_indices:
+            if idx < len(reader.pages):
+                writer.add_page(reader.pages[idx])
+        
+        output = BytesIO()
+        writer.write(output)
+        trimmed = output.getvalue()
+        print(f"INFO: Trimmed PDF from {len(reader.pages)} pages to {len(page_indices)} pages ({len(trimmed)//1024}KB)")
+        return trimmed
+    except Exception as e:
+        print(f"WARN: PDF trimming failed: {e}. Using full PDF.")
+        return pdf_bytes
+
+
+SEGMENT_EXTRACTION_PROMPT = """You are an expert financial data extractor specializing in Indian company Annual Reports and Investor Presentations. Analyze this document THOROUGHLY and extract ALL revenue and profitability breakdowns.
+
+**WHERE TO LOOK (in order of priority):**
+1. "Notes to the Consolidated Financial Statements" → "Segment Information" / "Segment Reporting" sections (these contain the most detailed, audited data)
+2. "Financial Highlights" section (summary-level data with absolute numbers)
+3. "Management Discussion & Analysis" (narrative data with segment commentary)
+4. Any charts, tables, or infographics showing segment/geography breakdowns
+
+**REQUIRED EXTRACTIONS (extract ALL that are available):**
+
+1. **Segment-wise Revenue** — Revenue/Sales by business segment/division. For each segment, extract: absolute revenue (₹ Cr), percentage of total, and YoY growth. Also include inter-segment revenue and eliminations if shown.
+2. **Segment-wise Operating Profit / EBITDA** — Operating profit or EBITDA by segment with absolute values and margins.
+3. **Segment-wise Results** — Segment Results / Profit Before Tax by segment if shown in the Notes to Financial Statements.
+4. **Geography-wise Revenue** — Revenue split by geography (e.g., India vs Outside India, or by country/region). Include both current year and previous year figures.
+5. **Domestic vs Export / International Revenue** — Revenue split between domestic and export/international operations.
+6. **Sector-wise / Vertical-wise Revenue** — Revenue by end-use industry, customer vertical, or application area.
+7. **Product-wise Revenue** — Revenue by product category or service line if available.
+
+**CRITICAL INSTRUCTIONS:**
+- Extract BOTH current year AND previous year figures when available (shown in the same table)
+- Previous year figures are often shown in italics or in a smaller font — extract them too
+- Include "Total" rows in tables for verification
+- Use the exact numbers from the document. Do NOT invent, estimate, or calculate data.
+- For tables in Notes to Financial Statements, include all columns shown (e.g., "Port and SEZ activities", "Others", "Eliminations", "Total")
+
+**OUTPUT FORMAT:**
+- Output clean, well-formatted HTML using tables.
+- Use this exact structure for each breakdown found:
+
+<div class="segment-block">
+<h4 class="segment-title">[Title, e.g. "Segment-wise Revenue (FY2025)"]</h4>
+<table class="segment-table">
+<thead><tr><th>Segment</th><th>FY2025 (₹ Cr)</th><th>FY2024 (₹ Cr)</th><th>YoY Growth</th></tr></thead>
+<tbody><tr><td>...</td><td>...</td><td>...</td><td>...</td></tr></tbody>
+</table>
+</div>
+
+- Adapt the column headers to match the actual data in the document.
+- If a breakdown is NOT found in the document, output: <p class="segment-not-found">⚠️ [Category] data was not found in this document.</p>
+- Include the period/year the data relates to in each table title.
+
+Do NOT include any introductory text, markdown, or explanation outside the HTML structure above."""
+
+
+async def fetch_segment_data_from_document_async(pdf_url: str, doc_type: str) -> str:
+    """
+    Fetches segment-wise, geography-wise, domestic/export revenue & profit data
+    from a document using Gemini's native PDF analysis.
+    
+    Args:
+        pdf_url: URL of the PDF document
+        doc_type: 'annual_report', 'presentation', or 'concall'
+    Returns:
+        HTML string with formatted segment data tables
+    """
+    if not GOOGLE_API_KEY:
+        return '<p class="segment-not-found">⚠️ Google API Key is not configured. Cannot analyze documents.</p>'
+    
+    try:
+        # Step 1: Download the PDF
+        log_progress(f"Downloading {doc_type} document for segment analysis...")
+        async with httpx.AsyncClient(follow_redirects=True, verify=False) as client:
+            response = await client.get(pdf_url, headers=HEADERS, timeout=60.0)
+            response.raise_for_status()
+            pdf_content = response.content
+        
+        # Check if it's actually a PDF
+        if not pdf_content.strip().startswith(b'%PDF'):
+            content_type = response.headers.get('content-type', '').lower()
+            if 'html' in content_type:
+                return '<p class="segment-not-found">⚠️ The document URL returned an HTML page instead of a PDF. Segment extraction not possible.</p>'
+        
+        # Step 2: For Annual Reports, trim to relevant pages
+        upload_content = pdf_content
+        if doc_type == 'annual_report':
+            log_progress("Scanning Annual Report for segment/geography pages...")
+            segment_pages = await asyncio.to_thread(_find_segment_pages, pdf_content)
+            if segment_pages:
+                upload_content = await asyncio.to_thread(_create_trimmed_pdf, pdf_content, segment_pages)
+            else:
+                log_progress("No specific segment pages found. Uploading full document to Gemini...")
+        
+        # Step 3: For concalls, use text extraction instead of Gemini File API
+        if doc_type == 'concall':
+            # Concall transcripts are better handled as text
+            extracted_text = await get_text_from_pdf_url_async(pdf_url, max_pages_to_process=75, max_chars_to_return=30000)
+            if not extracted_text or len(extracted_text.strip()) < 200:
+                return '<p class="segment-not-found">⚠️ Could not extract sufficient text from the concall transcript.</p>'
+            
+            # Use OpenAI/Gemini text model for concall text
+            def blocking_text_analysis():
+                global genai_client
+                if not genai_client:
+                    raise ValueError("GenAI client not initialized")
+                
+                response = genai_client.models.generate_content(
+                    model='gemini-3-flash-preview',
+                    contents=[
+                        types.Part.from_text(text=SEGMENT_EXTRACTION_PROMPT),
+                        types.Part.from_text(text=f"Here is the concall transcript text:\n\n{extracted_text}")
+                    ]
+                )
+                return response.text
+            
+            result_html = await asyncio.to_thread(blocking_text_analysis)
+            return result_html
+        
+        # Step 4: Upload PDF to Gemini File API and analyze (for annual_report and presentation)
+        def blocking_gemini_segment_analysis(content):
+            global genai_client
+            if not genai_client:
+                raise ValueError("GenAI client not initialized")
+            
+            log_progress(f"Uploading {doc_type} to Gemini for segment analysis...")
+            
+            pdf_file = genai_client.files.upload(
+                file=BytesIO(content),
+                config=types.UploadFileConfig(
+                    display_name=f"segment_analysis_{doc_type}.pdf",
+                    mime_type='application/pdf'
+                )
+            )
+            print(f"INFO: PDF uploaded for segment analysis as '{pdf_file.name}'")
+            
+            log_progress("Extracting segment and geography data with AI...")
+            
+            response = genai_client.models.generate_content(
+                model='gemini-3-flash-preview',
+                contents=[
+                    types.Part.from_text(text=SEGMENT_EXTRACTION_PROMPT),
+                    pdf_file
+                ]
+            )
+            
+            # Clean up uploaded file
+            try:
+                genai_client.files.delete(name=pdf_file.name)
+                print(f"INFO: Cleaned up segment analysis file {pdf_file.name}")
+            except Exception:
+                pass
+            
+            return response.text
+        
+        result_html = await asyncio.to_thread(blocking_gemini_segment_analysis, upload_content)
+        
+        # Strip any markdown code fences if Gemini wraps it
+        if result_html:
+            result_html = result_html.strip()
+            if result_html.startswith('```html'):
+                result_html = result_html[7:]
+            elif result_html.startswith('```'):
+                result_html = result_html[3:]
+            if result_html.endswith('```'):
+                result_html = result_html[:-3]
+            result_html = result_html.strip()
+        
+        return result_html
+        
+    except Exception as e:
+        print(f"ERROR: fetch_segment_data_from_document_async failed for {pdf_url}: {e}")
+        traceback.print_exc()
+        return f'<p class="segment-not-found">⚠️ Error analyzing document: {e}</p>'
+
+
+async def fetch_document_url_for_segment_analysis(ticker: str, section: str) -> tuple:
+    """
+    Fetches the appropriate document URL for segment analysis based on the section type.
+    
+    Args:
+        ticker: Stock ticker
+        section: "Annual Results" or "Quarterly Results"
+    Returns:
+        tuple: (pdf_url, doc_type) or (None, None) if not found
+    """
+    try:
+        url = BASE_URL.format(ticker=ticker)
+        async with httpx.AsyncClient(follow_redirects=True) as client:
+            response = await client.get(url, headers=HEADERS, timeout=45.0)
+            response.raise_for_status()
+        
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        if section == "Annual Results":
+            # Find the latest Annual Report
+            annual_links = soup.select('a[class*="Annual+Report"]')
+            if annual_links:
+                href = annual_links[0].get('href', '').strip().replace(' ', '%20')
+                if href:
+                    return (href, 'annual_report')
+            return (None, None)
+        
+        elif section == "Quarterly Results":
+            # Prefer Investor Presentation, fallback to Concall Transcript
+            concalls_section = soup.find('div', class_='concalls')
+            if not concalls_section:
+                return (None, None)
+            
+            for item in concalls_section.find_all('li', limit=4):
+                # Try Presentation first
+                ppt_link = item.find('a', string='PPT', href=True)
+                if ppt_link:
+                    return (ppt_link['href'], 'presentation')
+            
+            # Fallback to Concall
+            for item in concalls_section.find_all('li', limit=4):
+                transcript_link = item.find('a', string='Transcript', href=True)
+                if transcript_link:
+                    return (transcript_link['href'], 'concall')
+            
+            return (None, None)
+        
+        return (None, None)
+        
+    except Exception as e:
+        print(f"ERROR: fetch_document_url_for_segment_analysis failed for {ticker}: {e}")
+        return (None, None)
 
 
 # =====================================================================

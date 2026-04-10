@@ -9465,6 +9465,88 @@ def download_debug_file(filename):
     
 
 # =====================================================================
+# START: Segment Revenue Extraction Endpoint (On-Demand)
+# =====================================================================
+
+@app.route('/api/analyze-segments', methods=['POST'])
+def api_analyze_segments():
+    """
+    On-demand endpoint to extract segment/geography/export revenue data
+    from Annual Reports or Quarterly Presentations/Concalls.
+    
+    Accepts: { ticker: "RELIANCE", section: "Annual Results" | "Quarterly Results" }
+    Returns: { success: true, html: "..." } or { success: false, error: "..." }
+    """
+    try:
+        data = request.get_json(force=True)
+        ticker = data.get('ticker', '').strip().upper()
+        section = data.get('section', '').strip()
+        
+        if not ticker:
+            return jsonify({'success': False, 'error': 'No ticker provided'}), 400
+        
+        if section not in ('Annual Results', 'Quarterly Results'):
+            return jsonify({'success': False, 'error': 'Invalid section. Must be "Annual Results" or "Quarterly Results"'}), 400
+        
+        print(f"INFO: Segment analysis requested for {ticker} - {section}")
+        log_progress(f"Starting segment analysis for {ticker} ({section})...")
+        
+        # Import the fetcher functions
+        from fetchers.screener_fetcher import (
+            fetch_document_url_for_segment_analysis,
+            fetch_segment_data_from_document_async
+        )
+        
+        # Step 1: Find the right document URL
+        pdf_url, doc_type = asyncio.run(fetch_document_url_for_segment_analysis(ticker, section))
+        
+        if not pdf_url:
+            doc_name = "Annual Report" if section == "Annual Results" else "Investor Presentation or Concall Transcript"
+            return jsonify({
+                'success': False, 
+                'error': f'No {doc_name} found for {ticker} on Screener.in. The document may not be available yet.'
+            })
+        
+        print(f"INFO: Found {doc_type} document for {ticker}: {pdf_url}")
+        log_progress(f"Found {doc_type} document. Downloading and analyzing...")
+        
+        # Step 2: Extract segment data from the document
+        result_html = asyncio.run(fetch_segment_data_from_document_async(pdf_url, doc_type))
+        
+        if not result_html:
+            return jsonify({
+                'success': False, 
+                'error': 'AI could not extract segment data from the document.'
+            })
+        
+        log_progress("Segment analysis complete!")
+        
+        # Wrap the result in a styled container
+        source_label = {
+            'annual_report': '📊 Annual Report',
+            'presentation': '📈 Investor Presentation', 
+            'concall': '🎤 Concall Transcript'
+        }.get(doc_type, 'Document')
+        
+        wrapped_html = f'''
+        <div class="segment-analysis-wrapper">
+            <div class="segment-source-badge">
+                <span>{source_label}</span>
+                <a href="{pdf_url}" target="_blank" rel="noopener noreferrer" class="segment-pdf-link">View Source PDF ↗</a>
+            </div>
+            {result_html}
+        </div>
+        '''
+        
+        return jsonify({'success': True, 'html': wrapped_html})
+        
+    except Exception as e:
+        print(f"ERROR: /api/analyze-segments failed: {e}")
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': f'Server error: {str(e)}'}), 500
+
+
+# =====================================================================
 # START: Section Refresh Endpoint
 # =====================================================================
 

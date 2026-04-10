@@ -779,6 +779,178 @@
       }
     }
 
+    /* === SEGMENT EXTRACTION UI === */
+    .segment-extract-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: #ffffff;
+      background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%);
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      box-shadow: 0 2px 8px rgba(139, 92, 246, 0.3);
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .segment-extract-btn:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 16px rgba(139, 92, 246, 0.4);
+      background: linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%);
+    }
+
+    .segment-extract-btn:disabled {
+      opacity: 0.7;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .segment-analysis-container {
+      margin-top: 12px;
+      margin-bottom: 16px;
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    .segment-loading {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem;
+      background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%);
+      border-radius: 12px;
+      border: 1px solid #ddd6fe;
+    }
+
+    .segment-loading-spinner {
+      width: 32px;
+      height: 32px;
+      border: 3px solid #ddd6fe;
+      border-top: 3px solid #8b5cf6;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .segment-loading p {
+      margin-top: 12px;
+      color: #6d28d9;
+      font-size: 0.9rem;
+      font-weight: 500;
+    }
+
+    @keyframes segmentSlideDown {
+      from { opacity: 0; max-height: 0; }
+      to { opacity: 1; max-height: 5000px; }
+    }
+
+    .segment-analysis-wrapper {
+      background: #fafaf9;
+      border-radius: 12px;
+      padding: 1.25rem;
+      border: 1px solid #e7e5e4;
+    }
+
+    .segment-source-badge {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 14px;
+      background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%);
+      border-radius: 8px;
+      margin-bottom: 16px;
+      border: 1px solid #ddd6fe;
+    }
+
+    .segment-source-badge span {
+      font-weight: 600;
+      font-size: 0.85rem;
+      color: #5b21b6;
+    }
+
+    .segment-pdf-link {
+      font-size: 0.8rem;
+      color: #7c3aed;
+      text-decoration: none;
+      font-weight: 500;
+      transition: color 0.2s;
+    }
+
+    .segment-pdf-link:hover {
+      color: #5b21b6;
+      text-decoration: underline;
+    }
+
+    /* AI-generated segment tables */
+    .segment-block {
+      margin-bottom: 1.5rem;
+    }
+
+    .segment-title {
+      font-size: 1rem;
+      font-weight: 700;
+      color: #1e293b;
+      margin: 0 0 0.5rem 0;
+      padding-bottom: 0.4rem;
+      border-bottom: 2px solid #8b5cf6;
+    }
+
+    .segment-table {
+      width: 100%;
+      border-collapse: collapse;
+      background: white;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+      margin-bottom: 0.75rem;
+    }
+
+    .segment-table thead {
+      background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);
+      color: white;
+    }
+
+    .segment-table th {
+      padding: 0.6rem 0.75rem;
+      text-align: left;
+      font-weight: 600;
+      font-size: 0.8rem;
+      letter-spacing: 0.02em;
+    }
+
+    .segment-table td {
+      padding: 0.55rem 0.75rem;
+      border-bottom: 1px solid #f1f5f9;
+      font-size: 0.85rem;
+      color: #334155;
+    }
+
+    .segment-table tbody tr:nth-child(even) {
+      background: #f8fafc;
+    }
+
+    .segment-table tbody tr:hover {
+      background: #f5f3ff;
+    }
+
+    .segment-not-found {
+      color: #92400e;
+      background: #fef3c7;
+      padding: 10px 14px;
+      border-radius: 8px;
+      border-left: 3px solid #f59e0b;
+      font-size: 0.85rem;
+      margin: 0.5rem 0;
+    }
+
     /* === CHART POPOUT MODAL === */
     .chart-popout-modal {
       position: fixed;
@@ -3967,10 +4139,10 @@
                 if (isPercent) displayValue += '%';
               } else {
                 displayValue = v;
-                cellClass = 'text-left';
+                cellClass = 'text-right';
               }
             } else {
-              cellClass = 'text-center';
+              cellClass = 'text-right';
             }
 
             const highlightClass = yoyHighlightIndices.has(periodIndex) ? yoyBg : '';
@@ -3998,6 +4170,78 @@
       }
 
       return html;
+    }
+
+    // --- SEGMENT EXTRACTION: On-demand AI-powered segment/geography data ---
+    async function fetchSegmentDetails(section) {
+      const containerId = `segment-analysis-${section.replace(/\s/g, '-')}`;
+      const container = document.getElementById(containerId);
+      const btn = document.querySelector(`.segment-extract-btn[data-section="${section}"]`);
+      
+      if (!container || !btn) {
+        console.error('Segment container or button not found for:', section);
+        return;
+      }
+
+      // If data is already loaded, toggle visibility
+      if (btn.dataset.loaded === "true") {
+        if (container.classList.contains('hidden')) {
+          container.classList.remove('hidden');
+          btn.innerHTML = '− Hide Segment Details';
+        } else {
+          container.classList.add('hidden');
+          btn.innerHTML = '+ Show Segment Details';
+        }
+        return;
+      }
+      
+      // Show loading state
+      container.classList.remove('hidden');
+      container.innerHTML = `
+        <div class="segment-loading">
+          <div class="segment-loading-spinner"></div>
+          <p>Analyzing ${section === 'Annual Results' ? 'Annual Report' : 'Investor Presentation'} for segment data...</p>
+          <p style="font-size: 0.75rem; color: #a78bfa; margin-top: 4px;">This may take 10-15 seconds</p>
+        </div>`;
+      btn.disabled = true;
+      btn.innerHTML = '⏳ Analyzing...';
+      
+      try {
+        const ticker = window.currentTicker;
+        if (!ticker) throw new Error('No ticker selected');
+        
+        const resp = await fetch('/api/analyze-segments', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ticker, section })
+        });
+        const data = await resp.json();
+        
+        if (data.success) {
+          container.innerHTML = data.html;
+          container.style.animation = 'segmentSlideDown 0.4s ease-out';
+          
+          // Setup toggle state
+          btn.dataset.loaded = "true";
+          btn.innerHTML = '− Hide Segment Details';
+          btn.disabled = false;
+          
+          // Gray theme for the toggle button
+          btn.style.background = 'linear-gradient(135deg, #4b5563 0%, #374151 100%)';
+          btn.style.boxShadow = '0 2px 8px rgba(75, 85, 99, 0.3)';
+        } else {
+          throw new Error(data.error || 'Failed to extract segment data');
+        }
+      } catch (err) {
+        container.innerHTML = `
+          <div style="padding: 1rem; background: #fef2f2; border-radius: 8px; border: 1px solid #fecaca;">
+            <p style="color: #991b1b; font-size: 0.9rem; margin: 0;">❌ ${err.message}</p>
+          </div>`;
+        btn.innerHTML = '⚡ Retry Extract';
+        btn.disabled = false;
+        btn.style.background = '';
+        btn.style.boxShadow = '';
+      }
     }
 
     function render_analyst_rating(data) {
@@ -6824,7 +7068,14 @@
             try {
               const data = JSON.parse(payload.fundamentals[name]);
               if (data && data.index && data.columns && data.data) {
-                screenerHTML += `<h3 class="text-xl font-semibold mb-3 mt-6 text-slate-600">${name}</h3>${renderFundTable(data, name)}`;
+                const isSegmentSection = (name === "Annual Results" || name === "Quarterly Results");
+                const segmentBtnHtml = isSegmentSection
+                  ? `<button class="segment-extract-btn" data-section="${name}" onclick="fetchSegmentDetails('${name}')">⚡ Extract Segment Details (AI)</button>`
+                  : '';
+                const segmentContainerHtml = isSegmentSection
+                  ? `<div id="segment-analysis-${name.replace(/\s/g, '-')}" class="segment-analysis-container hidden"></div>`
+                  : '';
+                screenerHTML += `<div class="flex items-center justify-between mt-6 mb-3"><h3 class="text-xl font-semibold text-slate-600">${name}</h3>${segmentBtnHtml}</div>${segmentContainerHtml}${renderFundTable(data, name)}`;
               }
             } catch (e) { console.error(`Error parsing fundamental table "${name}":`, e); }
           });
