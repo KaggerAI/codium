@@ -1378,42 +1378,49 @@ def _find_segment_pages(pdf_bytes: bytes, max_pages: int = 60) -> list[int]:
     generic_pages = set()
     
     try:
-        with pdfplumber.open(BytesIO(pdf_bytes)) as pdf:
-            total_pages = len(pdf.pages)
-            
-            for i, page in enumerate(pdf.pages):
+        from pypdf import PdfReader
+        from io import BytesIO
+        
+        reader = PdfReader(BytesIO(pdf_bytes))
+        total_pages = len(reader.pages)
+        
+        for i, page in enumerate(reader.pages):
+            try:
                 text = (page.extract_text() or '').lower()
-                if not text or len(text.strip()) < 50:
-                    continue
-                    
-                if any(kw in text for kw in high_keywords):
-                    high_pages.add(i)
-                elif any(kw in text for kw in low_keywords):
-                    low_pages.add(i)
-                elif any(kw in text for kw in generic_keywords):
-                    generic_pages.add(i)
-            
-            print(f"INFO: _find_segment_pages scan: {len(high_pages)} high, {len(low_pages)} low, {len(generic_pages)} generic hits out of {total_pages} pages")
-            
-            # Build the final page set with context windows
-            target_pages = set()
-            
-            # High-confidence pages get wide context (±3 pages for multi-page tables)
-            for p in high_pages:
-                for j in range(max(0, p - 3), min(total_pages, p + 6)):
+            except Exception:
+                text = ''
+                
+            if not text or len(text.strip()) < 50:
+                continue
+                
+            if any(kw in text for kw in high_keywords):
+                high_pages.add(i)
+            elif any(kw in text for kw in low_keywords):
+                low_pages.add(i)
+            elif any(kw in text for kw in generic_keywords):
+                generic_pages.add(i)
+        
+        print(f"INFO: _find_segment_pages (pypdf) scan: {len(high_pages)} high, {len(low_pages)} low, {len(generic_pages)} generic hits out of {total_pages} pages")
+        
+        # Build the final page set with context windows
+        target_pages = set()
+        
+        # High-confidence pages get wide context (±3 pages for multi-page tables)
+        for p in high_pages:
+            for j in range(max(0, p - 3), min(total_pages, p + 6)):
+                target_pages.add(j)
+        
+        # Low-confidence pages get medium context (±2 pages)
+        for p in low_pages:
+            for j in range(max(0, p - 2), min(total_pages, p + 4)):
+                target_pages.add(j)
+        
+        # Generic pages only included if they're within 10 pages of a high/low hit
+        high_low_combined = high_pages | low_pages
+        for p in generic_pages:
+            if any(abs(p - hp) <= 10 for hp in high_low_combined):
+                for j in range(max(0, p - 1), min(total_pages, p + 3)):
                     target_pages.add(j)
-            
-            # Low-confidence pages get medium context (±2 pages)
-            for p in low_pages:
-                for j in range(max(0, p - 2), min(total_pages, p + 4)):
-                    target_pages.add(j)
-            
-            # Generic pages only included if they're within 10 pages of a high/low hit
-            high_low_combined = high_pages | low_pages
-            for p in generic_pages:
-                if any(abs(p - hp) <= 10 for hp in high_low_combined):
-                    for j in range(max(0, p - 1), min(total_pages, p + 3)):
-                        target_pages.add(j)
             
             # If we have high-confidence hits, prioritize those clusters
             if high_pages and len(target_pages) > max_pages:

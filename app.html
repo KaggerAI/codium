@@ -4215,7 +4215,15 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ticker, section })
         });
-        const data = await resp.json();
+        
+        let data;
+        try {
+            data = await resp.json();
+        } catch (e) {
+            const errText = await resp.text();
+            console.error("Non-JSON API response from segment extraction:", errText);
+            throw new Error(`Server returned an invalid response (possibly timed out due to document size). Status: ${resp.status}`);
+        }
         
         if (data.success) {
           container.innerHTML = data.html;
