@@ -8578,6 +8578,27 @@ async def get_analysis_for_ticker_async(tick, skip_ai_summary=False):
     # Pass BOTH dictionaries back to the synchronous wrapper
     return result_for_frontend, analysis_for_cache
 
+def get_seconds_to_next_quarter_boundary():
+    """
+    Calculates seconds from now until the start of the next corporate reporting quarter:
+    Jan 1, Apr 1, Jul 1, Oct 1.
+    """
+    from datetime import datetime
+    now = datetime.now()
+    mod_month = now.month
+    
+    if mod_month >= 10:
+        next_boundary = datetime(now.year + 1, 1, 1)
+    elif mod_month >= 7:
+        next_boundary = datetime(now.year, 10, 1)
+    elif mod_month >= 4:
+        next_boundary = datetime(now.year, 7, 1)
+    else:
+        next_boundary = datetime(now.year, 4, 1)
+        
+    return int((next_boundary - now).total_seconds())
+
+
 # @cache.memoize(timeout=21600)
 def get_analysis_for_ticker(tick, skip_ai_summary=False):
     """
@@ -8607,10 +8628,10 @@ def get_analysis_for_ticker(tick, skip_ai_summary=False):
             
             try:
                 frontend_compressed = zlib.compress(pickle.dumps(result_for_frontend))
-                # 3 months TTL
-                cache.set(stock_cache_key, frontend_compressed, timeout=7776000)
-                DIRECT_REDIS_CLIENT.setex(stock_cache_key, 7776000, frontend_compressed)
-                print(f"INFO: Successfully cached fallthrough data for {tick} in Redis", file=sys.stderr)
+                timeout_val = get_seconds_to_next_quarter_boundary()
+                cache.set(stock_cache_key, frontend_compressed, timeout=timeout_val)
+                DIRECT_REDIS_CLIENT.setex(stock_cache_key, timeout_val, frontend_compressed)
+                print(f"INFO: Successfully cached fallthrough data for {tick} in Redis (timeout={timeout_val})", file=sys.stderr)
             except Exception as e:
                 print(f"WARN: Failed to cache fallthrough data for {tick} in Redis: {e}", file=sys.stderr)
     except Exception as e:
@@ -8624,10 +8645,9 @@ def analyze():
     Stock analysis endpoint with smart caching.
     - Returns cached data instantly if available (< 1 second)
     - Use force_refresh=true to bypass cache and get fresh data
-    - Cache expires after 1 week (604800 seconds)
+    - Cache expires dynamically at the next quarter boundary
     """
-    # 3 months in seconds (90 days * 24 * 3600)
-    STOCK_CACHE_TTL = 7776000
+    STOCK_CACHE_TTL = get_seconds_to_next_quarter_boundary()
     global last_analysis
     
     try:
@@ -9487,6 +9507,22 @@ def api_analyze_segments():
         
         if section not in ('Annual Results', 'Quarterly Results'):
             return jsonify({'success': False, 'error': 'Invalid section. Must be "Annual Results" or "Quarterly Results"'}), 400
+            
+        cache_key = f"segment_analysis_{ticker}_{section.replace(' ', '_')}"
+        
+        # Check cache first
+        cached_html = cache.get(cache_key)
+        if cached_html:
+            print(f"INFO: Segment analysis loaded from cache for {ticker} - {section}")
+            
+            # Check if it's stored as bytes or string
+            if isinstance(cached_html, bytes):
+                try: 
+                    cached_html = zlib.decompress(cached_html).decode('utf-8')
+                except:
+                    cached_html = cached_html.decode('utf-8')
+                    
+            return jsonify({'success': True, 'html': cached_html})
         
         print(f"INFO: Segment analysis requested for {ticker} - {section}")
         log_progress(f"Starting segment analysis for {ticker} ({section})...")
@@ -9537,6 +9573,40 @@ def api_analyze_segments():
             {result_html}
         </div>
         '''
+        
+        from datetime import datetime
+        now = datetime.now()
+        
+        if section == 'Annual Results':
+            # Indian companies release Annual Reports starting April/May. 
+            # We cache until the immediate next April 1st.
+            if now.month >= 4:
+                next_april_first = datetime(now.year + 1, 4, 1)
+            else:
+                next_april_first = datetime(now.year, 4, 1)
+            
+            timeout_seconds = int((next_april_first - now).total_seconds())
+        else:
+            # For Quarterly Results, cache until the next quarterly boundary:
+            # Boundaries: Jan 1st, Apr 1st, Jul 1st, Oct 1st
+            mod_month = now.month
+            
+            if mod_month >= 10:
+                # Between Oct 1 and Jan 1 -> Next boundary is Jan 1st of next year
+                next_boundary = datetime(now.year + 1, 1, 1)
+            elif mod_month >= 7:
+                # Between Jul 1 and Oct 1 -> Next boundary is Oct 1st
+                next_boundary = datetime(now.year, 10, 1)
+            elif mod_month >= 4:
+                # Between Apr 1 and Jul 1 -> Next boundary is Jul 1st
+                next_boundary = datetime(now.year, 7, 1)
+            else:
+                # Between Jan 1 and Apr 1 -> Next boundary is Apr 1st
+                next_boundary = datetime(now.year, 4, 1)
+                
+            timeout_seconds = int((next_boundary - now).total_seconds())
+            
+        cache.set(cache_key, wrapped_html, timeout=timeout_seconds)
         
         return jsonify({'success': True, 'html': wrapped_html})
         
@@ -11316,7 +11386,16 @@ register_forensic_routes(app, call_gemini_api, call_perplexity_api, get_any_cach
 from agents.analyst_agent import register_analyst_routes
 register_analyst_routes(app, call_gemini_api, call_perplexity_search_api, fetch_analyst_reports_async)
 
-print("INFO: Agent Marketplace routes registered (Concall Agent, Forensic Agent, Analyst Agent)", file=sys.stderr)
+# Register Forecasting Agent routes
+from agents.forecasting_agent import register_forecasting_routes
+from fetchers.screener_fetcher import fetch_peer_comparison_from_screener
+register_forecasting_routes(
+    app, call_gemini_api, call_perplexity_api, call_openai_api,
+    get_any_cache, fetch_peer_comparison_from_screener,
+    get_analysis_for_ticker
+)
+
+print("INFO: Agent Marketplace routes registered (Concall Agent, Forensic Agent, Analyst Agent, Forecasting Agent)", file=sys.stderr)
 
 # =====================================================================
 # END: Agent Marketplace

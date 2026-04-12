@@ -11,6 +11,9 @@
         rel="stylesheet" />
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <style>
         :root {
             --bg-primary: #0a0a0f;
@@ -57,7 +60,7 @@
         }
 
         .nav-inner {
-            max-width: 1400px;
+            max-width: 1680px;
             margin: 0 auto;
             display: flex;
             align-items: center;
@@ -141,7 +144,7 @@
 
         /* === MAIN LAYOUT === */
         .main-container {
-            max-width: 1200px;
+            max-width: 1440px;
             margin: 0 auto;
             padding: 2rem 1.5rem;
         }
@@ -240,6 +243,49 @@
             letter-spacing: 0.5px;
             margin-left: auto;
             flex-shrink: 0;
+        }
+
+        /* === FC MODAL MARKDOWN TABLES === */
+        #fcTriangulationBody table,
+        .fc-reasoning-block table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1.5rem 0;
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            overflow: hidden;
+            display: block;
+            /* For horizontal overflow */
+        }
+
+        #fcTriangulationBody th,
+        .fc-reasoning-block th {
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text-primary);
+            font-weight: 600;
+            text-align: left;
+            padding: 12px 16px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        #fcTriangulationBody td,
+        .fc-reasoning-block td {
+            color: var(--text-secondary);
+            padding: 12px 16px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            font-size: 0.85rem;
+            vertical-align: top;
+        }
+
+        #fcTriangulationBody tr:hover td,
+        .fc-reasoning-block tr:hover td {
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        #fcTriangulationBody tr:last-child td,
+        .fc-reasoning-block tr:last-child td {
+            border-bottom: none;
         }
 
         .badge-live {
@@ -1100,8 +1146,753 @@
             opacity: 1;
             color: var(--accent-violet);
         }
+
+        /* === FORECASTING OVERLAY (FULL-SCREEN) === */
+        .fc-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: var(--bg-primary);
+            z-index: 9999;
+            display: none;
+            overflow-y: auto;
+            animation: fcSlideIn 0.4s ease;
+        }
+
+        .fc-overlay.show {
+            display: block;
+        }
+
+        @keyframes fcSlideIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .fc-topbar {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            background: rgba(10, 10, 15, 0.92);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border-color);
+            padding: 0.75rem 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .fc-topbar-left {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .fc-topbar h2 {
+            font-size: 1.1rem;
+            font-weight: 700;
+            background: var(--gradient-primary);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .fc-topbar-right {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .fc-btn {
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            font-size: 0.8rem;
+            font-weight: 600;
+            cursor: pointer;
+            border: 1px solid var(--border-color);
+            font-family: inherit;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 0.375rem;
+        }
+
+        .fc-btn-close {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--accent-red);
+        }
+
+        .fc-btn-close:hover {
+            background: rgba(239, 68, 68, 0.2);
+        }
+
+        .fc-btn-export {
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--accent-green);
+        }
+
+        .fc-btn-export:hover {
+            background: rgba(16, 185, 129, 0.2);
+        }
+
+        .fc-body {
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: 1.5rem 2rem 4rem;
+        }
+
+        /* Executive Summary */
+        .fc-summary {
+            background: var(--gradient-card);
+            border: 1px solid var(--border-color);
+            border-radius: 1rem;
+            padding: 1.5rem 2rem;
+            margin-bottom: 1.5rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .fc-summary::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: var(--gradient-primary);
+        }
+
+        .fc-summary-grid {
+            display: grid;
+            grid-template-columns: 1fr auto auto;
+            gap: 2rem;
+            align-items: center;
+        }
+
+        .fc-fv-label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 0.25rem;
+        }
+
+        .fc-fv-range {
+            font-size: 1.75rem;
+            font-weight: 800;
+            color: var(--text-primary);
+        }
+
+        .fc-fv-range .fc-currency {
+            font-size: 1rem;
+            color: var(--text-secondary);
+        }
+
+        .fc-verdict-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1.25rem;
+            border-radius: 999px;
+            font-size: 0.85rem;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+
+        .fc-verdict-undervalued {
+            background: rgba(16, 185, 129, 0.15);
+            color: #10b981;
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        .fc-verdict-overvalued {
+            background: rgba(239, 68, 68, 0.15);
+            color: #ef4444;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
+        .fc-verdict-fair {
+            background: rgba(234, 179, 8, 0.15);
+            color: #eab308;
+            border: 1px solid rgba(234, 179, 8, 0.3);
+        }
+
+        .fc-cmp-block {
+            text-align: right;
+        }
+
+        .fc-cmp-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+        }
+
+        .fc-upside {
+            font-size: 0.85rem;
+            margin-top: 0.25rem;
+        }
+
+        .fc-upside.positive {
+            color: #10b981;
+        }
+
+        .fc-upside.negative {
+            color: #ef4444;
+        }
+
+        /* Scenario Toggle */
+        .fc-scenario-toggle {
+            display: flex;
+            gap: 0.25rem;
+            margin-top: 1rem;
+            background: var(--bg-secondary);
+            border-radius: 0.5rem;
+            padding: 0.25rem;
+            width: fit-content;
+        }
+
+        .fc-scenario-btn {
+            padding: 0.4rem 1rem;
+            border-radius: 0.375rem;
+            border: none;
+            font-size: 0.75rem;
+            font-weight: 600;
+            cursor: pointer;
+            background: transparent;
+            color: var(--text-muted);
+            font-family: inherit;
+            transition: all 0.2s ease;
+        }
+
+        .fc-scenario-btn.active {
+            background: var(--gradient-primary);
+            color: white;
+        }
+
+        .fc-scenario-btn:hover:not(.active) {
+            color: var(--text-primary);
+        }
+
+        /* Football Field Chart */
+        .fc-football {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 1rem;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .fc-football h3 {
+            font-size: 1rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .fc-football-chart {
+            position: relative;
+            min-height: 300px;
+        }
+
+        /* Model Cards Grid */
+        .fc-models-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .fc-model-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 1rem;
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .fc-model-card:hover {
+            border-color: rgba(124, 58, 237, 0.3);
+            box-shadow: 0 4px 20px rgba(124, 58, 237, 0.1);
+        }
+
+        .fc-model-header {
+            padding: 1rem 1.25rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: var(--gradient-card);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .fc-model-header-left {
+            display: flex;
+            align-items: center;
+            gap: 0.625rem;
+        }
+
+        .fc-model-icon {
+            font-size: 1.25rem;
+        }
+
+        .fc-model-name {
+            font-size: 0.9rem;
+            font-weight: 700;
+        }
+
+        .fc-model-desc {
+            font-size: 0.65rem;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+
+        .fc-model-fv {
+            font-size: 1.2rem;
+            font-weight: 800;
+            text-align: right;
+            transition: all 0.3s ease;
+        }
+
+        .fc-model-fv .fc-currency {
+            font-size: 0.7rem;
+            color: var(--text-secondary);
+        }
+
+        .fc-model-body {
+            padding: 1rem 1.25rem;
+        }
+
+        .fc-slider-group {
+            margin-bottom: 0.75rem;
+        }
+
+        .fc-slider-label {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            margin-bottom: 0.375rem;
+        }
+
+        .fc-slider-value {
+            font-weight: 700;
+            color: var(--accent-violet);
+            font-size: 0.8rem;
+        }
+
+        .fc-slider {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 100%;
+            height: 4px;
+            border-radius: 2px;
+            background: rgba(255, 255, 255, 0.15);
+            outline: none;
+            transition: all 0.15s ease;
+        }
+
+        .fc-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: var(--accent-purple);
+            cursor: pointer;
+            box-shadow: 0 0 8px rgba(124, 58, 237, 0.4);
+            transition: transform 0.15s ease;
+        }
+
+        .fc-slider::-webkit-slider-thumb:hover {
+            transform: scale(1.2);
+        }
+
+        .fc-slider::-moz-range-thumb {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: var(--accent-purple);
+            cursor: pointer;
+            border: none;
+        }
+
+        .fc-model-scenarios {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.75rem 1.25rem;
+            background: rgba(0, 0, 0, 0.2);
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            border-top: 1px solid var(--border-color);
+        }
+
+        .fc-scenario-val {
+            text-align: center;
+        }
+
+        .fc-scenario-val strong {
+            display: block;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            margin-top: 2px;
+        }
+
+        .fc-scenario-val.bull strong {
+            color: #10b981;
+        }
+
+        .fc-scenario-val.bear strong {
+            color: #ef4444;
+        }
+
+        .fc-scenario-val.base strong {
+            color: var(--accent-violet);
+        }
+
+        /* Triangulation / Analysis Section */
+        .fc-section {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 1rem;
+            margin-bottom: 1.5rem;
+            overflow: hidden;
+        }
+
+        .fc-section-header {
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+            background: var(--gradient-card);
+            display: flex;
+            align-items: center;
+            gap: 0.625rem;
+        }
+
+        .fc-section-header h3 {
+            font-size: 1rem;
+            font-weight: 700;
+        }
+
+        .fc-section-body {
+            padding: 1.5rem;
+        }
+
+        .fc-section-body h1 {
+            font-size: 1.3rem;
+            font-weight: 700;
+            margin: 1.5rem 0 0.5rem;
+            color: #c4b5fd;
+        }
+
+        .fc-section-body h2 {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin: 1.25rem 0 0.5rem;
+            color: #a78bfa;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 0.375rem;
+        }
+
+        .fc-section-body h3 {
+            font-size: 1rem;
+            font-weight: 600;
+            margin: 1rem 0 0.375rem;
+            color: #c4b5fd;
+        }
+
+        .fc-section-body p {
+            margin: 0.5rem 0;
+            line-height: 1.7;
+            color: var(--text-secondary);
+        }
+
+        .fc-section-body strong {
+            color: var(--text-primary);
+        }
+
+        .fc-section-body ul,
+        .fc-section-body ol {
+            padding-left: 1.5rem;
+            margin: 0.5rem 0;
+        }
+
+        .fc-section-body li {
+            margin-bottom: 0.375rem;
+            line-height: 1.6;
+            color: var(--text-secondary);
+        }
+
+        .fc-section-body table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0;
+            font-size: 0.83rem;
+        }
+
+        .fc-section-body th {
+            background: rgba(124, 58, 237, 0.15);
+            color: var(--text-primary);
+            padding: 0.6rem 0.75rem;
+            text-align: left;
+            font-weight: 600;
+            border: 1px solid var(--border-color);
+        }
+
+        .fc-section-body td {
+            padding: 0.5rem 0.75rem;
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+        }
+
+        .fc-section-body tr:hover {
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .fc-section-body hr {
+            border: none;
+            border-top: 1px solid var(--border-color);
+            margin: 1.5rem 0;
+        }
+
+        .fc-section-body blockquote {
+            border-left: 3px solid var(--accent-purple);
+            padding: 0.75rem 1rem;
+            margin: 1rem 0;
+            background: rgba(124, 58, 237, 0.06);
+            border-radius: 0 0.5rem 0.5rem 0;
+        }
+
+        /* Peer Comparison Table */
+        .fc-peer-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.8rem;
+        }
+
+        .fc-peer-table th {
+            background: rgba(124, 58, 237, 0.12);
+            padding: 0.625rem;
+            text-align: left;
+            font-weight: 600;
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+            white-space: nowrap;
+        }
+
+        .fc-peer-table td {
+            padding: 0.5rem 0.625rem;
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+        }
+
+        .fc-peer-table tr:hover {
+            background: rgba(124, 58, 237, 0.04);
+        }
+
+        .fc-peer-table .fc-highlight-row {
+            background: rgba(124, 58, 237, 0.08);
+        }
+
+        .fc-peer-table .fc-highlight-row td {
+            color: var(--text-primary);
+            font-weight: 600;
+        }
+
+        /* Expand/Info Buttons */
+        .fc-model-info-btn {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            font-size: 1rem;
+            margin-left: 0.5rem;
+            transition: color 0.2s;
+            padding: 0.25rem;
+        }
+
+        .fc-model-info-btn:hover {
+            color: var(--accent-purple);
+        }
+
+        /* Full Screen Info Modal */
+        .fc-modal {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(5px);
+            z-index: 10000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .fc-modal.show {
+            display: flex;
+            animation: fcFadeIn 0.2s ease;
+        }
+
+        .fc-modal-content {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 1rem;
+            padding: 2rem;
+            width: 90%;
+            max-width: 800px;
+            max-height: 85vh;
+            overflow-y: auto;
+            position: relative;
+        }
+
+        .fc-modal-close {
+            position: absolute;
+            top: 1rem;
+            right: 1.5rem;
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            font-size: 1.5rem;
+            cursor: pointer;
+        }
+
+        .fc-modal-close:hover {
+            color: var(--accent-red);
+        }
+
+        .fc-modal-title {
+            font-size: 1.25rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            color: var(--accent-violet);
+        }
+
+        .fc-modal-body p {
+            line-height: 1.6;
+            margin-bottom: 1rem;
+            color: var(--text-secondary);
+        }
+
+        .fc-modal-body strong {
+            color: var(--text-primary);
+        }
+
+        .fc-modal-body h3 {
+            font-size: 1.1rem;
+            color: #c4b5fd;
+            margin: 1.5rem 0 0.75rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding-bottom: 0.25rem;
+        }
+
+        .fc-modal-body ul {
+            margin-left: 1.5rem;
+            margin-bottom: 1rem;
+            color: var(--text-secondary);
+        }
+
+        .fc-modal-body li {
+            margin-bottom: 0.5rem;
+        }
+
+        .fc-modal-body table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 1.5rem;
+            font-size: 0.85rem;
+        }
+
+        .fc-modal-body th,
+        .fc-modal-body td {
+            border: 1px solid var(--border-color);
+            padding: 0.5rem 0.75rem;
+            text-align: left;
+        }
+
+        .fc-modal-body th {
+            background: rgba(124, 58, 237, 0.15);
+            color: var(--text-primary);
+        }
+
+        /* Triangulation Toggle & Peer Rationale */
+        .fc-collapse-btn {
+            background: rgba(124, 58, 237, 0.1);
+            border: 1px solid rgba(124, 58, 237, 0.3);
+            color: #c4b5fd;
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: all 0.2s;
+        }
+
+        .fc-collapse-btn:hover {
+            background: rgba(124, 58, 237, 0.2);
+        }
+
+        .fc-collapsible {
+            display: none;
+            padding-top: 1rem;
+            border-top: 1px dashed var(--border-color);
+            margin-top: 1.5rem;
+        }
+
+        .fc-collapsible.show {
+            display: block;
+            animation: fcSlideIn 0.3s ease;
+        }
+
+        .fc-reasoning-block {
+            background: rgba(124, 58, 237, 0.05);
+            border-left: 3px solid var(--accent-purple);
+            padding: 1rem 1.25rem;
+            margin-bottom: 1.5rem;
+            border-radius: 0 0.5rem 0.5rem 0;
+            font-size: 0.85rem;
+            line-height: 1.6;
+            color: var(--text-secondary);
+        }
+
+        @keyframes fcFadeIn {
+            from {
+                opacity: 0;
+            }
+
+            to {
+                opacity: 1;
+            }
+        }
+
+        /* Responsive */
+        @media (max-width: 900px) {
+            .fc-body {
+                padding: 1rem;
+            }
+
+            .fc-models-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .fc-summary-grid {
+                grid-template-columns: 1fr;
+                gap: 1rem;
+            }
+
+            .fc-topbar {
+                padding: 0.75rem 1rem;
+            }
+        }
     </style>
-  <script src="scale_ui.js"></script>
+    <script src="scale_ui.js"></script>
 </head>
 
 <body>
@@ -1233,10 +2024,10 @@
                 id="tab-forecasting">
                 <span class="agent-tab-icon">📊</span>
                 <div class="agent-tab-info">
-                    <div class="agent-tab-name">Forecasting Agent</div>
+                    <div class="agent-tab-name">Forecasting Agent (beta)</div>
                     <div class="agent-tab-desc">Multi-method valuation & price targets</div>
                 </div>
-                <span class="agent-badge badge-soon">Soon</span>
+                <span class="agent-badge badge-live">Live</span>
             </button>
         </div>
 
@@ -1524,11 +2315,54 @@
         <!-- FORECASTING AGENT WORKSPACE      -->
         <!-- =============================== -->
         <div class="agent-workspace" id="workspace-forecasting">
-            <div class="coming-soon">
-                <div class="coming-soon-icon">📊</div>
-                <h3>Forecasting Agent — Coming Soon</h3>
-                <p>Multi-method valuation (DCF, DDM, relative) with bull/base/bear price targets.</p>
+
+            <!-- Ticker Input -->
+            <div class="ticker-card">
+                <h2>📊 Forecasting Agent — Multi-Method Valuation</h2>
+                <p class="subtitle">Run institutional-grade DCF, DDM, relative multiples, residual income & more — with
+                    AI-powered triangulation</p>
+                <div class="ticker-input-row">
+                    <div class="ticker-input-wrapper">
+                        <input type="text" class="ticker-input" id="forecastingTickerInput"
+                            placeholder="Type a stock name or ticker... (e.g. Reliance, HDFCBANK, ITC)"
+                            autocomplete="off" />
+                        <div class="ticker-dropdown" id="forecastingTickerDropdown"></div>
+                    </div>
+                    <button class="analyze-btn" id="forecastingAnalyzeBtn" onclick="startForecastingAnalysis()">
+                        <span id="forecastingBtnText">Run Valuation</span>
+                    </button>
+                </div>
+                <!-- History Panel -->
+                <div class="mt-4" style="display:flex;align-items:center;justify-content:space-between;">
+                    <button class="kagger-history-toggle" onclick="toggleHistoryPanel('forecasting')">🕐 Recent
+                        Valuations</button>
+                    <button class="kagger-history-clear-btn"
+                        onclick="KaggerHistory.clear('forecasting');renderForecastingHistory();"
+                        title="Clear">Clear</button>
+                </div>
+                <div id="forecastingHistoryPanel" class="kagger-history-panel">
+                    <ul id="forecastingHistoryList" class="kagger-history-list"></ul>
+                </div>
             </div>
+
+            <!-- Error -->
+            <div class="error-card" id="forecastingError">
+                <h4>⚠️ Valuation Error</h4>
+                <p id="forecastingErrorText"></p>
+            </div>
+
+            <!-- Progress -->
+            <div class="progress-card" id="forecastingProgress">
+                <div class="progress-status">
+                    <div class="progress-dot"></div>
+                    <span id="forecastingProgressText">Starting valuation...</span>
+                </div>
+                <div class="progress-timer" id="forecastingProgressTimer">Elapsed: 0s</div>
+                <div class="progress-bar-container">
+                    <div class="progress-bar"></div>
+                </div>
+            </div>
+
         </div>
 
     </div>
@@ -2746,6 +3580,7 @@
                 if (module === 'concall') renderConcallHistory();
                 else if (module === 'forensic') renderForensicHistory();
                 else if (module === 'analyst') renderAnalystHistory();
+                else if (module === 'forecasting') renderForecastingHistory();
             }
         }
 
@@ -2798,13 +3633,1253 @@
             });
         }
 
+        function renderForecastingHistory() {
+            const listEl = document.getElementById('forecastingHistoryList');
+            if (!listEl) return;
+            KaggerHistory.renderList('forecasting', listEl, {
+                emptyText: 'No valuations yet',
+                labelFn: item => (item.name && item.name !== item.query ? item.name + ' (' + item.query + ')' : item.query),
+                onSelect: item => {
+                    forecastingSelectedTicker = item.query;
+                    forecastingSelectedName = item.name || item.query;
+                    const inp = document.getElementById('forecastingTickerInput');
+                    if (inp) inp.value = item.name && item.name !== item.query ? item.name + ' (' + item.query + ')' : item.query;
+                    toggleHistoryPanel('forecasting');
+                    startForecastingAnalysis();
+                }
+            });
+        }
+
         // Auto-render on page load
         document.addEventListener('DOMContentLoaded', () => {
             renderConcallHistory();
             renderForensicHistory();
             renderAnalystHistory();
+            renderForecastingHistory();
         });
     </script>
+
+    <!-- =============================== -->
+    <!-- FORECASTING OVERLAY (FULL-SCREEN) -->
+    <!-- =============================== -->
+    <div class="fc-overlay" id="forecastingOverlay">
+        <div class="fc-topbar">
+            <div class="fc-topbar-left">
+                <span style="font-size:1.25rem">📊</span>
+                <h2 id="fcOverlayTitle">Forecasting Agent</h2>
+            </div>
+            <div class="fc-topbar-right">
+                <button class="fc-btn fc-btn-export" onclick="exportForecastPDF()">⬇ Export PDF</button>
+                <button class="fc-btn fc-btn-close" onclick="closeForecastingOverlay()">✕ Close</button>
+            </div>
+        </div>
+        <div class="fc-body" id="fcOverlayBody">
+            <!-- Dynamically rendered by JS -->
+        </div>
+
+        <!-- INFO MODAL -->
+        <div class="fc-modal" id="fcModelInfoModal">
+            <div class="fc-modal-content">
+                <button class="fc-modal-close" onclick="closeFcModal()">&times;</button>
+                <div class="fc-modal-title" id="fcModalTitle">Model Rationale</div>
+                <div class="fc-modal-body" id="fcModalBody"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- =============================== -->
+    <!-- FORECASTING AGENT JS ENGINE     -->
+    <!-- =============================== -->
+    <script>
+        (function () {
+            'use strict';
+
+            // =====================================================
+            // STATE
+            // =====================================================
+            let forecastingSelectedTicker = '';
+            let forecastingSelectedName = '';
+            let fcJobId = null;
+            let fcPollTimer = null;
+            let fcElapsedTimer = null;
+            let fcElapsedSeconds = 0;
+            let fcCurrentData = null; // Holds full result for slider recalculation
+            let fcActiveScenario = 'base';
+            let fcFootballChart = null;
+            let fcCmp = 0;
+            let fcApplicableModels = null;
+            let fcScenarioAvg = {};
+            let fcRangeMin = 0;
+            let fcRangeMax = 0;
+
+            // Make variables accessible globally for history
+            window.forecastingSelectedName = '';
+
+            let fcOriginalAssumptions = null; // Stores deep copy for resetting
+
+            // =====================================================
+            // TICKER AUTOCOMPLETE
+            // =====================================================
+            const fcInput = document.getElementById('forecastingTickerInput');
+            const fcDropdown = document.getElementById('forecastingTickerDropdown');
+            let fcSelectedIndex = -1;
+
+            if (fcInput) {
+                fcInput.addEventListener('input', () => {
+                    const val = fcInput.value.trim();
+                    if (val.length < 1) { fcDropdown.classList.remove('show'); return; }
+                    const matches = filterAgentStocks(val);
+                    if (!matches.length) { fcDropdown.classList.remove('show'); return; }
+                    fcSelectedIndex = -1;
+                    fcDropdown.innerHTML = matches.map((s, i) => `
+                    <div class="ticker-option" data-ticker="${s.ticker}" data-name="${s.name}"
+                         onclick="selectForecastingTicker('${s.ticker}', '${s.name.replace(/'/g, "\\'")}')">
+                      <span class="ticker-option-name">${s.name}</span>
+                      <span class="ticker-option-ticker">${s.ticker}</span>
+                    </div>
+                `).join('');
+                    fcDropdown.classList.add('show');
+                });
+
+                fcInput.addEventListener('keydown', (e) => {
+                    const items = fcDropdown.querySelectorAll('.ticker-option');
+                    if (!items.length) {
+                        if (e.key === 'Enter') { startForecastingAnalysis(); e.preventDefault(); }
+                        return;
+                    }
+                    if (e.key === 'ArrowDown') { e.preventDefault(); fcSelectedIndex = Math.min(fcSelectedIndex + 1, items.length - 1); }
+                    else if (e.key === 'ArrowUp') { e.preventDefault(); fcSelectedIndex = Math.max(fcSelectedIndex - 1, 0); }
+                    else if (e.key === 'Enter') {
+                        e.preventDefault();
+                        if (fcSelectedIndex >= 0 && items[fcSelectedIndex]) {
+                            const t = items[fcSelectedIndex].dataset.ticker;
+                            const n = items[fcSelectedIndex].dataset.name;
+                            selectForecastingTicker(t, n);
+                        } else { startForecastingAnalysis(); }
+                    } else if (e.key === 'Escape') { fcDropdown.classList.remove('show'); }
+                    items.forEach((it, idx) => it.classList.toggle('highlighted', idx === fcSelectedIndex));
+                });
+
+                document.addEventListener('click', (e) => {
+                    if (!e.target.closest('#forecastingTickerInput') && !e.target.closest('#forecastingTickerDropdown')) {
+                        fcDropdown.classList.remove('show');
+                    }
+                });
+            }
+
+            window.selectForecastingTicker = function (ticker, name) {
+                forecastingSelectedTicker = ticker;
+                forecastingSelectedName = name;
+                window.forecastingSelectedTicker = ticker;
+                window.forecastingSelectedName = name;
+                fcInput.value = name + ' (' + ticker + ')';
+                fcDropdown.classList.remove('show');
+            };
+
+            // =====================================================
+            // START ANALYSIS
+            // =====================================================
+            window.startForecastingAnalysis = async function () {
+                if (!forecastingSelectedTicker && fcInput) {
+                    const v = fcInput.value.trim().toUpperCase();
+                    if (v) forecastingSelectedTicker = v;
+                }
+                if (!forecastingSelectedTicker) return;
+
+                const ticker = forecastingSelectedTicker;
+                const name = forecastingSelectedName || ticker;
+
+                // UI: disable button, show progress
+                const btn = document.getElementById('forecastingAnalyzeBtn');
+                const btnText = document.getElementById('forecastingBtnText');
+                if (btn) btn.disabled = true;
+                if (btnText) btnText.innerHTML = '<span class="spinner"></span> Running...';
+
+                hideEl('forecastingError');
+                showEl('forecastingProgress');
+                updateProgress('Initializing valuation engine...', 0);
+
+                // Save to history
+                KaggerHistory.add('forecasting', { query: ticker, name: name });
+                renderForecastingHistory();
+
+                try {
+                    const resp = await fetch('/agent/forecasting/analyze', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ ticker })
+                    });
+                    const data = await resp.json();
+
+                    if (data.status === 'complete') {
+                        // Immediate cached result
+                        onForecastingComplete(data.result);
+                        return;
+                    }
+
+                    if (data.error) {
+                        showFcError(data.message || data.error);
+                        return;
+                    }
+
+                    fcJobId = data.job_id;
+                    fcElapsedSeconds = 0;
+                    fcElapsedTimer = setInterval(() => {
+                        fcElapsedSeconds++;
+                        const timer = document.getElementById('forecastingProgressTimer');
+                        if (timer) timer.textContent = 'Elapsed: ' + fcElapsedSeconds + 's';
+                    }, 1000);
+
+                    pollForecastingStatus();
+
+                } catch (err) {
+                    showFcError('Network error: ' + err.message);
+                }
+            };
+
+            function pollForecastingStatus() {
+                if (!fcJobId) return;
+                fcPollTimer = setInterval(async () => {
+                    try {
+                        const resp = await fetch(`/agent/forecasting/${fcJobId}/status`);
+                        const data = await resp.json();
+
+                        if (data.status === 'processing') {
+                            updateProgress(data.progress || 'Processing...', data.elapsed_seconds);
+                        } else if (data.status === 'complete') {
+                            clearInterval(fcPollTimer);
+                            clearInterval(fcElapsedTimer);
+                            onForecastingComplete(data.result);
+                        } else if (data.status === 'error') {
+                            clearInterval(fcPollTimer);
+                            clearInterval(fcElapsedTimer);
+                            showFcError(data.error);
+                        }
+                    } catch (e) {
+                        console.error('Polling error:', e);
+                    }
+                }, 2000);
+            }
+
+            function updateProgress(text, elapsed) {
+                const el = document.getElementById('forecastingProgressText');
+                if (el) el.textContent = text;
+            }
+
+            function showFcError(msg) {
+                hideEl('forecastingProgress');
+                const errEl = document.getElementById('forecastingErrorText');
+                if (errEl) errEl.textContent = msg;
+                showEl('forecastingError');
+                resetFcButton();
+            }
+
+            function resetFcButton() {
+                const btn = document.getElementById('forecastingAnalyzeBtn');
+                const btnText = document.getElementById('forecastingBtnText');
+                if (btn) btn.disabled = false;
+                if (btnText) btnText.textContent = 'Run Valuation';
+            }
+
+            function showEl(id) { const el = document.getElementById(id); if (el) el.classList.add('show'); }
+            function hideEl(id) { const el = document.getElementById(id); if (el) el.classList.remove('show'); }
+
+            // =====================================================
+            // ON COMPLETE — OPEN OVERLAY
+            // =====================================================
+            function onForecastingComplete(result) {
+                hideEl('forecastingProgress');
+                resetFcButton();
+                // Store deep copy of original AI assumptions
+                fcOriginalAssumptions = JSON.parse(JSON.stringify(result.assumptions || {}));
+                fcCurrentData = result;
+                fcActiveScenario = 'base';
+                openForecastingOverlay(result);
+            }
+
+            window.closeForecastingOverlay = function () {
+                const overlay = document.getElementById('forecastingOverlay');
+                if (overlay) overlay.classList.remove('show');
+                document.body.style.overflow = '';
+                if (fcFootballChart) { fcFootballChart.destroy(); fcFootballChart = null; }
+            };
+
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') {
+                    const infoModal = document.getElementById('fcModelInfoModal');
+                    if (infoModal && infoModal.classList.contains('show')) {
+                        closeFcModal();
+                    } else {
+                        closeForecastingOverlay();
+                    }
+                }
+            });
+
+            // =====================================================
+            // RENDER OVERLAY
+            // =====================================================
+            function openForecastingOverlay(data) {
+                const overlay = document.getElementById('forecastingOverlay');
+                const title = document.getElementById('fcOverlayTitle');
+                const body = document.getElementById('fcOverlayBody');
+                if (!overlay || !body) return;
+
+                if (title) title.textContent = `Forecasting Agent — ${data.company_name || data.ticker}`;
+                document.body.style.overflow = 'hidden';
+
+                const models = data.models || {};
+                const cmp = parseFloat(String(data.cmp || '0').replace(/[^0-9.]/g, '')) || 0;
+                fcCmp = cmp; // Store globally for scenario switching
+                const applicableModels = Object.entries(models).filter(([k, v]) => v.applicable);
+                fcApplicableModels = applicableModels; // Store globally for chart re-rendering
+
+                // Compute simple averages for each scenario (fallback)
+                const simpleAvg = {};
+                ['bull', 'base', 'bear'].forEach(s => {
+                    const vals = applicableModels.map(([k, v]) => v[s]?.fair_value).filter(v => v != null && v > 0);
+                    simpleAvg[s] = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
+                });
+
+                // Use AI-weighted triangulated values if available, otherwise fall back to simple averages
+                const tv = data.triangulated_values;
+                const scenarioAvg = {};
+                if (tv && tv.weighted_bull && tv.weighted_base && tv.weighted_bear) {
+                    scenarioAvg.bull = parseFloat(tv.weighted_bull) || simpleAvg.bull;
+                    scenarioAvg.base = parseFloat(tv.weighted_base) || simpleAvg.base;
+                    scenarioAvg.bear = parseFloat(tv.weighted_bear) || simpleAvg.bear;
+                    console.log('[FC] Using AI-weighted triangulated values:', scenarioAvg);
+                } else {
+                    scenarioAvg.bull = simpleAvg.bull;
+                    scenarioAvg.base = simpleAvg.base;
+                    scenarioAvg.bear = simpleAvg.bear;
+                    console.log('[FC] No triangulated values found, using simple averages:', scenarioAvg);
+                }
+                fcScenarioAvg = scenarioAvg; // Store globally
+
+                // Also compute full range for the "Range" view
+                fcRangeMin = scenarioAvg.bear || 0;
+                fcRangeMax = scenarioAvg.bull || 0;
+
+                // Default to base scenario
+                const avgFV = scenarioAvg.base;
+                const upsidePct = cmp > 0 ? ((avgFV - cmp) / cmp * 100) : 0;
+
+                // Verdict: prefer AI verdict if available, else compute from numbers
+                let verdictText = 'Fairly Valued', verdictClass = 'fc-verdict-fair';
+                if (tv && tv.verdict) {
+                    const v = tv.verdict.toUpperCase();
+                    if (v.includes('UNDER')) { verdictText = 'Undervalued'; verdictClass = 'fc-verdict-undervalued'; }
+                    else if (v.includes('OVER')) { verdictText = 'Overvalued'; verdictClass = 'fc-verdict-overvalued'; }
+                    else { verdictText = 'Fairly Valued'; verdictClass = 'fc-verdict-fair'; }
+                } else if (cmp > 0 && avgFV > 0) {
+                    const diff = ((avgFV - cmp) / cmp) * 100;
+                    if (diff > 10) { verdictText = 'Undervalued'; verdictClass = 'fc-verdict-undervalued'; }
+                    else if (diff < -10) { verdictText = 'Overvalued'; verdictClass = 'fc-verdict-overvalued'; }
+                }
+
+                body.innerHTML = `
+                <!-- Executive Summary -->
+                <div class="fc-summary">
+                    <div class="fc-summary-grid">
+                        <div>
+                            <div class="fc-fv-label" id="fcSummaryLabel">Fair Value — Base Estimate (${applicableModels.length} Models)</div>
+                            <div class="fc-fv-range" id="fcSummaryValue"><span class="fc-currency">₹</span>${formatNum(avgFV)}</div>
+                            <div style="margin-top:0.5rem" id="fcVerdictWrap">
+                                <span class="fc-verdict-chip ${verdictClass}" id="fcVerdictChip">${verdictText}</span>
+                            </div>
+                            <div class="fc-scenario-toggle">
+                                <button class="fc-scenario-btn" data-s="range" onclick="setFcScenario('range')">📏 Range</button>
+                                <button class="fc-scenario-btn" data-s="bull" onclick="setFcScenario('bull')">🟢 Bull</button>
+                                <button class="fc-scenario-btn active" data-s="base" onclick="setFcScenario('base')">🟡 Base</button>
+                                <button class="fc-scenario-btn" data-s="bear" onclick="setFcScenario('bear')">🔴 Bear</button>
+                            </div>
+                        </div>
+                        <div class="fc-cmp-block">
+                            <div class="fc-fv-label">Current Market Price</div>
+                            <div class="fc-cmp-value">₹${formatNum(cmp)}</div>
+                            <div class="fc-upside ${upsidePct >= 0 ? 'positive' : 'negative'}" id="fcUpsideEl">
+                                ${upsidePct >= 0 ? '↑' : '↓'} ${Math.abs(upsidePct).toFixed(1)}% vs Avg Fair Value
+                            </div>
+                        </div>
+                        <div style="text-align:right">
+                            <div class="fc-fv-label">Analysis Time</div>
+                            <div style="font-size:1.25rem;font-weight:700">${data.analysis_time_seconds || 0}s</div>
+                            <div style="font-size:0.7rem;color:var(--text-muted);margin-top:0.25rem">${applicableModels.length} models computed</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Football Field Chart -->
+                <div class="fc-football">
+                    <h3>⚽ Football Field — Triangulation Chart</h3>
+                    <div class="fc-football-chart">
+                        <canvas id="fcFootballCanvas"></canvas>
+                    </div>
+                </div>
+
+                <!-- Model Cards Grid -->
+                <div style="margin-bottom:0.75rem;display:flex;align-items:center;gap:0.5rem;">
+                    <span style="font-size:1.1rem">🔬</span>
+                    <h3 style="font-size:1rem;font-weight:700;">Interactive Valuation Models</h3>
+                    <span style="font-size:0.8rem;color:var(--text-muted);margin-left:auto;">Drag sliders to see real-time impact</span>
+                </div>
+                <div class="fc-models-grid" id="fcModelsGrid"></div>
+
+                <!-- Triangulation AI Analysis -->
+                <div class="fc-section">
+                    <div class="fc-section-header">
+                        <span style="font-size:1.1rem">🎯</span>
+                        <h3>AI Triangulation Analysis</h3>
+                    </div>
+                    <div class="fc-section-body" id="fcTriangulationBody"></div>
+                </div>
+
+                <!-- Peer Comparison -->
+                <div class="fc-section" id="fcPeerSection" style="display:none">
+                    <div class="fc-section-header">
+                        <span style="font-size:1.1rem">👥</span>
+                        <h3>Peer Comparison</h3>
+                    </div>
+                    <div class="fc-section-body" id="fcPeerBody"></div>
+                </div>
+
+                <!-- Chat -->
+                <div class="chat-card show" style="background:var(--bg-card);border:1px solid var(--border-color);border-radius:1rem;">
+                    <div class="chat-header"><h3>💬 Ask about this Valuation</h3></div>
+                    <div class="chat-messages" id="fcChatMessages">
+                        <div class="chat-message assistant">
+                            <div class="chat-bubble">I've completed the multi-method valuation. Ask me anything — drill into specific models, challenge assumptions, explore what-if scenarios, or request deeper analysis.</div>
+                        </div>
+                    </div>
+                    <div class="chat-input-row">
+                        <input type="text" class="chat-input" id="fcChatInput" placeholder="Ask about the valuation..." autocomplete="off" />
+                        <button class="chat-send-btn" onclick="sendFcChat()">Send</button>
+                    </div>
+                </div>
+            `;
+
+                overlay.classList.add('show');
+
+                // Render sub-components
+                setTimeout(() => {
+                    renderFootballField(applicableModels, cmp, 'range');
+                    renderModelCards(applicableModels, data.assumptions);
+                    renderTriangulation(data.triangulation);
+                    renderPeerComparison(data.peer_data, data.assumptions);
+
+                    // Chat enter key
+                    const chatInput = document.getElementById('fcChatInput');
+                    if (chatInput) chatInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendFcChat(); });
+                }, 100);
+            }
+
+            // =====================================================
+            // FOOTBALL FIELD CHART (Chart.js)
+            // =====================================================
+            function renderFootballField(applicableModels, cmp, scenario) {
+                const canvas = document.getElementById('fcFootballCanvas');
+                if (!canvas || !applicableModels.length) return;
+
+                if (fcFootballChart) { fcFootballChart.destroy(); fcFootballChart = null; }
+
+                const labels = [];
+                const datasets = [];
+                const isRange = (!scenario || scenario === 'range');
+                const activeScen = isRange ? 'base' : scenario;
+
+                const bearData = [];
+                const rangeData = [];
+                const pointData = [];
+
+                const barColors = { bull: 'rgba(16,185,129,1)', base: 'rgba(139,92,246,1)', bear: 'rgba(239,68,68,1)' };
+
+                applicableModels.forEach(([key, model], idx) => {
+                    const cfg = model.config || {};
+                    const bear = model.bear?.fair_value || 0;
+                    const bull = model.bull?.fair_value || 0;
+                    const ptVal = model[activeScen]?.fair_value || 0;
+
+                    if (!bear && !bull) return;
+
+                    labels.push(cfg.icon + ' ' + (cfg.name || key));
+                    bearData.push(Math.max(0, bear));
+                    rangeData.push(Math.max(0, (bull || bear) - bear));
+                    pointData.push({ x: ptVal, y: idx });
+                });
+
+                // The translucent background ranges (Always show these, highly translucent if specific scenario is active)
+                datasets.push(
+                    { label: 'Bear Bound', data: bearData, backgroundColor: 'rgba(0,0,0,0)', borderWidth: 0, order: 2 },
+                    {
+                        label: 'Valuation Spread',
+                        data: rangeData,
+                        backgroundColor: isRange ? 'rgba(124,58,237,0.35)' : 'rgba(124,58,237,0.08)',
+                        borderColor: isRange ? 'rgba(124,58,237,0.6)' : 'rgba(124,58,237,0.15)',
+                        borderWidth: 1,
+                        borderRadius: 4,
+                        order: 2
+                    }
+                );
+
+                // Overlay single price point if specific scenario
+                if (!isRange) {
+                    datasets.push({
+                        type: 'scatter',
+                        label: scenario.charAt(0).toUpperCase() + scenario.slice(1) + ' Estimate',
+                        data: pointData,
+                        pointStyle: 'circle',
+                        pointRadius: 6,
+                        pointHoverRadius: 8,
+                        backgroundColor: barColors[scenario],
+                        borderColor: '#ffffff',
+                        borderWidth: 2,
+                        order: 1
+                    });
+                }
+
+                if (!labels.length) return;
+
+                fcFootballChart = new Chart(canvas, {
+                    type: 'bar',
+                    data: { labels, datasets },
+                    options: {
+                        indexAxis: 'y',
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            x: {
+                                stacked: true,
+                                grid: { color: 'rgba(255,255,255,0.05)' },
+                                ticks: { color: '#a0a0b8', callback: v => '₹' + formatNum(v) }
+                            },
+                            y: {
+                                stacked: true,
+                                grid: { display: false },
+                                ticks: { color: '#f0f0f5', font: { size: 11, weight: '600' } }
+                            }
+                        },
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                callbacks: {
+                                    label: function (ctx) {
+                                        if (ctx.datasetIndex === 0) return ''; // Hide invisible bear boundary
+                                        if (ctx.datasetIndex === 1) {
+                                            const idx = ctx.dataIndex;
+                                            const bear = datasets[0].data[idx];
+                                            const range = datasets[1].data[idx] || 0;
+                                            // Special safeguard for parsing
+                                            const numericBear = typeof bear === 'object' ? bear.x : bear;
+                                            const numericRange = typeof range === 'object' ? range.x : range;
+                                            const bull = numericBear + numericRange;
+                                            return `Range: ₹${formatNum(numericBear)} — ₹${formatNum(bull)}`;
+                                        }
+                                        if (ctx.datasetIndex === 2) {
+                                            return `${ctx.dataset.label}: ₹${formatNum(ctx.raw.x)}`;
+                                        }
+                                        return `₹${formatNum(ctx.raw)}`;
+                                    }
+                                }
+                            },
+                            annotation: cmp > 0 ? {
+                                annotations: {
+                                    cmpLine: {
+                                        type: 'line',
+                                        xMin: cmp, xMax: cmp,
+                                        borderColor: '#eab308',
+                                        borderWidth: 2,
+                                        borderDash: [6, 4],
+                                        label: { content: 'CMP: ₹' + formatNum(cmp), display: true, position: 'start', color: '#eab308', font: { size: 10, weight: '600' } }
+                                    }
+                                }
+                            } : {}
+                        }
+                    }
+                });
+            }
+
+            // =====================================================
+            // MODEL CARDS WITH SLIDERS
+            // =====================================================
+            function renderModelCards(applicableModels, assumptions) {
+                const grid = document.getElementById('fcModelsGrid');
+                if (!grid) return;
+
+                grid.innerHTML = applicableModels.map(([modelKey, model]) => {
+                    const cfg = model.config || {};
+                    const baseVal = model.base?.fair_value;
+                    const bullVal = model.bull?.fair_value;
+                    const bearVal = model.bear?.fair_value;
+                    const sliders = cfg.slider_params || [];
+
+                    const slidersHtml = sliders.map(sp => {
+                        const currentVal = getNestedVal(assumptions, sp.key);
+                        const displayVal = typeof currentVal === 'object' ? (currentVal.base || 0) : (currentVal || 0);
+                        return `
+                        <div class="fc-slider-group">
+                            <div class="fc-slider-label">
+                                <span>${sp.label}</span>
+                                <span class="fc-slider-value" id="sv_${modelKey}_${sp.key.replace(/\./g, '_')}">${displayVal}</span>
+                            </div>
+                            <input type="range" class="fc-slider"
+                                min="${sp.min}" max="${sp.max}" step="${sp.step}" value="${displayVal}"
+                                data-model="${modelKey}" data-key="${sp.key}"
+                                oninput="onFcSlider(this)" />
+                        </div>
+                    `;
+                    }).join('');
+
+                    return `
+                    <div class="fc-model-card" id="card_${modelKey}">
+                        <div class="fc-model-header">
+                            <div class="fc-model-header-left">
+                                <span class="fc-model-icon">${cfg.icon || '📊'}</span>
+                                <div>
+                                    <div class="fc-model-name" style="display:flex;align-items:center;">
+                                        ${cfg.name || modelKey}
+                                        <div style="margin-left:0.5rem;display:flex;gap:0.1rem;">
+                                            <button class="fc-model-info-btn" style="margin-left:0;" onclick="openFcMethodologyInfo('${modelKey}')" title="Model Methodology">📖</button>
+                                            <button class="fc-model-info-btn" style="margin-left:0;" onclick="openFcResearchInfo('${modelKey}')" title="AI Assumptions & Research">🧠</button>
+                                            <button class="fc-model-info-btn" style="margin-left:0;" onclick="resetFcModel('${modelKey}')" title="Reset Sliders to Original AI Estimates">↺</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="fc-model-fv" id="fv_${modelKey}">
+                                <span class="fc-currency">₹</span>${baseVal ? formatNum(baseVal) : 'N/A'}
+                            </div>
+                        </div>
+                        <div class="fc-model-body">${slidersHtml}</div>
+                        <div class="fc-model-scenarios">
+                            <div class="fc-scenario-val bear">🔴 Bear<strong>₹${bearVal ? formatNum(bearVal) : 'N/A'}</strong></div>
+                            <div class="fc-scenario-val base">🟡 Base<strong>₹${baseVal ? formatNum(baseVal) : 'N/A'}</strong></div>
+                            <div class="fc-scenario-val bull">🟢 Bull<strong>₹${bullVal ? formatNum(bullVal) : 'N/A'}</strong></div>
+                        </div>
+                    </div>
+                `;
+                }).join('');
+            }
+
+            window.openFcMethodologyInfo = function (modelKey) {
+                if (!fcCurrentData || !fcCurrentData.models || !fcCurrentData.models[modelKey]) return;
+                const cfg = fcCurrentData.models[modelKey].config;
+
+                document.getElementById('fcModalTitle').innerText = (cfg.icon || '📊') + ' ' + (cfg.name || modelKey) + ' Methodology';
+
+                // The methodology text already contains <br><br> and <strong> tags from the backend
+                let html = `<p>${cfg.description || 'Standard valuation model.'}</p>`;
+
+                document.getElementById('fcModalBody').innerHTML = html;
+                document.getElementById('fcModelInfoModal').classList.add('show');
+            }
+
+            window.openFcResearchInfo = function (modelKey) {
+                if (!fcCurrentData || !fcCurrentData.models || !fcCurrentData.models[modelKey]) return;
+                const model = fcCurrentData.models[modelKey];
+                const cfg = model.config;
+                const assumptions = fcCurrentData.assumptions || {};
+
+                document.getElementById('fcModalTitle').innerText = (cfg.icon || '📊') + ' ' + (cfg.name || modelKey) + ' AI Research & Assumptions';
+
+                let html = '';
+
+                // Section 1: AI Reasoning
+                if (cfg.reasoning_keys && cfg.reasoning_keys.length > 0) {
+                    cfg.reasoning_keys.forEach(rKey => {
+                        const rootObj = assumptions[rKey];
+                        if (rootObj && rootObj.reasoning) {
+                            const parsedReasoning = typeof marked !== 'undefined' ? marked.parse(rootObj.reasoning) : `<pre style="white-space:pre-wrap;">${rootObj.reasoning}</pre>`;
+
+                            html += `
+                            <div style="background:rgba(124,58,237,0.06);border-left:3px solid var(--accent-purple);padding:1.5rem;margin-bottom:1.5rem;border-radius:0.5rem;">
+                                <div style="font-size:0.85rem;color:var(--text-primary);font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:1rem;border-bottom:1px solid rgba(255,255,255,0.1);padding-bottom:0.5rem;">
+                                    ${rKey.replace(/_/g, ' ')} Rationale
+                                </div>
+                                <div style="color:var(--text-secondary)">${parsedReasoning}</div>
+                            </div>
+                        `;
+                        }
+                    });
+                } else {
+                    html += `<p style="color:var(--text-muted)">No specific AI reasoning available for this model.</p>`;
+                }
+
+                // Section 2: Peer Multiples Table (only for relative valuation models)
+                const isRelativeModel = cfg.reasoning_keys && cfg.reasoning_keys.includes('relative_valuation');
+                if (isRelativeModel && fcCurrentData.peer_data) {
+                    const peerData = fcCurrentData.peer_data;
+                    const company = peerData.company || {};
+                    const peers = peerData.peers || [];
+
+                    if (company.name || peers.length > 0) {
+                        html += `
+                        <div style="background:rgba(16,185,129,0.06);border-left:3px solid var(--accent-green);padding:1.5rem;margin-bottom:1.5rem;border-radius:0.5rem;">
+                            <div style="font-size:0.85rem;color:var(--text-primary);font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:1rem;border-bottom:1px solid rgba(255,255,255,0.1);padding-bottom:0.5rem;">
+                                📊 Peer Multiples Comparison
+                            </div>
+                            <div style="overflow-x:auto;">
+                                <table class="fc-peer-table">
+                                    <thead><tr>
+                                        <th>Company</th><th>CMP</th><th>MCap (Cr)</th><th>P/E</th><th>P/B</th><th>ROCE %</th><th>ROE %</th>
+                                    </tr></thead>
+                                    <tbody>
+                    `;
+
+                        const cols = ['name', 'cmp', 'market_cap', 'pe_ratio', 'pb_ratio', 'roce', 'roe'];
+
+                        // Highlighted company row
+                        if (company.name) {
+                            html += '<tr class="fc-highlight-row">';
+                            cols.forEach(c => html += `<td>${company[c] || 'N/A'}</td>`);
+                            html += '</tr>';
+                        }
+
+                        // Peer rows
+                        peers.forEach(p => {
+                            html += '<tr>';
+                            cols.forEach(c => html += `<td>${p[c] || 'N/A'}</td>`);
+                            html += '</tr>';
+                        });
+
+                        html += `
+                                    </tbody>
+                                </table>
+                            </div>
+                    `;
+
+                        // Compute and show peer median summary
+                        const peerPEs = peers.map(p => parseFloat(p.pe_ratio)).filter(v => v > 0 && isFinite(v));
+                        const peerPBs = peers.map(p => parseFloat(p.pb_ratio)).filter(v => v > 0 && isFinite(v));
+
+                        if (peerPEs.length > 0 || peerPBs.length > 0) {
+                            const medianFn = arr => { const s = [...arr].sort((a, b) => a - b); const m = Math.floor(s.length / 2); return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+                            html += '<div style="margin-top:1rem;display:flex;gap:1.5rem;flex-wrap:wrap;">';
+                            if (peerPEs.length > 0) {
+                                const medPE = medianFn(peerPEs);
+                                const avgPE = (peerPEs.reduce((a, b) => a + b, 0) / peerPEs.length);
+                                html += `<div style="background:rgba(124,58,237,0.1);padding:0.75rem 1rem;border-radius:0.5rem;font-size:0.8rem;">
+                                <div style="color:var(--text-muted);font-size:0.7rem;text-transform:uppercase;letter-spacing:0.5px;">Peer Median P/E</div>
+                                <div style="font-size:1.1rem;font-weight:700;color:var(--accent-violet);">${medPE.toFixed(1)}x</div>
+                                <div style="color:var(--text-muted);font-size:0.7rem;">Mean: ${avgPE.toFixed(1)}x</div>
+                            </div>`;
+                            }
+                            if (peerPBs.length > 0) {
+                                const medPB = medianFn(peerPBs);
+                                const avgPB = (peerPBs.reduce((a, b) => a + b, 0) / peerPBs.length);
+                                html += `<div style="background:rgba(124,58,237,0.1);padding:0.75rem 1rem;border-radius:0.5rem;font-size:0.8rem;">
+                                <div style="color:var(--text-muted);font-size:0.7rem;text-transform:uppercase;letter-spacing:0.5px;">Peer Median P/B</div>
+                                <div style="font-size:1.1rem;font-weight:700;color:var(--accent-violet);">${medPB.toFixed(1)}x</div>
+                                <div style="color:var(--text-muted);font-size:0.7rem;">Mean: ${avgPB.toFixed(1)}x</div>
+                            </div>`;
+                            }
+                            // Show the AI's chosen multiple for this specific model
+                            const relAssumptions = assumptions.relative_valuation || {};
+                            let aiMultipleLabel = '';
+                            let aiMultipleVal = '';
+                            if (modelKey === 'relative_pe') {
+                                const v = relAssumptions.peer_median_pe;
+                                aiMultipleVal = typeof v === 'object' ? `${v.bear || '?'}x — ${v.bull || '?'}x` : `${v || '?'}x`;
+                                aiMultipleLabel = 'AI Target P/E';
+                            } else if (modelKey === 'relative_pb') {
+                                const v = relAssumptions.peer_median_pb;
+                                aiMultipleVal = typeof v === 'object' ? `${v.bear || '?'}x — ${v.bull || '?'}x` : `${v || '?'}x`;
+                                aiMultipleLabel = 'AI Target P/B';
+                            } else if (modelKey === 'ev_ebitda') {
+                                const v = relAssumptions.peer_median_ev_ebitda;
+                                aiMultipleVal = typeof v === 'object' ? `${v.bear || '?'}x — ${v.bull || '?'}x` : `${v || '?'}x`;
+                                aiMultipleLabel = 'AI Target EV/EBITDA';
+                            } else if (modelKey === 'mcap_sales') {
+                                const v = relAssumptions.peer_median_mcap_sales;
+                                aiMultipleVal = typeof v === 'object' ? `${v.bear || '?'}x — ${v.bull || '?'}x` : `${v || '?'}x`;
+                                aiMultipleLabel = 'AI Target MCap/Sales';
+                            }
+                            if (aiMultipleLabel) {
+                                html += `<div style="background:rgba(16,185,129,0.12);padding:0.75rem 1rem;border-radius:0.5rem;font-size:0.8rem;border:1px solid rgba(16,185,129,0.3);">
+                                <div style="color:var(--text-muted);font-size:0.7rem;text-transform:uppercase;letter-spacing:0.5px;">${aiMultipleLabel}</div>
+                                <div style="font-size:1.1rem;font-weight:700;color:var(--accent-green);">${aiMultipleVal}</div>
+                                <div style="color:var(--text-muted);font-size:0.7rem;">Bear — Bull Range</div>
+                            </div>`;
+                            }
+                            html += '</div>';
+                        }
+
+                        html += '</div>';
+                    }
+                }
+
+                // Section 2.5: Target Historical Medians
+                if (isRelativeModel && fcCurrentData.target_historical_medians) {
+                    const meds = fcCurrentData.target_historical_medians;
+                    let medHtml = '';
+                    Object.keys(meds).forEach(metric => {
+                        const data = meds[metric];
+                        if (data && Object.keys(data).length > 0) {
+                            medHtml += `
+                            <div style="margin-bottom:1rem;">
+                                <div style="font-size:0.75rem;color:var(--text-muted);font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:0.5rem;">${metric}</div>
+                                <div style="display:flex;gap:1.5rem;flex-wrap:wrap;">`;
+                            for (const [k, v] of Object.entries(data)) {
+                                if (v === null || v === undefined) continue;
+                                let label = k.includes('1yr') ? '1-Year Median' : (k.includes('3yr') ? '3-Year Median' : '5-Year Median');
+                                let unit = k.toLowerCase().includes('margin') ? '%' : 'x';
+                                medHtml += `
+                                <div style="background:rgba(245,158,11,0.08);padding:0.75rem 1rem;border-radius:0.5rem;border:1px solid rgba(245,158,11,0.3);">
+                                    <div style="font-size:0.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">${label}</div>
+                                    <div style="font-size:1.1rem;font-weight:700;color:#d97706;">${v}${unit}</div>
+                                </div>
+                            `;
+                            }
+                            medHtml += `</div></div>`;
+                        }
+                    });
+                    if (medHtml) {
+                        html += `
+                        <div style="background:rgba(245,158,11,0.04);border-left:3px solid #f59e0b;padding:1.5rem;margin-bottom:1.5rem;border-radius:0.5rem;">
+                            <div style="font-size:0.85rem;color:var(--text-primary);font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:1rem;border-bottom:1px solid rgba(255,255,255,0.1);padding-bottom:0.5rem;">
+                                🕰️ Target Company Historical Medians
+                            </div>
+                            <div style="color:var(--text-muted);font-size:0.8rem;margin-bottom:1rem;">
+                                Extracted from Screener.in Valuation & Margin History based on last 5 years daily closing data.
+                            </div>
+                            ${medHtml}
+                        </div>
+                    `;
+                    }
+                }
+
+                // Section 3: Market Research (Perplexity) for relative valuation models
+                if (isRelativeModel && fcCurrentData.market_research) {
+                    const parsedResearch = typeof marked !== 'undefined' ? marked.parse(fcCurrentData.market_research) : `<pre style="white-space:pre-wrap;">${fcCurrentData.market_research}</pre>`;
+                    html += `
+                    <div style="background:rgba(99,102,241,0.06);border-left:3px solid var(--accent-indigo);padding:1.5rem;margin-bottom:1.5rem;border-radius:0.5rem;">
+                        <div style="font-size:0.85rem;color:var(--text-primary);font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:1rem;border-bottom:1px solid rgba(255,255,255,0.1);padding-bottom:0.5rem;">
+                            📈 Market Research & Historical Context
+                        </div>
+                        <div style="color:var(--text-secondary);font-size:0.85rem;">${parsedResearch}</div>
+                    </div>
+                `;
+                }
+
+                document.getElementById('fcModalBody').innerHTML = html;
+                document.getElementById('fcModelInfoModal').classList.add('show');
+            }
+
+            window.closeFcModal = function () {
+                document.getElementById('fcModelInfoModal').classList.remove('show');
+            }
+
+            window.resetFcModel = function (modelKey) {
+                if (!fcCurrentData || !fcOriginalAssumptions) return;
+                const model = fcCurrentData.models[modelKey];
+                if (!model) return;
+
+                const cfg = model.config || {};
+                const sliders = cfg.slider_params || [];
+                const activeScen = (fcActiveScenario === 'range') ? 'base' : fcActiveScenario;
+
+                // Revert memory assumptions for this model's keys
+                sliders.forEach(sp => {
+                    const originalValObj = getNestedVal(fcOriginalAssumptions, sp.key);
+                    const targetVal = (typeof originalValObj === 'object' && originalValObj !== null)
+                        ? (originalValObj[activeScen] ?? originalValObj.base ?? 0)
+                        : originalValObj;
+
+                    setNestedVal(fcCurrentData.assumptions, sp.key, targetVal);
+
+                    // Update HTML slider range element
+                    const sliderInput = document.querySelector(`input[data-model="${modelKey}"][data-key="${sp.key}"]`);
+                    if (sliderInput) {
+                        sliderInput.value = targetVal;
+                    }
+
+                    // Update display label
+                    const svId = `sv_${modelKey}_${sp.key.replace(/\./g, '_')}`;
+                    const svEl = document.getElementById(svId);
+                    if (svEl) svEl.textContent = targetVal;
+                });
+
+                // Trigger recalculation immediately
+                recalculateModel(modelKey);
+            }
+
+            // =====================================================
+            // SLIDER HANDLER — REAL-TIME RECALCULATION
+            // =====================================================
+            let fcSliderDebounce = null;
+
+            window.onFcSlider = function (slider) {
+                const modelKey = slider.dataset.model;
+                const key = slider.dataset.key;
+                const value = parseFloat(slider.value);
+
+                // Update display value
+                const svId = `sv_${modelKey}_${key.replace(/\./g, '_')}`;
+                const svEl = document.getElementById(svId);
+                if (svEl) svEl.textContent = value;
+
+                // Update assumptions in memory
+                if (fcCurrentData && fcCurrentData.assumptions) {
+                    setNestedVal(fcCurrentData.assumptions, key, value);
+                }
+
+                // Debounced recalculation
+                clearTimeout(fcSliderDebounce);
+                fcSliderDebounce = setTimeout(() => recalculateModel(modelKey), 150);
+            };
+
+            async function recalculateModel(modelKey) {
+                if (!fcCurrentData) return;
+                try {
+                    const resp = await fetch('/agent/forecasting/recalculate', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            model: modelKey,
+                            assumptions: fcCurrentData.assumptions,
+                            key_metrics: fcCurrentData.key_metrics || {}
+                        })
+                    });
+                    const data = await resp.json();
+                    if (data.status === 'success' && data.result) {
+                        // Update the model card fair value
+                        const fvEl = document.getElementById(`fv_${modelKey}`);
+                        const baseVal = data.result.base?.fair_value;
+                        if (fvEl && baseVal) {
+                            fvEl.innerHTML = `<span class="fc-currency">₹</span>${formatNum(baseVal)}`;
+                        }
+
+                        // Update scenarios
+                        const card = document.getElementById(`card_${modelKey}`);
+                        if (card) {
+                            const scenDiv = card.querySelector('.fc-model-scenarios');
+                            if (scenDiv) {
+                                const bearV = data.result.bear?.fair_value;
+                                const baseV = data.result.base?.fair_value;
+                                const bullV = data.result.bull?.fair_value;
+                                scenDiv.innerHTML = `
+                                <div class="fc-scenario-val bear">🔴 Bear<strong>₹${bearV ? formatNum(bearV) : 'N/A'}</strong></div>
+                                <div class="fc-scenario-val base">🟡 Base<strong>₹${baseV ? formatNum(baseV) : 'N/A'}</strong></div>
+                                <div class="fc-scenario-val bull">🟢 Bull<strong>₹${bullV ? formatNum(bullV) : 'N/A'}</strong></div>
+                            `;
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.error('Recalculation error:', e);
+                }
+            }
+
+            // =====================================================
+            // SCENARIO TOGGLE
+            // =====================================================
+            window.setFcScenario = function (scenario) {
+                fcActiveScenario = scenario;
+                document.querySelectorAll('.fc-scenario-btn').forEach(btn => {
+                    btn.classList.toggle('active', btn.dataset.s === scenario);
+                });
+
+                const labelEl = document.getElementById('fcSummaryLabel');
+                const valueEl = document.getElementById('fcSummaryValue');
+                const verdictEl = document.getElementById('fcVerdictChip');
+                const upsideEl = document.getElementById('fcUpsideEl');
+                const modelCount = fcApplicableModels ? fcApplicableModels.length : 0;
+
+                if (scenario === 'range') {
+                    // Range mode: show min-max spread
+                    if (labelEl) labelEl.textContent = `Fair Value Range (${modelCount} Models)`;
+                    if (valueEl) valueEl.innerHTML = `<span class="fc-currency">₹</span>${formatNum(fcRangeMin)} — <span class="fc-currency">₹</span>${formatNum(fcRangeMax)}`;
+                    // Verdict and upside use base average
+                    const avg = fcScenarioAvg ? fcScenarioAvg.base : 0;
+                    updateFcVerdict(avg, verdictEl, upsideEl);
+                } else {
+                    // Single scenario: show weighted average
+                    const scenarioLabel = scenario.charAt(0).toUpperCase() + scenario.slice(1);
+                    const avg = fcScenarioAvg ? (fcScenarioAvg[scenario] || 0) : 0;
+                    if (labelEl) labelEl.textContent = `Fair Value — ${scenarioLabel} Estimate (${modelCount} Models)`;
+                    if (valueEl) valueEl.innerHTML = `<span class="fc-currency">₹</span>${formatNum(avg)}`;
+                    updateFcVerdict(avg, verdictEl, upsideEl);
+                }
+
+                // Update all model card headline values AND Sliders
+                if (fcCurrentData && fcCurrentData.models) {
+                    const activeScen = (scenario === 'range') ? 'base' : scenario;
+                    Object.entries(fcCurrentData.models).forEach(([key, model]) => {
+                        if (!model.applicable) return;
+
+                        // 1. Update Headline Prices (Inner Bear/Base/Bull static text stays untouched)
+                        const fvEl = document.getElementById(`fv_${key}`);
+                        const val = model[activeScen]?.fair_value;
+                        if (fvEl && val) fvEl.innerHTML = `<span class="fc-currency">₹</span>${formatNum(val)}`;
+
+                        // 2. Update Assumption Sliders dynamically
+                        const cfg = model.config || {};
+                        const sliders = cfg.slider_params || [];
+                        sliders.forEach(sp => {
+                            const originalValObj = getNestedVal(fcOriginalAssumptions, sp.key);
+                            if (typeof originalValObj === 'object' && originalValObj !== null) {
+                                const targetVal = originalValObj[activeScen] ?? originalValObj.base ?? 0;
+
+                                // DOM Update
+                                const sliderInput = document.querySelector(`input[data-model="${key}"][data-key="${sp.key}"]`);
+                                if (sliderInput) sliderInput.value = targetVal;
+
+                                const svId = `sv_${key}_${sp.key.replace(/\./g, '_')}`;
+                                const svEl = document.getElementById(svId);
+                                if (svEl) svEl.textContent = targetVal;
+
+                                // Memory Update so recalculations trigger off the new scenario baseline
+                                setNestedVal(fcCurrentData.assumptions, sp.key, targetVal);
+                            }
+                        });
+                    });
+                }
+
+                // Re-render football field for the selected scenario
+                if (fcApplicableModels) {
+                    renderFootballField(fcApplicableModels, fcCmp, scenario);
+                }
+            };
+
+            function updateFcVerdict(avgFV, verdictEl, upsideEl) {
+                const cmp = fcCmp || 0;
+                let verdictText = 'Fairly Valued', verdictClass = 'fc-verdict-fair';
+                if (cmp > 0 && avgFV > 0) {
+                    const diff = ((avgFV - cmp) / cmp) * 100;
+                    if (diff > 10) { verdictText = 'Undervalued'; verdictClass = 'fc-verdict-undervalued'; }
+                    else if (diff < -10) { verdictText = 'Overvalued'; verdictClass = 'fc-verdict-overvalued'; }
+                }
+                const upsidePct = cmp > 0 ? ((avgFV - cmp) / cmp * 100) : 0;
+                if (verdictEl) { verdictEl.textContent = verdictText; verdictEl.className = 'fc-verdict-chip ' + verdictClass; }
+                if (upsideEl) {
+                    upsideEl.className = 'fc-upside ' + (upsidePct >= 0 ? 'positive' : 'negative');
+                    upsideEl.textContent = `${upsidePct >= 0 ? '↑' : '↓'} ${Math.abs(upsidePct).toFixed(1)}% vs Avg Fair Value`;
+                }
+            }
+
+            // =====================================================
+            // TRIANGULATION RENDER
+            // =====================================================
+            function renderTriangulation(text) {
+                const el = document.getElementById('fcTriangulationBody');
+                if (!el || !text) return;
+
+                // Split the text on "Detailed Analysis" heading to separate the main summary from the verbose details
+                const splitRegex = /### 🔍 Detailed Analysis/;
+                const parts = text.split(splitRegex);
+
+                let mainHtml = '';
+                let collHtml = '';
+
+                if (typeof marked !== 'undefined') {
+                    // Ensure markdown tables have a leading blank line so marked.js can parse them properly
+                    // We match any line that doesn't contain a pipe, followed by a newline, followed by a pipe
+                    const fixedMain = parts[0].replace(/(^|\n)([^|\n]+)\n(\s*\|)/g, '$1$2\n\n$3');
+                    mainHtml = marked.parse(fixedMain);
+                    if (parts[1]) collHtml = marked.parse('### 🔍 Detailed Analysis\n' + parts[1]);
+                } else {
+                    mainHtml = '<pre style="white-space:pre-wrap;color:var(--text-secondary)">' + parts[0] + '</pre>';
+                    if (parts[1]) collHtml = '<pre style="white-space:pre-wrap;color:var(--text-secondary)">### 🔍 Detailed Analysis\n' + parts[1] + '</pre>';
+                }
+
+                let finalHtml = mainHtml;
+                if (parts[1]) {
+                    finalHtml += `
+                    <button class="fc-collapse-btn" onclick="toggleFcCollapse('fcDetailedTriangulation', this)" style="margin-top:1rem;">
+                        📄 View Triangulation Blueprint & Risks ▼
+                    </button>
+                    <div id="fcDetailedTriangulation" class="fc-collapsible">
+                        ${collHtml}
+                    </div>
+                `;
+                }
+                el.innerHTML = finalHtml;
+            }
+
+            window.toggleFcCollapse = function (id, btn) {
+                const el = document.getElementById(id);
+                if (el.classList.contains('show')) {
+                    el.classList.remove('show');
+                    btn.innerHTML = btn.innerHTML.replace('▲', '▼');
+                } else {
+                    el.classList.add('show');
+                    btn.innerHTML = btn.innerHTML.replace('▼', '▲');
+                }
+            }
+
+            // =====================================================
+            // PEER COMPARISON
+            // =====================================================
+            function renderPeerComparison(peerData, assumptions) {
+                if (!peerData || (!peerData.company && !peerData.peers?.length)) return;
+
+                const section = document.getElementById('fcPeerSection');
+                const body = document.getElementById('fcPeerBody');
+                if (!section || !body) return;
+
+                section.style.display = 'block';
+
+                const company = peerData.company || {};
+                const peers = peerData.peers || [];
+                const cols = ['name', 'cmp', 'market_cap', 'pe_ratio', 'pb_ratio', 'roce', 'roe'];
+                const headers = ['Company', 'CMP', 'MCap (Cr)', 'P/E', 'P/B', 'ROCE %', 'ROE %'];
+
+                let html = '';
+
+                // Add AI Reasoning context if available
+                const reason = assumptions?.relative_valuation?.reasoning;
+                if (reason) {
+                    const parsedReason = typeof marked !== 'undefined' ? marked.parse(reason) : `<pre style="white-space:pre-wrap;">${reason}</pre>`;
+                    html += `
+                    <div class="fc-reasoning-block" style="background:rgba(124,58,237,0.06);border-left:3px solid var(--accent-purple);padding:1.5rem;margin-bottom:1.5rem;border-radius:0.5rem;">
+                        <strong style="color:var(--text-primary);display:block;margin-bottom:0.75rem;text-transform:uppercase;letter-spacing:1px;font-size:0.85rem;border-bottom:1px solid rgba(255,255,255,0.1);padding-bottom:0.5rem;">Peer Selection Rationale</strong>
+                        <div style="color:var(--text-secondary);font-size:0.85rem;">${parsedReason}</div>
+                    </div>
+                `;
+                }
+
+                html += '<div style="overflow-x:auto"><table class="fc-peer-table"><thead><tr>';
+                headers.forEach(h => html += `<th>${h}</th>`);
+                html += '</tr></thead><tbody>';
+
+                // Company row (highlighted)
+                if (company.name) {
+                    html += '<tr class="fc-highlight-row">';
+                    cols.forEach(c => html += `<td>${company[c] || 'N/A'}</td>`);
+                    html += '</tr>';
+                }
+
+                peers.forEach(p => {
+                    html += '<tr>';
+                    cols.forEach(c => html += `<td>${p[c] || 'N/A'}</td>`);
+                    html += '</tr>';
+                });
+
+                html += '</tbody></table></div>';
+                body.innerHTML = html;
+            }
+
+            // =====================================================
+            // CHAT
+            // =====================================================
+            window.sendFcChat = async function () {
+                const input = document.getElementById('fcChatInput');
+                const messages = document.getElementById('fcChatMessages');
+                if (!input || !messages || !input.value.trim()) return;
+
+                const question = input.value.trim();
+                input.value = '';
+
+                // Add user message
+                messages.innerHTML += `<div class="chat-message user"><div class="chat-bubble">${escHtml(question)}</div></div>`;
+
+                // Add thinking indicator
+                messages.innerHTML += `<div class="chat-message assistant" id="fcChatThinking"><div class="chat-bubble"><em>Thinking...</em></div></div>`;
+                messages.scrollTop = messages.scrollHeight;
+
+                try {
+                    const resp = await fetch('/agent/forecasting/chat', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            ticker: fcCurrentData?.ticker || forecastingSelectedTicker,
+                            company_name: fcCurrentData?.company_name || forecastingSelectedName,
+                            question,
+                            analysis_context: fcCurrentData?.triangulation || '',
+                            data_context: JSON.stringify(fcCurrentData?.assumptions || {}).substring(0, 20000)
+                        })
+                    });
+                    const data = await resp.json();
+                    const thinking = document.getElementById('fcChatThinking');
+                    if (thinking) thinking.remove();
+
+                    let answerHtml = data.answer || 'Sorry, I could not process that.';
+                    if (typeof marked !== 'undefined') answerHtml = marked.parse(answerHtml);
+
+                    messages.innerHTML += `<div class="chat-message assistant"><div class="chat-bubble">${answerHtml}</div></div>`;
+                    messages.scrollTop = messages.scrollHeight;
+                } catch (e) {
+                    const thinking = document.getElementById('fcChatThinking');
+                    if (thinking) thinking.remove();
+                    messages.innerHTML += `<div class="chat-message assistant"><div class="chat-bubble">Error: ${e.message}</div></div>`;
+                }
+            };
+
+            // =====================================================
+            // PDF EXPORT
+            // =====================================================
+            window.exportForecastPDF = async function () {
+                const body = document.getElementById('fcOverlayBody');
+                if (!body) return;
+
+                const btn = document.querySelector('.fc-btn-export');
+                if (btn) { btn.textContent = '⏳ Generating...'; btn.disabled = true; }
+
+                try {
+                    const canvas = await html2canvas(body, {
+                        backgroundColor: '#0a0a0f',
+                        scale: 1.5,
+                        useCORS: true,
+                        logging: false
+                    });
+
+                    const jsPDF = (window.jspdf && window.jspdf.jsPDF) ? window.jspdf.jsPDF : window.jsPDF;
+                    if (!jsPDF) throw new Error("jsPDF library not loaded");
+                    const imgData = canvas.toDataURL('image/jpeg', 0.85);
+                    const pdfWidth = 210; // A4 width in mm
+                    const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+
+                    const pdf = new jsPDF('p', 'mm', [pdfWidth, Math.max(pdfHeight, 297)]);
+                    pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+
+                    const ticker = fcCurrentData?.ticker || 'valuation';
+                    pdf.save(`${ticker}_Valuation_Report.pdf`);
+                } catch (e) {
+                    console.error('PDF export error:', e);
+                    alert('PDF export failed: ' + e.message);
+                } finally {
+                    if (btn) { btn.innerHTML = '⬇ Export PDF'; btn.disabled = false; }
+                }
+            };
+
+            // =====================================================
+            // UTILITIES
+            // =====================================================
+            function formatNum(n) {
+                if (n == null || isNaN(n)) return 'N/A';
+                n = parseFloat(n);
+                if (Math.abs(n) >= 100000) return n.toLocaleString('en-IN', { maximumFractionDigits: 0 });
+                if (Math.abs(n) >= 1000) return n.toLocaleString('en-IN', { maximumFractionDigits: 0 });
+                return n.toLocaleString('en-IN', { maximumFractionDigits: 2 });
+            }
+
+            function escHtml(s) {
+                const d = document.createElement('div'); d.textContent = s; return d.innerHTML;
+            }
+
+            function getNestedVal(obj, path) {
+                return path.split('.').reduce((o, k) => (o && o[k] !== undefined) ? o[k] : null, obj);
+            }
+
+            function setNestedVal(obj, path, value) {
+                const keys = path.split('.');
+                let current = obj;
+                for (let i = 0; i < keys.length - 1; i++) {
+                    if (!current[keys[i]]) current[keys[i]] = {};
+                    current = current[keys[i]];
+                }
+                const lastKey = keys[keys.length - 1];
+                const existing = current[lastKey];
+                if (typeof existing === 'object' && existing !== null && !Array.isArray(existing)) {
+                    // It's a scenario object — update all scenarios
+                    current[lastKey] = { bull: value, base: value, bear: value };
+                } else {
+                    current[lastKey] = value;
+                }
+            }
+
+        })();
+    </script>
 </body>
+
 
 </html>
