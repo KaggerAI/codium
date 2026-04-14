@@ -587,6 +587,11 @@ if azure_redis_conn_string:
     except Exception as e:
         print(f"WARN: Failed to create direct Redis client: {e}", file=sys.stderr)
         DIRECT_REDIS_CLIENT = None
+
+    # Inject Redis client into the agents layer for persistent caching
+    from agents.base import set_agent_redis_client
+    set_agent_redis_client(DIRECT_REDIS_CLIENT)
+
 else:
     print("INFO: No Azure Redis configured, using local-only storage for industry jobs")
 

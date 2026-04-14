@@ -93,10 +93,13 @@ Your role is to answer the investor's follow-up questions about the concall. You
 - Use markdown formatting for readability
 """
 
-CONCALL_FETCH_ERROR_MSG = """I was unable to fetch the conference call transcript for this company. This could be because:
-1. No recent conference call transcript is available on Screener.in
-2. The company may not have had a recent earnings call
-3. There may be a temporary issue accessing the document
+CONCALL_FETCH_ERROR_MSG = """I was unable to fetch the conference call transcript for this company. 
+I also automatically searched for the concall recording on Screener.in and YouTube, but couldn't find one.
 
-Please try again later, or try a different stock ticker.
+This could be because:
+1. The latest concall transcript/recording hasn't been uploaded yet
+2. The company may not have had a recent earnings call
+3. There may be a temporary issue accessing the documents
+
+You can manually provide a URL to the concall transcript/recording below, or try again later.
 """

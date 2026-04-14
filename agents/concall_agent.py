@@ -30,6 +30,158 @@ from agents.prompts.concall_prompts import (
     CONCALL_ANALYSIS_PROMPT, CONCALL_CHAT_PROMPT, CONCALL_FETCH_ERROR_MSG
 )
 
+import csv
+import os
+
+def _get_company_name_from_ticker(ticker: str) -> str:
+    """Read the stock master to get the full company name."""
+    try:
+        master_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'trendlyne_all_stocks_master.csv')
+        if os.path.exists(master_file):
+            with open(master_file, 'r', encoding='utf-8') as f:
+                reader = csv.reader(f)
+                next(reader) # skip headers
+                for row in reader:
+                    if len(row) > 1 and row[1].strip().upper() == ticker.strip().upper():
+                        return row[0].strip()
+    except Exception as e:
+        print(f"CONCALL_AGENT error reading stock master: {e}", file=sys.stderr)
+    return ticker
+
+def _get_q_fy_from_quarter(quarter_str: str) -> str:
+    """Convert 'Mar 2026' into 'Q4 FY26' for better search"""
+    if not quarter_str: return ""
+    parts = quarter_str.split(' ')
+    if len(parts) == 2:
+        month, year = parts[0], parts[1]
+        try:
+            year_int = int(year)
+            fy = year_int if month in ['Jan', 'Feb', 'Mar'] else year_int + 1
+            fy_str = str(fy)[-2:]
+            q_map = {'Mar': 'Q4', 'Jun': 'Q1', 'Sep': 'Q2', 'Dec': 'Q3'}
+            q_str_part = q_map.get(month, "")
+            if q_str_part:
+                return f"{q_str_part} FY{fy_str}"
+        except:
+            pass
+    return quarter_str
+
+def _get_current_expected_quarter() -> str:
+    """Derive the most likely latest quarter from today's date.
+    e.g. In April 2026, the latest quarter end is Mar 2026 → 'Q4 FY26'"""
+    from datetime import datetime
+    now = datetime.now()
+    m, y = now.month, now.year
+    # Which quarter just ended?
+    if m in (1, 2, 3, 4):    return f"Q4 FY{str(y)[-2:]}"       # Mar quarter
+    elif m in (5, 6, 7):      return f"Q1 FY{str(y+1)[-2:]}"     # Jun quarter
+    elif m in (8, 9, 10):     return f"Q2 FY{str(y+1)[-2:]}"     # Sep quarter
+    else:                     return f"Q3 FY{str(y+1)[-2:]}"     # Dec quarter
+
+def _search_youtube_concall(company_name: str, ticker: str, quarter: str = '') -> str:
+    """
+    Search YouTube for the latest earnings call video using yt-dlp ytsearch.
+    Tries multiple search queries for robustness.
+    Returns: YouTube URL or empty string if not found.
+    """
+    import yt_dlp
+    from datetime import datetime, timedelta
+    
+    recency_cutoff = datetime.now() - timedelta(days=10)
+    
+    # Build multiple quarter variants to try
+    q_fy = _get_q_fy_from_quarter(quarter)
+    current_q = _get_current_expected_quarter()
+    
+    quarter_variants = []
+    if current_q:
+        quarter_variants.append(current_q)
+    if q_fy and q_fy != current_q:
+        quarter_variants.append(q_fy)
+    if not quarter_variants:
+        quarter_variants.append("latest")
+    
+    # Build multiple name variants to try
+    # e.g. for "Icici Prudential Asset Management Company Ltd" → also try "ICICIAMC"
+    name_variants = [ticker]  # ticker first — it's usually the most recognizable
+    if company_name and company_name.upper() != ticker.upper():
+        name_variants.append(company_name)
+    
+    # Generate search queries: ticker + quarter combos first, then company name
+    search_queries = []
+    for name in name_variants:
+        for q in quarter_variants:
+            search_queries.append(f"{name} concall {q}")
+            search_queries.append(f"{name} earnings call {q}")
+    
+    # Deduplicate while preserving order
+    seen = set()
+    unique_queries = []
+    for q in search_queries:
+        q_lower = q.lower()
+        if q_lower not in seen:
+            seen.add(q_lower)
+            unique_queries.append(q)
+    
+    # Limit to 4 most promising queries to avoid excessive API calls
+    unique_queries = unique_queries[:4]
+    
+    ydl_opts = {
+        'quiet': True,
+        'skip_download': True,
+        'extract_flat': False,
+    }
+    
+    def _is_valid_video(vid):
+        """Check if video meets duration and recency criteria."""
+        if not vid: return False
+        duration = vid.get('duration', 0)
+        if duration and duration < 1200:  # must be > 20m
+            return False
+        upload_date_str = vid.get('upload_date')
+        if upload_date_str and len(upload_date_str) == 8:
+            try:
+                if datetime.strptime(upload_date_str, "%Y%m%d") < recency_cutoff:
+                    return False
+            except:
+                pass
+        return True
+    
+    for query in unique_queries:
+        search_query = f"ytsearch5:{query}"
+        print(f"CONCALL_AGENT: YouTube search: '{query}'", file=sys.stderr)
+        
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            try:
+                results = ydl.extract_info(search_query, download=False)
+                videos = results.get('entries', [])
+                
+                if not videos:
+                    continue
+                
+                # Priority 1: Recent + long + title matches concall keywords
+                for vid in videos:
+                    if not _is_valid_video(vid): continue
+                    title_lower = vid.get('title', '').lower()
+                    if any(kw in title_lower for kw in ['earning', 'concall', 'conference call', 'q1', 'q2', 'q3', 'q4']):
+                        url = vid.get('webpage_url', vid.get('url'))
+                        print(f"CONCALL_AGENT: YouTube match found: {url} (title: {vid.get('title')})", file=sys.stderr)
+                        return url
+                
+                # Priority 2: Recent + long (any title)
+                for vid in videos:
+                    if not _is_valid_video(vid): continue
+                    url = vid.get('webpage_url', vid.get('url'))
+                    print(f"CONCALL_AGENT: YouTube fallback match: {url} (title: {vid.get('title')})", file=sys.stderr)
+                    return url
+                    
+            except Exception as e:
+                print(f"CONCALL_AGENT YouTube search error for '{query}': {e}", file=sys.stderr)
+                continue
+    
+    print("CONCALL_AGENT: No suitable YouTube video found across all queries", file=sys.stderr)
+    return ""
+
 
 # =====================================================================
 # QUARTER MAPPING HELPERS
@@ -72,53 +224,66 @@ async def _fetch_latest_results_quarter(ticker: str) -> str:
     """
     Lightweight HTTP call to Screener.in to extract the latest quarterly
     results column header (e.g., 'Dec 2025').
+    Checks BOTH consolidated and standalone URLs, returns whichever is newer.
     Does NOT download any PDFs — only parses the HTML for table headers.
     Returns the quarter string or empty string on failure.
     """
     try:
-        urls = [
-            f"https://www.screener.in/company/{ticker}/consolidated/",
-            f"https://www.screener.in/company/{ticker}/"
-        ]
+        consolidated_url = f"https://www.screener.in/company/{ticker}/consolidated/"
+        standalone_url = f"https://www.screener.in/company/{ticker}/"
         headers = {"User-Agent": "Mozilla/5.0"}
+        quarter_pattern = re.compile(r'^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{4}$', re.IGNORECASE)
 
-        async with httpx.AsyncClient(follow_redirects=True) as client:
-            for url in urls:
-                try:
+        async def _get_quarter_from_url(url):
+            try:
+                async with httpx.AsyncClient(follow_redirects=True) as client:
                     response = await client.get(url, headers=headers, timeout=15.0)
                     if response.status_code != 200:
-                        continue
-
+                        return ""
                     soup = BeautifulSoup(response.text, 'html.parser')
-                    # Find the quarterly results section
                     quarters_section = soup.find('section', id='quarters')
                     if not quarters_section:
-                        continue
-
-                    # Get the table header row
+                        return ""
                     table = quarters_section.find('table')
                     if not table:
-                        continue
-
+                        return ""
                     header_row = table.find('thead')
                     if not header_row:
-                        continue
-
+                        return ""
                     headers_list = [th.get_text(strip=True) for th in header_row.find_all('th')]
-                    # Filter for quarter-like headers (e.g., 'Dec 2025', 'Sep 2025')
-                    quarter_pattern = re.compile(r'^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{4}$', re.IGNORECASE)
                     quarter_headers = [h for h in headers_list if quarter_pattern.match(h.strip())]
-
                     if quarter_headers:
-                        latest = quarter_headers[-1].strip()  # Last column = latest quarter
-                        print(f"CONCALL_AGENT: Latest results quarter for {ticker}: {latest}", file=sys.stderr)
-                        return latest
-                except Exception as inner_e:
-                    print(f"CONCALL_AGENT: Error fetching quarter from {url}: {inner_e}", file=sys.stderr)
-                    continue
+                        return quarter_headers[-1].strip()
+            except Exception:
+                pass
+            return ""
 
-        print(f"CONCALL_AGENT: Could not determine latest results quarter for {ticker}", file=sys.stderr)
-        return ''
+        # Fetch both in parallel for speed
+        consol_q, standalone_q = await asyncio.gather(
+            _get_quarter_from_url(consolidated_url),
+            _get_quarter_from_url(standalone_url)
+        )
+
+        # Compare and pick the newest
+        best = ""
+        if consol_q and standalone_q:
+            from fetchers.screener_fetcher import _compare_quarter_strings
+            if _compare_quarter_strings(standalone_q, consol_q) > 0:
+                best = standalone_q
+                print(f"CONCALL_AGENT: Latest results quarter for {ticker}: {best} (from standalone, newer than consolidated {consol_q})", file=sys.stderr)
+            else:
+                best = consol_q
+                print(f"CONCALL_AGENT: Latest results quarter for {ticker}: {best} (from consolidated)", file=sys.stderr)
+        elif consol_q:
+            best = consol_q
+            print(f"CONCALL_AGENT: Latest results quarter for {ticker}: {best} (consolidated only)", file=sys.stderr)
+        elif standalone_q:
+            best = standalone_q
+            print(f"CONCALL_AGENT: Latest results quarter for {ticker}: {best} (standalone only)", file=sys.stderr)
+        else:
+            print(f"CONCALL_AGENT: Could not determine latest results quarter for {ticker}", file=sys.stderr)
+
+        return best
     except Exception as e:
         print(f"CONCALL_AGENT: _fetch_latest_results_quarter failed for {ticker}: {e}", file=sys.stderr)
         return ''
@@ -552,7 +717,9 @@ def register_concall_routes(app, call_gemini_api_fn, fetch_documents_fn, get_pdf
         elif job['status'] == 'error':
             return jsonify({
                 'status': 'error',
-                'error': job['error']
+                'error': job['error'],
+                'auto_fetch_failed': job.get('auto_fetch_failed', False),
+                'quarter_mismatch': job.get('quarter_mismatch', False)
             }), 500
 
         return jsonify({'error': 'Unknown job status'}), 500
@@ -715,15 +882,6 @@ def _run_concall_analysis(job_id, ticker, call_gemini_api_fn, fetch_documents_fn
                     concall_text = doc.get('content_summary', '')
                     break
 
-        if not concall_text or len(concall_text.strip()) < 200:
-            elapsed = int(time.time() - start_time)
-            print(f"CONCALL_AGENT: No concall transcript found for {ticker} after {elapsed}s", file=sys.stderr)
-            update_agent_job(job_id, {
-                'status': 'error',
-                'error': CONCALL_FETCH_ERROR_MSG
-            })
-            return
-
         concall_link = concall_doc.get('link', '') if concall_doc else ''
         concall_label = concall_doc.get('text', 'Latest Concall') if concall_doc else 'Latest Concall'
         concall_raw_date = concall_doc.get('date', '') if concall_doc else ''
@@ -733,10 +891,120 @@ def _run_concall_analysis(job_id, ticker, call_gemini_api_fn, fetch_documents_fn
         quarter_mismatch = False
         if results_quarter and concall_quarter:
             quarter_mismatch = (concall_quarter != results_quarter)
+            
+        auto_fetch_failed = False
+        auto_fetch_source = None
+
+        if (not concall_text or len(concall_text.strip()) < 200) or quarter_mismatch:
             if quarter_mismatch:
                 print(f"CONCALL_AGENT: ⚠️ Quarter mismatch! Concall={concall_quarter}, Results={results_quarter}", file=sys.stderr)
             else:
-                print(f"CONCALL_AGENT: ✓ Quarters match: {concall_quarter}", file=sys.stderr)
+                print(f"CONCALL_AGENT: ⚠️ No concall transcript found for {ticker}", file=sys.stderr)
+                
+            update_agent_job(job_id, {'progress': 'Transcript missing or outdated. Auto-searching for latest concall audio...'})
+            
+            new_audio_url = ""
+            new_source = ""
+            
+            # Helper to attempt transcription within a loop
+            async def _try_transcribe(audio_url):
+                is_yt = 'youtube' in audio_url.lower() or 'youtu.be' in audio_url.lower()
+                text = ""
+                if is_yt:
+                    print("CONCALL_AGENT: Trying _extract_youtube_transcript", file=sys.stderr)
+                    text = await _extract_youtube_transcript(audio_url, max_chars=80000)
+                    
+                if not text or text.startswith("Error"):
+                    print(f"CONCALL_AGENT: Falling back to _transcribe_audio_video_from_url via Gemini for {audio_url}", file=sys.stderr)
+                    update_agent_job(job_id, {'progress': 'Running deep transcription via Gemini AI...'})
+                    text = await _transcribe_audio_video_from_url(audio_url, 'audio')
+                return text
+
+            # 2a. Try to fetch REC link from Screener
+            from fetchers.screener_fetcher import fetch_concall_rec_url_async
+            loop2 = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop2)
+            try:
+                rec_info = loop2.run_until_complete(fetch_concall_rec_url_async(ticker))
+            finally:
+                loop2.close()
+                
+            # Keep a separate loop for transcriptions
+            loop3 = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop3)
+            
+            try:
+                # First, test Screener REC URL
+                if rec_info and rec_info.get("url"):
+                    rec_date = rec_info.get("date", "")
+                    rec_quarter = _date_to_quarter(rec_date)
+                    if not results_quarter or not rec_quarter or (rec_quarter == results_quarter) or (not concall_quarter) or (rec_date != concall_raw_date):
+                        new_audio_url = rec_info.get("url")
+                        new_source = "screener_rec"
+                        print(f"CONCALL_AGENT: Found REC link on Screener: {new_audio_url}", file=sys.stderr)
+                        
+                        try:
+                            # Attempt transcription NOW
+                            transcribed_text = loop3.run_until_complete(_try_transcribe(new_audio_url))
+                            if transcribed_text and not transcribed_text.startswith("Error"):
+                                concall_text = transcribed_text
+                                concall_link = new_audio_url
+                                concall_label = "Auto-Fetched Audio Transcription"
+                                concall_quarter = results_quarter if results_quarter else "Latest"
+                                quarter_mismatch = False
+                                auto_fetch_source = new_source
+                            else:
+                                print("CONCALL_AGENT: Transcription returned empty or error for REC url", file=sys.stderr)
+                                new_audio_url = "" # Reset to allow fallback
+                        except Exception as e:
+                            print(f"CONCALL_AGENT: Transcription of REC url failed entirely: {e}", file=sys.stderr)
+                            new_audio_url = "" # Reset to allow fallback
+
+                # 2b. If no valid REC link or transcription failed, search YouTube
+                if not new_audio_url:
+                    update_agent_job(job_id, {'progress': 'Searching YouTube for latest earnings call...'})
+                    company_name = _get_company_name_from_ticker(ticker)
+                    
+                    search_q = results_quarter if results_quarter else ""
+                    yt_audio_url = _search_youtube_concall(company_name, ticker, search_q)
+                    
+                    if yt_audio_url:
+                        new_source = "youtube_search"
+                        print(f"CONCALL_AGENT: Found YouTube hit: {yt_audio_url}", file=sys.stderr)
+                        try:
+                            transcribed_text = loop3.run_until_complete(_try_transcribe(yt_audio_url))
+                            if transcribed_text and not transcribed_text.startswith("Error"):
+                                concall_text = transcribed_text
+                                concall_link = yt_audio_url
+                                concall_label = "Auto-Fetched YouTube Transcription"
+                                concall_quarter = results_quarter if results_quarter else "Latest"
+                                quarter_mismatch = False
+                                auto_fetch_source = new_source
+                                new_audio_url = yt_audio_url
+                            else:
+                                auto_fetch_failed = True
+                        except Exception as e:
+                            print(f"CONCALL_AGENT: Transcription of YT url failed: {e}", file=sys.stderr)
+                            auto_fetch_failed = True
+                    else:
+                        auto_fetch_failed = True
+
+            finally:
+                loop3.close()
+                if not new_audio_url:
+                    auto_fetch_failed = True
+
+        if not concall_text or len(concall_text.strip()) < 200:
+            elapsed = int(time.time() - start_time)
+            print(f"CONCALL_AGENT: No concall transcript found for {ticker} after {elapsed}s", file=sys.stderr)
+            
+            update_agent_job(job_id, {
+                'status': 'error',
+                'error': CONCALL_FETCH_ERROR_MSG,
+                'auto_fetch_failed': auto_fetch_failed,
+                'quarter_mismatch': quarter_mismatch
+            })
+            return
 
         elapsed_fetch = int(time.time() - start_time)
         print(f"CONCALL_AGENT: Step 1 complete — Got {len(concall_text)} chars of transcript in {elapsed_fetch}s", file=sys.stderr)
@@ -782,6 +1050,7 @@ def _run_concall_analysis(job_id, ticker, call_gemini_api_fn, fetch_documents_fn
             'concall_quarter': concall_quarter,
             'results_quarter': results_quarter,
             'quarter_mismatch': quarter_mismatch,
+            'auto_fetch_source': auto_fetch_source,
             'transcript_text': concall_text,
             'analyzed_at': time.time(),
             'analysis_time_seconds': elapsed_total

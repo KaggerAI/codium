@@ -103,6 +103,42 @@ def clean_df(df: pd.DataFrame) -> pd.DataFrame:
         df.index = df.index.astype(str).str.strip().str.replace("+", "", regex=False)
     return df
 
+def _extract_latest_quarter_from_soup(soup: BeautifulSoup) -> str:
+    """Extract the latest quarterly results column header (e.g. 'Mar 2026') from parsed HTML.
+    Returns empty string if not found."""
+    try:
+        quarters_section = soup.select_one("#quarters")
+        if quarters_section:
+            table_html = quarters_section.select_one(".data-table")
+            if table_html:
+                headers = table_html.select("th")
+                if headers:
+                    import re as _re
+                    qp = _re.compile(r'^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{4}$', _re.IGNORECASE)
+                    valid = [h.get_text(strip=True) for h in headers if qp.match(h.get_text(strip=True))]
+                    if valid:
+                        return valid[-1]
+    except Exception:
+        pass
+    return ""
+
+
+def _compare_quarter_strings(q1: str, q2: str) -> int:
+    """Compare two quarter strings like 'Mar 2026' and 'Sep 2025'.
+    Returns: 1 if q1 is newer, -1 if q2 is newer, 0 if same or unparseable."""
+    try:
+        from dateutil import parser as dateparser
+        d1 = dateparser.parse(q1)
+        d2 = dateparser.parse(q2)
+        if d1 and d2:
+            if d1 > d2: return 1
+            elif d1 < d2: return -1
+            else: return 0
+    except Exception:
+        pass
+    return 0
+
+
 def _inject_schedules_sync(tables: dict, soup: BeautifulSoup, cid: str):
     """Fetches hidden schedule rows from Screener API and injects them into the parsed DataFrames."""
     SECTION_MAP = {
@@ -316,6 +352,31 @@ async def fetch_consolidated_async(ticker: str) -> tuple[dict[str, pd.DataFrame]
         if is_consolidated: # Was set to True if URL matched /consolidated/
              log_progress(f"No toggles found for {ticker} at {final_url}. Defaulting to is_consolidated=False.")
         is_consolidated = False
+
+    # --- FRESHNESS CHECK ---
+    # For companies like ICICIAMC (spun off), consolidated exists but has STALE data.
+    # We compare the latest quarter header from consolidated vs standalone.
+    # If standalone is newer, switch to it. Fully wrapped so failures never break main flow.
+    if is_consolidated:
+        try:
+            consol_latest_q = _extract_latest_quarter_from_soup(soup)
+            if consol_latest_q:
+                # Quick-fetch standalone page to check its latest quarter
+                async with httpx.AsyncClient(follow_redirects=True) as client2:
+                    sa_resp = await client2.get(standalone_url, headers=HEADERS, timeout=15.0)
+                    if sa_resp.status_code == 200:
+                        sa_soup = BeautifulSoup(sa_resp.text, 'html.parser')
+                        sa_latest_q = _extract_latest_quarter_from_soup(sa_soup)
+                        if sa_latest_q and _compare_quarter_strings(sa_latest_q, consol_latest_q) > 0:
+                            log_progress(f"FRESHNESS: Standalone ({sa_latest_q}) is newer than Consolidated ({consol_latest_q}) for {ticker}. Switching to standalone.")
+                            text = sa_resp.text
+                            soup = sa_soup
+                            is_consolidated = False
+                            final_url = str(sa_resp.url)
+                        else:
+                            log_progress(f"FRESHNESS: Consolidated ({consol_latest_q}) is current for {ticker}. Keeping consolidated.")
+        except Exception as freshness_err:
+            log_progress(f"FRESHNESS: Check failed for {ticker} (non-fatal): {freshness_err}")
 
     # --- CRITICAL FIX ---
     # If we determined this is a Standalone company (is_consolidated=False), but we are currently
@@ -598,6 +659,26 @@ def fetch_consolidated(ticker: str) -> tuple[dict[str, pd.DataFrame], str, dict,
     else:
         # Standalone-only company (like E2E)
         is_consolidated = False
+
+    # --- FRESHNESS CHECK (Sync) ---
+    if is_consolidated:
+        try:
+            consol_latest_q = _extract_latest_quarter_from_soup(soup)
+            if consol_latest_q:
+                sa_resp = requests.get(standalone_url, headers=HEADERS, timeout=15.0)
+                if sa_resp.status_code == 200:
+                    sa_soup = BeautifulSoup(sa_resp.text, 'html.parser')
+                    sa_latest_q = _extract_latest_quarter_from_soup(sa_soup)
+                    if sa_latest_q and _compare_quarter_strings(sa_latest_q, consol_latest_q) > 0:
+                        log_progress(f"FRESHNESS: Standalone ({sa_latest_q}) is newer than Consolidated ({consol_latest_q}) for {ticker}. Switching to standalone.")
+                        text = sa_resp.text
+                        soup = sa_soup
+                        is_consolidated = False
+                        final_url = str(sa_resp.url)
+                    else:
+                        log_progress(f"FRESHNESS: Consolidated ({consol_latest_q}) is current for {ticker}. Keeping consolidated.")
+        except Exception as freshness_err:
+            log_progress(f"FRESHNESS: Check failed for {ticker} (non-fatal): {freshness_err}")
 
     # --- CRITICAL FIX (Sync) ---
     if not is_consolidated and "/consolidated/" in final_url:
@@ -1276,9 +1357,20 @@ async def fetch_latest_documents_async(ticker: str) -> list[dict]:
 
             if 'Concall' not in found_types:
                 transcript_link = item.find('a', string='Transcript', href=True)
-                if transcript_link:
-                    doc_info = {"type": "Concall", "text": f"Concall Transcript {date_text}", "link": transcript_link['href'], "date": raw_date}
-                    tasks_to_run.append(get_text_from_pdf_url_async(doc_info['link']))
+                rec_link = item.find('a', string='REC', href=True)
+                if transcript_link or rec_link:
+                    link = transcript_link['href'] if transcript_link else ""
+                    doc_info = {"type": "Concall", "text": f"Concall Transcript {date_text}", "link": link, "date": raw_date}
+                    if rec_link:
+                        doc_info["rec_link"] = rec_link['href']
+                    
+                    if link:
+                        tasks_to_run.append(get_text_from_pdf_url_async(doc_info['link']))
+                    else:
+                        # Dummy task if only REC link exists so it still gets returned
+                        async def dummy_task(*args, **kwargs): return ""
+                        tasks_to_run.append(dummy_task())
+                        
                     doc_infos.append(doc_info)
                     found_types.add('Concall')
 
@@ -1328,8 +1420,39 @@ async def fetch_latest_documents_async(ticker: str) -> list[dict]:
 
         return final_docs
     except Exception as e:
-        print(f"ERROR (async): Could not fetch documents for {ticker}. Reason: {e}")
+        print(f"Error fetching latest documents for {ticker}: {e}")
         return []
+
+async def fetch_concall_rec_url_async(ticker: str) -> dict:
+    """
+    Fetch the latest concall recording URL from Screener.in.
+    Returns dict with keys: url, date (or empty dict if none found).
+    Looks for REC links in the concalls section.
+    """
+    try:
+        url = BASE_URL.format(ticker=ticker)
+        async with httpx.AsyncClient(follow_redirects=True) as client:
+            response = await client.get(url, headers=HEADERS, timeout=45.0)
+            response.raise_for_status()
+        
+        soup = BeautifulSoup(response.text, 'html.parser')
+        concalls_section = soup.find('div', class_='concalls')
+        if not concalls_section: return {}
+
+        for item in concalls_section.find_all('li', limit=4):
+            rec_link = item.find('a', string='REC', href=True)
+            if rec_link:
+                date_element = item.find('div', class_='nowrap')
+                raw_date = date_element.text.strip() if date_element else ""
+                return {
+                    "url": rec_link['href'],
+                    "date": raw_date
+                }
+        return {}
+    except Exception as e:
+        print(f"Error fetching concall REC url for {ticker}: {e}")
+        return {}
+
 
 
 # =====================================================================

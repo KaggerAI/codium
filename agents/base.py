@@ -8,6 +8,34 @@ import uuid
 import time
 import threading
 import sys
+import json
+import zlib
+import datetime
+
+# =====================================================================
+# REDIS PERSISTENCE
+# =====================================================================
+AGENT_REDIS_CLIENT = None
+
+def set_agent_redis_client(client):
+    global AGENT_REDIS_CLIENT
+    AGENT_REDIS_CLIENT = client
+
+def get_seconds_to_next_quarter_boundary():
+    """Calculates seconds until next Jan 1, Apr 1, Jul 1, Oct 1"""
+    now = datetime.datetime.now()
+    mod_month = now.month
+    
+    if mod_month >= 10:
+        next_boundary = datetime.datetime(now.year + 1, 1, 1)
+    elif mod_month >= 7:
+        next_boundary = datetime.datetime(now.year, 10, 1)
+    elif mod_month >= 4:
+        next_boundary = datetime.datetime(now.year, 7, 1)
+    else:
+        next_boundary = datetime.datetime(now.year, 4, 1)
+        
+    return int((next_boundary - now).total_seconds())
 
 # =====================================================================
 # IN-MEMORY JOB STORE (shared by all agents)
@@ -77,19 +105,56 @@ AGENT_LATEST_LOCK = threading.Lock()
 
 
 def store_latest_result(agent_type, ticker, result_data):
-    """Store the latest result for an agent+ticker combination."""
+    """Store the latest result for an agent+ticker combination in local cache and Redis."""
     key = f"{agent_type}_{ticker.upper()}"
+    ttl = get_seconds_to_next_quarter_boundary()
+    expires_at = time.time() + ttl
+    
     with AGENT_LATEST_LOCK:
         AGENT_LATEST_RESULTS[key] = {
             'result': result_data,
             'stored_at': time.time(),
+            'expires_at': expires_at,
             'agent_type': agent_type,
             'ticker': ticker.upper()
         }
+        
+    if AGENT_REDIS_CLIENT:
+        try:
+            data_bytes = zlib.compress(json.dumps(result_data).encode('utf-8'))
+            AGENT_REDIS_CLIENT.setex(f"agent_result_{key}", ttl, data_bytes)
+        except Exception as e:
+            print(f"WARN: Failed to cache agent result in Redis for {key}: {e}", file=sys.stderr)
 
 
 def get_latest_result(agent_type, ticker):
-    """Get the latest stored result for an agent+ticker."""
+    """Get the latest stored result for an agent+ticker, checking Redis if missing in memory."""
     key = f"{agent_type}_{ticker.upper()}"
+    redis_key = f"agent_result_{key}"
+    
     with AGENT_LATEST_LOCK:
-        return AGENT_LATEST_RESULTS.get(key)
+        mem_val = AGENT_LATEST_RESULTS.get(key)
+        if mem_val:
+            if time.time() > mem_val.get('expires_at', 0):
+                del AGENT_LATEST_RESULTS[key]
+            else:
+                return mem_val
+
+    if AGENT_REDIS_CLIENT:
+        try:
+            raw = AGENT_REDIS_CLIENT.get(redis_key)
+            if raw:
+                result_data = json.loads(zlib.decompress(raw).decode('utf-8'))
+                with AGENT_LATEST_LOCK:
+                    AGENT_LATEST_RESULTS[key] = {
+                        'result': result_data,
+                        'stored_at': time.time(),
+                        'expires_at': time.time() + get_seconds_to_next_quarter_boundary(),
+                        'agent_type': agent_type,
+                        'ticker': ticker.upper()
+                    }
+                return AGENT_LATEST_RESULTS[key]
+        except Exception as e:
+            print(f"WARN: Failed to retrieve agent result from Redis for {key}: {e}", file=sys.stderr)
+            
+    return None

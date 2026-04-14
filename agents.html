@@ -2542,7 +2542,7 @@
                         concallJobId = data.job_id;
                         pollConcallStatus();
                     } else if (data.error) {
-                        onConcallError(data.error);
+                        onConcallError(data.error, data);
                     }
                 })
                 .catch(err => {
@@ -2562,7 +2562,7 @@
                     } else if (data.status === 'complete') {
                         onConcallComplete(data.result);
                     } else if (data.status === 'error') {
-                        onConcallError(data.error);
+                        onConcallError(data.error, data);
                     }
                 })
                 .catch(err => {
@@ -2636,7 +2636,7 @@
       `;
         }
 
-        function onConcallError(errorMsg) {
+        function onConcallError(errorMsg, data = null) {
             if (concallTimerInterval) clearInterval(concallTimerInterval);
             if (concallPollTimer) clearTimeout(concallPollTimer);
 
@@ -2647,6 +2647,23 @@
             const btn = document.getElementById('concallAnalyzeBtn');
             btn.disabled = false;
             document.getElementById('concallBtnText').textContent = 'Analyze Concall';
+            
+            // Show mismatch fallback UI if auto_fetch failed
+            if (data && data.auto_fetch_failed) {
+                const mismatchNotice = document.getElementById('concallMismatchNotice');
+                document.getElementById('concallMismatchTitle').textContent = `Auto-Fetch Failed`;
+                
+                let msg = `We automatically searched for the latest concall recording but couldn't find it. If you have a link (YouTube, PDF, etc.), paste it below.`;
+                if (data.quarter_mismatch) {
+                    msg = `The latest transcript is from an older quarter. We automatically searched for the latest concall audio but couldn't find it. If you have a link, paste it below.`;
+                }
+                
+                document.getElementById('concallMismatchText').innerHTML = msg;
+                document.getElementById('concallMismatchUrlInput').value = '';
+                document.getElementById('concallMismatchAnalyzeBtn').disabled = false;
+                document.getElementById('concallMismatchAnalyzeBtn').textContent = 'Analyze Latest Concall';
+                showEl('concallMismatchNotice');
+            }
         }
 
         // =====================================================
