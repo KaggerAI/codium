@@ -1891,6 +1891,104 @@
                 padding: 0.75rem 1rem;
             }
         }
+        /* ============================== */
+        /* COSMIC REPORT — STRUCTURED UI  */
+        /* ============================== */
+        .cr-page { padding: 0; }
+        .cr-masthead { text-align: center; padding: 1.25rem 1rem 1rem; border-bottom: 0.5px solid var(--border-color); margin-bottom: 1.25rem; }
+        .cr-masthead h1 { font-size: 20px; font-weight: 600; color: var(--text-primary); }
+        .cr-masthead .cr-sub { font-size: 13px; color: var(--text-secondary); margin-top: 4px; }
+
+        .cr-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 1.5rem; padding: 0 0.25rem; }
+        .cr-tab { font-size: 13px; font-weight: 500; padding: 8px 16px; border: 0.5px solid var(--border-color); border-radius: 20px; cursor: pointer; background: transparent; color: var(--text-secondary); transition: all 0.15s; white-space: nowrap; font-family: inherit; }
+        .cr-tab.active { background: var(--text-primary); color: var(--bg-primary); border-color: var(--text-primary); }
+        .cr-tab:hover:not(.active) { background: var(--bg-card-hover); }
+
+        .cr-panel { display: none; }
+        .cr-panel.active { display: block; }
+
+        .cr-section-title { font-size: 13px; font-weight: 600; color: var(--text-secondary); letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 0.75rem; padding: 0 0.15rem; }
+
+        /* Dashboard metric cards */
+        .cr-dashboard-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; margin-bottom: 1.25rem; }
+        .cr-metric-card { background: var(--bg-card); border: 0.5px solid var(--border-color); border-radius: 10px; padding: 12px 14px; }
+        .cr-metric-card .cr-mlabel { font-size: 11px; color: var(--text-secondary); margin-bottom: 4px; }
+        .cr-metric-card .cr-mval { font-size: 20px; font-weight: 600; overflow-wrap: break-word; word-wrap: break-word; word-break: break-word; hyphens: auto; }
+        .cr-metric-card .cr-mval.red { color: #f87171; }
+        .cr-metric-card .cr-mval.green { color: #34d399; }
+        .cr-metric-card .cr-mval.amber { color: #fbbf24; }
+        .cr-metric-card .cr-mchange { font-size: 10px; color: var(--text-muted); margin-top: 3px; }
+
+        /* Planet grid */
+        .cr-planet-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(165px, 1fr)); gap: 8px; margin-bottom: 1.25rem; }
+        .cr-planet-card { border: 0.5px solid var(--border-color); border-radius: 12px; padding: 12px 14px; background: var(--bg-card); }
+        .cr-planet-card .cr-symbol { font-size: 20px; margin-bottom: 5px; }
+        .cr-planet-card .cr-pname { font-size: 15px; font-weight: 600; color: var(--text-primary); }
+        .cr-planet-card .cr-pos { font-size: 11px; color: var(--text-secondary); margin: 2px 0 5px; }
+        .cr-planet-card .cr-effect { font-size: 11px; color: var(--text-secondary); line-height: 1.55; }
+
+        .cr-badge { display: inline-block; font-size: 10px; font-weight: 500; padding: 2px 7px; border-radius: 10px; margin-top: 5px; }
+        .cr-badge.bear { background: rgba(248,113,113,0.15); color: #f87171; }
+        .cr-badge.bull { background: rgba(52,211,153,0.15); color: #34d399; }
+        .cr-badge.neut { background: rgba(160,160,184,0.12); color: var(--text-secondary); }
+        .cr-badge.warn { background: rgba(251,191,36,0.15); color: #fbbf24; }
+
+        /* Timeline */
+        .cr-timeline-block { border-left: 2px solid var(--border-color); padding-left: 16px; margin-bottom: 1.25rem; }
+        .cr-timeline-item { margin-bottom: 1.15rem; position: relative; }
+        .cr-timeline-item::before { content: ''; position: absolute; left: -21px; top: 5px; width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted); }
+        .cr-timeline-item.hot::before { background: #f87171; }
+        .cr-timeline-item.warm::before { background: #fbbf24; }
+        .cr-timeline-item.cool::before { background: #34d399; }
+        .cr-timeline-item .cr-tdate { font-size: 11px; font-weight: 500; color: var(--text-secondary); margin-bottom: 3px; }
+        .cr-timeline-item .cr-ttitle { font-size: 15px; font-weight: 500; color: var(--text-primary); margin-bottom: 3px; }
+        .cr-timeline-item .cr-tdesc { font-size: 12px; color: var(--text-secondary); line-height: 1.55; }
+
+        /* Sector bars */
+        .cr-sector-row { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 0.5px solid rgba(42,42,58,0.5); }
+        .cr-sector-row:last-child { border-bottom: none; }
+        .cr-sector-name { font-size: 14px; font-weight: 500; width: 140px; flex-shrink: 0; color: var(--text-primary); }
+        .cr-sector-bar-wrap { flex: 1; height: 7px; background: var(--bg-card); border-radius: 4px; overflow: hidden; }
+        .cr-sector-bar { height: 100%; border-radius: 4px; transition: width 0.5s ease; }
+        .cr-sector-signal { font-size: 11px; width: 100px; text-align: right; flex-shrink: 0; }
+        .cr-signal-bull { color: #34d399; }
+        .cr-signal-bear { color: #f87171; }
+        .cr-signal-neut { color: var(--text-secondary); }
+
+        /* Geopolitics */
+        .cr-geo-card { border: 0.5px solid var(--border-color); border-radius: 12px; padding: 14px; margin-bottom: 8px; background: var(--bg-card); }
+        .cr-geo-card .cr-gcountry { font-size: 15px; font-weight: 600; margin-bottom: 4px; color: var(--text-primary); }
+        .cr-geo-card .cr-gcountry span { margin-right: 6px; }
+        .cr-geo-card .cr-gtheme { font-size: 12px; color: var(--text-secondary); line-height: 1.55; }
+
+        /* Scenarios */
+        .cr-scenario-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 1.25rem; }
+        .cr-scenario-card { border: 0.5px solid var(--border-color); border-radius: 12px; padding: 14px; background: var(--bg-card); }
+        .cr-scenario-card.best { border-color: #34d399; }
+        .cr-scenario-card.base { border-color: #fbbf24; }
+        .cr-scenario-card.worst { border-color: #f87171; }
+        .cr-scenario-card .cr-shead { font-size: 14px; font-weight: 600; margin-bottom: 6px; }
+        .cr-scenario-card.best .cr-shead { color: #34d399; }
+        .cr-scenario-card.base .cr-shead { color: #fbbf24; }
+        .cr-scenario-card.worst .cr-shead { color: #f87171; }
+        .cr-scenario-card .cr-sprob { font-size: 22px; font-weight: 600; margin-bottom: 5px; color: var(--text-primary); overflow-wrap: break-word; word-wrap: break-word; word-break: break-word; hyphens: auto; }
+        .cr-scenario-card .cr-sdesc { font-size: 11px; color: var(--text-secondary); line-height: 1.55; }
+
+        /* Insight blocks */
+        .cr-insight-block { background: var(--bg-card); border: 0.5px solid var(--border-color); border-radius: 12px; padding: 14px; margin-bottom: 8px; }
+        .cr-insight-block .cr-ititle { font-size: 15px; font-weight: 600; color: var(--text-primary); margin-bottom: 5px; }
+        .cr-insight-block .cr-idesc { font-size: 12px; color: var(--text-secondary); line-height: 1.6; }
+
+        /* Compass */
+        .cr-compass { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border: 0.5px solid var(--border-color); border-radius: 8px; margin-bottom: 6px; background: var(--bg-card); }
+        .cr-compass .cr-cicon { font-size: 16px; width: 24px; text-align: center; }
+        .cr-compass .cr-ctext { flex: 1; font-size: 12px; color: var(--text-secondary); line-height: 1.5; }
+
+        @media (max-width: 640px) {
+            .cr-scenario-grid { grid-template-columns: 1fr; }
+            .cr-planet-grid { grid-template-columns: repeat(2, 1fr); }
+            .cr-dashboard-grid { grid-template-columns: repeat(2, 1fr); }
+        }
     </style>
     <script src="scale_ui.js"></script>
 </head>
@@ -2026,6 +2124,15 @@
                 <div class="agent-tab-info">
                     <div class="agent-tab-name">Forecasting Agent (beta)</div>
                     <div class="agent-tab-desc">Multi-method valuation & price targets</div>
+                </div>
+                <span class="agent-badge badge-live">Live</span>
+            </button>
+            <button class="agent-tab" onclick="switchAgent('cosmic')" role="tab" aria-selected="false"
+                id="tab-cosmic">
+                <span class="agent-tab-icon">🌌</span>
+                <div class="agent-tab-info">
+                    <div class="agent-tab-name">Cosmic Macro Agent</div>
+                    <div class="agent-tab-desc">Astro-geopolitical market intelligence</div>
                 </div>
                 <span class="agent-badge badge-live">Live</span>
             </button>
@@ -2360,6 +2467,82 @@
                 <div class="progress-timer" id="forecastingProgressTimer">Elapsed: 0s</div>
                 <div class="progress-bar-container">
                     <div class="progress-bar"></div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- =============================== -->
+        <!-- COSMIC MACRO AGENT WORKSPACE    -->
+        <!-- =============================== -->
+        <div class="agent-workspace" id="workspace-cosmic">
+
+            <!-- Input Card -->
+            <div class="ticker-card">
+                <h2>🌌 Cosmic Financial Analyst</h2>
+                <p class="subtitle">Blends planetary transits, geopolitical intelligence &amp; macroeconomic data to forecast global market trends</p>
+                <div class="ticker-input-row" style="align-items:center;">
+                    <div style="flex:1;display:flex;align-items:center;gap:0.75rem;">
+                        <label for="cosmicRegionSelect" style="font-size:0.875rem;color:var(--text-secondary);white-space:nowrap;">Region Focus:</label>
+                        <select id="cosmicRegionSelect" class="ticker-input" style="max-width:320px;cursor:pointer;">
+                            <option value="All Regions (Global + India)" selected>🌍 All Regions (Global + India)</option>
+                            <option value="India Focus">🇮🇳 India Focus</option>
+                        </select>
+                    </div>
+                    <button class="analyze-btn" id="cosmicAnalyzeBtn" onclick="startCosmicAnalysis()">
+                        <span id="cosmicBtnText">🌌 Generate Cosmic Report</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Error -->
+            <div class="error-card" id="cosmicError">
+                <h4>⚠️ Analysis Error</h4>
+                <p id="cosmicErrorText"></p>
+            </div>
+
+            <!-- Progress -->
+            <div class="progress-card" id="cosmicProgress">
+                <div class="progress-status">
+                    <div class="progress-dot"></div>
+                    <span id="cosmicProgressText">Starting cosmic analysis...</span>
+                </div>
+                <div class="progress-timer" id="cosmicProgressTimer">Elapsed: 0s</div>
+                <div class="progress-bar-container">
+                    <div class="progress-bar"></div>
+                </div>
+            </div>
+
+            <!-- Structured Report Container -->
+            <div class="analysis-card" id="cosmicAnalysis">
+                <div class="analysis-header">
+                    <div class="analysis-header-left">
+                        <span style="font-size:1.25rem;">🌌</span>
+                        <div>
+                            <h3>Cosmic Macro Intelligence Report</h3>
+                            <span class="analysis-meta" id="cosmicAnalysisMeta"></span>
+                        </div>
+                    </div>
+                    <button class="analyze-btn" style="padding:0.5rem 1rem;font-size:0.75rem;" onclick="startCosmicAnalysis(true)">
+                        🔄 Refresh
+                    </button>
+                </div>
+                <div id="cosmicReportContainer" style="padding:0 1.5rem 1.5rem;"></div>
+            </div>
+
+            <!-- Chat -->
+            <div class="chat-card" id="cosmicChat">
+                <div class="chat-header">
+                    <h3>💬 Ask about this report</h3>
+                </div>
+                <div class="chat-messages" id="cosmicChatMessages"></div>
+                <div style="padding:0.75rem 1.5rem;border-top:1px solid var(--border-color);display:flex;gap:0.5rem;">
+                    <input type="text" class="ticker-input" id="cosmicChatInput"
+                        placeholder="Ask a follow-up question about the cosmic analysis..."
+                        onkeydown="if(event.key==='Enter'){sendCosmicChat();event.preventDefault();}" />
+                    <button class="analyze-btn" style="padding:0.75rem 1.25rem;" onclick="sendCosmicChat()">
+                        Send
+                    </button>
                 </div>
             </div>
 
@@ -3703,6 +3886,367 @@
             </div>
         </div>
     </div>
+
+    <!-- =============================== -->
+    <!-- COSMIC MACRO AGENT JS ENGINE    -->
+    <!-- =============================== -->
+    <script>
+        // =====================================================
+        // COSMIC AGENT: STATE
+        // =====================================================
+        let cosmicJobId = null;
+        let cosmicPollTimer = null;
+        let cosmicStartTime = null;
+        let cosmicTimerInterval = null;
+        let currentCosmicData = null;
+
+        // =====================================================
+        // COSMIC AGENT: API + POLLING
+        // =====================================================
+        function startCosmicAnalysis(forceRefresh) {
+            const regionSelect = document.getElementById('cosmicRegionSelect');
+            const regionFocus = regionSelect ? regionSelect.value : 'All Regions (Global + India)';
+
+            document.getElementById('cosmicError').classList.remove('show');
+            document.getElementById('cosmicAnalysis').classList.remove('show');
+            document.getElementById('cosmicChat').classList.remove('show');
+            document.getElementById('cosmicProgress').classList.add('show');
+            document.getElementById('cosmicProgressText').textContent = 'Starting cosmic analysis...';
+            document.getElementById('cosmicAnalyzeBtn').disabled = true;
+            document.getElementById('cosmicBtnText').innerHTML = '<span class="spinner"></span> Analyzing...';
+
+            cosmicStartTime = Date.now();
+            if (cosmicTimerInterval) clearInterval(cosmicTimerInterval);
+            cosmicTimerInterval = setInterval(() => {
+                const elapsed = Math.floor((Date.now() - cosmicStartTime) / 1000);
+                const mins = Math.floor(elapsed / 60);
+                const secs = elapsed % 60;
+                document.getElementById('cosmicProgressTimer').textContent = mins > 0 ? `Elapsed: ${mins}m ${secs}s` : `Elapsed: ${secs}s`;
+            }, 1000);
+
+            fetch('/agent/cosmic/analyze', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ region_focus: regionFocus, force_refresh: forceRefresh === true })
+            })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.status === 'complete') { onCosmicComplete(data.result, data.cached); }
+                    else if (data.job_id) { cosmicJobId = data.job_id; pollCosmicStatus(); }
+                    else if (data.error) { onCosmicError(data.error); }
+                })
+                .catch(err => onCosmicError(`Network error: ${err.message}`));
+        }
+
+        function pollCosmicStatus() {
+            if (!cosmicJobId) return;
+            fetch(`/agent/cosmic/${cosmicJobId}/status`)
+                .then(r => r.json())
+                .then(data => {
+                    if (data.status === 'processing') {
+                        document.getElementById('cosmicProgressText').textContent = data.progress || 'Analyzing...';
+                        cosmicPollTimer = setTimeout(pollCosmicStatus, 3000);
+                    } else if (data.status === 'complete') { onCosmicComplete(data.result); }
+                    else if (data.status === 'error') { onCosmicError(data.error); }
+                })
+                .catch(err => onCosmicError(`Polling error: ${err.message}`));
+        }
+
+        function onCosmicComplete(result, cached) {
+            if (cosmicTimerInterval) { clearInterval(cosmicTimerInterval); cosmicTimerInterval = null; }
+            if (cosmicPollTimer) { clearTimeout(cosmicPollTimer); cosmicPollTimer = null; }
+            cosmicJobId = null;
+            document.getElementById('cosmicAnalyzeBtn').disabled = false;
+            document.getElementById('cosmicBtnText').textContent = '\ud83c\udf0c Generate Cosmic Report';
+            document.getElementById('cosmicProgress').classList.remove('show');
+            currentCosmicData = result;
+
+            // Meta info
+            const meta = document.getElementById('cosmicAnalysisMeta');
+            const elapsed = result.analysis_time_seconds ? `${result.analysis_time_seconds}s` : 'N/A';
+            const model = result.model_used || 'GPT-5.4';
+            const cacheLabel = cached ? ' (cached)' : '';
+            meta.textContent = `Model: ${model} | Time: ${elapsed}${cacheLabel} | Focus: ${result.region_focus || 'Global'}`;
+
+            // Render structured or markdown fallback
+            const container = document.getElementById('cosmicReportContainer');
+            if (result.structured) {
+                renderCosmicReport(container, result.structured);
+            } else if (result.analysis) {
+                container.innerHTML = '<div class="analysis-body" style="max-height:none;">' + marked.parse(result.analysis) + '</div>';
+            } else {
+                container.innerHTML = '<p style="color:var(--text-muted);">No data received.</p>';
+            }
+
+            document.getElementById('cosmicAnalysis').classList.add('show');
+            document.getElementById('cosmicChat').classList.add('show');
+        }
+
+        function onCosmicError(errorMsg) {
+            if (cosmicTimerInterval) { clearInterval(cosmicTimerInterval); cosmicTimerInterval = null; }
+            if (cosmicPollTimer) { clearTimeout(cosmicPollTimer); cosmicPollTimer = null; }
+            cosmicJobId = null;
+            document.getElementById('cosmicAnalyzeBtn').disabled = false;
+            document.getElementById('cosmicBtnText').textContent = '\ud83c\udf0c Generate Cosmic Report';
+            document.getElementById('cosmicProgress').classList.remove('show');
+            document.getElementById('cosmicErrorText').textContent = errorMsg || 'An unknown error occurred.';
+            document.getElementById('cosmicError').classList.add('show');
+        }
+
+        // =====================================================
+        // COSMIC AGENT: CHAT
+        // =====================================================
+        function sendCosmicChat() {
+            const input = document.getElementById('cosmicChatInput');
+            const question = input.value.trim();
+            if (!question || !currentCosmicData) return;
+            const messagesDiv = document.getElementById('cosmicChatMessages');
+
+            messagesDiv.innerHTML += `<div class="chat-message user"><div class="chat-bubble">${question.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div></div>`;
+            input.value = '';
+            const typingId = 'cosmic-typing-' + Date.now();
+            messagesDiv.innerHTML += `<div class="chat-message assistant" id="${typingId}"><div class="chat-bubble"><span class="spinner" style="display:inline-block;width:14px;height:14px;"></span> Thinking...</div></div>`;
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+
+            fetch('/agent/cosmic/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    question,
+                    analysis_context: currentCosmicData.analysis || JSON.stringify(currentCosmicData.structured || {}),
+                    geopolitical_context: currentCosmicData.geopolitical_context || '',
+                    astro_context: currentCosmicData.astro_context || '',
+                    economic_context: currentCosmicData.economic_context || '',
+                })
+            })
+                .then(r => r.json())
+                .then(data => {
+                    const el = document.getElementById(typingId); if (el) el.remove();
+                    if (data.answer) messagesDiv.innerHTML += `<div class="chat-message assistant"><div class="chat-bubble">${marked.parse(data.answer)}</div></div>`;
+                    else messagesDiv.innerHTML += `<div class="chat-message assistant"><div class="chat-bubble" style="color:var(--accent-red);">Error: ${data.error || 'No response'}</div></div>`;
+                    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+                })
+                .catch(err => {
+                    const el = document.getElementById(typingId); if (el) el.remove();
+                    messagesDiv.innerHTML += `<div class="chat-message assistant"><div class="chat-bubble" style="color:var(--accent-red);">Network error: ${err.message}</div></div>`;
+                    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+                });
+        }
+
+        // =====================================================
+        // COSMIC AGENT: STRUCTURED REPORT RENDERER
+        // =====================================================
+        function _esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+        function _badge(text, sentiment) { return `<span class="cr-badge ${sentiment}">${_esc(text)}</span>`; }
+
+        function renderCosmicReport(container, d) {
+            const tabDefs = [
+                { id: 'overview', label: 'Overview' },
+                { id: 'planets', label: 'Planetary Map' },
+                { id: 'timeline', label: 'Timeline' },
+                { id: 'sectors', label: 'Sectors' },
+                { id: 'geo', label: 'Geopolitics' },
+                { id: 'macro', label: 'Macro' },
+                { id: 'scenarios', label: 'Scenarios' },
+                { id: 'action', label: 'Actionable' },
+            ];
+
+            let html = `<div class="cr-page">`;
+
+            // Masthead
+            html += `<div class="cr-masthead">`;
+            html += `<div class="cr-sub">Cosmic Financial Intelligence Report</div>`;
+            html += `<h1>${_esc(d.report_title || 'Cosmic Macro Intelligence Report')}</h1>`;
+            html += `<div class="cr-sub">${_esc(d.report_subtitle || 'Planetary Transits · Macroeconomic Cycles · Geopolitical Vectors')}</div>`;
+            html += `</div>`;
+
+            // Tabs
+            html += `<div class="cr-tabs">`;
+            tabDefs.forEach((t, i) => {
+                html += `<button class="cr-tab${i === 0 ? ' active' : ''}" onclick="showCosmicTab('${t.id}', this)">${t.label}</button>`;
+            });
+            html += `</div>`;
+
+            // ── OVERVIEW ──
+            html += `<div id="crp-overview" class="cr-panel active">`;
+            html += `<div class="cr-section-title">Summary Dashboard</div>`;
+            html += `<div class="cr-dashboard-grid">`;
+            (d.dashboard || []).forEach(m => {
+                html += `<div class="cr-metric-card"><div class="cr-mlabel">${_esc(m.label)}</div><div class="cr-mval ${m.sentiment || ''}">${_esc(m.value)}</div><div class="cr-mchange">${_esc(m.note)}</div></div>`;
+            });
+            html += `</div>`;
+
+            if (d.key_events && d.key_events.length) {
+                html += `<div class="cr-section-title">Key Cosmic Events</div>`;
+                html += `<div class="cr-timeline-block">`;
+                d.key_events.forEach(ev => {
+                    html += `<div class="cr-timeline-item ${ev.severity || 'warm'}"><div class="cr-tdate">${_esc(ev.date)}</div><div class="cr-ttitle">${_esc(ev.title)}</div><div class="cr-tdesc">${_esc(ev.description)}</div></div>`;
+                });
+                html += `</div>`;
+            }
+
+            if (d.planetary_compass && d.planetary_compass.length) {
+                html += `<div class="cr-section-title">Planetary Sentiment Compass</div>`;
+                d.planetary_compass.forEach(c => {
+                    html += `<div class="cr-compass"><div class="cr-cicon">${c.icon || '•'}</div><div class="cr-ctext">${_esc(c.text)}</div>${_badge(c.badge, c.sentiment)}</div>`;
+                });
+            }
+            html += `</div>`; // end overview
+
+            // ── PLANETS ──
+            html += `<div id="crp-planets" class="cr-panel">`;
+            html += `<div class="cr-section-title">Planetary Positions & Market Significations</div>`;
+            html += `<div class="cr-planet-grid">`;
+            (d.planets || []).forEach(p => {
+                html += `<div class="cr-planet-card"><div class="cr-symbol">${p.symbol || '★'}</div><div class="cr-pname">${_esc(p.name)}</div><div class="cr-pos">${_esc(p.position)}</div><div class="cr-effect">${_esc(p.effect)}</div>${_badge(p.badge, p.sentiment)}</div>`;
+            });
+            html += `</div>`;
+
+            if (d.vedic_insights && d.vedic_insights.length) {
+                html += `<div class="cr-section-title">Vedic Jyotish Perspective</div>`;
+                d.vedic_insights.forEach(vi => {
+                    html += `<div class="cr-insight-block"><div class="cr-ititle">${_esc(vi.title)}</div><div class="cr-idesc">${_esc(vi.description)}</div></div>`;
+                });
+            }
+            html += `</div>`; // end planets
+
+            // ── TIMELINE ──
+            html += `<div id="crp-timeline" class="cr-panel">`;
+            html += `<div class="cr-section-title">Quarter-by-Quarter Forecast</div>`;
+            (d.timeline || []).forEach(q => {
+                html += `<div style="margin-bottom:0.75rem;font-size:13px;font-weight:600;color:var(--text-primary);">${_esc(q.quarter)} — ${_esc(q.subtitle)}</div>`;
+                html += `<div class="cr-timeline-block">`;
+                (q.events || []).forEach(ev => {
+                    html += `<div class="cr-timeline-item ${ev.severity || 'warm'}"><div class="cr-tdate">${_esc(ev.date)}</div><div class="cr-ttitle">${_esc(ev.title)}</div><div class="cr-tdesc">${_esc(ev.description)}</div></div>`;
+                });
+                html += `</div>`;
+            });
+            html += `</div>`; // end timeline
+
+            // ── SECTORS ──
+            html += `<div id="crp-sectors" class="cr-panel">`;
+            html += `<div class="cr-section-title">Sector Outlook — Planetary Alignment</div>`;
+            (d.sectors || []).forEach(s => {
+                const barColor = s.sentiment === 'bull' ? '#34d399' : s.sentiment === 'bear' ? '#f87171' : '#fbbf24';
+                const sigClass = s.sentiment === 'bull' ? 'cr-signal-bull' : s.sentiment === 'bear' ? 'cr-signal-bear' : 'cr-signal-neut';
+                html += `<div class="cr-sector-row"><div class="cr-sector-name">${_esc(s.name)}</div><div class="cr-sector-bar-wrap"><div class="cr-sector-bar" style="width:${s.score || 50}%;background:${barColor};"></div></div><div class="cr-sector-signal ${sigClass}">${_esc(s.signal)}</div></div>`;
+            });
+            html += `<div style="margin-top:0.75rem;font-size:10px;color:var(--text-muted);">* Sector outlook is interpretative, based on planetary significations. Not investment advice.</div>`;
+
+            if (d.sector_insights && d.sector_insights.length) {
+                html += `<div style="margin-top:1.25rem;" class="cr-section-title">Planetary-Sector Mapping Logic</div>`;
+                d.sector_insights.forEach(si => {
+                    html += `<div class="cr-insight-block"><div class="cr-ititle">${_esc(si.title)}</div><div class="cr-idesc">${_esc(si.description)}</div></div>`;
+                });
+            }
+            html += `</div>`; // end sectors
+
+            // ── GEOPOLITICS ──
+            html += `<div id="crp-geo" class="cr-panel">`;
+            html += `<div class="cr-section-title">Geopolitical Forecast by Region</div>`;
+            (d.geopolitics || []).forEach(g => {
+                html += `<div class="cr-geo-card"><div class="cr-gcountry"><span>${g.flag || '🌐'}</span>${_esc(g.country)}${_badge(g.badge, g.sentiment)}</div><div class="cr-gtheme">${_esc(g.analysis)}</div></div>`;
+            });
+            html += `</div>`; // end geo
+
+            // ── MACRO ──
+            html += `<div id="crp-macro" class="cr-panel">`;
+            html += `<div class="cr-section-title">Macroeconomic Indicators & Central Bank Outlook</div>`;
+            if (d.macro_metrics && d.macro_metrics.length) {
+                html += `<div class="cr-dashboard-grid">`;
+                d.macro_metrics.forEach(m => {
+                    html += `<div class="cr-metric-card"><div class="cr-mlabel">${_esc(m.label)}</div><div class="cr-mval ${m.sentiment || ''}">${_esc(m.value)}</div><div class="cr-mchange">${_esc(m.note)}</div></div>`;
+                });
+                html += `</div>`;
+            }
+
+            if (d.central_banks && d.central_banks.length) {
+                html += `<div class="cr-section-title">Central Bank Action Matrix</div>`;
+                d.central_banks.forEach(cb => {
+                    html += `<div class="cr-insight-block"><div class="cr-ititle">${_esc(cb.name)} — ${_esc(cb.title)}</div><div class="cr-idesc">${_esc(cb.analysis)}</div></div>`;
+                });
+            }
+
+            if (d.commodities && d.commodities.length) {
+                html += `<div class="cr-section-title">Commodity Price Vector</div>`;
+                d.commodities.forEach(c => {
+                    html += `<div class="cr-compass"><div class="cr-cicon">${c.icon || '•'}</div><div class="cr-ctext">${_esc(c.text)}</div>${_badge(c.badge, c.sentiment)}</div>`;
+                });
+            }
+            html += `</div>`; // end macro
+
+            // ── SCENARIOS ──
+            html += `<div id="crp-scenarios" class="cr-panel">`;
+            html += `<div class="cr-section-title">Probability-Weighted Scenarios</div>`;
+            html += `<div class="cr-scenario-grid">`;
+            (d.scenarios || []).forEach(sc => {
+                html += `<div class="cr-scenario-card ${sc.type || 'base'}"><div class="cr-shead">${_esc(sc.label)}</div><div class="cr-sprob">${_esc(sc.probability)}</div><div class="cr-sdesc">${_esc(sc.description)}</div></div>`;
+            });
+            html += `</div>`;
+
+            if (d.time_horizons && d.time_horizons.length) {
+                html += `<div class="cr-section-title">Time-Horizon Predictions</div>`;
+                d.time_horizons.forEach(th => {
+                    html += `<div class="cr-insight-block"><div class="cr-ititle">${_esc(th.title)}</div><div class="cr-idesc">${_esc(th.description)}</div></div>`;
+                });
+            }
+            html += `</div>`; // end scenarios
+
+            // ── ACTIONABLE ──
+            html += `<div id="crp-action" class="cr-panel">`;
+            html += `<div class="cr-section-title">Actionable Investment Intelligence</div>`;
+            const act = d.actionable || {};
+
+            if (act.allocation) {
+                html += `<div class="cr-insight-block"><div class="cr-ititle">${_esc(act.allocation.title)}</div><div class="cr-idesc">${_esc(act.allocation.description)}</div></div>`;
+            }
+
+            if (act.rotation && act.rotation.length) {
+                html += `<div class="cr-section-title">Sector Rotation Strategy</div>`;
+                act.rotation.forEach(r => {
+                    html += `<div class="cr-compass"><div class="cr-cicon">${r.icon || '→'}</div><div class="cr-ctext">${_esc(r.text)}</div>${_badge(r.badge, r.sentiment)}</div>`;
+                });
+            }
+
+            if (act.risk_signals) {
+                html += `<div class="cr-section-title">Risk Management Signals</div>`;
+                html += `<div class="cr-insight-block"><div class="cr-ititle">${_esc(act.risk_signals.title)}</div><div class="cr-idesc">${_esc(act.risk_signals.description)}</div></div>`;
+            }
+
+            if (act.india_strategy) {
+                html += `<div class="cr-insight-block"><div class="cr-ititle">${_esc(act.india_strategy.title)}</div><div class="cr-idesc">${_esc(act.india_strategy.description)}</div></div>`;
+            }
+
+            if (act.disclaimer) {
+                html += `<div class="cr-insight-block" style="opacity:0.7;"><div class="cr-ititle">${_esc(act.disclaimer.title)}</div><div class="cr-idesc">${_esc(act.disclaimer.description)}</div></div>`;
+            }
+            html += `</div>`; // end actionable
+
+            html += `</div>`; // end cr-page
+            container.innerHTML = html;
+        }
+
+        function showCosmicTab(name, btn) {
+            const container = document.getElementById('cosmicReportContainer');
+            if (!container) return;
+            container.querySelectorAll('.cr-panel').forEach(p => p.classList.remove('active'));
+            container.querySelectorAll('.cr-tab').forEach(t => t.classList.remove('active'));
+            const panel = container.querySelector('#crp-' + name);
+            if (panel) panel.classList.add('active');
+            if (btn) btn.classList.add('active');
+        }
+
+        // Try to load cached cosmic result on page load
+        fetch('/agent/cosmic/latest')
+            .then(r => r.json())
+            .then(data => {
+                if (data.status === 'complete' && data.result) {
+                    currentCosmicData = data.result;
+                    console.log(`Cosmic: Loaded cached result (${data.age_minutes}m old)`);
+                }
+            })
+            .catch(() => {});
+    </script>
 
     <!-- =============================== -->
     <!-- FORECASTING AGENT JS ENGINE     -->

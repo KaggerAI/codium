@@ -11400,7 +11400,11 @@ register_forecasting_routes(
     get_analysis_for_ticker
 )
 
-print("INFO: Agent Marketplace routes registered (Concall Agent, Forensic Agent, Analyst Agent, Forecasting Agent)", file=sys.stderr)
+# Register Cosmic Financial Analyst routes
+from agents.cosmic_agent import register_cosmic_routes
+register_cosmic_routes(app, call_openai_api, call_perplexity_api, call_perplexity_search_api)
+
+print("INFO: Agent Marketplace routes registered (Concall Agent, Forensic Agent, Analyst Agent, Forecasting Agent, Cosmic Agent)", file=sys.stderr)
 
 # =====================================================================
 # END: Agent Marketplace
