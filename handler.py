@@ -641,6 +641,98 @@ try:
 except Exception as e:
     print(f"WARNING: Could not load stocks CSV: {e}")
 
+# =====================================================================
+# BSE TICKER MAPPING (NSE Ticker → BSE Scrip Code)
+# Used by: Results Watcher (Plan 1) and Announcements Section (Plan 2)
+# =====================================================================
+NSE_TO_BSE_MAP = {}
+try:
+    with open('trendlyne_all_stocks_master.csv', 'r', encoding='utf-8') as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            nse = str(row.get('Ticker', '')).strip().upper()
+            bse = str(row.get('BSE Ticker', '')).strip()
+            if nse and bse:
+                NSE_TO_BSE_MAP[nse] = bse
+    print(f"INFO: Loaded {len(NSE_TO_BSE_MAP)} NSE→BSE ticker mappings")
+except Exception as e:
+    print(f"WARNING: Could not load BSE ticker mappings: {e}")
+
+
+def fetch_bse_announcements(ticker):
+    """
+    Fetch BSE corporate announcements for a stock (last 60 days).
+    Returns dict with 'success', 'categories', 'total_count'.
+    Called eagerly during /analyze to include in the response payload.
+    """
+    bse_scrip = NSE_TO_BSE_MAP.get(ticker.strip().upper())
+    if not bse_scrip:
+        return {'success': False, 'error': f'No BSE mapping for {ticker}', 'categories': {}, 'total_count': 0}
+
+    from datetime import timedelta as td
+    now_ist = datetime.utcnow() + td(hours=5, minutes=30)
+    to_date = now_ist.strftime("%Y%m%d")
+    from_date = (now_ist - td(days=60)).strftime("%Y%m%d")
+
+    BSE_API_URL = "https://api.bseindia.com/BseIndiaAPI/api/AnnGetData/w"
+    BSE_HEADERS = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+        "Referer": "https://www.bseindia.com/corporates/ann.html",
+        "Accept": "application/json",
+    }
+
+    try:
+        import requests as req
+        resp = req.get(
+            BSE_API_URL,
+            params={"strCat": "-1", "strPrevDate": from_date, "strToDate": to_date,
+                     "strScrip": bse_scrip, "strSearch": "P", "strType": "C"},
+            headers=BSE_HEADERS,
+            timeout=10,
+        )
+        resp.raise_for_status()
+        filings = resp.json().get("Table", [])
+    except Exception as e:
+        print(f"WARN: BSE announcements fetch failed for {ticker}: {e}")
+        return {'success': False, 'error': str(e), 'categories': {}, 'total_count': 0}
+
+    # Category normalization and grouping
+    CATEGORY_ORDER = ["Result", "Board Meeting", "Company Update", "AGM/EGM",
+                       "Corp. Action", "Insider Trading / SAST", "New Listing",
+                       "Integrated Filing", "Others"]
+
+    def normalize_cat(c):
+        c = c.strip()
+        if "Corp" in c and "Action" in c:
+            return "Corp. Action"
+        return c if c in CATEGORY_ORDER else "Others"
+
+    grouped = {cat: [] for cat in CATEGORY_ORDER}
+    for filing in filings:
+        category = normalize_cat(filing.get("CATEGORYNAME", "Others"))
+        attachment = filing.get("ATTACHMENTNAME", "")
+        pdf_url = f"https://www.bseindia.com/xml-data/corpfiling/AttachLive/{attachment}" if attachment else ""
+        news_dt = filing.get("NEWS_DT", "")
+        try:
+            dt = datetime.fromisoformat(news_dt.replace("Z", ""))
+            display_date = dt.strftime("%d %b %Y, %I:%M %p")
+        except:
+            display_date = news_dt[:10] if news_dt else "Unknown"
+
+        grouped[category].append({
+            "headline": filing.get("HEADLINE", filing.get("NEWSSUB", "")),
+            "subject": filing.get("NEWSSUB", ""),
+            "date": display_date,
+            "date_raw": news_dt,
+            "pdf_url": pdf_url,
+        })
+
+    # Remove empty categories
+    grouped = {k: v for k, v in grouped.items() if v}
+    return {'success': True, 'ticker': ticker, 'bse_scrip': bse_scrip,
+            'total_count': len(filings), 'categories': grouped}
+
+
 @app.route('/api/stocks')
 def api_stocks():
     """Return all stocks for client-side autocomplete filtering"""
@@ -6715,7 +6807,7 @@ def chat():
                 {"role": "user", "content": merged_user_content}
             ]
             
-            merged_response_str = call_generative_ai_model("gemini-3-flash-preview", merged_messages, temperature=1, thinking_level='HIGH')
+            merged_response_str = call_generative_ai_model("gpt-5.4-mini", merged_messages, temperature=1)
             
             try:
                 # Try to parse JSON (may or may not have code blocks)
@@ -7009,9 +7101,9 @@ def chat():
 """
                 
                 eia_messages = [{"role": "user", "content": eia_prompt}]
-                # Use Gemini Flash for best-fast mode, GPT-5.4-mini otherwise
+                # Use GPT-5.4-mini for best-fast mode and best mode
                 if is_best_fast_mode:
-                    result = await asyncio.to_thread(call_gemini_api, eia_messages, 'gemini-3-flash-preview', 1, False, 'HIGH')
+                    result = await asyncio.to_thread(call_openai_api, eia_messages, 'gpt-5.4-mini', False, 1, 180)
                 else:
                     result = await asyncio.to_thread(call_openai_api, eia_messages, 'gpt-5.4-mini', False, 1, 180)
                 elapsed = time.time() - stage3_start_time
@@ -7077,11 +7169,11 @@ def chat():
             {"role": "user", "content": f"Please synthesize an answer based on: {json.dumps(final_context_for_answer, indent=2, default=str)[:100000]}"}
         ]
         
-        # Use Gemini Flash for best-fast mode, GPT-5.4-mini for best mode
+        # Use GPT-5.4-mini for best-fast mode, GPT-5.4-mini for best mode
         if is_best_fast_mode:
-            answerer_model = 'gemini-3-flash-preview'
-        elif is_best_mode:
             answerer_model = 'gpt-5.4-mini'
+        elif is_best_mode:
+            answerer_model = 'gpt-5.4'
         else:
             answerer_model = selected_model
         final_answer = call_generative_ai_model(
@@ -9109,6 +9201,13 @@ def analyze():
                             # Save to global for debug/schema viewing
                             last_analysis = analysis_for_cache
                             
+                            # ── BSE Corporate Announcements (fetched fresh, not cached) ──
+                            try:
+                                result_for_frontend['bse_announcements'] = fetch_bse_announcements(tick)
+                            except Exception as ann_err:
+                                print(f"WARN: BSE announcements fetch failed for {tick}: {ann_err}")
+                                result_for_frontend['bse_announcements'] = {'success': False, 'categories': {}, 'total_count': 0}
+                            
                             return jsonify(sanitize_for_json(result_for_frontend))
                             
                         except Exception as e:
@@ -9282,6 +9381,13 @@ def analyze():
                         # END: Background PDF Text Extraction for Full Cache
                         # =====================================================================
                         
+                        # ── BSE Corporate Announcements (fetched fresh, not cached) ──
+                        try:
+                            cached_result['bse_announcements'] = fetch_bse_announcements(tick)
+                        except Exception as ann_err:
+                            print(f"WARN: BSE announcements fetch failed for {tick}: {ann_err}")
+                            cached_result['bse_announcements'] = {'success': False, 'categories': {}, 'total_count': 0}
+                        
                         return jsonify(sanitize_for_json(cached_result))
                         
             except Exception as cache_err:
@@ -9453,6 +9559,13 @@ def analyze():
         
         # Save to global for debug/schema viewing
         last_analysis = analysis_for_cache
+        
+        # ── BSE Corporate Announcements (fetched fresh, not cached) ──
+        try:
+            result_for_frontend['bse_announcements'] = fetch_bse_announcements(tick)
+        except Exception as ann_err:
+            print(f"WARN: BSE announcements fetch failed for {tick}: {ann_err}")
+            result_for_frontend['bse_announcements'] = {'success': False, 'categories': {}, 'total_count': 0}
         
         return jsonify(sanitize_for_json(result_for_frontend))
 
@@ -11056,6 +11169,22 @@ def api_clear_cache():
 # =====================================================================
 
 # =====================================================================
+# Results Watcher Status API (Admin)
+# =====================================================================
+@app.route('/api/admin/results-watcher-status', methods=['GET'])
+@admin_required
+def api_results_watcher_status():
+    """Return last run summary of the Results Watcher daemon."""
+    if DIRECT_REDIS_CLIENT:
+        try:
+            raw = DIRECT_REDIS_CLIENT.get("results_watcher_last_run")
+            if raw:
+                return jsonify(json.loads(raw))
+        except Exception:
+            pass
+    return jsonify({"status": "never_run", "message": "No run recorded yet"})
+
+# =====================================================================
 # BUDGET LIVE TRANSCRIPTION - SocketIO Endpoints
 # =====================================================================
 from budget_live import (
@@ -11488,6 +11617,7 @@ import time
 def screener_daily_scheduler():
     from datetime import datetime, timedelta
     from calculations.screener_background import execute_daily_screener_scan
+    from calculations.results_watcher import run_results_watch_cycle
     
     print("Screener background daemon online. Checking IST schedule natively...")
     while True:
@@ -11495,6 +11625,21 @@ def screener_daily_scheduler():
             # Shift UTC to IST rigidly mapping to Azure's clock
             now_ist = datetime.utcnow() + timedelta(hours=5, minutes=30)
             time_str = now_ist.strftime("%H:%M")
+            
+            # ── Quarterly Results Watcher: 8:00 AM and 5:00 PM IST ──
+            if time_str in ["08:00", "17:00"]:
+                try:
+                    print(f"SCHEDULER: Triggering Results Watcher at {time_str} IST")
+                    run_results_watch_cycle(
+                        redis_client=DIRECT_REDIS_CLIENT,
+                        run_batch_precache_fn=run_batch_precache,
+                    )
+                except Exception as e:
+                    print(f"RESULTS_WATCHER: Cycle failed: {e}")
+                    traceback.print_exc()
+                # Exhaust window to block duplicate minute-shots
+                time.sleep(65)
+                continue
             
             # Auto-run locally at precise intervals natively
             if time_str in ["15:00", "16:00"]:

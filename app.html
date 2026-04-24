@@ -4360,6 +4360,150 @@
       return html;
     }
 
+    // ── BSE Corporate Announcements Renderer (Horizontal Tabs) ──
+    function renderBseAnnouncements(annData) {
+      const catIcons = {
+        'Result': '📊', 'Board Meeting': '🏛️', 'Company Update': '📋',
+        'AGM/EGM': '🗳️', 'Corp. Action': '⚡',
+        'Insider Trading / SAST': '🔍', 'New Listing': '🆕',
+        'Integrated Filing': '📄', 'Others': '📌',
+      };
+      const catAccent = {
+        'Result': '#22c55e', 'Board Meeting': '#3b82f6',
+        'Company Update': '#f59e0b', 'AGM/EGM': '#a855f7',
+        'Corp. Action': '#ef4444', 'Insider Trading / SAST': '#f97316',
+        'New Listing': '#14b8a6', 'Integrated Filing': '#6366f1',
+        'Others': '#94a3b8',
+      };
+
+      const categories = Object.entries(annData.categories);
+      const uid = 'annTabs' + Date.now();
+
+      // ── Build tab bar ──
+      let tabsHtml = '';
+      categories.forEach(([category, items], idx) => {
+        const icon = catIcons[category] || '📌';
+        const isActive = idx === 0;
+        tabsHtml += `<button data-ann-tab="${uid}-${idx}"
+          onclick="switchAnnTab('${uid}', ${idx}, ${categories.length})"
+          class="ann-tab flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium whitespace-nowrap
+                 rounded-t-lg border border-b-0 transition-all duration-200 shrink-0
+                 ${isActive
+                   ? 'bg-white text-slate-800 border-slate-200 relative z-10 shadow-sm'
+                   : 'bg-slate-100 text-slate-500 border-transparent hover:bg-slate-50 hover:text-slate-700'}"
+          ${isActive ? `style="box-shadow: 0 1px 0 white, 0 -1px 3px rgba(0,0,0,0.04);"` : ''}>
+          <span class="text-base">${icon}</span>
+          <span>${category}</span>
+          <span class="text-xs font-semibold px-1.5 py-0.5 rounded-full
+                 ${isActive ? 'bg-green-100 text-green-700' : 'bg-slate-200 text-slate-500'}">${items.length}</span>
+        </button>`;
+      });
+
+      // ── Build content panels ──
+      let panelsHtml = '';
+      categories.forEach(([category, items], idx) => {
+        const accent = catAccent[category] || '#94a3b8';
+        const isActive = idx === 0;
+        const previewItems = items.slice(0, 3);
+        const hasMore = items.length > 3;
+        const panelId = `${uid}-panel-${idx}`;
+
+        let itemsHtml = previewItems.map(item => `
+          <li class="flex items-start justify-between px-4 py-3 hover:bg-slate-50 transition-colors"
+              style="border-left: 3px solid ${accent};">
+            <div class="flex-1 min-w-0 pr-3">
+              <p class="text-sm font-medium text-slate-700 leading-snug">${item.headline || item.subject}</p>
+              <p class="text-xs text-slate-400 mt-1">${item.date}</p>
+            </div>
+            ${item.pdf_url ? `<a href="${item.pdf_url}" target="_blank" rel="noopener noreferrer"
+              class="shrink-0 px-3 py-1 text-xs font-semibold text-white bg-green-500 rounded-md hover:bg-green-600 self-center">View PDF</a>` : ''}
+          </li>`).join('');
+
+        let moreHtml = '';
+        if (hasMore) {
+          const remaining = items.slice(3);
+          moreHtml = `<ul id="${panelId}-more" class="divide-y divide-slate-100 hidden">
+            ${remaining.map(item => `
+              <li class="flex items-start justify-between px-4 py-3 hover:bg-slate-50 transition-colors"
+                  style="border-left: 3px solid ${accent};">
+                <div class="flex-1 min-w-0 pr-3">
+                  <p class="text-sm font-medium text-slate-700 leading-snug">${item.headline || item.subject}</p>
+                  <p class="text-xs text-slate-400 mt-1">${item.date}</p>
+                </div>
+                ${item.pdf_url ? `<a href="${item.pdf_url}" target="_blank" rel="noopener noreferrer"
+                  class="shrink-0 px-3 py-1 text-xs font-semibold text-white bg-green-500 rounded-md hover:bg-green-600 self-center">View PDF</a>` : ''}
+              </li>`).join('')}
+          </ul>
+          <button onclick="toggleAnnCategory('${panelId}-more', this)"
+            class="w-full px-4 py-2 text-xs font-medium text-green-600 bg-slate-50
+                   hover:bg-slate-100 transition-colors border-t border-slate-100 text-center">
+            Show ${remaining.length} more ▼
+          </button>`;
+        }
+
+        panelsHtml += `<div id="${panelId}" class="ann-panel ${isActive ? '' : 'hidden'}">
+          <ul class="divide-y divide-slate-100">${itemsHtml}</ul>
+          ${moreHtml}
+        </div>`;
+      });
+
+      let html = `<div class="mt-8">
+        <h3 class="text-xl font-semibold mb-3 text-slate-600">📢 Corporate Announcements
+          <span class="ml-2 text-xs font-normal text-slate-400">(${annData.total_count} in last 2 months)</span>
+        </h3>
+        <div class="border border-slate-200 rounded-lg overflow-hidden">
+          <!-- Tab Bar -->
+          <div class="flex overflow-x-auto bg-slate-100 px-2 pt-2 gap-1 border-b border-slate-200"
+               style="scrollbar-width: thin;">${tabsHtml}</div>
+          <!-- Content Panels -->
+          <div class="bg-white">${panelsHtml}</div>
+        </div>
+      </div>`;
+      return html;
+    }
+
+    window.switchAnnTab = function(uid, activeIdx, total) {
+      for (let i = 0; i < total; i++) {
+        const tab = document.querySelector(`[data-ann-tab="${uid}-${i}"]`);
+        const panel = document.getElementById(`${uid}-panel-${i}`);
+        if (!tab || !panel) continue;
+        if (i === activeIdx) {
+          panel.classList.remove('hidden');
+          tab.className = tab.className
+            .replace('bg-slate-100', 'bg-white').replace('text-slate-500', 'text-slate-800')
+            .replace('border-transparent', 'border-slate-200').replace('hover:bg-slate-50', '')
+            .replace('hover:text-slate-700', '');
+          if (!tab.className.includes('shadow-sm')) tab.className += ' shadow-sm';
+          if (!tab.className.includes('z-10')) tab.className += ' relative z-10';
+          tab.style.boxShadow = '0 1px 0 white, 0 -1px 3px rgba(0,0,0,0.04)';
+          // Update badge color
+          const badge = tab.querySelector('span:last-child');
+          if (badge) { badge.className = badge.className.replace('bg-slate-200 text-slate-500', 'bg-green-100 text-green-700'); }
+        } else {
+          panel.classList.add('hidden');
+          tab.className = tab.className
+            .replace('bg-white', 'bg-slate-100').replace('text-slate-800', 'text-slate-500')
+            .replace('border-slate-200', 'border-transparent').replace('shadow-sm', '')
+            .replace('relative z-10', '');
+          if (!tab.className.includes('hover:bg-slate-50')) tab.className += ' hover:bg-slate-50';
+          if (!tab.className.includes('hover:text-slate-700')) tab.className += ' hover:text-slate-700';
+          tab.style.boxShadow = '';
+          const badge = tab.querySelector('span:last-child');
+          if (badge) { badge.className = badge.className.replace('bg-green-100 text-green-700', 'bg-slate-200 text-slate-500'); }
+        }
+      }
+    };
+
+    window.toggleAnnCategory = function(catId, btn) {
+      const el = document.getElementById(catId);
+      if (!el) return;
+      const isHidden = el.classList.toggle('hidden');
+      if (btn) {
+        const remaining = el.querySelectorAll('li').length;
+        btn.innerHTML = isHidden ? `Show ${remaining} more ▼` : `Show less ▲`;
+      }
+    };
+
     let sseConnection = null;
 
     function setupSseListener() {
@@ -7094,6 +7238,12 @@
             screenerHTML += `<li class="flex items-center justify-between p-3 rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors"><span class="font-medium text-slate-700">${doc.text} (${doc.type})</span><a href="${doc.link}" target="_blank" rel="noopener noreferrer" class="px-3 py-1 text-sm font-semibold text-white bg-green-500 rounded-md hover:bg-green-600">View PDF</a></li>`;
           });
           screenerHTML += `</ul>`;
+        }
+        // ── BSE Corporate Announcements Section ──
+        if (payload.bse_announcements && payload.bse_announcements.success
+            && payload.bse_announcements.categories
+            && Object.keys(payload.bse_announcements.categories).length > 0) {
+          screenerHTML += renderBseAnnouncements(payload.bse_announcements);
         }
         if (payload.metric_charts && Object.keys(payload.metric_charts).length > 0) {
           screenerHTML += `<h3 class="text-xl font-semibold mb-3 mt-8 text-slate-600">Valuation & Margin History</h3>`;
