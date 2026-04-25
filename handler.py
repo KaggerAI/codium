@@ -5804,7 +5804,7 @@ The enhanced_query must:
 2. If it's a company/stock query, request: "latest material developments", "earnings/guidance", "segment drivers", "regulatory issues", "competitive landscape", "valuation context (directional, not exact unless sourced)", and "near-term catalysts/tailwind/headwind".
 3. If it's an industry/market/macro/Nifty/Sensex query, request: "recent tariff hikes/threats", "drivers", "recent news", "global cues", "Trump's statements/actions", "data points", "policy/regulation", "winners/losers", "second-order effects", "leading indicators", and "implications for listed Indian companies".
 4. If user asks for "quick" or "summary", still generate a thorough query but request a concise output.
-5. Ensure the Sonar-Pro query mentions that answer should be maximum 500 words
+5. Ensure the Sonar-Pro query mentions that answer should be maximum 800 words and MUST use markdown tables (| col | col |) for any multi-period financial data like shareholding patterns, quarterly results, or comparisons
 
 CONVERSATION CONTEXT USAGE
 - Use prior assistant/user messages in the current thread to resolve pronouns and continuity.
@@ -5829,7 +5829,7 @@ Required format for EVERY response:
 3. Under each heading, write detailed explanations using:
    - **Paragraphs** for narrative flow and explanations (2-3 sentences per point)
    - **Bullet points** (- or 1.) for breaking down complex information into key takeaways
-   - **Tables** for comparisons and data-heavy sections
+   - **Markdown tables** (using | pipe | syntax |) for ALL multi-period data: shareholding patterns, quarterly results, annual results, financial ratios, peer comparisons
 4. Target response length: 700-1000 words (adjust based on query complexity)
 
 Example of CORRECT formatting (only formatting, not content):
@@ -5855,9 +5855,9 @@ Management guided for continued momentum in retail with plans to add 2,000 store
 Your goal is to provide detailed, accurate, and easy-to-understand answers about financial markets, stocks, industries, and the economy of the Indian market, while ensuring comprehensive coverage of recent developments.
 
 DATA SOURCE RULES:
-- **CRITICAL: If "Financial Data from Screener.in" is provided below in the context, you MUST use those exact numbers for any financial metrics about the mentioned companies. Do NOT approximate, estimate, or use outdated figures for companies with provided data.**
-- **When quoting a number for a mentioned company, verify: "Is this from the provided screener table?" If yes, use the exact value from the table.**
-- **If screener data conflicts with news sources, PRIORITIZE the screener table data as it is the verified source of truth for financial metrics.**
+- **CRITICAL: If \"Verified Financial Data for Mentioned Companies\" or \"Full Cached Analysis\" is provided below, you MUST use those exact numbers for any financial metrics about those companies. Do NOT approximate, estimate, or use outdated figures.**
+- **The cached analysis data includes: Key Metrics Snapshot, Technical Summary, Quarterly/Annual Results, Balance Sheet, Financial Ratios, Shareholding Patterns, Peer Comparison, and Valuation Trends. USE ALL of these when answering questions about the mentioned companies.**
+- **When quoting a number for a mentioned company, verify: \"Is this from the provided data context?\" If yes, use the exact value. If data conflicts with news sources, PRIORITIZE the provided data as the verified source of truth.**
 - For Indian company financial data (revenue, profit, ratios, quarterly results, market cap, stock price), ALWAYS use screener.in as the primary source
 - When researching Indian stocks, search: "site:screener.in [company name]" for fundamental data
 - For company news: prioritize filings/press releases/transcripts, then tier-1 financial media/wires; corroborate major breaking claims with 2 credible sources when possible.
@@ -5865,13 +5865,19 @@ DATA SOURCE RULES:
 - For general Nifty/Sensex-related questions, prefer general internet search to get the latest updates.
 - Always anchor statements with dates ("as of <date>") and avoid "current" claims unless the source is real-time.
 
+
 FORMATTING RULES (CRITICAL):
 - Use simple, clear English accessible to retail investors
 - **Mix paragraphs and bullets** - use paragraphs for explanations and context, bullets for key takeaways
 - Break content into logical sections with ## headings
 - Provide sufficient detail - each point should be well-explained (2-4 sentences when needed)
-- Use tables for comparisons (markdown format: | Column | Column |)
-- **Target 500-1000 words** - adjust based on question complexity, but prioritize clarity over brevity
+- **MANDATORY TABLE RULE**: When presenting multi-period financial data (shareholding patterns, quarterly results, annual results, financial ratios, balance sheet items, or any data that spans multiple quarters/years), you MUST format it as a proper markdown table using pipe syntax. Example:
+  | Quarter | Promoters | FIIs | DIIs | Public |
+  |---------|-----------|------|------|--------|
+  | Mar 2026 | 40.19% | 0.36% | 1.89% | 57.57% |
+  | Apr 2026 | 40.19% | 0.36% | 15.11% | 44.35% |
+- Use tables for ALL comparisons and data-heavy sections (markdown format: | Column | Column |)
+- **Target 700-1000 words** - adjust based on query complexity, but prioritize clarity over brevity
 - Use **bold** for emphasis on key metrics, findings, or section titles (but don't overuse)
 - **Avoid acronyms** - spell out terms on first use, then use acronym in parentheses (e.g., "Foreign Institutional Investors (FII)"). After first definition, you may use the acronym.
 - **Do NOT show the word count** at the end of the response.
@@ -5911,13 +5917,153 @@ def ai_news_chat():
             print(f"INFO: Company context: {company_context}")
         
         # =====================================================================
-        # NEW: Fetch financial tables from screener.in for @mentioned companies
+        # ROBUST DATA ACCESS: Cache-first with screener.in fallback
         # =====================================================================
+        # Priority: 1) Cached analysis (local + Redis) → 2) Live screener.in fetch
+        # This gives the AI access to the FULL rich analysis data that was
+        # generated when the user searched for a stock in Company Search.
+        # =====================================================================
+        
+        def format_cached_analysis_to_markdown(ticker, name, cached_data):
+            """
+            Formats the RICH cached analysis data into comprehensive markdown
+            for the AI prompt. This includes key metrics, technical summary,
+            fundamentals, peer comparison, valuation data, and company description
+            — far more context than a raw screener.in fetch provides.
+            """
+            sections = [f"## {name} ({ticker}) — Full Cached Analysis"]
+            
+            # 1. Company Description
+            description = cached_data.get("company_description", "")
+            if description:
+                sections.append(f"### Company Overview\n{description[:1500]}")
+            
+            # 2. Key Metrics Snapshot (most important for quick financial context)
+            key_metrics = cached_data.get("key_metrics", {})
+            if key_metrics and isinstance(key_metrics, dict):
+                metrics_lines = ["### Key Metrics Snapshot"]
+                metric_labels = {
+                    'current_price': 'Current Price (₹)',
+                    'market_cap': 'Market Cap',
+                    'pe_ratio': 'P/E Ratio',
+                    'pb_ratio': 'P/B Ratio',
+                    'dividend_yield': 'Dividend Yield',
+                    'roce': 'ROCE (%)',
+                    'roe': 'ROE (%)',
+                    'sales_growth_yoy': 'Sales Growth YoY',
+                    'ebitda_growth_yoy': 'EBITDA Growth YoY',
+                    'net_profit_growth': 'Net Profit Growth',
+                    'npm': 'Net Profit Margin',
+                    'face_value': 'Face Value',
+                    'book_value': 'Book Value',
+                    'eps': 'EPS',
+                    'debt_to_equity': 'Debt/Equity',
+                    'promoter_holding': 'Promoter Holding',
+                    'industry_pe': 'Industry P/E',
+                    'high_low_52w': '52-Week High/Low',
+                }
+                for key, label in metric_labels.items():
+                    val = key_metrics.get(key)
+                    if val and val != 'N/A':
+                        metrics_lines.append(f"- **{label}**: {val}")
+                if len(metrics_lines) > 1:
+                    sections.append("\n".join(metrics_lines))
+            
+            # 3. Technical Summary (cleaned summary data from screener)
+            summary_data = cached_data.get("summary", [])
+            if summary_data and isinstance(summary_data, list):
+                summary_lines = ["### Technical Summary"]
+                for item in summary_data[:20]:  # Limit to top 20 items
+                    if isinstance(item, dict):
+                        key = item.get("key", "")
+                        val = item.get("value", "")
+                        if key and val:
+                            summary_lines.append(f"- **{key}**: {val}")
+                if len(summary_lines) > 1:
+                    sections.append("\n".join(summary_lines))
+            
+            # 4. Fundamentals (the rich table data)
+            fundamentals = cached_data.get("fundamentals", {})
+            if fundamentals and isinstance(fundamentals, dict):
+                priority_tables = [
+                    "Quarterly Results",
+                    "Annual Results",
+                    "Balance Sheet",
+                    "Financial Ratios",
+                    "Quarterly Shareholding Pattern"
+                ]
+                for table_name in priority_tables:
+                    table_data = fundamentals.get(table_name)
+                    if not table_data:
+                        continue
+                    
+                    # Handle list-of-dicts format (AI context format)
+                    if isinstance(table_data, list) and table_data and isinstance(table_data[0], dict):
+                        try:
+                            import pandas as _pd
+                            df = _pd.DataFrame(table_data)
+                            # Limit columns to recent periods — keep FIRST col (metric names) + LAST N period cols (newest)
+                            # Screener tables are chronological left-to-right, so newest is on the RIGHT
+                            if table_name == "Quarterly Results" and len(df.columns) > 6:
+                                df = _pd.concat([df.iloc[:, :1], df.iloc[:, -5:]], axis=1)
+                            elif table_name == "Annual Results" and len(df.columns) > 5:
+                                df = _pd.concat([df.iloc[:, :1], df.iloc[:, -4:]], axis=1)
+                            elif len(df.columns) > 4:
+                                df = _pd.concat([df.iloc[:, :1], df.iloc[:, -3:]], axis=1)
+                            sections.append(f"### {table_name}\n{df.to_markdown(index=False)}")
+                        except Exception as e:
+                            print(f"WARN: Could not format cached table '{table_name}': {e}")
+                    # Handle DataFrame format (if somehow stored as df)
+                    elif hasattr(table_data, 'to_markdown'):
+                        try:
+                            import pandas as _pd2
+                            df = table_data.copy()
+                            if len(df.columns) > 6:
+                                df = _pd2.concat([df.iloc[:, :1], df.iloc[:, -5:]], axis=1)
+                            sections.append(f"### {table_name}\n{df.to_markdown(index=False)}")
+                        except Exception as e:
+                            print(f"WARN: Could not format cached df '{table_name}': {e}")
+            
+            # 5. Peer Comparison
+            peer_data = cached_data.get("peer_comparison", [])
+            if peer_data:
+                peer_lines = ["### Peer Comparison"]
+                peers_list = peer_data if isinstance(peer_data, list) else peer_data.get("peers", []) if isinstance(peer_data, dict) else []
+                if peers_list and isinstance(peers_list, list):
+                    for peer in peers_list[:10]:  # Top 10 peers
+                        if isinstance(peer, dict):
+                            peer_name = peer.get("name", peer.get("ticker", "Unknown"))
+                            pe = peer.get("pe_ratio", peer.get("pe", "N/A"))
+                            mcap = peer.get("market_cap", "N/A")
+                            roce = peer.get("roce", "N/A")
+                            peer_lines.append(f"- **{peer_name}**: P/E={pe}, MCap={mcap}, ROCE={roce}")
+                    if len(peer_lines) > 1:
+                        sections.append("\n".join(peer_lines))
+            
+            # 6. Valuation & Margin Data (time series)
+            valuation_data = cached_data.get("valuation_and_margin_data", {})
+            if valuation_data and isinstance(valuation_data, dict):
+                val_lines = ["### Valuation & Margin Trends"]
+                for series_name, series_data in valuation_data.items():
+                    if isinstance(series_data, list) and series_data:
+                        # Show latest 4 data points
+                        recent = series_data[-4:]
+                        val_lines.append(f"- **{series_name}** (recent): {recent}")
+                if len(val_lines) > 1:
+                    sections.append("\n".join(val_lines))
+            
+            # 7. Consolidation status
+            is_consolidated = cached_data.get("is_consolidated")
+            if is_consolidated is not None:
+                sections.append(f"**Reporting Type**: {'Consolidated' if is_consolidated else 'Standalone'}")
+            
+            return "\n\n".join(sections)
         
         async def fetch_financial_tables_for_companies(companies_list):
             """
             Fetches financial tables from screener.in for @mentioned companies.
             Returns formatted markdown string with tables.
+            Used ONLY as fallback when cached data is not available.
             """
             if not companies_list:
                 return ""
@@ -5932,17 +6078,17 @@ def ai_news_chat():
                     continue
                     
                 try:
-                    print(f"INFO: Fetching financial data for {ticker} from screener.in...")
+                    print(f"INFO: [Fallback] Fetching financial data for {ticker} from screener.in...")
                     # Fetch tables, description, and top ratios
                     tables, description, top_ratios, is_consolidated_flag = await fetch_consolidated_async(ticker)
                     
                     # Format into markdown
                     markdown = format_tables_to_markdown(ticker, name, tables)
                     financial_data_sections.append(markdown)
-                    print(f"INFO: Successfully fetched data for {ticker}")
+                    print(f"INFO: [Fallback] Successfully fetched data for {ticker}")
                     
                 except Exception as e:
-                    print(f"WARN: Could not fetch financial data for {ticker}: {e}")
+                    print(f"WARN: [Fallback] Could not fetch financial data for {ticker}: {e}")
                     continue
             
             if not financial_data_sections:
@@ -5976,22 +6122,25 @@ def ai_news_chat():
                 df = tables[table_name].copy()
                 
                 # Limit columns to recent periods to reduce token usage
+                # IMPORTANT: Screener tables are chronological left-to-right (oldest → newest)
+                # So we keep first column (metric names) + LAST N columns (newest periods)
+                import pandas as _pd_fmt
                 if table_name == "Quarterly Results":
                     # Keep first column (metric names) + latest 4 quarters
                     if len(df.columns) > 5:
-                        df = df.iloc[:, :5]
+                        df = _pd_fmt.concat([df.iloc[:, :1], df.iloc[:, -4:]], axis=1)
                 elif table_name == "Annual Results":
                     # Keep first column + latest 3 years
                     if len(df.columns) > 4:
-                        df = df.iloc[:, :4]
+                        df = _pd_fmt.concat([df.iloc[:, :1], df.iloc[:, -3:]], axis=1)
                 elif table_name == "Quarterly Shareholding Pattern":
                     # Keep first column + latest 4 quarters
                     if len(df.columns) > 5:
-                        df = df.iloc[:, :5]
+                        df = _pd_fmt.concat([df.iloc[:, :1], df.iloc[:, -4:]], axis=1)
                 else:
                     # For Balance Sheet and Ratios, keep first column + latest 2 periods
                     if len(df.columns) > 3:
-                        df = df.iloc[:, :3]
+                        df = _pd_fmt.concat([df.iloc[:, :1], df.iloc[:, -2:]], axis=1)
                 
                 # Convert to markdown
                 try:
@@ -6003,19 +6152,87 @@ def ai_news_chat():
             
             return "\n\n".join(sections)
         
-        # Fetch financial data if companies are mentioned
-        financial_data_context = ""
-        if companies:
-            try:
-                financial_data_context = asyncio.run(fetch_financial_tables_for_companies(companies))
-                if financial_data_context:
-                    print(f"INFO: Fetched financial data for {len(companies)} companies")
-            except Exception as e:
-                print(f"WARN: Failed to fetch financial data: {e}")
-                financial_data_context = ""
+        # =====================================================================
+        # STEP 1: Auto-detect tickers from question text (even without @mentions)
+        # =====================================================================
+        # This enables cache lookups for stocks mentioned naturally in the question
+        # e.g., "How is RELIANCE doing?" or "Compare TCS and INFY"
+        auto_detected_tickers = set()
+        
+        # Extract @TICKER mentions from question
+        at_mentions = re.findall(r'@([A-Z0-9-]+)', user_question, re.IGNORECASE)
+        for t in at_mentions:
+            auto_detected_tickers.add(t.upper())
+        
+        # Also check if any known stock tickers appear as standalone words in the question
+        # (Only if allStocks-equivalent data is available in local cache)
+        question_upper = user_question.upper()
+        for cached_ticker in list(LOCAL_ANALYSIS_CACHE.keys()):
+            # Match whole word only to avoid false positives (e.g., "IT" matching random words)
+            if len(cached_ticker) >= 3 and re.search(r'\b' + re.escape(cached_ticker) + r'\b', question_upper):
+                auto_detected_tickers.add(cached_ticker)
+                print(f"INFO: Auto-detected cached ticker '{cached_ticker}' from question text")
+        
+        # Add explicitly @mentioned companies' tickers
+        for c in companies:
+            t = c.get('ticker', '').strip().upper()
+            if t:
+                auto_detected_tickers.add(t)
         
         # =====================================================================
-        # END: Financial data fetching
+        # STEP 2: Cache-first data retrieval for all detected companies
+        # =====================================================================
+        financial_data_context = ""
+        cache_hit_tickers = set()
+        cache_miss_companies = []
+        all_data_sections = []
+        
+        for ticker in auto_detected_tickers:
+            # Find company name from companies list or use ticker as fallback
+            name = ticker
+            for c in companies:
+                if c.get('ticker', '').upper() == ticker:
+                    name = c.get('name', ticker)
+                    break
+            
+            # Try cached analysis first (local memory + Redis)
+            cached = get_any_cache(ticker)
+            if cached and isinstance(cached, dict) and cached.get("ticker"):
+                # Rich cached data found — format it
+                cached_name = cached.get("company_name", name)
+                print(f"INFO: CACHE HIT for {ticker} — using full cached analysis ({len(cached)} keys: {list(cached.keys())})")
+                markdown = format_cached_analysis_to_markdown(ticker, cached_name, cached)
+                all_data_sections.append(markdown)
+                cache_hit_tickers.add(ticker)
+            else:
+                # No cache — will need live fetch
+                cache_miss_companies.append({"ticker": ticker, "name": name})
+                print(f"INFO: CACHE MISS for {ticker} — will try live screener.in fetch")
+        
+        # =====================================================================
+        # STEP 3: Fallback to live screener.in for cache misses
+        # =====================================================================
+        if cache_miss_companies:
+            try:
+                live_data = asyncio.run(fetch_financial_tables_for_companies(cache_miss_companies))
+                if live_data:
+                    all_data_sections.append(live_data)
+                    print(f"INFO: Live screener.in fetch succeeded for {len(cache_miss_companies)} companies")
+            except Exception as e:
+                print(f"WARN: Live screener.in fetch failed: {e}")
+        
+        # =====================================================================
+        # STEP 4: Assemble the complete financial context
+        # =====================================================================
+        if all_data_sections:
+            header = "### Verified Financial Data for Mentioned Companies\n"
+            header += "**CRITICAL: Use the following verified financial data as the PRIMARY source of truth when quoting numbers, metrics, or financial performance for these companies. Do NOT approximate or use outdated figures.**\n\n"
+            financial_data_context = header + "\n\n---\n\n".join(all_data_sections)
+            print(f"INFO: Total financial context assembled: {len(financial_data_context)} chars "
+                  f"(Cache hits: {len(cache_hit_tickers)}, Live fetches: {len(cache_miss_companies)})")
+        
+        # =====================================================================
+        # END: Robust cache-first financial data retrieval
         # =====================================================================
 
         
@@ -6080,19 +6297,40 @@ def ai_news_chat():
         
         # Post-process: Convert paragraph-style response to bullet format
         # Sonar Pro ignores formatting instructions, so we force bullets here
+        # IMPORTANT: Preserve tables, table-adjacent lines, and data rows
         def convert_to_bullets(text):
             lines = text.split('\n')
             print(f"DEBUG: Split into {len(lines)} lines")
             result = []
             first_content_seen = False  # Track if we've seen the first content (summary)
+            in_table = False  # Track if we're inside a table block
             for i, line in enumerate(lines):
                 stripped = line.strip()
                 if i < 5:  # Debug first 5 lines
                     print(f"DEBUG: Line {i}: len={len(stripped)}, starts_with={'#' if stripped.startswith('#') else 'other'}")
+                
+                # Detect table rows (lines starting with |)
+                is_table_line = stripped.startswith('|')
+                # Detect table separator (|---|---|)
+                is_table_separator = is_table_line and re.match(r'^\|[\s\-:|]+\|$', stripped)
+                
+                if is_table_line or is_table_separator:
+                    in_table = True
+                    result.append(line)
+                    continue
+                elif in_table and not stripped:
+                    # Empty line after table — end of table
+                    in_table = False
+                    result.append('')
+                    continue
+                elif in_table and stripped:
+                    # Non-table line right after table — end table mode
+                    in_table = False
+                
                 if not stripped:
                     result.append('')  # Keep empty lines
-                elif stripped.startswith('#') or stripped.startswith('-') or stripped.startswith('*') or stripped.startswith('|'):
-                    # Already a heading, bullet, or table - keep as-is
+                elif stripped.startswith('#') or stripped.startswith('-') or stripped.startswith('*'):
+                    # Already a heading or bullet - keep as-is
                     result.append(line)
                 elif re.match(r'^\d+\.', stripped):
                     # Already a numbered list - keep as-is
