@@ -65,3 +65,5 @@ flask-socketio>=5.3.0
 python-socketio>=5.0.0
 python-engineio>=4.0.0
 
+# --- Cosmic Ephemeris Engine ---
+pyswisseph

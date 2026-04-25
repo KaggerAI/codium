@@ -1891,103 +1891,454 @@
                 padding: 0.75rem 1rem;
             }
         }
+
         /* ============================== */
         /* COSMIC REPORT — STRUCTURED UI  */
         /* ============================== */
-        .cr-page { padding: 0; }
-        .cr-masthead { text-align: center; padding: 1.25rem 1rem 1rem; border-bottom: 0.5px solid var(--border-color); margin-bottom: 1.25rem; }
-        .cr-masthead h1 { font-size: 20px; font-weight: 600; color: var(--text-primary); }
-        .cr-masthead .cr-sub { font-size: 13px; color: var(--text-secondary); margin-top: 4px; }
+        .cr-page {
+            padding: 0;
+        }
 
-        .cr-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 1.5rem; padding: 0 0.25rem; }
-        .cr-tab { font-size: 13px; font-weight: 500; padding: 8px 16px; border: 0.5px solid var(--border-color); border-radius: 20px; cursor: pointer; background: transparent; color: var(--text-secondary); transition: all 0.15s; white-space: nowrap; font-family: inherit; }
-        .cr-tab.active { background: var(--text-primary); color: var(--bg-primary); border-color: var(--text-primary); }
-        .cr-tab:hover:not(.active) { background: var(--bg-card-hover); }
+        .cr-masthead {
+            text-align: center;
+            padding: 1.25rem 1rem 1rem;
+            border-bottom: 0.5px solid var(--border-color);
+            margin-bottom: 1.25rem;
+        }
 
-        .cr-panel { display: none; }
-        .cr-panel.active { display: block; }
+        .cr-masthead h1 {
+            font-size: 20px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
 
-        .cr-section-title { font-size: 13px; font-weight: 600; color: var(--text-secondary); letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 0.75rem; padding: 0 0.15rem; }
+        .cr-masthead .cr-sub {
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin-top: 4px;
+        }
+
+        .cr-tabs {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-bottom: 1.5rem;
+            padding: 0 0.25rem;
+        }
+
+        .cr-tab {
+            font-size: 13px;
+            font-weight: 500;
+            padding: 8px 16px;
+            border: 0.5px solid var(--border-color);
+            border-radius: 20px;
+            cursor: pointer;
+            background: transparent;
+            color: var(--text-secondary);
+            transition: all 0.15s;
+            white-space: nowrap;
+            font-family: inherit;
+        }
+
+        .cr-tab.active {
+            background: var(--text-primary);
+            color: var(--bg-primary);
+            border-color: var(--text-primary);
+        }
+
+        .cr-tab:hover:not(.active) {
+            background: var(--bg-card-hover);
+        }
+
+        .cr-panel {
+            display: none;
+        }
+
+        .cr-panel.active {
+            display: block;
+        }
+
+        .cr-section-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            margin-bottom: 0.75rem;
+            padding: 0 0.15rem;
+        }
 
         /* Dashboard metric cards */
-        .cr-dashboard-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; margin-bottom: 1.25rem; }
-        .cr-metric-card { background: var(--bg-card); border: 0.5px solid var(--border-color); border-radius: 10px; padding: 12px 14px; }
-        .cr-metric-card .cr-mlabel { font-size: 11px; color: var(--text-secondary); margin-bottom: 4px; }
-        .cr-metric-card .cr-mval { font-size: 20px; font-weight: 600; overflow-wrap: break-word; word-wrap: break-word; word-break: break-word; hyphens: auto; }
-        .cr-metric-card .cr-mval.red { color: #f87171; }
-        .cr-metric-card .cr-mval.green { color: #34d399; }
-        .cr-metric-card .cr-mval.amber { color: #fbbf24; }
-        .cr-metric-card .cr-mchange { font-size: 10px; color: var(--text-muted); margin-top: 3px; }
+        .cr-dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+            gap: 8px;
+            margin-bottom: 1.25rem;
+        }
+
+        .cr-metric-card {
+            background: var(--bg-card);
+            border: 0.5px solid var(--border-color);
+            border-radius: 10px;
+            padding: 12px 14px;
+        }
+
+        .cr-metric-card .cr-mlabel {
+            font-size: 11px;
+            color: var(--text-secondary);
+            margin-bottom: 4px;
+        }
+
+        .cr-metric-card .cr-mval {
+            font-size: 20px;
+            font-weight: 600;
+            overflow-wrap: break-word;
+            word-wrap: break-word;
+            word-break: break-word;
+            hyphens: auto;
+        }
+
+        .cr-metric-card .cr-mval.red {
+            color: #f87171;
+        }
+
+        .cr-metric-card .cr-mval.green {
+            color: #34d399;
+        }
+
+        .cr-metric-card .cr-mval.amber {
+            color: #fbbf24;
+        }
+
+        .cr-metric-card .cr-mchange {
+            font-size: 10px;
+            color: var(--text-muted);
+            margin-top: 3px;
+        }
 
         /* Planet grid */
-        .cr-planet-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(165px, 1fr)); gap: 8px; margin-bottom: 1.25rem; }
-        .cr-planet-card { border: 0.5px solid var(--border-color); border-radius: 12px; padding: 12px 14px; background: var(--bg-card); }
-        .cr-planet-card .cr-symbol { font-size: 20px; margin-bottom: 5px; }
-        .cr-planet-card .cr-pname { font-size: 15px; font-weight: 600; color: var(--text-primary); }
-        .cr-planet-card .cr-pos { font-size: 11px; color: var(--text-secondary); margin: 2px 0 5px; }
-        .cr-planet-card .cr-effect { font-size: 11px; color: var(--text-secondary); line-height: 1.55; }
+        .cr-planet-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(165px, 1fr));
+            gap: 8px;
+            margin-bottom: 1.25rem;
+        }
 
-        .cr-badge { display: inline-block; font-size: 10px; font-weight: 500; padding: 2px 7px; border-radius: 10px; margin-top: 5px; }
-        .cr-badge.bear { background: rgba(248,113,113,0.15); color: #f87171; }
-        .cr-badge.bull { background: rgba(52,211,153,0.15); color: #34d399; }
-        .cr-badge.neut { background: rgba(160,160,184,0.12); color: var(--text-secondary); }
-        .cr-badge.warn { background: rgba(251,191,36,0.15); color: #fbbf24; }
+        .cr-planet-card {
+            border: 0.5px solid var(--border-color);
+            border-radius: 12px;
+            padding: 12px 14px;
+            background: var(--bg-card);
+        }
+
+        .cr-planet-card .cr-symbol {
+            font-size: 20px;
+            margin-bottom: 5px;
+        }
+
+        .cr-planet-card .cr-pname {
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .cr-planet-card .cr-pos {
+            font-size: 11px;
+            color: var(--text-secondary);
+            margin: 2px 0 5px;
+        }
+
+        .cr-planet-card .cr-effect {
+            font-size: 11px;
+            color: var(--text-secondary);
+            line-height: 1.55;
+        }
+
+        .cr-badge {
+            display: inline-block;
+            font-size: 10px;
+            font-weight: 500;
+            padding: 2px 7px;
+            border-radius: 10px;
+            margin-top: 5px;
+        }
+
+        .cr-badge.bear {
+            background: rgba(248, 113, 113, 0.15);
+            color: #f87171;
+        }
+
+        .cr-badge.bull {
+            background: rgba(52, 211, 153, 0.15);
+            color: #34d399;
+        }
+
+        .cr-badge.neut {
+            background: rgba(160, 160, 184, 0.12);
+            color: var(--text-secondary);
+        }
+
+        .cr-badge.warn {
+            background: rgba(251, 191, 36, 0.15);
+            color: #fbbf24;
+        }
 
         /* Timeline */
-        .cr-timeline-block { border-left: 2px solid var(--border-color); padding-left: 16px; margin-bottom: 1.25rem; }
-        .cr-timeline-item { margin-bottom: 1.15rem; position: relative; }
-        .cr-timeline-item::before { content: ''; position: absolute; left: -21px; top: 5px; width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted); }
-        .cr-timeline-item.hot::before { background: #f87171; }
-        .cr-timeline-item.warm::before { background: #fbbf24; }
-        .cr-timeline-item.cool::before { background: #34d399; }
-        .cr-timeline-item .cr-tdate { font-size: 11px; font-weight: 500; color: var(--text-secondary); margin-bottom: 3px; }
-        .cr-timeline-item .cr-ttitle { font-size: 15px; font-weight: 500; color: var(--text-primary); margin-bottom: 3px; }
-        .cr-timeline-item .cr-tdesc { font-size: 12px; color: var(--text-secondary); line-height: 1.55; }
+        .cr-timeline-block {
+            border-left: 2px solid var(--border-color);
+            padding-left: 16px;
+            margin-bottom: 1.25rem;
+        }
+
+        .cr-timeline-item {
+            margin-bottom: 1.15rem;
+            position: relative;
+        }
+
+        .cr-timeline-item::before {
+            content: '';
+            position: absolute;
+            left: -21px;
+            top: 5px;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--text-muted);
+        }
+
+        .cr-timeline-item.hot::before {
+            background: #f87171;
+        }
+
+        .cr-timeline-item.warm::before {
+            background: #fbbf24;
+        }
+
+        .cr-timeline-item.cool::before {
+            background: #34d399;
+        }
+
+        .cr-timeline-item .cr-tdate {
+            font-size: 11px;
+            font-weight: 500;
+            color: var(--text-secondary);
+            margin-bottom: 3px;
+        }
+
+        .cr-timeline-item .cr-ttitle {
+            font-size: 15px;
+            font-weight: 500;
+            color: var(--text-primary);
+            margin-bottom: 3px;
+        }
+
+        .cr-timeline-item .cr-tdesc {
+            font-size: 12px;
+            color: var(--text-secondary);
+            line-height: 1.55;
+        }
 
         /* Sector bars */
-        .cr-sector-row { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 0.5px solid rgba(42,42,58,0.5); }
-        .cr-sector-row:last-child { border-bottom: none; }
-        .cr-sector-name { font-size: 14px; font-weight: 500; width: 140px; flex-shrink: 0; color: var(--text-primary); }
-        .cr-sector-bar-wrap { flex: 1; height: 7px; background: var(--bg-card); border-radius: 4px; overflow: hidden; }
-        .cr-sector-bar { height: 100%; border-radius: 4px; transition: width 0.5s ease; }
-        .cr-sector-signal { font-size: 11px; width: 100px; text-align: right; flex-shrink: 0; }
-        .cr-signal-bull { color: #34d399; }
-        .cr-signal-bear { color: #f87171; }
-        .cr-signal-neut { color: var(--text-secondary); }
+        .cr-sector-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 9px 0;
+            border-bottom: 0.5px solid rgba(42, 42, 58, 0.5);
+        }
+
+        .cr-sector-row:last-child {
+            border-bottom: none;
+        }
+
+        .cr-sector-name {
+            font-size: 14px;
+            font-weight: 500;
+            width: 140px;
+            flex-shrink: 0;
+            color: var(--text-primary);
+        }
+
+        .cr-sector-bar-wrap {
+            flex: 1;
+            height: 7px;
+            background: var(--bg-card);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .cr-sector-bar {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.5s ease;
+        }
+
+        .cr-sector-signal {
+            font-size: 11px;
+            width: 100px;
+            text-align: right;
+            flex-shrink: 0;
+        }
+
+        .cr-signal-bull {
+            color: #34d399;
+        }
+
+        .cr-signal-bear {
+            color: #f87171;
+        }
+
+        .cr-signal-neut {
+            color: var(--text-secondary);
+        }
 
         /* Geopolitics */
-        .cr-geo-card { border: 0.5px solid var(--border-color); border-radius: 12px; padding: 14px; margin-bottom: 8px; background: var(--bg-card); }
-        .cr-geo-card .cr-gcountry { font-size: 15px; font-weight: 600; margin-bottom: 4px; color: var(--text-primary); }
-        .cr-geo-card .cr-gcountry span { margin-right: 6px; }
-        .cr-geo-card .cr-gtheme { font-size: 12px; color: var(--text-secondary); line-height: 1.55; }
+        .cr-geo-card {
+            border: 0.5px solid var(--border-color);
+            border-radius: 12px;
+            padding: 14px;
+            margin-bottom: 8px;
+            background: var(--bg-card);
+        }
+
+        .cr-geo-card .cr-gcountry {
+            font-size: 15px;
+            font-weight: 600;
+            margin-bottom: 4px;
+            color: var(--text-primary);
+        }
+
+        .cr-geo-card .cr-gcountry span {
+            margin-right: 6px;
+        }
+
+        .cr-geo-card .cr-gtheme {
+            font-size: 12px;
+            color: var(--text-secondary);
+            line-height: 1.55;
+        }
 
         /* Scenarios */
-        .cr-scenario-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 1.25rem; }
-        .cr-scenario-card { border: 0.5px solid var(--border-color); border-radius: 12px; padding: 14px; background: var(--bg-card); }
-        .cr-scenario-card.best { border-color: #34d399; }
-        .cr-scenario-card.base { border-color: #fbbf24; }
-        .cr-scenario-card.worst { border-color: #f87171; }
-        .cr-scenario-card .cr-shead { font-size: 14px; font-weight: 600; margin-bottom: 6px; }
-        .cr-scenario-card.best .cr-shead { color: #34d399; }
-        .cr-scenario-card.base .cr-shead { color: #fbbf24; }
-        .cr-scenario-card.worst .cr-shead { color: #f87171; }
-        .cr-scenario-card .cr-sprob { font-size: 22px; font-weight: 600; margin-bottom: 5px; color: var(--text-primary); overflow-wrap: break-word; word-wrap: break-word; word-break: break-word; hyphens: auto; }
-        .cr-scenario-card .cr-sdesc { font-size: 11px; color: var(--text-secondary); line-height: 1.55; }
+        .cr-scenario-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+            margin-bottom: 1.25rem;
+        }
+
+        .cr-scenario-card {
+            border: 0.5px solid var(--border-color);
+            border-radius: 12px;
+            padding: 14px;
+            background: var(--bg-card);
+        }
+
+        .cr-scenario-card.best {
+            border-color: #34d399;
+        }
+
+        .cr-scenario-card.base {
+            border-color: #fbbf24;
+        }
+
+        .cr-scenario-card.worst {
+            border-color: #f87171;
+        }
+
+        .cr-scenario-card .cr-shead {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 6px;
+        }
+
+        .cr-scenario-card.best .cr-shead {
+            color: #34d399;
+        }
+
+        .cr-scenario-card.base .cr-shead {
+            color: #fbbf24;
+        }
+
+        .cr-scenario-card.worst .cr-shead {
+            color: #f87171;
+        }
+
+        .cr-scenario-card .cr-sprob {
+            font-size: 22px;
+            font-weight: 600;
+            margin-bottom: 5px;
+            color: var(--text-primary);
+            overflow-wrap: break-word;
+            word-wrap: break-word;
+            word-break: break-word;
+            hyphens: auto;
+        }
+
+        .cr-scenario-card .cr-sdesc {
+            font-size: 11px;
+            color: var(--text-secondary);
+            line-height: 1.55;
+        }
 
         /* Insight blocks */
-        .cr-insight-block { background: var(--bg-card); border: 0.5px solid var(--border-color); border-radius: 12px; padding: 14px; margin-bottom: 8px; }
-        .cr-insight-block .cr-ititle { font-size: 15px; font-weight: 600; color: var(--text-primary); margin-bottom: 5px; }
-        .cr-insight-block .cr-idesc { font-size: 12px; color: var(--text-secondary); line-height: 1.6; }
+        .cr-insight-block {
+            background: var(--bg-card);
+            border: 0.5px solid var(--border-color);
+            border-radius: 12px;
+            padding: 14px;
+            margin-bottom: 8px;
+        }
+
+        .cr-insight-block .cr-ititle {
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 5px;
+        }
+
+        .cr-insight-block .cr-idesc {
+            font-size: 12px;
+            color: var(--text-secondary);
+            line-height: 1.6;
+        }
 
         /* Compass */
-        .cr-compass { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border: 0.5px solid var(--border-color); border-radius: 8px; margin-bottom: 6px; background: var(--bg-card); }
-        .cr-compass .cr-cicon { font-size: 16px; width: 24px; text-align: center; }
-        .cr-compass .cr-ctext { flex: 1; font-size: 12px; color: var(--text-secondary); line-height: 1.5; }
+        .cr-compass {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 14px;
+            border: 0.5px solid var(--border-color);
+            border-radius: 8px;
+            margin-bottom: 6px;
+            background: var(--bg-card);
+        }
+
+        .cr-compass .cr-cicon {
+            font-size: 16px;
+            width: 24px;
+            text-align: center;
+        }
+
+        .cr-compass .cr-ctext {
+            flex: 1;
+            font-size: 12px;
+            color: var(--text-secondary);
+            line-height: 1.5;
+        }
 
         @media (max-width: 640px) {
-            .cr-scenario-grid { grid-template-columns: 1fr; }
-            .cr-planet-grid { grid-template-columns: repeat(2, 1fr); }
-            .cr-dashboard-grid { grid-template-columns: repeat(2, 1fr); }
+            .cr-scenario-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .cr-planet-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .cr-dashboard-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
         }
     </style>
     <script src="scale_ui.js"></script>
@@ -2085,7 +2436,7 @@
 
         <!-- Page Header -->
         <div class="page-header">
-            <h1>🤖 Agent Marketplace</h1>
+            <h1>🤖 Advanced Agents</h1>
             <p>Specialized AI agents that perform deep, data-driven financial analysis at institutional grade.</p>
         </div>
 
@@ -2127,8 +2478,7 @@
                 </div>
                 <span class="agent-badge badge-live">Live</span>
             </button>
-            <button class="agent-tab" onclick="switchAgent('cosmic')" role="tab" aria-selected="false"
-                id="tab-cosmic">
+            <button class="agent-tab" onclick="switchAgent('cosmic')" role="tab" aria-selected="false" id="tab-cosmic">
                 <span class="agent-tab-icon">🌌</span>
                 <div class="agent-tab-info">
                     <div class="agent-tab-name">Cosmic Macro Agent</div>
@@ -2480,12 +2830,16 @@
             <!-- Input Card -->
             <div class="ticker-card">
                 <h2>🌌 Cosmic Financial Analyst</h2>
-                <p class="subtitle">Blends planetary transits, geopolitical intelligence &amp; macroeconomic data to forecast global market trends</p>
+                <p class="subtitle">Blends planetary transits, geopolitical intelligence &amp; macroeconomic data to
+                    forecast global market trends</p>
                 <div class="ticker-input-row" style="align-items:center;">
                     <div style="flex:1;display:flex;align-items:center;gap:0.75rem;">
-                        <label for="cosmicRegionSelect" style="font-size:0.875rem;color:var(--text-secondary);white-space:nowrap;">Region Focus:</label>
+                        <label for="cosmicRegionSelect"
+                            style="font-size:0.875rem;color:var(--text-secondary);white-space:nowrap;">Region
+                            Focus:</label>
                         <select id="cosmicRegionSelect" class="ticker-input" style="max-width:320px;cursor:pointer;">
-                            <option value="All Regions (Global + India)" selected>🌍 All Regions (Global + India)</option>
+                            <option value="All Regions (Global + India)" selected>🌍 All Regions (Global + India)
+                            </option>
                             <option value="India Focus">🇮🇳 India Focus</option>
                         </select>
                     </div>
@@ -2523,7 +2877,8 @@
                             <span class="analysis-meta" id="cosmicAnalysisMeta"></span>
                         </div>
                     </div>
-                    <button class="analyze-btn" style="padding:0.5rem 1rem;font-size:0.75rem;" onclick="startCosmicAnalysis(true)">
+                    <button class="analyze-btn" style="padding:0.5rem 1rem;font-size:0.75rem;"
+                        onclick="startCosmicAnalysis(true)">
                         🔄 Refresh
                     </button>
                 </div>
@@ -2830,17 +3185,17 @@
             const btn = document.getElementById('concallAnalyzeBtn');
             btn.disabled = false;
             document.getElementById('concallBtnText').textContent = 'Analyze Concall';
-            
+
             // Show mismatch fallback UI if auto_fetch failed
             if (data && data.auto_fetch_failed) {
                 const mismatchNotice = document.getElementById('concallMismatchNotice');
                 document.getElementById('concallMismatchTitle').textContent = `Auto-Fetch Failed`;
-                
+
                 let msg = `We automatically searched for the latest concall recording but couldn't find it. If you have a link (YouTube, PDF, etc.), paste it below.`;
                 if (data.quarter_mismatch) {
                     msg = `The latest transcript is from an older quarter. We automatically searched for the latest concall audio but couldn't find it. If you have a link, paste it below.`;
                 }
-                
+
                 document.getElementById('concallMismatchText').innerHTML = msg;
                 document.getElementById('concallMismatchUrlInput').value = '';
                 document.getElementById('concallMismatchAnalyzeBtn').disabled = false;
@@ -4002,7 +4357,7 @@
             if (!question || !currentCosmicData) return;
             const messagesDiv = document.getElementById('cosmicChatMessages');
 
-            messagesDiv.innerHTML += `<div class="chat-message user"><div class="chat-bubble">${question.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div></div>`;
+            messagesDiv.innerHTML += `<div class="chat-message user"><div class="chat-bubble">${question.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div></div>`;
             input.value = '';
             const typingId = 'cosmic-typing-' + Date.now();
             messagesDiv.innerHTML += `<div class="chat-message assistant" id="${typingId}"><div class="chat-bubble"><span class="spinner" style="display:inline-block;width:14px;height:14px;"></span> Thinking...</div></div>`;
@@ -4041,7 +4396,8 @@
 
         function renderCosmicReport(container, d) {
             const tabDefs = [
-                { id: 'overview', label: 'Overview' },
+                { id: 'overview', label: '🔮 Crystal Ball' },
+                { id: 'triggers', label: '📅 Triggers' },
                 { id: 'planets', label: 'Planetary Map' },
                 { id: 'timeline', label: 'Timeline' },
                 { id: 'sectors', label: 'Sectors' },
@@ -4069,6 +4425,28 @@
 
             // ── OVERVIEW ──
             html += `<div id="crp-overview" class="cr-panel active">`;
+
+            // Crystal Ball Predictions (hero section)
+            if (d.crystal_ball && d.crystal_ball.length) {
+                html += `<div class="cr-section-title">🔮 Crystal Ball Predictions</div>`;
+                d.crystal_ball.forEach(cb => {
+                    const confColor = (cb.confidence || '').includes('HIGH') ? '#34d399' : (cb.confidence || '').includes('MEDIUM') ? '#fbbf24' : '#94a3b8';
+                    html += `<div class="cr-insight-block" style="border-left:3px solid ${confColor};padding-left:12px;margin-bottom:10px;">`;
+                    html += `<div class="cr-ititle" style="font-size:13px;">${_esc(cb.prediction)}</div>`;
+                    html += `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:4px;font-size:10px;color:var(--text-muted);">`;
+                    html += `<span style="color:${confColor};font-weight:600;">${_esc(cb.confidence)}${cb.probability ? ` (${_esc(cb.probability)})` : ''}</span>`;
+                    html += `<span>⏱ ${_esc(cb.timeframe)}</span>`;
+                    html += `<span>🪐 ${_esc(cb.planetary_trigger)}</span>`;
+                    if (cb.economic_anchor) html += `<span>📊 ${_esc(cb.economic_anchor)}</span>`;
+                    if (cb.historical_analogue) html += `<span>📜 ${_esc(cb.historical_analogue)}</span>`;
+                    html += `</div>`;
+                    if (cb.invalidation_condition) {
+                        html += `<div style="margin-top:6px;padding:4px 8px;background:rgba(248,113,113,0.1);border-left:2px solid #f87171;font-size:10px;color:var(--text-muted);"><strong>Invalidation:</strong> ${_esc(cb.invalidation_condition)}</div>`;
+                    }
+                    html += `</div>`;
+                });
+            }
+
             html += `<div class="cr-section-title">Summary Dashboard</div>`;
             html += `<div class="cr-dashboard-grid">`;
             (d.dashboard || []).forEach(m => {
@@ -4093,12 +4471,36 @@
             }
             html += `</div>`; // end overview
 
+            // ── TRIGGER CALENDAR ──
+            html += `<div id="crp-triggers" class="cr-panel">`;
+            html += `<div class="cr-section-title">📅 Planetary Trigger Calendar</div>`;
+            if (d.trigger_calendar && d.trigger_calendar.length) {
+                html += `<div class="cr-timeline-block">`;
+                d.trigger_calendar.forEach(tc => {
+                    const actionColor = (tc.action || '').startsWith('BUY') ? '#34d399' : (tc.action || '').startsWith('SELL') ? '#f87171' : (tc.action || '').startsWith('HEDGE') ? '#fbbf24' : '#94a3b8';
+                    html += `<div class="cr-timeline-item warm" style="border-left-color:${actionColor};">`;
+                    html += `<div class="cr-tdate">${_esc(tc.date)}</div>`;
+                    html += `<div class="cr-ttitle">${_esc(tc.trigger)}</div>`;
+                    html += `<div class="cr-tdesc">${_esc(tc.prediction)}</div>`;
+                    html += `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;">`;
+                    if (tc.action) html += `<span class="cr-badge" style="background:${actionColor};color:#000;font-weight:600;">${_esc(tc.action)}</span>`;
+                    (tc.markets_affected || []).forEach(m => { html += `<span class="cr-badge neut">${_esc(m)}</span>`; });
+                    html += `</div></div>`;
+                });
+                html += `</div>`;
+            } else {
+                html += `<p style="color:var(--text-muted);font-size:12px;">No trigger calendar data available.</p>`;
+            }
+            html += `</div>`; // end triggers
+
             // ── PLANETS ──
             html += `<div id="crp-planets" class="cr-panel">`;
             html += `<div class="cr-section-title">Planetary Positions & Market Significations</div>`;
             html += `<div class="cr-planet-grid">`;
             (d.planets || []).forEach(p => {
-                html += `<div class="cr-planet-card"><div class="cr-symbol">${p.symbol || '★'}</div><div class="cr-pname">${_esc(p.name)}</div><div class="cr-pos">${_esc(p.position)}</div><div class="cr-effect">${_esc(p.effect)}</div>${_badge(p.badge, p.sentiment)}</div>`;
+                let predHtml = '';
+                if (p.prediction) predHtml += `<div style="margin-top:6px;padding:4px 8px;background:rgba(99,102,241,0.1);border-radius:4px;font-size:11px;color:var(--text-primary);"><strong>⚡ Prediction:</strong> ${_esc(p.prediction)}${p.trigger_date ? ' <span style="color:var(--text-muted);">('+_esc(p.trigger_date)+')</span>' : ''}</div>`;
+                html += `<div class="cr-planet-card"><div class="cr-symbol">${p.symbol || '★'}</div><div class="cr-pname">${_esc(p.name)}</div><div class="cr-pos">${_esc(p.position)}</div><div class="cr-effect">${_esc(p.effect)}</div>${predHtml}${_badge(p.badge, p.sentiment)}</div>`;
             });
             html += `</div>`;
 
@@ -4170,7 +4572,10 @@
             if (d.commodities && d.commodities.length) {
                 html += `<div class="cr-section-title">Commodity Price Vector</div>`;
                 d.commodities.forEach(c => {
-                    html += `<div class="cr-compass"><div class="cr-cicon">${c.icon || '•'}</div><div class="cr-ctext">${_esc(c.text)}</div>${_badge(c.badge, c.sentiment)}</div>`;
+                    let extraBadges = '';
+                    if (c.price_direction) { const dirColor = c.price_direction === 'UP' ? '#34d399' : c.price_direction === 'DOWN' ? '#f87171' : '#94a3b8'; extraBadges += `<span class="cr-badge" style="background:${dirColor};color:#000;font-weight:600;margin-left:4px;">${c.price_direction === 'UP' ? '▲ UP' : c.price_direction === 'DOWN' ? '▼ DOWN' : '— FLAT'}</span>`; }
+                    if (c.target_range) extraBadges += `<span class="cr-badge neut" style="margin-left:4px;">${_esc(c.target_range)}</span>`;
+                    html += `<div class="cr-compass"><div class="cr-cicon">${c.icon || '•'}</div><div class="cr-ctext">${_esc(c.text)}</div>${_badge(c.badge, c.sentiment)}${extraBadges}</div>`;
                 });
             }
             html += `</div>`; // end macro
@@ -4245,7 +4650,7 @@
                     console.log(`Cosmic: Loaded cached result (${data.age_minutes}m old)`);
                 }
             })
-            .catch(() => {});
+            .catch(() => { });
     </script>
 
     <!-- =============================== -->

@@ -2,13 +2,13 @@
 cosmic_agent.py — Cosmic Financial Analyst Agent for the Kagger AI Agent Marketplace.
 
 Combines geopolitical intelligence, macroeconomic indicators, and astrological/planetary
-analysis to produce institutional-grade global market forecasts using GPT-5.4.
+analysis to produce institutional-grade global market forecasts using GPT-5.5.
 
 Pipeline:
   1. Perplexity sonar-pro (pro_search) → Geopolitical intelligence
   2. Perplexity sonar-pro (pro_search) → Astrological/cosmic data
   3. Perplexity /search API → Economic indicators
-  4. GPT-5.4 synthesis → Full 11-section cosmic macro report
+  4. GPT-5.5 synthesis → Full 11-section cosmic macro report
 """
 
 import sys
@@ -18,6 +18,8 @@ import threading
 import traceback
 import json
 import datetime
+from agents.utils.ephemeris import generate_cosmic_data_report
+from agents.utils.market_data import get_live_market_data
 
 from flask import request, jsonify
 
@@ -165,7 +167,7 @@ def _run_cosmic_analysis(
         1. Fetch geopolitical intelligence (Perplexity sonar-pro, pro_search)
         2. Fetch astrological/cosmic data (Perplexity sonar-pro, pro_search)
         3. Fetch economic indicators (Perplexity /search API)
-        4. Synthesize everything via GPT-5.4
+        4. Synthesize everything via GPT-5.5
     """
     start_time = time.time()
 
@@ -181,9 +183,9 @@ def _run_cosmic_analysis(
 
         # ── Step 2: Astrological/Cosmic Data ──────────────────────
         update_agent_job(job_id, {"progress": "🪐 Analyzing planetary transits and cosmic alignments..."})
-        print(f"COSMIC_AGENT: Step 2 — Fetching astrological data", file=sys.stderr)
+        print(f"COSMIC_AGENT: Step 2 — Calculating exact astronomical ephemeris data", file=sys.stderr)
 
-        astro_context = _fetch_astrological_data(call_perplexity_api_fn)
+        astro_context = generate_cosmic_data_report()
 
         step2_time = int(time.time() - start_time)
         print(f"COSMIC_AGENT: Step 2 done in {step2_time}s", file=sys.stderr)
@@ -193,13 +195,17 @@ def _run_cosmic_analysis(
         print(f"COSMIC_AGENT: Step 3 — Fetching economic indicators", file=sys.stderr)
 
         economic_context = _fetch_economic_indicators(call_perplexity_search_api_fn)
+        
+        # Append exact deterministic market prices (including MCX India)
+        exact_prices = get_live_market_data()
+        economic_context = exact_prices + "\n\n" + economic_context
 
         step3_time = int(time.time() - start_time)
         print(f"COSMIC_AGENT: Step 3 done in {step3_time}s", file=sys.stderr)
 
-        # ── Step 4: GPT-5.4 Synthesis ─────────────────────────────
-        update_agent_job(job_id, {"progress": "🌌 GPT-5.4 synthesizing Cosmic Macro Intelligence Report..."})
-        print(f"COSMIC_AGENT: Step 4 — GPT-5.4 synthesis", file=sys.stderr)
+        # ── Step 4: GPT-5.5 Synthesis ─────────────────────────────
+        update_agent_job(job_id, {"progress": "🌌 GPT-5.5 synthesizing Cosmic Macro Intelligence Report..."})
+        print(f"COSMIC_AGENT: Step 4 — GPT-5.5 synthesis", file=sys.stderr)
 
         # Build the PDF augmentation section
         pdf_section = ""
@@ -248,11 +254,11 @@ Now produce the complete Cosmic Macro Intelligence Report as a single JSON objec
             {"role": "user", "content": user_message},
         ]
 
-        # Call GPT-5.4 for synthesis
+        # Call GPT-5.5 for synthesis (temperature 1 for bold crystal ball predictions)
         analysis_result = call_openai_api_fn(
             messages,
-            model="gpt-5.4",
-            temperature=0.7,
+            model="gpt-5.5",
+            temperature=1,
             timeout=300,  # 5 minutes — this is a massive synthesis
         )
 
@@ -285,12 +291,12 @@ Now produce the complete Cosmic Macro Intelligence Report as a single JSON objec
             "structured": structured_data,  # Parsed JSON (or None)
             "analysis": raw_analysis,  # Raw GPT output (markdown fallback)
             "region_focus": region_focus,
-            "geopolitical_context": geopolitical_context[:5000],
-            "astro_context": astro_context[:5000],
-            "economic_context": economic_context[:5000],
+            "geopolitical_context": geopolitical_context[:50000],
+            "astro_context": astro_context[:50000],
+            "economic_context": economic_context[:50000],
             "analyzed_at": time.time(),
             "analysis_time_seconds": elapsed_total,
-            "model_used": "gpt-5.4",
+            "model_used": "gpt-5.5",
         }
 
         store_latest_result("cosmic", COSMIC_CACHE_KEY, result_data)
@@ -329,7 +335,7 @@ def register_cosmic_routes(
 
     Args:
         app: Flask app instance
-        call_openai_api_fn: Reference to call_openai_api from handler.py (for GPT-5.4)
+        call_openai_api_fn: Reference to call_openai_api from handler.py (for GPT-5.5)
         call_perplexity_api_fn: Reference to call_perplexity_api (sonar-pro chat)
         call_perplexity_search_api_fn: Reference to call_perplexity_search_api (/search)
     """
@@ -448,7 +454,7 @@ def register_cosmic_routes(
 
             answer = call_openai_api_fn(
                 messages,
-                model="gpt-5.4",
+                model="gpt-5.5",
                 temperature=0.7,
                 timeout=180,
             )
