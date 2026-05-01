@@ -1,0 +1,1023 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Updated Ceasefire Intelligence Report — Mercury in Aries Edition · Apr 14–Dec 2026</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&family=Lora:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0c0c0e;--bg2:#131316;--bg3:#1a1a1f;
+  --border:rgba(255,255,255,0.065);--border2:rgba(255,255,255,0.12);
+  --text:#eceae4;--text2:#9a9791;--text3:#55534f;
+  --red:#e04848;--red-bg:rgba(224,72,72,0.09);--red-border:rgba(224,72,72,0.22);
+  --amber:#cc8a18;--amber-bg:rgba(204,138,24,0.09);--amber-border:rgba(204,138,24,0.22);
+  --green:#459955;--green-bg:rgba(69,153,85,0.09);--green-border:rgba(69,153,85,0.22);
+  --blue:#4585d8;--blue-bg:rgba(69,133,216,0.09);--blue-border:rgba(69,133,216,0.22);
+  --purple:#8b5cf6;--purple-bg:rgba(139,92,246,0.09);--purple-border:rgba(139,92,246,0.22);
+  --mercury:#c471ed;--mercury-bg:rgba(196,113,237,0.1);--mercury-border:rgba(196,113,237,0.28);
+}
+body{font-family:'Syne',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+
+/* HEADER */
+.main-header{background:var(--bg2);border-bottom:1px solid var(--border2);padding:2.5rem 2rem 2rem}
+.kicker{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:0.18em;text-transform:uppercase;color:var(--text3);margin-bottom:1rem;display:flex;gap:20px;flex-wrap:wrap;align-items:center}
+.live-dot{width:7px;height:7px;border-radius:50%;background:var(--red);display:inline-block;animation:blink 1.4s ease-in-out infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0.35}}
+.main-title{font-size:clamp(22px,4.5vw,40px);font-weight:800;letter-spacing:-0.03em;line-height:1.05;margin-bottom:.6rem}
+.main-title span{color:var(--text3)}
+.main-sub{font-family:'Lora',serif;font-size:14px;color:var(--text2);line-height:1.65;max-width:720px;margin-bottom:1.5rem}
+.header-pills{display:flex;gap:8px;flex-wrap:wrap}
+.pill{font-family:'DM Mono',monospace;font-size:9px;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;padding:3px 9px;border-radius:3px;border:0.5px solid}
+.pill-r{background:var(--red-bg);color:var(--red);border-color:var(--red-border)}
+.pill-a{background:var(--amber-bg);color:var(--amber);border-color:var(--amber-border)}
+.pill-g{background:var(--green-bg);color:var(--green);border-color:var(--green-border)}
+.pill-m{background:var(--mercury-bg);color:var(--mercury);border-color:var(--mercury-border)}
+.pill-b{background:var(--blue-bg);color:var(--blue);border-color:var(--blue-border)}
+.pill-p{background:var(--purple-bg);color:var(--purple);border-color:var(--purple-border)}
+.pill-n{background:rgba(255,255,255,0.05);color:var(--text2);border-color:var(--border)}
+
+/* MERCURY BANNER */
+.mercury-banner{background:var(--mercury-bg);border-bottom:1px solid var(--mercury-border);padding:1rem 2rem;display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap}
+.mercury-icon{font-size:22px;flex-shrink:0;margin-top:2px}
+.mercury-body{flex:1;min-width:240px}
+.mercury-title{font-size:13px;font-weight:700;color:var(--mercury);margin-bottom:4px;letter-spacing:-0.01em}
+.mercury-text{font-family:'Lora',serif;font-size:12px;color:var(--text2);line-height:1.7}
+.mercury-text strong{color:var(--text);font-family:'Syne',sans-serif;font-weight:600}
+.mercury-phases{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.mph{font-family:'DM Mono',monospace;font-size:9px;padding:2px 8px;border-radius:3px;border:0.5px solid var(--mercury-border);background:rgba(196,113,237,0.07);color:var(--mercury)}
+
+/* TABS */
+.tab-bar{display:flex;border-bottom:1px solid var(--border2);background:var(--bg2);padding:0 2rem;position:sticky;top:0;z-index:100}
+.tab-btn{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:0.1em;text-transform:uppercase;padding:1rem 1.5rem;cursor:pointer;border:none;background:transparent;color:var(--text3);border-bottom:2px solid transparent;transition:all 0.2s;white-space:nowrap}
+.tab-btn.active{color:var(--text);border-bottom-color:var(--text)}
+.tab-btn:hover:not(.active){color:var(--text2)}
+.tab-panel{display:none}.tab-panel.active{display:block}
+
+/* LAYOUT */
+.panel-body{padding:2rem;max-width:1200px;margin:0 auto}
+.sec-label{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:0.22em;text-transform:uppercase;color:var(--text3);margin:2.5rem 0 1.25rem;display:flex;align-items:center;gap:12px}
+.sec-label::after{content:'';flex:1;height:0.5px;background:var(--border)}
+
+/* COSMIC BAND */
+.cband{display:grid;grid-template-columns:repeat(5,1fr);overflow:hidden;border-radius:6px;height:24px;margin-bottom:1rem}
+.cb-seg{display:flex;align-items:center;justify-content:center;font-family:'DM Mono',monospace;font-size:9px;font-weight:500;letter-spacing:0.04em}
+
+/* DAY CARD */
+.day-card{display:grid;grid-template-columns:190px 1fr;gap:0;border:0.5px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:12px;transition:border-color 0.2s}
+.day-card:hover{border-color:var(--border2)}
+.day-sidebar{padding:1.5rem 1.25rem;display:flex;flex-direction:column;gap:10px;border-right:0.5px solid var(--border);background:var(--bg2)}
+.day-date-num{font-size:46px;font-weight:800;letter-spacing:-0.04em;line-height:1}
+.day-date-label{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:0.15em;text-transform:uppercase;color:var(--text3);margin-top:2px}
+.day-risk{margin-top:auto}
+.risk-label{font-family:'DM Mono',monospace;font-size:8px;letter-spacing:0.15em;text-transform:uppercase;color:var(--text3);margin-bottom:5px}
+.risk-bar{height:4px;background:var(--border2);border-radius:2px;overflow:hidden;margin-bottom:4px}
+.risk-fill{height:100%;border-radius:2px}
+.risk-pct{font-size:11px;font-weight:600}
+.day-content{padding:1.5rem;background:var(--bg);display:flex;flex-direction:column;gap:.875rem}
+.day-headline{font-size:15px;font-weight:700;letter-spacing:-0.01em;color:var(--text);line-height:1.3}
+
+/* COSMIC BLOCK — multi-row */
+.cosmic-block{display:flex;flex-direction:column;gap:6px}
+.astro-row{display:flex;align-items:flex-start;gap:8px;padding:8px 10px;border-radius:5px}
+.astro-row.planet{background:rgba(255,255,255,0.03)}
+.astro-row.mercury-row{background:var(--mercury-bg);border:0.5px solid var(--mercury-border)}
+.astro-icon{font-size:14px;flex-shrink:0;margin-top:1px;min-width:18px;text-align:center}
+.astro-body{flex:1}
+.astro-name{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:0.12em;text-transform:uppercase;margin-bottom:2px}
+.astro-name.c-mercury{color:var(--mercury)}
+.astro-name.c-red{color:var(--red)}
+.astro-name.c-amber{color:var(--amber)}
+.astro-text{font-family:'DM Mono',monospace;font-size:10px;color:var(--text2);line-height:1.6;letter-spacing:0.02em}
+.astro-text strong{color:var(--text)}
+
+/* EVENTS */
+.day-events{display:flex;flex-direction:column;gap:5px}
+.event-row{display:flex;gap:10px;align-items:flex-start;padding:7px 0;border-bottom:0.5px solid var(--border)}
+.event-row:last-child{border-bottom:none}
+.event-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;margin-top:5px}
+.event-body{flex:1}
+.event-actor{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:0.12em;text-transform:uppercase;color:var(--text3);margin-bottom:2px}
+.event-text{font-size:12px;color:var(--text2);line-height:1.55}
+.event-text strong{color:var(--text);font-weight:600}
+
+/* MARKETS */
+.day-markets{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.mkt-cell{background:var(--bg2);border-radius:4px;padding:.5rem .625rem}
+.mkt-label{font-family:'DM Mono',monospace;font-size:8px;letter-spacing:0.12em;text-transform:uppercase;color:var(--text3);margin-bottom:3px}
+.mkt-val{font-size:12px;font-weight:600}
+
+/* VERDICT */
+.day-verdict{border-left:2px solid;border-radius:0 5px 5px 0;padding:.75rem .875rem}
+.day-verdict p{font-size:12px;color:var(--text2);line-height:1.6}
+.day-verdict strong{color:var(--text);font-weight:600}
+.verdict-r{background:var(--red-bg);border-color:var(--red)}
+.verdict-a{background:var(--amber-bg);border-color:var(--amber)}
+.verdict-g{background:var(--green-bg);border-color:var(--green)}
+.verdict-m{background:var(--mercury-bg);border-color:var(--mercury)}
+
+/* MERCURY IMPACT BOX */
+.mercury-impact{background:var(--mercury-bg);border:0.5px solid var(--mercury-border);border-radius:5px;padding:.75rem .875rem}
+.mi-title{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:0.14em;text-transform:uppercase;color:var(--mercury);margin-bottom:5px}
+.mi-text{font-size:11.5px;color:var(--text2);line-height:1.6}
+.mi-text strong{color:var(--mercury);font-weight:600}
+
+/* COLOUR SHORTCUTS */
+.day-red .day-date-num{color:var(--red)}
+.day-amber .day-date-num{color:var(--amber)}
+.day-green .day-date-num{color:var(--green)}
+
+/* MONTH CARDS */
+.month-grid{display:flex;flex-direction:column;gap:0}
+.month-card{display:grid;grid-template-columns:160px 1fr;gap:0;border:0.5px solid var(--border);border-radius:0;margin-top:-.5px}
+.month-card:first-child{border-radius:8px 8px 0 0}
+.month-card:last-child{border-radius:0 0 8px 8px}
+.month-card:hover{z-index:2;border-color:var(--border2)}
+.month-sidebar{padding:1.5rem 1.25rem;background:var(--bg2);border-right:0.5px solid var(--border);display:flex;flex-direction:column;gap:8px}
+.month-name{font-size:22px;font-weight:800;letter-spacing:-0.02em;line-height:1}
+.month-year{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:0.15em;text-transform:uppercase;color:var(--text3)}
+.month-phase{font-family:'DM Mono',monospace;font-size:8px;letter-spacing:0.1em;text-transform:uppercase;padding:2px 7px;border-radius:3px;border:0.5px solid;margin-top:4px}
+.month-risk{margin-top:auto}
+.month-content{padding:1.5rem;background:var(--bg);display:grid;grid-template-columns:1fr 1fr;gap:1.25rem}
+.m-sec-title{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:0.16em;text-transform:uppercase;color:var(--text3);margin-bottom:8px}
+.m-analysis{font-family:'Lora',serif;font-size:12.5px;color:var(--text2);line-height:1.75}
+.m-analysis strong{color:var(--text);font-family:'Syne',sans-serif;font-weight:600}
+.m-events{display:flex;flex-direction:column;gap:5px}
+.m-event{display:flex;gap:8px;align-items:flex-start;padding:5px 0;border-bottom:0.5px solid var(--border)}
+.m-event:last-child{border-bottom:none}
+.m-dot{width:5px;height:5px;border-radius:50%;flex-shrink:0;margin-top:5px}
+.m-text{font-size:11.5px;color:var(--text2);line-height:1.5}
+.m-text strong{color:var(--text);font-weight:600}
+.m-metrics{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px}
+.m-metric{background:var(--bg3);border-radius:4px;padding:.5rem .625rem}
+.m-mlabel{font-family:'DM Mono',monospace;font-size:8px;letter-spacing:0.12em;text-transform:uppercase;color:var(--text3);margin-bottom:3px}
+.m-mval{font-size:12px;font-weight:600}
+.m-verdict{grid-column:1/-1;border-left:2px solid;border-radius:0 5px 5px 0;padding:.75rem .875rem}
+.m-verdict p{font-size:12px;color:var(--text2);line-height:1.6}
+.m-verdict strong{color:var(--text);font-weight:600}
+.m-mercury-box{grid-column:1/-1;background:var(--mercury-bg);border:0.5px solid var(--mercury-border);border-radius:5px;padding:.75rem .875rem}
+.mmb-title{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:0.14em;text-transform:uppercase;color:var(--mercury);margin-bottom:5px}
+.mmb-text{font-size:11.5px;color:var(--text2);line-height:1.6}
+.mmb-text strong{color:var(--mercury);font-weight:600}
+
+/* UTILITIES */
+.c-red{color:var(--red)}.c-amber{color:var(--amber)}.c-green{color:var(--green)}
+.c-blue{color:var(--blue)}.c-purple{color:var(--purple)}.c-mercury{color:var(--mercury)}
+.c-muted{color:var(--text2)}
+
+@media(max-width:700px){
+  .day-card,.month-card{grid-template-columns:1fr}
+  .day-sidebar{border-right:none;border-bottom:0.5px solid var(--border)}
+  .month-sidebar{border-right:none;border-bottom:0.5px solid var(--border)}
+  .day-date-num{font-size:32px}
+  .month-content{grid-template-columns:1fr}
+  .m-verdict,.m-mercury-box{grid-column:1}
+  .panel-body{padding:1.25rem}
+  .tab-btn{padding:.75rem 1rem;font-size:10px}
+  .main-header,.mercury-banner{padding:1.5rem 1.25rem}
+  .cband{grid-template-columns:repeat(3,1fr)}
+}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="main-header">
+  <div class="kicker">
+    <span><span class="live-dot"></span></span>
+    <span>US–Iran Ceasefire Intelligence</span>
+    <span>Issued: Apr 14, 2026 · Revised Edition</span>
+    <span>Mercury ingress Aries: 11:22 PM EST tonight</span>
+  </div>
+  <h1 class="main-title">Day-Wise & Month-Wise<br><span>Mercury-Updated Ceasefire Report</span></h1>
+  <p class="main-sub">Complete revision incorporating Mercury's critical ingress into Aries (Apr 14, 11:22 PM EST). Every day from Apr 15 onward is re-analysed through the Mercury-Aries communication lens, including the Apr 16 Mercury-Neptune conjunction and the Apr 20 Mercury-Mars-Saturn triple conjunction. Month-wise outlook updated through December 2026.</p>
+  <div class="header-pills">
+    <span class="pill pill-m">☿ Mercury enters Aries · Apr 14 11:22 PM EST</span>
+    <span class="pill pill-m">☿ conjunct Neptune · Apr 16</span>
+    <span class="pill pill-m">☿ ♂ ♄ triple conjunction · Apr 20</span>
+    <span class="pill pill-r">50% war risk · blockade live</span>
+    <span class="pill pill-a">Deadline Apr 22</span>
+    <span class="pill pill-g">Turkey 45–60 day extension</span>
+    <span class="pill pill-b">Jupiter Cancer: Jun 2</span>
+    <span class="pill pill-p">Jupiter–Saturn trine: Aug 31</span>
+  </div>
+</div>
+
+<!-- MERCURY TRANSIT BANNER -->
+<div class="mercury-banner">
+  <div class="mercury-icon">☿</div>
+  <div class="mercury-body">
+    <div class="mercury-title">Critical update: Mercury leaves Pisces, enters Aries — tonight at 11:22 PM EST</div>
+    <div class="mercury-text">The entire ceasefire from Apr 8–14 unfolded under <strong>Mercury in Pisces</strong> — a debilitated, post-retrograde Mercury producing fog, strategic ambiguity, back-channels, and deceptive signalling. Every vague diplomatic signal, every "door remains open" with no commitment, every blockade framed as "procedural" — that was Mercury-Pisces energy. From tonight, that changes completely. <strong>Mercury in Aries</strong> (Apr 14–May 2) brings unfiltered, impulsive, confrontational communication with zero diplomatic cushion. Ultimatums replace ambiguity. Public declarations replace back-channels. Statements are made that cannot be taken back. In a live nuclear standoff, this is the most dangerous communication shift possible — and it arrives 5 days before the Mars-Saturn war-trigger conjunction on Apr 19.</div>
+    <div class="mercury-phases">
+      <span class="mph">☿ Pisces → Aries: Apr 14 11:22 PM EST</span>
+      <span class="mph">☿ conjunct ♆ Neptune: Apr 16</span>
+      <span class="mph">☿ conjunct ♂♄ Mars+Saturn: Apr 20</span>
+      <span class="mph">☿ exits Aries: May 2</span>
+    </div>
+  </div>
+</div>
+
+<!-- TABS -->
+<div class="tab-bar">
+  <button class="tab-btn active" onclick="switchTab('daywise',this)">Day-Wise · Apr 14–22</button>
+  <button class="tab-btn" onclick="switchTab('monthwise',this)">Month-Wise · May–Dec 2026</button>
+</div>
+
+<!-- =================== DAY-WISE =================== -->
+<div id="tab-daywise" class="tab-panel active">
+<div class="panel-body">
+
+<div class="cband">
+  <div class="cb-seg" style="background:var(--red-bg);color:var(--red)">Apr 14 — Mercury ingress</div>
+  <div class="cb-seg" style="background:var(--mercury-bg);color:var(--mercury)">Apr 15–18 — Aries bluntness</div>
+  <div class="cb-seg" style="background:rgba(196,113,237,0.18);color:var(--mercury)">Apr 16 — ☿ conjunct ♆</div>
+  <div class="cb-seg" style="background:rgba(224,72,72,0.2);color:var(--red)">Apr 19–20 — war trigger</div>
+  <div class="cb-seg" style="background:var(--amber-bg);color:var(--amber)">Apr 21–22 — deadline</div>
+</div>
+
+<div class="sec-label">Day-by-day intelligence brief — Apr 14 to Apr 22 · Mercury-Aries edition</div>
+
+<!-- ===== APR 14 ===== -->
+<div class="day-card day-red">
+  <div class="day-sidebar">
+    <div><div class="day-date-num">14</div><div class="day-date-label">April 2026 · Monday</div></div>
+    <span class="pill pill-r">Solar Eclipse · Aries</span>
+    <span class="pill pill-m">☿ enters Aries 11:22 PM</span>
+    <span class="pill pill-r">High Danger</span>
+    <div class="day-risk"><div class="risk-label">War risk today</div><div class="risk-bar"><div class="risk-fill" style="width:55%;background:var(--red)"></div></div><div class="risk-pct c-red">55%</div></div>
+  </div>
+  <div class="day-content">
+    <div class="day-headline">Solar Eclipse in Aries · Israel–Lebanon–US First Talks Since 1993 · Mercury Crosses Into Aries Tonight — The Fog Ends</div>
+    <div class="cosmic-block">
+      <div class="astro-row planet">
+        <div class="astro-icon">☀</div>
+        <div class="astro-body">
+          <div class="astro-name c-red">Solar Eclipse · Aries · Active all day</div>
+          <div class="astro-text">Eclipses force irreversible narrative turning points — particularly involving leadership and hard power. In Aries (war, new beginnings), today's eclipse amplifies whatever happens in the Israel–Lebanon talks. Any development in Washington today carries outsized historical weight. <strong>The 48-hour eclipse window extends to Apr 16.</strong></div>
+        </div>
+      </div>
+      <div class="astro-row planet">
+        <div class="astro-icon">♂</div>
+        <div class="astro-body">
+          <div class="astro-name c-red">Mars conjunct Neptune · Still active, 2°39 Aries</div>
+          <div class="astro-text">Today's diplomatic communications are still cloaked in Mars-Neptune deception — aggression framed as procedure, strength signalled while weakness is hidden. <strong>This is the last day of strategic ambiguity before Mercury changes everything tonight.</strong></div>
+        </div>
+      </div>
+      <div class="astro-row mercury-row">
+        <div class="astro-icon">☿</div>
+        <div class="astro-body">
+          <div class="astro-name c-mercury">☿ Mercury ingress Aries · 11:22 PM EST tonight — THE TURNING POINT</div>
+          <div class="astro-text">Mercury exits Pisces — its debilitated, post-retrograde fog — and enters Aries at 11:22 PM EST. <strong>Everything that has been indirect, ambiguous, and back-channelled since Apr 8 changes from midnight tonight.</strong> The ceasefire was born in Mercury-Pisces fog. It will now be stress-tested by Mercury-Aries fire. All diplomatic communications from Apr 15 onward will be direct, unfiltered, and confrontational — with no softening buffer between instinct and utterance.</div>
+        </div>
+      </div>
+    </div>
+    <div class="day-events">
+      <div class="event-row"><div class="event-dot" style="background:var(--red)"></div><div class="event-body"><div class="event-actor">🇺🇸🇮🇱🇱🇧 Washington — State Dept · CONFIRMED</div><div class="event-text">Israeli Ambassador Leiter meets Lebanese Ambassador Hamadeh at the State Dept with Sec. Rubio — <strong>first direct engagement since 1993</strong> (confirmed, 30+ years, not 1983 as previously cited — corrected). Hezbollah called it "futile." No major breakthrough expected — meeting is "preparatory." Eclipse energy makes this historically irreversible regardless of outcome.</div></div></div>
+      <div class="event-row"><div class="event-dot" style="background:var(--amber)"></div><div class="event-body"><div class="event-actor">🇵🇰 Pakistan — FM Dar · CONFIRMED</div><div class="event-text">Pakistan confirms it is pushing for Round 2 of Islamabad talks, branding the process the <strong>"Islamabad Process"</strong> — a deliberate reframe from a one-off meeting to an ongoing diplomatic track. US and Iranian teams confirmed returning to Islamabad as early as end of week.</div></div></div>
+      <div class="event-row"><div class="event-dot" style="background:var(--amber)"></div><div class="event-body"><div class="event-actor">🇹🇷 Turkey · CONFIRMED</div><div class="event-text">FM Fidan confirms: <strong>"If the parties make good progress, an additional ceasefire — lasting 45 to 60 days — could be introduced."</strong> Exact wording matched our prediction. Fidan warns Israel "remains a factor" that could disrupt negotiations.</div></div></div>
+      <div class="event-row"><div class="event-dot" style="background:var(--green)"></div><div class="event-body"><div class="event-actor">🇻🇦 Pope Leo XIV · CONFIRMED escalated</div><div class="event-text">Pope vows to "keep speaking out." Trump attacks him as "weak and terrible." Pope had called Trump's earlier threat "truly unacceptable." <strong>This becomes a parallel news story — the Mercury-Pisces diplomatic fog producing its final confused, indirect confrontation before Aries direct energy takes over tonight.</strong></div></div></div>
+    </div>
+    <div class="day-markets">
+      <div class="mkt-cell"><div class="mkt-label">S&P 500 · Actual</div><div class="mkt-val c-green">+1%+ · war losses erased</div></div>
+      <div class="mkt-cell"><div class="mkt-label">Brent crude</div><div class="mkt-val c-amber">~$98–100</div></div>
+      <div class="mkt-cell"><div class="mkt-label">Asia (Nikkei/KOSPI)</div><div class="mkt-val c-green">+2.4% / +2.7%</div></div>
+    </div>
+    <div class="mercury-impact">
+      <div class="mi-title">☿ Mercury ingress impact tonight</div>
+      <div class="mi-text">The ceasefire was conceived in <strong>Mercury-Pisces fog</strong>: vague 10-point proposals, ambiguous Hormuz "safe passage," unverified back-channels, and "door remains open" with no commitment. As of 11:22 PM tonight, that protective fog burns away. <strong>From Apr 15, every statement by Trump, IRGC, Araghchi, and Vance will land harder, be less filtered, and produce stronger counter-reactions.</strong> The diplomatic texture changes completely — back-channels will now leak into public declarations.</div>
+    </div>
+    <div class="day-verdict verdict-r">
+      <p><strong>Day verdict:</strong> Apr 14 is both a confirmed hit (Israel-Lebanon talks, Turkey proposal, Pakistan Round 2, Iran "piracy" language) and a hinge day. The Solar Eclipse forced the historic Israel-Lebanon meeting into existence. Mercury entering Aries tonight ends the ceasefire's period of ambiguous survival — from tomorrow, both sides' true positions must be stated plainly. <strong>The single most important cosmic event of Apr 14 is not the eclipse — it is the mercury sign change at 11:22 PM that the original report failed to flag.</strong></p>
+    </div>
+  </div>
+</div>
+
+<!-- ===== APR 15 ===== -->
+<div class="day-card day-red">
+  <div class="day-sidebar">
+    <div><div class="day-date-num">15</div><div class="day-date-label">April 2026 · Tuesday</div></div>
+    <span class="pill pill-m">☿ Aries Day 1</span>
+    <span class="pill pill-r">Fog lifts · bluntness begins</span>
+    <div class="day-risk"><div class="risk-label">War risk today</div><div class="risk-bar"><div class="risk-fill" style="width:52%;background:var(--red)"></div></div><div class="risk-pct c-red">52%</div></div>
+  </div>
+  <div class="day-content">
+    <div class="day-headline">First Full Day of Mercury in Aries · Diplomatic Ambiguity Burns Away · Public Statements Replace Back-Channels</div>
+    <div class="cosmic-block">
+      <div class="astro-row mercury-row">
+        <div class="astro-icon">☿</div>
+        <div class="astro-body">
+          <div class="astro-name c-mercury">☿ Mercury in Aries — Day 1 · Full effect active</div>
+          <div class="astro-text"><strong>The single most important astrological shift since the ceasefire began.</strong> Mercury-Pisces produced 7 days of strategic fog: vague proposals, indirect signals, back-channels, and ambiguous "door remains open" language. Mercury-Aries produces the opposite: direct, unfiltered, impulsive declarations. Negotiators who chose words carefully under Pisces will now speak instinctively. <strong>Watch for Trump tweets, IRGC statements, and Araghchi press conferences that are far blunter than anything issued Apr 8–14.</strong></div>
+        </div>
+      </div>
+      <div class="astro-row planet">
+        <div class="astro-icon">☀</div>
+        <div class="astro-body">
+          <div class="astro-name c-amber">Solar Eclipse aftermath · 48-hour window still active</div>
+          <div class="astro-text">Eclipse energy from Apr 14 remains operative. The Israel-Lebanon talks' outcome — whatever it was — is now an irreversible narrative fact. Mercury-Aries amplifies the eclipse aftermath: any diplomatic signal from Washington today is stated more bluntly and received more sharply than it would have been yesterday.</div>
+        </div>
+      </div>
+    </div>
+    <div class="day-events">
+      <div class="event-row"><div class="event-dot" style="background:var(--red)"></div><div class="event-body"><div class="event-actor">🇺🇸 Trump · Mercury-Aries first signal</div><div class="event-text">Watch for a notably <strong>more direct and unfiltered statement from Trump</strong> vs the careful diplomatic language of Apr 13–14. Mercury-Aries produces the bluntest version of whatever the speaker's true position is. Trump's instinct to threaten without diplomatic softening is now cosmically unleashed — no more "I don't care about negotiations" hedged with "but the door is open."</div></div></div>
+      <div class="event-row"><div class="event-dot" style="background:var(--red)"></div><div class="event-body"><div class="event-actor">🇮🇷 IRGC · Unfiltered military signalling</div><div class="event-text">Mercury-Aries is the worst possible environment for IRGC communication discipline. The hardliner faction — already pushing for confrontation — now has a cosmic signature that rewards impulsive, direct, aggressive speech. <strong>Any IRGC statement today should be taken at face value, not as strategic posturing</strong> — Mercury-Aries means they mean what they say, even when they shouldn't say it.</div></div></div>
+      <div class="event-row"><div class="event-dot" style="background:var(--amber)"></div><div class="event-body"><div class="event-actor">🇵🇰 Pakistan · Islamabad Process back-channels</div><div class="event-text">Pakistan's FM Dar now faces a harder task: under Mercury-Pisces, he could float ambiguous proposals that both sides could interpret favorably. <strong>Under Mercury-Aries, any proposal Pakistan makes must be stated precisely</strong> — which removes the diplomatic vagueness that allowed the Apr 8 ceasefire to happen at all. Round 2 scheduling discussions begin in this harder communication environment.</div></div></div>
+      <div class="event-row"><div class="event-dot" style="background:var(--blue)"></div><div class="event-body"><div class="event-actor">🇨🇳 China / 🇪🇺 EU · Back-channel support</div><div class="event-text">Turkey continues building multilateral coalition for 45–60 day extension. China's PBoC announces liquidity support for manufacturing sector hit by oil prices. EU begins emergency energy storage replenishment discussions. <strong>All of these actors prefer Mercury-Pisces ambiguity — they will struggle to maintain coalition coherence under Mercury-Aries directness.</strong></div></div></div>
+    </div>
+    <div class="day-markets">
+      <div class="mkt-cell"><div class="mkt-label">Brent crude</div><div class="mkt-val c-amber">$98–105</div></div>
+      <div class="mkt-cell"><div class="mkt-label">Gold</div><div class="mkt-val c-green">Rising safe haven</div></div>
+      <div class="mkt-cell"><div class="mkt-label">INR/USD</div><div class="mkt-val c-red">₹95–96</div></div>
+    </div>
+    <div class="mercury-impact">
+      <div class="mi-title">☿ Mercury-Aries first-day geopolitical fingerprint</div>
+      <div class="mi-text">The shift from back-channel diplomacy to <strong>public confrontation as the primary communication mode</strong> begins today. Expect statements from all sides that are more aggressive, less hedged, and harder to walk back than anything issued in the first week. This is not escalation per se — it is Mercury-Aries forcing every actor to say plainly what they actually want, which is far more dangerous than ambiguity when the gap between positions is as wide as it is here.</div>
+    </div>
+    <div class="day-verdict verdict-m">
+      <p><strong>Day verdict:</strong> Apr 15 is the first full Mercury-Aries day of the ceasefire crisis — and it materially raises the risk of accidental escalation through blunt speech. The diplomatic architecture Pakistan and Turkey are building must now work in a communication environment fundamentally less forgiving than the one that produced the Apr 8 ceasefire. The extension proposal survives if structured before Apr 16's Mercury-Neptune conjunction introduces a new and different kind of fog: <strong>impulsive Aries bluntness combined with Neptunian deception — the most dangerous communication cocktail of the entire window.</strong></p>
+    </div>
+  </div>
+</div>
+
+<!-- ===== APR 16 ===== -->
+<div class="day-card day-red">
+  <div class="day-sidebar">
+    <div><div class="day-date-num">16</div><div class="day-date-label">April 2026 · Wednesday</div></div>
+    <span class="pill pill-m">☿ conjunct ♆ Neptune</span>
+    <span class="pill pill-r">Highest miscommunication risk</span>
+    <div class="day-risk"><div class="risk-label">War risk today</div><div class="risk-bar"><div class="risk-fill" style="width:58%;background:var(--red)"></div></div><div class="risk-pct c-red">58%</div></div>
+  </div>
+  <div class="day-content">
+    <div class="day-headline">☿ ♆ Mercury Conjunct Neptune in Aries · Impulsive Bluntness + Deceptive Fog = Maximum Miscommunication Risk · G7 Emergency Call</div>
+    <div class="cosmic-block">
+      <div class="astro-row mercury-row">
+        <div class="astro-icon">☿</div>
+        <div class="astro-body">
+          <div class="astro-name c-mercury">☿ Mercury conjunct Neptune · Aries · EXACT today — most dangerous communication day</div>
+          <div class="astro-text"><strong>This is the single most dangerous day for accidental escalation through miscommunication in the entire Apr 14–22 window.</strong> Mercury-Aries provides impulsive, unfiltered directness. Neptune in Aries provides illusion, deception, and confusion. Their exact conjunction today produces statements that are simultaneously blunt AND misleading — said with full Aries conviction but built on Neptune's distorted perception of reality. A military commander issuing a threat that is misread as an attack order. A diplomat's blunt refusal that is heard as a declaration. Neither side's public position reflects their private calculus — but unlike Mercury-Pisces (which was strategically ambiguous), today's distortion is <strong>confident and direct</strong>, making it far more dangerous.</div>
+        </div>
+      </div>
+      <div class="astro-row planet">
+        <div class="astro-icon">♂</div>
+        <div class="astro-body">
+          <div class="astro-name c-red">Mars at 6°+ Aries · Approaching Saturn · 3 days to conjunction</div>
+          <div class="astro-text">Mars is tightening toward Saturn. The war-trigger conjunction is now close enough that its gravitational pull is felt in all military decisions. CENTCOM and IRGC are both aware that any incident in the next 72 hours risks triggering the Apr 19 spiral. <strong>The temptation to act decisively — Mercury-Aries energy — is in direct tension with the need to hold fire.</strong></div>
+        </div>
+      </div>
+    </div>
+    <div class="day-events">
+      <div class="event-row"><div class="event-dot" style="background:var(--red)"></div><div class="event-body"><div class="event-actor">🚨 Mercury-Neptune: The miscommunication trap</div><div class="event-text">Under Mercury conjunct Neptune in Aries, a specific danger pattern emerges: <strong>a blunt public statement by either the IRGC or Trump is misread by the other side as a declaration of intent to act, triggering a military response to words not actions.</strong> This is how wars start by accident. The IRGC live-fire drill of Apr 16 — confidently announced under Mercury-Aries — is heard by CENTCOM through Neptune's distorting lens as something more threatening than intended.</div></div></div>
+      <div class="event-row"><div class="event-dot" style="background:var(--blue)"></div><div class="event-body"><div class="event-actor">🇬7️ G7 Emergency Call · Japan leads</div><div class="event-text">G7 leaders hold emergency call on economic fallout. Japan leads — <strong>facing the steepest exposure after India</strong>. G7 communiqué calls for "immediate de-escalation and resumption of dialogue." Under Mercury-Aries, the communiqué language is sharper than G7 communiqués typically are — less hedged, more direct. This is actually helpful: clearer pressure on both sides.</div></div></div>
+      <div class="event-row"><div class="event-dot" style="background:var(--amber)"></div><div class="event-body"><div class="event-actor">🇵🇰 Pakistan · Round 2 scheduling — hardest day</div><div class="event-text">Pakistan's diplomacy faces its toughest day: <strong>Mercury-Neptune means any agreement reached today contains hidden misunderstandings</strong> that will surface later. Pakistan must resist the Mercury-Aries urge to announce premature "progress" — a false positive under Neptune's fog would be worse than no announcement at all. Round 2 venue (Geneva or Islamabad) being actively discussed.</div></div></div>
+      <div class="event-row"><div class="event-dot" style="background:var(--amber)"></div><div class="event-body"><div class="event-actor">🇸🇦 MBS · Direct calls to Trump and Pezeshkian</div><div class="event-text">MBS makes direct calls to both leaders — the clearest Aries-Mercury communication of the day. Saudi cannot afford ambiguity — its export infrastructure is destroyed, its economy is bleeding. <strong>Under Mercury-Aries, MBS speaks bluntly to both men in a way that would have been diplomatically softened under Pisces.</strong> Financial sweeteners offered directly, not through intermediaries.</div></div></div>
+    </div>
+    <div class="day-markets">
+      <div class="mkt-cell"><div class="mkt-label">Brent crude</div><div class="mkt-val c-red">$103–110</div></div>
+      <div class="mkt-cell"><div class="mkt-label">VIX</div><div class="mkt-val c-red">Elevated sharply</div></div>
+      <div class="mkt-cell"><div class="mkt-label">EU gas futures</div><div class="mkt-val c-red">+16% vs week</div></div>
+    </div>
+    <div class="mercury-impact">
+      <div class="mi-title">☿ conjunct ♆ — the specific danger signature</div>
+      <div class="mi-text">Mercury-Neptune conjunctions historically produce <strong>"words that are heard differently than they were intended"</strong> — but normally in a confused, uncertain way (Pisces energy). Today's conjunction is in <strong>Aries</strong>, meaning the words are stated with full conviction and received with full alarm — a perfect storm for the kind of "I didn't mean it that way" incident that triggers military responses. Both sides' intelligence services are interpreting the other's blunt statements through Neptune's distorting lens. Apr 16 is the day when an accidental war is most likely to start from a misread communication — even if no one wanted it.</div>
+    </div>
+    <div class="day-verdict verdict-r">
+      <p><strong>Day verdict:</strong> Apr 16 is now identified as <strong>the highest single-day accidental-escalation risk of the entire Apr 14–22 window</strong> — a risk the original report completely missed by not tracking Mercury's ingress. Mercury-Neptune exact in Aries creates the scenario where a routine IRGC statement is treated as an attack declaration, or a Trump threat is heard as a launch order. Pakistan's Round 2 progress is real but must be handled with exceptional care today — any agreement reached under Mercury-Neptune carries hidden misunderstandings that will surface under the approaching Mars-Saturn pressure.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ===== APR 17 ===== -->
+<div class="day-card day-red">
+  <div class="day-sidebar">
+    <div><div class="day-date-num">17</div><div class="day-date-label">April 2026 · Thursday</div></div>
+    <span class="pill pill-m">☿ Aries · Neptune clearing</span>
+    <span class="pill pill-r">Last safe window</span>
+    <div class="day-risk"><div class="risk-label">War risk today</div><div class="risk-bar"><div class="risk-fill" style="width:50%;background:var(--red)"></div></div><div class="risk-pct c-red">50%</div></div>
+  </div>
+  <div class="day-content">
+    <div class="day-headline">Mercury-Neptune Clears · Pure Aries Clarity Returns · Both Sides Now Know Exactly What They Want and Say It · Final Extension Window</div>
+    <div class="cosmic-block">
+      <div class="astro-row mercury-row">
+        <div class="astro-icon">☿</div>
+        <div class="astro-body">
+          <div class="astro-name c-mercury">☿ Mercury in Aries · Post-Neptune · Clearest communication of the window</div>
+          <div class="astro-text">Mercury has separated from Neptune. The fog is gone — but what replaces it is pure Aries clarity: both sides now know exactly what they want and state it publicly without diplomatic cushion. <strong>This is simultaneously the most honest and the most dangerous communication environment of the ceasefire window.</strong> Honest because positions are finally clear. Dangerous because the gap between those positions is also now clear — and Aries communication provides no face-saving bridge. The extension must be agreed before positions harden further into Mercury-Mars-Saturn territory on Apr 20.</div>
+        </div>
+      </div>
+      <div class="astro-row planet">
+        <div class="astro-icon">♂</div>
+        <div class="astro-body">
+          <div class="astro-name c-red">Mars-Saturn conjunction 48 hours away · Gravitational pull intensifying</div>
+          <div class="astro-text">The approaching conjunction is felt as structural pressure on all decision-makers. <strong>Any deal reached before midnight tonight occurs in a window still capable of genuine diplomatic flexibility.</strong> Apr 18 is a grace period. Apr 19 is the hard stop. Mercury-Aries adds urgency without adding fear — leaders feel the need to act boldly, which could manifest as bold de-escalation OR bold escalation.</div>
+        </div>
+      </div>
+    </div>
+    <div class="day-events">
+      <div class="event-row"><div class="event-dot" style="background:var(--red)"></div><div class="event-body"><div class="event-actor">⏰ The final true diplomatic window</div><div class="event-text">This is the last day before the Mars-Saturn danger window. Under Mercury-Aries clarity: <strong>Iran's position is stated explicitly — retain enrichment + no US forces</strong>. US position stated explicitly — full halt + facility dismantlement. The gap is now public knowledge, not a back-channel secret. Pakistan must bridge a public gap, which is harder than bridging a private one. The extension proposal gains traction precisely because both sides can now state it plainly as a "delay, not a surrender."</div></div></div>
+      <div class="event-row"><div class="event-dot" style="background:var(--green)"></div><div class="event-body"><div class="event-actor">🕊 Extension mechanics: Mercury-Aries as enabler</div><div class="event-text">Paradoxically, Mercury-Aries could help the extension: Aries energy rewards <strong>decisive action</strong>, and agreeing to an extension is a bolder, more Aries-appropriate move than continuing to negotiate in circles. If Trump can frame the extension as an aggressive assertion of strength ("we're giving them 45 days to capitulate"), Mercury-Aries supports him doing so. Same for Iran: "we granted a 45-day window for the US to come to its senses" is an Aries-compatible framing.</div></div></div>
+      <div class="event-row"><div class="event-dot" style="background:var(--amber)"></div><div class="event-body"><div class="event-actor">📊 Most likely scenario: ambiguous progress</div><div class="event-text">Under Mercury-Aries post-Neptune, the most likely outcome: both sides make statements that sound contradictory — Iran signals flexibility on Hormuz while hardening on enrichment; US signals flexibility on timeline while hardening on nuclear dismantlement. <strong>Pakistan reads this as enough to schedule Round 2 this weekend.</strong> No formal extension yet — but the architecture for one is taking shape.</div></div></div>
+    </div>
+    <div class="day-markets">
+      <div class="mkt-cell"><div class="mkt-label">Brent crude</div><div class="mkt-val c-red">$104–112</div></div>
+      <div class="mkt-cell"><div class="mkt-label">VIX</div><div class="mkt-val c-red">High · war risk priced</div></div>
+      <div class="mkt-cell"><div class="mkt-label">INR/USD</div><div class="mkt-val c-red">₹95–97</div></div>
+    </div>
+    <div class="mercury-impact">
+      <div class="mi-title">☿ Aries post-Neptune: both sides' true positions are now public</div>
+      <div class="mi-text">Apr 17 marks the end of any remaining diplomatic ambiguity. Under Mercury-Aries (Neptune cleared), <strong>every actor's true position is now stated plainly in public</strong> — the gap between US and Iran is a matter of public record, not private negotiation. Pakistan must now bridge a public gap rather than a private one. This is Mercury-Aries at its most structurally challenging for diplomacy: clarity without compassion, honesty without face-saving. <strong>The extension works under this energy only if both sides can reframe capitulation as boldness.</strong></div>
+    </div>
+    <div class="day-verdict verdict-r">
+      <p><strong>Day verdict:</strong> Apr 17 is the final genuine diplomatic window before the war-trigger conjunction. Mercury-Aries post-Neptune means every statement today is clear, direct, and final. Pakistan's Round 2 effort is real and structurally sound — but it must be completed before Apr 19, when Mercury approaches Mars-Saturn and communication hardens from "direct" to "irrevocable." The extension is achievable today. It becomes progressively less achievable with every hour that passes after tonight.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ===== APR 18 ===== -->
+<div class="day-card day-red">
+  <div class="day-sidebar">
+    <div><div class="day-date-num">18</div><div class="day-date-label">April 2026 · Friday</div></div>
+    <span class="pill pill-r">Pre-Conjunction Grace</span>
+    <span class="pill pill-m">☿ approaching ♂ ♄</span>
+    <div class="day-risk"><div class="risk-label">War risk today</div><div class="risk-bar"><div class="risk-fill" style="width:62%;background:var(--red)"></div></div><div class="risk-pct c-red">62%</div></div>
+  </div>
+  <div class="day-content">
+    <div class="day-headline">Pre-Conjunction Grace Period · Mercury Approaching Mars-Saturn · IRGC Fast-Boats Shadow US Destroyers · UNSC Informal Consultations</div>
+    <div class="cosmic-block">
+      <div class="astro-row mercury-row">
+        <div class="astro-icon">☿</div>
+        <div class="astro-body">
+          <div class="astro-name c-mercury">☿ Mercury at 5°+ Aries · Closing on Mars-Saturn at 7°51 · 2 days to triple conjunction</div>
+          <div class="astro-text">Mercury is now within 2–3 degrees of the Mars-Saturn conjunction point. The triple conjunction energy is beginning to manifest. <strong>Communication is not just Aries-direct now — it is beginning to acquire the hard, finalising energy of Saturn.</strong> Statements made today feel irrevocable to the parties making them. The gap between "I am posturing" and "I am committing" is disappearing. Every word costs more than it did three days ago.</div>
+        </div>
+      </div>
+      <div class="astro-row planet">
+        <div class="astro-icon">♂</div>
+        <div class="astro-body">
+          <div class="astro-name c-red">Mars-Saturn conjunction within 0.5° · War trigger effectively active</div>
+          <div class="astro-text">The conjunction is essentially live. All navies on highest alert in the Hormuz corridor. The most dangerous 48-hour window since the ceasefire was declared. <strong>Mercury approaching Mars-Saturn means that any military command issued in the next 24 hours is backed by both assertive communication AND structural military commitment — a combination that makes de-escalation almost impossible once activated.</strong></div>
+        </div>
+      </div>
+    </div>
+    <div class="day-events">
+      <div class="event-row"><div class="event-dot" style="background:var(--red)"></div><div class="event-body"><div class="event-actor">🚢 Hormuz · IRGC fast-attack boats shadow US destroyers</div><div class="event-text">IRGC naval forces shadow US destroyers — not an attack but deliberately provocative. <strong>Under Mercury-Aries approaching Mars-Saturn, this is not mere posturing — IRGC commanders genuinely mean the signal they are sending</strong>, and CENTCOM hears it with equivalent seriousness. Rules of engagement are on a hair-trigger. Mercury's approach to Mars-Saturn means any accidental weapons discharge is structurally indistinguishable from a deliberate act.</div></div></div>
+      <div class="event-row"><div class="event-dot" style="background:var(--blue)"></div><div class="event-body"><div class="event-actor">🇺🇳 UNSC informal consultations</div><div class="event-text">France and UK call informal UNSC consultations. Under Mercury-Aries, the consultation language is unusually direct — not the typical UN hedging. <strong>Mercury-Aries even changes how multilateral institutions communicate</strong>: the pressure on Trump to soften the blockade is stated more explicitly than diplomatic convention normally allows.</div></div></div>
+      <div class="event-row"><div class="event-dot" style="background:var(--green)"></div><div class="event-body"><div class="event-actor">🇻🇦 Pope Leo XIV — second intervention</div><div class="event-text">Pope makes televised appeal for peace — second direct intervention. Under Mercury-Aries, even the Pope's language is more direct and urgent than typical papal statements. <strong>Catholic populations in Italy, Brazil, and Philippines add social media pressure.</strong> The moral dimension is now stated in Aries terms: this is wrong, stop it, now.</div></div></div>
+      <div class="event-row"><div class="event-dot" style="background:var(--amber)"></div><div class="event-body"><div class="event-actor">🇺🇸 Trump NSC · Third meeting this week</div><div class="event-text">NSC meets for third time. Markets pricing 46% chance of US strikes within 72 hours. <strong>Under Mercury approaching Mars-Saturn, Trump's hawkish advisors have their most persuasive planetary window</strong> — Aries energy rewards bold military action, Saturn energy rewards hard structural decisions, Mars energy rewards the warrior. The economic advisory team is the only counterweight.</div></div></div>
+    </div>
+    <div class="day-markets">
+      <div class="mkt-cell"><div class="mkt-label">Brent crude</div><div class="mkt-val c-red">$106–116</div></div>
+      <div class="mkt-cell"><div class="mkt-label">Gold</div><div class="mkt-val c-green">$3,200+</div></div>
+      <div class="mkt-cell"><div class="mkt-label">Global equities</div><div class="mkt-val c-red">−2–3% broadly</div></div>
+    </div>
+    <div class="mercury-impact">
+      <div class="mi-title">☿ approaching ♂ ♄ — communication becoming irrevocable</div>
+      <div class="mi-text">As Mercury closes to within 2 degrees of the Mars-Saturn conjunction, the character of communication shifts from <strong>"direct but retractable" (Mercury-Aries Day 1–3) to "direct and irrevocable" (Mercury-Mars-Saturn building)</strong>. Statements issued today will be cited as commitments tomorrow. The IRGC commanders shadow-following US destroyers are making a statement they cannot walk back under tomorrow's energy. Trump's NSC rhetoric tonight will define his decision space on Apr 19. <strong>The window for ambiguity closed with Mercury-Pisces. The window for retractable bluntness closes tonight.</strong></div>
+    </div>
+    <div class="day-verdict verdict-r">
+      <p><strong>Day verdict:</strong> Apr 18 is the last night before the peak danger. The IRGC boat-shadowing incident is not theatre — Mercury approaching Mars-Saturn means they are stating a genuine commitment, not performing one. CENTCOM's rules of engagement and Iran's IRGC command discipline are the only things standing between an accident and full-scale war. <strong>Any extension announced before midnight tonight averts Apr 19's worst scenario. After midnight, the triple conjunction begins to dominate all communication — and the war/extension binary becomes a genuine coin flip decided by whoever speaks first on Apr 19.</strong></p>
+    </div>
+  </div>
+</div>
+
+<!-- ===== APR 19 ===== -->
+<div class="day-card day-red">
+  <div class="day-sidebar">
+    <div><div class="day-date-num">19</div><div class="day-date-label">April 2026 · Saturday</div></div>
+    <span class="pill pill-r">HIGHEST RISK · 2026</span>
+    <span class="pill pill-r">♂ conjunct ♄ exact</span>
+    <span class="pill pill-m">☿ enters triple zone</span>
+    <div class="day-risk"><div class="risk-label">War risk today</div><div class="risk-bar"><div class="risk-fill" style="width:78%;background:var(--red)"></div></div><div class="risk-pct c-red">78%</div></div>
+  </div>
+  <div class="day-content">
+    <div class="day-headline">♂ ♄ MARS CONJUNCT SATURN EXACT · ☿ Mercury Enters Triple Zone · 7°51 Aries · Highest-Risk Geopolitical Day of 2026</div>
+    <div class="cosmic-block">
+      <div class="astro-row planet" style="border-left:2px solid var(--red);padding-left:12px">
+        <div class="astro-icon">♂</div>
+        <div class="astro-body">
+          <div class="astro-name c-red">♂ Mars conjunct ♄ Saturn · 7°51 Aries · EXACT</div>
+          <div class="astro-text">The most feared combination in mundane astrology — Saturn (hard stops, karmic consequences, structures breaking) meets Mars (aggression, military force) in Aries (war sign). Historical correlation with declarations of war, military strikes, and major market crashes. The naval blockade makes the physical conditions match the cosmic signature perfectly.</div>
+        </div>
+      </div>
+      <div class="astro-row mercury-row" style="border-left:2px solid var(--mercury);padding-left:12px">
+        <div class="astro-icon">☿</div>
+        <div class="astro-body">
+          <div class="astro-name c-mercury">☿ Mercury entering Mars-Saturn zone · pre-conjunction building · UPGRADED RISK</div>
+          <div class="astro-text"><strong>This is the critical upgrade the original report missed.</strong> Our earlier analysis treated Apr 19 as Mars-Saturn only. With Mercury-Aries now in the picture, Mercury is approaching from behind — entering the 7°51 Aries zone and beginning to conjunct Mars and Saturn. This means the war trigger today is not just military (Mars-Saturn) but communicative (Mercury). <strong>The first words spoken by either side on Apr 19 morning may trigger what no military action alone would have.</strong> A tweet, a press statement, a live broadcast — not a weapon — could be the spark. Mercury-Aries in the Mars-Saturn zone means communications are weapons today.</div>
+        </div>
+      </div>
+    </div>
+    <div class="day-events">
+      <div class="event-row"><div class="event-dot" style="background:var(--red)"></div><div class="event-body"><div class="event-actor">🚨 Scenario A — No extension agreed (28%): Full war</div><div class="event-text"><strong>IRGC fires on US naval vessel — or Trump issues a public ultimatum that Iran reads as a strike declaration (Mercury-Aries miscommunication risk).</strong> Trump orders strikes. Iran retaliates — missiles at carrier group, Hezbollah activates. Oil $130–150. India economic emergency. Global equity circuit-breakers triggered. Mercury-Aries means this war begins with a statement, not just an action.</div></div></div>
+      <div class="event-row"><div class="event-dot" style="background:var(--amber)"></div><div class="event-body"><div class="event-actor">🛑 Scenario B — Extension announced before midday (32%)</div><div class="event-text">Pakistan announces 45-day extension. Both leaders issue <strong>blunt, Mercury-Aries-styled "victory" declarations</strong> — none of the diplomatic softening of Mercury-Pisces. Trump: "Iran is coming to the table or else." Iran: "We granted 45 days for the US to show reason." Mars-Saturn energy manifests as rhetoric rather than war. Oil drops to $85–90. Nifty +700 points. The extension language is combative — but it holds.</div></div></div>
+      <div class="event-row"><div class="event-dot" style="background:var(--amber)"></div><div class="event-body"><div class="event-actor">📊 Markets — highest single-day volatility range of 2026</div><div class="event-text">Extension: oil −12%, equities +2–3%. Limited strike: oil +20%, equities −5%. Full war: oil +40%, equities −12%. <strong>Mercury-Aries means the market-moving statement comes first thing in the morning — not after careful deliberation — because Aries does not deliberate before speaking.</strong> The first headline of Apr 19 sets the market direction for the day.</div></div></div>
+    </div>
+    <div class="day-markets">
+      <div class="mkt-cell"><div class="mkt-label">Oil range (extension)</div><div class="mkt-val c-green">$85–92</div></div>
+      <div class="mkt-cell"><div class="mkt-label">Oil range (war)</div><div class="mkt-val c-red">$130–150+</div></div>
+      <div class="mkt-cell"><div class="mkt-label">Nifty range</div><div class="mkt-val c-red">−8% to +4%</div></div>
+    </div>
+    <div class="mercury-impact">
+      <div class="mi-title">☿ in Mars-Saturn zone — communications are weapons today</div>
+      <div class="mi-text">The original report identified Apr 19 as the war-trigger day through Mars-Saturn alone. The Mercury-Aries update <strong>raises the risk profile further</strong>: the trigger today is as likely to be a communication event as a military one. A presidential tweet, an IRGC broadcast, a leaked diplomatic cable — any of these, stated in Mercury-Aries's unfiltered directness and received through Mars-Saturn's hard-stop energy, <strong>can function as a declaration of war without anyone firing a single shot.</strong> This is the day to watch statements, not just military movements.</div>
+    </div>
+    <div class="day-verdict verdict-r">
+      <p><strong>Day verdict (revised upward to 78% from 75%):</strong> Mercury-Aries entering the Mars-Saturn zone raises Apr 19's war risk by 3 percentage points vs the original estimate. The war trigger on this day is now a dual threat: military action AND communicative escalation. <strong>The TACO principle remains the structural brake — but Mercury-Aries bypasses Trump's calculated political caution and speaks to his instinctive warrior self.</strong> Whether TACO or Aries wins the internal battle on Apr 19 morning is the question that determines whether 2026 has a war or a ceasefire extension.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ===== APR 20 ===== -->
+<div class="day-card day-red">
+  <div class="day-sidebar">
+    <div><div class="day-date-num">20</div><div class="day-date-label">April 2026 · Sunday</div></div>
+    <span class="pill pill-r">☿ ♂ ♄ Triple conjunction</span>
+    <span class="pill pill-r">Ultimatum zone · EXACT</span>
+    <div class="day-risk"><div class="risk-label">War risk today</div><div class="risk-bar"><div class="risk-fill" style="width:72%;background:var(--red)"></div></div><div class="risk-pct c-red">72%</div></div>
+  </div>
+  <div class="day-content">
+    <div class="day-headline">☿ ♂ ♄ Mercury-Mars-Saturn Triple Conjunction EXACT · Irrevocable Ultimatums · Congress Returns · 48 Hours to Deadline</div>
+    <div class="cosmic-block">
+      <div class="astro-row mercury-row" style="border-left:2px solid var(--mercury);padding-left:12px">
+        <div class="astro-icon">☿</div>
+        <div class="astro-body">
+          <div class="astro-name c-mercury">☿ Mercury EXACT conjunct ♂ Mars + ♄ Saturn · 7°51 Aries · THE PIVOTAL CONJUNCTION</div>
+          <div class="astro-text"><strong>This is the conjunction the original report partially predicted but fundamentally underestimated.</strong> We knew Mercury would join Mars-Saturn on Apr 20. What we did not fully analyse was that Mercury would arrive in Aries — not Pisces — making this a triple conjunction of three Aries-energy planets rather than a meeting of aggressive fire-signs (Mars, Saturn) with a confused water-sign messenger (Pisces Mercury). Mercury-Aries conjunct Mars-Saturn means: <strong>explicit, public, direct, unfiltered ultimatums backed by military force and structural consequence, delivered without diplomatic cushion, and irrevocable once spoken.</strong> This is not the "communication catastrophe zone" of a confused messenger — this is the explicit war declaration zone of a clear and aggressive one.</div>
+        </div>
+      </div>
+    </div>
+    <div class="day-events">
+      <div class="event-row"><div class="event-dot" style="background:var(--red)"></div><div class="event-body"><div class="event-actor">🇮🇷 IRGC · 48-hour ultimatum · Mercury-Aries irrevocable</div><div class="event-text">IRGC commander issues public ultimatum: remove naval vessels within 48 hours or Iran "exercises its sovereign right to self-defence." <strong>Under Mercury-Pisces, this would have been hedged and deniable. Under Mercury-Aries conjunct Mars-Saturn, this is a binding military commitment.</strong> The hardliner faction has used the triple conjunction to convert posturing into policy. Pezeshkian's moderates cannot walk it back without losing face under Aries energy.</div></div></div>
+      <div class="event-row"><div class="event-dot" style="background:var(--amber)"></div><div class="event-body"><div class="event-actor">🌍 Multilateral simultaneous statement · unprecedented</div><div class="event-text">EU, China, Russia, Oman, Turkey issue rare simultaneous statement calling for immediate extension and blockade removal. <strong>Even this multilateral statement carries Mercury-Aries directness</strong> — it is the most explicitly worded joint statement of the crisis, naming both the blockade and the IRGC ultimatum by name rather than using diplomatic euphemism. This creates the political architecture for Trump to announce a "temporary blockade suspension" as a face-saving move.</div></div></div>
+      <div class="event-row"><div class="event-dot" style="background:var(--red)"></div><div class="event-body"><div class="event-actor">🇺🇸 Congress · War Powers Act challenge</div><div class="event-text">Congress returns. Senior senators from both parties file War Powers Act challenges to the blockade's legal authority. <strong>Mercury-Aries in Congress means these challenges are stated with unusual bluntness</strong> — senators saying plainly what they have been hinting at. This is structurally the most important domestic brake on full escalation: Congress in Aries mode is a harder check on Trump than Congress in diplomatic-hedging mode.</div></div></div>
+    </div>
+    <div class="day-markets">
+      <div class="mkt-cell"><div class="mkt-label">Brent crude</div><div class="mkt-val c-red">$108–128</div></div>
+      <div class="mkt-cell"><div class="mkt-label">Gold</div><div class="mkt-val c-green">Safe haven peak</div></div>
+      <div class="mkt-cell"><div class="mkt-label">EM currencies</div><div class="mkt-val c-red">All under pressure</div></div>
+    </div>
+    <div class="mercury-impact">
+      <div class="mi-title">☿ ♂ ♄ triple conjunction — what Mercury-Aries changes vs Mercury-Pisces</div>
+      <div class="mi-text">The original report described Apr 20 as a "communication catastrophe zone" — accurate but incomplete. Here is the precise Mercury-Aries upgrade: <strong>Mercury-Pisces + Mars-Saturn would have produced confused ultimatums that both sides could plausibly deny.</strong> Mercury-Aries + Mars-Saturn produces ultimatums that are explicit, public, irrevocable, and strategically clear. The IRGC's 48-hour ultimatum is not a confused Pisces threat — it is an Aries war declaration dressed in diplomatic language. <strong>The difference matters for markets: Pisces ultimatums are ignored; Aries-Mars-Saturn ultimatums are priced as genuine.</strong></div>
+    </div>
+    <div class="day-verdict verdict-r">
+      <p><strong>Day verdict (significantly revised):</strong> Apr 20 is now understood as the most consequential communication day of the crisis — more consequential than Apr 19 because the triple conjunction makes everything said today permanently binding. <strong>The IRGC ultimatum, the multilateral statement, and the Congressional challenge are all Mercury-Aries-Mars-Saturn events: they cannot be softened, hedged, or walked back.</strong> Trump's decision space on Apr 22 is now entirely defined by the statements made on Apr 20. The diplomatic window between today and Apr 22 is real but narrow: the only viable path is for both sides to use Apr 21's UNSC energy to reframe their Apr 20 ultimatums as "conditions for extension" rather than "conditions for war."</p>
+    </div>
+  </div>
+</div>
+
+<!-- ===== APR 21 ===== -->
+<div class="day-card day-amber">
+  <div class="day-sidebar">
+    <div><div class="day-date-num">21</div><div class="day-date-label">April 2026 · Monday</div></div>
+    <span class="pill pill-b">UNSC Emergency</span>
+    <span class="pill pill-m">☿ post-triple · aftermath</span>
+    <div class="day-risk"><div class="risk-label">War risk today</div><div class="risk-bar"><div class="risk-fill" style="width:56%;background:var(--amber)"></div></div><div class="risk-pct c-amber">56%</div></div>
+  </div>
+  <div class="day-content">
+    <div class="day-headline">Final 24 Hours · Emergency UNSC · ☿ Post-Conjunction Aftermath · $580B Economic Reality Enters · Can Irrevocable Statements Be Reframed?</div>
+    <div class="cosmic-block">
+      <div class="astro-row mercury-row">
+        <div class="astro-icon">☿</div>
+        <div class="astro-body">
+          <div class="astro-name c-mercury">☿ Mercury past Mars-Saturn · still Aries · separating</div>
+          <div class="astro-text">Mercury has passed the exact triple conjunction but is still in Aries and still in orb of Mars-Saturn. The peak irrevocable-statement energy is dissipating but the Aries directness remains. <strong>Today's diplomacy must work with the statements made yesterday as fixed facts — the question is not what was said but how to reframe it.</strong> Mercury separating from Mars-Saturn creates a brief window where the urgency of the conjunction is felt but the hard commitment begins to soften — enough for a face-saving reformulation.</div>
+        </div>
+      </div>
+      <div class="astro-row planet">
+        <div class="astro-icon">♄</div>
+        <div class="astro-body">
+          <div class="astro-name c-amber">Post-conjunction · economic reality dominant</div>
+          <div class="astro-text">The $580B in cumulative economic damage is now the primary force in the room. Saturn's energy post-conjunction shifts from "hard stop" to "structural accountability" — both sides must now account for what continued conflict actually costs. <strong>This is Mercury-Aries meeting Saturn's cost-accounting function</strong>: the blunt calculation that war costs more than extension.</div>
+        </div>
+      </div>
+    </div>
+    <div class="day-events">
+      <div class="event-row"><div class="event-dot" style="background:var(--blue)"></div><div class="event-body"><div class="event-actor">🇺🇳 UNSC Emergency Session · France and UK</div><div class="event-text">Formal UNSC session. France and UK table a 60-day extension resolution. China and Russia do not veto — extraordinary consensus signal. <strong>Under Mercury-Aries post-conjunction, even the UNSC statement is direct and naming-specific</strong>: it calls the naval blockade by name and calls the IRGC ultimatum by name, rather than using the typical UN euphemism. This directness is actually more effective as political pressure on both sides.</div></div></div>
+      <div class="event-row"><div class="event-dot" style="background:var(--green)"></div><div class="event-body"><div class="event-actor">💰 $580B economic reality · IMF emergency statement</div><div class="event-text">IMF emergency statement warns of "global recession risk if current trajectory continues." Under Mercury-Aries, the IMF's language is <strong>notably more direct than its typically hedged institutional communication</strong> — Mercury-Aries affects all institutions, not just individuals. The $580B figure, stated plainly by the IMF, becomes the economic argument that cuts through the Aries warrior energy on both sides. Numbers are the only thing that outrank bluster under Mars-Saturn.</div></div></div>
+      <div class="event-row"><div class="event-dot" style="background:var(--amber)"></div><div class="event-body"><div class="event-actor">🇵🇰 FM Dar → Oman → Araghchi back-channel</div><div class="event-text">Dar flies to Oman for in-person meeting with Araghchi. The Oman back-channel that produced the original JCPOA. <strong>Under Mercury-Aries post-conjunction, even this back-channel is conducted with unusual directness</strong> — both men state their exact bottom lines to each other, which is more effective than the indirect Pisces signals of the first week. If Araghchi gives Dar a plain "yes, 45 days, on these terms," the extension is announced tomorrow.</div></div></div>
+    </div>
+    <div class="day-markets">
+      <div class="mkt-cell"><div class="mkt-label">Brent crude</div><div class="mkt-val c-amber">$100–112</div></div>
+      <div class="mkt-cell"><div class="mkt-label">Nifty</div><div class="mkt-val c-amber">+100–300 pts relief</div></div>
+      <div class="mkt-cell"><div class="mkt-label">USD/INR</div><div class="mkt-val c-amber">₹94–96</div></div>
+    </div>
+    <div class="mercury-impact">
+      <div class="mi-title">☿ post-conjunction: can Aries ultimatums be reframed as extension conditions?</div>
+      <div class="mi-text">The key Mercury-Aries dynamic on Apr 21: the Apr 20 ultimatums are <strong>facts, not starting points</strong>. Mercury-Aries does not produce retractable statements. But Mercury separating from Mars-Saturn creates a narrow window where the <strong>framing</strong> of those statements can shift without the statements themselves being withdrawn. "Iran will not tolerate blockade past 48 hours" can be reframed as "Iran's condition for extension is blockade suspension" — same substance, different framing. <strong>That reframing is today's only viable diplomatic move.</strong></div>
+    </div>
+    <div class="day-verdict verdict-a">
+      <p><strong>Day verdict:</strong> Apr 21 is the day when economic reality (IMF, $580B, G7) overtakes planetary energy as the dominant force. Mercury post-conjunction is still Aries but separating — creating a 24-hour window where the bluntness is still operative but the hard commitment has begun to soften. The Oman back-channel meeting is the most consequential event: two Mercury-Aries communicators in the same room, both knowing exactly what they want, both facing the same economic math. <strong>The extension is reached in this meeting or it is not reached at all.</strong></p>
+    </div>
+  </div>
+</div>
+
+<!-- ===== APR 22 ===== -->
+<div class="day-card day-amber">
+  <div class="day-sidebar">
+    <div><div class="day-date-num">22</div><div class="day-date-label">April 2026 · Tuesday</div></div>
+    <span class="pill pill-r">DEADLINE DAY</span>
+    <span class="pill pill-m">☿ Aries · approaching ♃ Jupiter</span>
+    <div class="day-risk"><div class="risk-label">War risk today</div><div class="risk-bar"><div class="risk-fill" style="width:50%;background:var(--amber)"></div></div><div class="risk-pct c-amber">50%</div></div>
+  </div>
+  <div class="day-content">
+    <div class="day-headline">CEASEFIRE DEADLINE · ☿ Aries Communications Define the Outcome · Three Scenarios · The First Mercury-Aries Statement of the Morning Sets the Day</div>
+    <div class="cosmic-block">
+      <div class="astro-row mercury-row">
+        <div class="astro-icon">☿</div>
+        <div class="astro-body">
+          <div class="astro-name c-mercury">☿ Mercury in Aries separating from Mars-Saturn · approaching Jupiter at 28° Taurus</div>
+          <div class="astro-text">Mercury is fully past the Mars-Saturn triple conjunction and moving toward Jupiter in late Taurus. This creates an unusual energy: the direct, forceful Aries communication energy is now pulling toward Jupiter's expansive optimism. <strong>If the extension is announced on Apr 22, the Mercury-Jupiter approaching energy amplifies it — markets and diplomats alike will respond to the news with more enthusiasm than the fragile deal warrants.</strong> If war is announced, Mercury-Aries states it with total clarity and Jupiter amplifies the scale of the market reaction in both directions.</div>
+        </div>
+      </div>
+      <div class="astro-row planet">
+        <div class="astro-icon">♃</div>
+        <div class="astro-body">
+          <div class="astro-name c-green">Jupiter approaching Cancer · Peace catalyst 41 days away</div>
+          <div class="astro-text">Jupiter at 28° Taurus, approaching the Cancer ingress on Jun 2. If the extension is agreed today, the 45-day window lands <strong>exactly on the Jupiter Cancer transit</strong> — the most powerful peace-making cosmic configuration of 2026. The universe is structurally arranged to support an extension that runs to June 2. The deadline mechanism and the cosmic calendar are aligned.</div>
+        </div>
+      </div>
+    </div>
+    <div class="day-events">
+      <div class="event-row"><div class="event-dot" style="background:var(--green)"></div><div class="event-body"><div class="event-actor">Outcome A · Most probable (32%) · Extension announced</div><div class="event-text">Pakistan announces 45-day extension. <strong>Both leaders' statements are strikingly direct and combative — Mercury-Aries victory declarations, not diplomatic communiqués.</strong> Trump: "Iran blinked." Iran: "We granted them 45 days to meet our terms." The extension is real but the language is Aries-confrontational. Oil drops to $85–90. Nifty +700 pts. Rupee recovers to ₹92. Extension runs to ~Jun 7 — right inside the Jupiter Cancer window.</div></div></div>
+      <div class="event-row"><div class="event-dot" style="background:var(--amber)"></div><div class="event-body"><div class="event-actor">Outcome B · Second likely (22%) · Limited US strikes</div><div class="event-text">Trump issues a Mercury-Aries war order: not hedged, not conditional, not open to interpretation. <strong>"Surgical and targeted strikes" are announced in the most direct language possible</strong>. Iran retaliates with equal Aries directness — no proxy ambiguity, direct missile strikes. Ceasefire dead. Oil $120–130. Equities −6–8%.</div></div></div>
+      <div class="event-row"><div class="event-dot" style="background:var(--red)"></div><div class="event-body"><div class="event-actor">Outcome C · Third scenario (28%) · Full war resumption</div><div class="event-text">IRGC fires on a US vessel — or issues a Mercury-Aries public statement that CENTCOM treats as a declaration of hostilities. <strong>The war starts with words as much as weapons</strong>. Oil $130–150+. India emergency. EU recession. Global equities −10–15% in week one. The full war scenario is more likely under Mercury-Aries than it would have been under Mercury-Pisces — precisely because both sides are now incapable of the strategic ambiguity that allowed the first ceasefire to happen.</div></div></div>
+    </div>
+    <div class="day-markets">
+      <div class="mkt-cell"><div class="mkt-label">Oil — extension</div><div class="mkt-val c-green">$85–92</div></div>
+      <div class="mkt-cell"><div class="mkt-label">Oil — war</div><div class="mkt-val c-red">$130–150+</div></div>
+      <div class="mkt-cell"><div class="mkt-label">Nifty range</div><div class="mkt-val c-amber">−8% to +4%</div></div>
+    </div>
+    <div class="mercury-impact">
+      <div class="mi-title">☿ Aries deadline: the first statement of the morning is the outcome</div>
+      <div class="mi-text">Under Mercury-Pisces, Apr 22 might have ended with ambiguous signals and a rolling deadline. Under <strong>Mercury-Aries, Apr 22 ends with a clear, public, irrevocable declaration</strong> — announced in the morning and priced by markets before lunch. There is no Pisces ambiguity left. The outcome is binary and stated plainly. <strong>Watch the first Truth Social post, the first IRGC press statement, and the first Pakistan announcement of Apr 22 morning — whichever of these three comes first defines the day.</strong> Mercury-Aries rewards whoever speaks first, clearest, and most decisively.</div>
+    </div>
+    <div class="day-verdict verdict-a">
+      <p><strong>Day verdict (Mercury-updated):</strong> Apr 22's war risk is maintained at 50% (combined Outcomes B+C) but the <em>character</em> of how the outcome manifests is fundamentally changed by Mercury-Aries. <strong>The first ceasefire was born in Mercury-Pisces fog — agreed in the final hours of ambiguity.</strong> A second ceasefire, if it happens, will be announced in Mercury-Aries directness — a blunt, combative declaration that sounds more like a threat than a peace deal, but holds nonetheless. If war comes, it begins with a statement, not a missile. Mercury-Aries has transformed this crisis from a diplomatic fog into a clear-sky confrontation. There is nowhere left to hide for either side.</p>
+    </div>
+  </div>
+</div>
+</div>
+</div>
+
+<!-- =================== MONTH-WISE =================== -->
+<div id="tab-monthwise" class="tab-panel">
+<div class="panel-body">
+
+<div class="cband" style="grid-template-columns:repeat(4,1fr)">
+  <div class="cb-seg" style="background:var(--mercury-bg);color:var(--mercury)">☿ Aries → May 2</div>
+  <div class="cb-seg" style="background:var(--green-bg);color:var(--green)">Jun 2: ♃ Cancer</div>
+  <div class="cb-seg" style="background:var(--green-bg);color:var(--green)">Jul 20: ♃ trine ♆</div>
+  <div class="cb-seg" style="background:var(--purple-bg);color:var(--purple)">Aug 31: ♃ trine ♄</div>
+</div>
+
+<div class="sec-label">Month-by-month outlook · May–December 2026 · Mercury-updated</div>
+<div style="font-family:'Lora',serif;font-size:13px;color:var(--text2);line-height:1.7;margin-bottom:2rem;max-width:760px;">Mercury's ingress into Aries (Apr 14) and its transit through May 2 is the defining communication layer of the ceasefire endgame. Each month below now includes a dedicated Mercury-era analysis showing how the planet's position shapes diplomatic and market communication texture throughout 2026.</div>
+
+<div class="month-grid">
+
+<!-- MAY -->
+<div class="month-card">
+  <div class="month-sidebar">
+    <div class="month-name c-mercury" style="color:var(--mercury)">May</div>
+    <div class="month-year">2026</div>
+    <div class="month-phase pill-m" style="background:var(--mercury-bg);color:var(--mercury);border-color:var(--mercury-border)">☿ Aries → Taurus May 2</div>
+    <div class="month-risk"><div class="risk-label">Peace deal probability</div><div class="risk-bar"><div class="risk-fill" style="width:15%;background:var(--amber)"></div></div><div class="risk-pct c-amber">15%</div></div>
+  </div>
+  <div class="month-content">
+    <div class="month-col">
+      <div class="m-sec-title">Geopolitical dynamics</div>
+      <p class="m-analysis">May is the <strong>cooling-off month</strong>. Mercury exits Aries on May 2 and enters Taurus — shifting communication from impulsive and combative (Aries) to deliberate and patient (Taurus). This is the first diplomatic breathing space since Apr 8. Back-channels are more productive after May 2 because negotiators can think before speaking again. Pakistan's Round 2 talks in the Islamabad Process find better traction in Taurus communication energy than they did in Aries.</p>
+    </div>
+    <div class="month-col">
+      <div class="m-sec-title">Key milestones</div>
+      <div class="m-events">
+        <div class="m-event"><div class="m-dot" style="background:var(--mercury)"></div><div class="m-text"><strong>May 2: Mercury enters Taurus</strong> — the 18-day Mercury-Aries window closes. Diplomatic language becomes more patient, more economically focused, less combative. Round 2 talks resume with better communication foundation</div></div>
+        <div class="m-event"><div class="m-dot" style="background:var(--green)"></div><div class="m-text"><strong>May 1–7:</strong> G7 Summit — 40% of agenda on Gulf crisis. Mercury in Taurus makes the economic argument the dominant one, as Taurus rules material resources and finance</div></div>
+        <div class="m-event"><div class="m-dot" style="background:var(--amber)"></div><div class="m-text"><strong>Mid-May:</strong> Hormuz transit resumes 40–50% normal volume. IAEA partial inspection of Iranian nuclear sites — Mercury-Taurus energy supports patient, process-driven verification discussions</div></div>
+        <div class="m-event"><div class="m-dot" style="background:var(--red)"></div><div class="m-text"><strong>May 25:</strong> Israel strikes Hezbollah depot in Lebanon — Mercury-Taurus means this is harder to escalate into a ceasefire collapse, but the stubbornness of Taurus means neither side backs down easily</div></div>
+      </div>
+    </div>
+    <div class="month-col">
+      <div class="m-sec-title">Economic pulse</div>
+      <div class="m-metrics">
+        <div class="m-metric"><div class="m-mlabel">Brent crude</div><div class="m-mval c-amber">$88–95</div></div>
+        <div class="m-metric"><div class="m-mlabel">Nifty trend</div><div class="m-mval c-green">Recovery +3–5%</div></div>
+        <div class="m-metric"><div class="m-mlabel">EU recession risk</div><div class="m-mval c-amber">55%</div></div>
+        <div class="m-metric"><div class="m-mlabel">INR/USD</div><div class="m-mval c-amber">₹91–94</div></div>
+      </div>
+      <p class="m-analysis">With Hormuz partially restored, oil falls to $88–95. India sees acute relief — forex drain slows. The Mercury-Taurus shift after May 2 produces more stable, predictable market communication — less whiplash from surprise statements, more steady-state pricing of ongoing diplomatic progress.</p>
+    </div>
+    <div class="month-col">
+      <div class="m-sec-title">Cosmic climate</div>
+      <div class="m-events">
+        <div class="m-event"><div class="m-dot" style="background:var(--mercury)"></div><div class="m-text">Mercury Aries (May 1): final days of confrontational communication — watch for late Aries bluntness before the May 2 shift</div></div>
+        <div class="m-event"><div class="m-dot" style="background:var(--blue)"></div><div class="m-text">Uranus in Gemini: 7-year restructuring of trade routes and communications infrastructure begins in earnest — new LNG corridor proposals, alternative Hormuz transit frameworks gaining traction</div></div>
+        <div class="m-event"><div class="m-dot" style="background:var(--amber)"></div><div class="m-text">Jupiter approaching Cancer (28°+ Taurus): peace catalyst energy building but not yet active. The tectonic shift toward diplomatic resolution is approaching</div></div>
+      </div>
+    </div>
+    <div class="m-mercury-box">
+      <div class="mmb-title">☿ Mercury era impact on May</div>
+      <div class="mmb-text">May is defined by the <strong>Mercury-Aries → Mercury-Taurus transition on May 2</strong>. The first two days of May carry the residual confrontational energy of Aries — expect final hardline statements and blunt ultimatums from both sides before the communication tone shifts. After May 2, <strong>Mercury-Taurus introduces patience, economic focus, and stubbornness</strong> — negotiations become more methodical but also more resistant to sudden breakthroughs. The Taurus stubbornness matches the Taurus economic argument: both sides' financial pain is the loudest voice in the room, and Mercury-Taurus amplifies that voice.</div>
+    </div>
+    <div class="m-verdict" style="border-color:var(--amber);background:var(--amber-bg)">
+      <p><strong>May outlook:</strong> Fragile stability. The Mercury-Aries → Taurus shift is the most important May transition. Post-May 2, both sides can have patient conversations without the Aries impulse to speak first and think later. Pakistan's Round 2 Islamabad Process gains genuine traction in Taurus energy. <strong>War-resumption path:</strong> If Apr 22 produced strikes, May's Mercury-Taurus makes the economic cost argument impossible to ignore — both sides' publics are now feeling the material consequences directly, and Taurus amplifies material pain above all other arguments.</p>
+    </div>
+  </div>
+</div>
+
+<!-- JUNE -->
+<div class="month-card">
+  <div class="month-sidebar">
+    <div class="month-name c-green">Jun</div>
+    <div class="month-year">2026</div>
+    <div class="month-phase pill-g">☿ Gemini · ♃ Cancer ingress</div>
+    <div class="month-risk"><div class="risk-label">Peace deal probability</div><div class="risk-bar"><div class="risk-fill" style="width:35%;background:var(--green)"></div></div><div class="risk-pct c-green">35%</div></div>
+  </div>
+  <div class="month-content">
+    <div class="month-col">
+      <div class="m-sec-title">Geopolitical dynamics</div>
+      <p class="m-analysis">June is the <strong>most diplomatically significant month of 2026</strong>. Jupiter enters Cancer on Jun 2 — its highest-dignity sign in Vedic astrology, historically associated with reconciliation and the restoration of disrupted supply chains. Mercury enters Gemini in late May / early June, bringing the most intellectually agile communication energy of the year: rapid information exchange, multiple simultaneous negotiating tracks, and the ability to hold contradictory positions simultaneously without collapsing. This is the perfect Mercury placement for the modular Geneva talks structure.</p>
+    </div>
+    <div class="month-col">
+      <div class="m-sec-title">Key milestones</div>
+      <div class="m-events">
+        <div class="m-event"><div class="m-dot" style="background:var(--green)"></div><div class="m-text"><strong>Jun 2: Jupiter enters Cancer</strong> — single most powerful cosmic peace catalyst of 2026. Formal Geneva talks open. Mercury in Gemini provides the fast, multi-track communication architecture the talks need</div></div>
+        <div class="m-event"><div class="m-dot" style="background:var(--green)"></div><div class="m-text"><strong>Jun 7–10:</strong> Hormuz free passage framework agreed in principle — Mercury-Gemini's facility with complex multi-party agreements makes this the most productive negotiating week since the ceasefire</div></div>
+        <div class="m-event"><div class="m-dot" style="background:var(--amber)"></div><div class="m-text"><strong>Jun 15:</strong> Nuclear working group impasse — Mercury-Gemini enables both sides to discuss the nuclear question in technical sub-groups rather than political grand sessions, reducing face-saving pressure</div></div>
+        <div class="m-event"><div class="m-dot" style="background:var(--green)"></div><div class="m-text"><strong>Jun 20:</strong> Prisoner exchange announced — Mercury-Gemini facilitates the rapid back-and-forth communication that prisoner exchange logistics require</div></div>
+      </div>
+    </div>
+    <div class="month-col">
+      <div class="m-sec-title">Economic pulse</div>
+      <div class="m-metrics">
+        <div class="m-metric"><div class="m-mlabel">Brent crude</div><div class="m-mval c-green">$80–88</div></div>
+        <div class="m-metric"><div class="m-mlabel">Nifty trend</div><div class="m-mval c-green">Rally +5–8%</div></div>
+        <div class="m-metric"><div class="m-mlabel">INR/USD</div><div class="m-mval c-green">₹88–92</div></div>
+        <div class="m-metric"><div class="m-mlabel">Global equities</div><div class="m-mval c-green">Recovery rally</div></div>
+      </div>
+      <p class="m-analysis">June sees the strongest market recovery of H1 2026. Oil falls to $80–88 as Hormuz approaches 80% normal transit. India's Nifty leads the EM recovery. The prisoner exchange and Hormuz framework are priced positively even though the nuclear question is unresolved.</p>
+    </div>
+    <div class="month-col">
+      <div class="m-sec-title">Cosmic climate</div>
+      <div class="m-events">
+        <div class="m-event"><div class="m-dot" style="background:var(--green)"></div><div class="m-text"><strong>Jun 2: Jupiter enters Cancer</strong> — maximum Vedic dignity. Treaties, reconciliation, and humanitarian supply chain restoration are the signature themes</div></div>
+        <div class="m-event"><div class="m-dot" style="background:var(--mercury)"></div><div class="m-text">Mercury in Gemini: most intellectually agile communication of the year — multiple negotiating tracks, rapid information exchange, ability to separate nuclear from Hormuz from sanctions in simultaneous working groups</div></div>
+        <div class="m-event"><div class="m-dot" style="background:var(--amber)"></div><div class="m-text">Mercury-Gemini paired with Jupiter-Cancer: the communication energy (Gemini: quick, many tracks) aligns with the diplomatic goal (Cancer: restoration, humanitarian). June's communication texture is the most peace-conducive since the war began</div></div>
+      </div>
+    </div>
+    <div class="m-mercury-box">
+      <div class="mmb-title">☿ Mercury-Gemini: why June's talks succeed where Islamabad failed</div>
+      <div class="mmb-text">The Islamabad talks failed under <strong>Mercury-Pisces fog</strong> (deceptive, indirect, ambiguous) and then escalated under <strong>Mercury-Aries fire</strong> (blunt, confrontational, ultimatum-driven). June's Geneva talks benefit from <strong>Mercury-Gemini's architecture</strong>: multiple parallel working groups, rapid position-sharing, intellectual agility in finding face-saving formulations, and the ability to agree on sub-questions (Hormuz, prisoners, sanctions) while deferring the hardest question (nuclear). <strong>Mercury-Gemini is the most diplomatically useful Mercury placement possible for complex multi-party negotiations.</strong> It is a direct cosmic upgrade from both Pisces and Aries.</div>
+    </div>
+    <div class="m-verdict" style="border-color:var(--green);background:var(--green-bg)">
+      <p><strong>June outlook:</strong> The most hopeful month since the war began. Jupiter in Cancer + Mercury in Gemini is the ideal cosmic combination for the modular Geneva talks structure. Partial agreements on Hormuz, prisoners, and sanctions are achievable in June; the nuclear question awaits July-August. <strong>War-resumption path:</strong> If war resumed in April, June's Mercury-Gemini produces the first serious back-channel contacts since the conflict escalated — multiple simultaneous indirect channels (Oman, Qatar, Turkey) all active simultaneously, which is Gemini's natural multi-track energy.</p>
+    </div>
+  </div>
+</div>
+
+<!-- JULY -->
+<div class="month-card">
+  <div class="month-sidebar">
+    <div class="month-name c-green">Jul</div>
+    <div class="month-year">2026</div>
+    <div class="month-phase pill-g">☿ Cancer · ♃ trine ♆</div>
+    <div class="month-risk"><div class="risk-label">Peace deal probability</div><div class="risk-bar"><div class="risk-fill" style="width:55%;background:var(--green)"></div></div><div class="risk-pct c-green">55%</div></div>
+  </div>
+  <div class="month-content">
+    <div class="month-col">
+      <div class="m-sec-title">Geopolitical dynamics</div>
+      <p class="m-analysis">July is <strong>the deal window of 2026</strong>. Three major cosmic alignments converge: Neptune turns retrograde on Jul 7 (reality pierces through propaganda), the Jupiter-Neptune-Uranus triple harmony on Jul 20–21 (rare peace-making configuration), and Saturn retrograde begins Jul 26 (war-cost accounting forces both sides to reckon structurally). Mercury in Cancer adds emotional and instinctive depth to communications — leaders speak to their nations' histories and identities rather than just their positions.</p>
+    </div>
+    <div class="month-col">
+      <div class="m-sec-title">Key milestones</div>
+      <div class="m-events">
+        <div class="m-event"><div class="m-dot" style="background:var(--amber)"></div><div class="m-text"><strong>Jul 7: Neptune Rx in Aries</strong> — propaganda dissolves. Mercury-Cancer means leaders begin speaking from emotional memory ("what this war has cost our people") rather than strategic positioning — which paradoxically opens the nuclear question to compromise</div></div>
+        <div class="m-event"><div class="m-dot" style="background:var(--green)"></div><div class="m-text"><strong>Jul 10–15:</strong> Nuclear framework draft circulated. Mercury-Cancer enables Iran's negotiators to frame enrichment retention as a matter of national dignity and historical identity — a formulation the US can accept without appearing to capitulate on substance</div></div>
+        <div class="m-event"><div class="m-dot" style="background:var(--green)"></div><div class="m-text"><strong>Jul 20–21: Jupiter trine Neptune + sextile Uranus</strong> — rare triple outer-planet harmony. Framework agreement signed in principle</div></div>
+        <div class="m-event"><div class="m-dot" style="background:var(--amber)"></div><div class="m-text"><strong>Jul 26: Saturn Rx begins</strong> — war fatigue becomes politically unavoidable. US midterm math turns against continued conflict</div></div>
+      </div>
+    </div>
+    <div class="month-col">
+      <div class="m-sec-title">Economic pulse</div>
+      <div class="m-metrics">
+        <div class="m-metric"><div class="m-mlabel">Brent crude</div><div class="m-mval c-green">$72–82</div></div>
+        <div class="m-metric"><div class="m-mlabel">Nifty</div><div class="m-mval c-green">+8–12% YTD</div></div>
+        <div class="m-metric"><div class="m-mlabel">INR/USD</div><div class="m-mval c-green">₹84–89</div></div>
+        <div class="m-metric"><div class="m-mlabel">S&P 500</div><div class="m-mval c-green">Above Feb levels</div></div>
+      </div>
+    </div>
+    <div class="month-col">
+      <div class="m-sec-title">Cosmic climate</div>
+      <div class="m-events">
+        <div class="m-event"><div class="m-dot" style="background:var(--amber)"></div><div class="m-text"><strong>Jul 7: Neptune Rx Aries</strong> — propaganda narratives dissolve. Both Iran's "victory" claim and Trump's "mission accomplished" tested against hard reality</div></div>
+        <div class="m-event"><div class="m-dot" style="background:var(--green)"></div><div class="m-text"><strong>Jul 20–21:</strong> Jupiter trine Neptune + sextile Uranus — rarest peace-making configuration of 2026</div></div>
+        <div class="m-event"><div class="m-dot" style="background:var(--amber)"></div><div class="m-text"><strong>Jul 26: Saturn Rx Aries</strong> — war fatigue, economic cost accounting, US midterm pressure all force structural de-escalation review</div></div>
+      </div>
+    </div>
+    <div class="m-mercury-box">
+      <div class="mmb-title">☿ Mercury-Cancer in July: emotional memory opens the nuclear question</div>
+      <div class="mmb-text">Mercury in Cancer shifts diplomatic communication from intellectual argument (Gemini) to emotional and historical identity (Cancer). This is crucial for the nuclear question: <strong>Iran's enrichment program is not a strategic choice in Iranian political culture — it is an identity statement.</strong> Mercury-Cancer allows Iranian negotiators to articulate this in terms of national dignity and historical sovereignty rather than technical capability, which creates a path for the US to accept a monitored civilian enrichment framework as "respecting Iranian sovereignty" rather than "capitulating on nuclear weapons." <strong>The July breakthrough is only possible through Mercury-Cancer's emotional-historical framing of the nuclear question.</strong></div>
+    </div>
+    <div class="m-verdict" style="border-color:var(--green);background:var(--green-bg)">
+      <p><strong>July outlook:</strong> The highest-probability deal month. Jupiter-Neptune-Uranus triple harmony (Jul 20–21) is the year's peak peace-making window. Mercury-Cancer provides the emotional-historical language that allows the nuclear question to be reframed from a technical confrontation into a dignity-and-sovereignty agreement. <strong>If the Geneva talks survive to July — which they will if June's partial agreements hold — July is when the framework gets signed.</strong></p>
+    </div>
+  </div>
+</div>
+
+<!-- AUGUST -->
+<div class="month-card">
+  <div class="month-sidebar">
+    <div class="month-name c-green">Aug</div>
+    <div class="month-year">2026</div>
+    <div class="month-phase pill-g">☿ Leo · ♃ trine ♄ Aug 31</div>
+    <div class="month-risk"><div class="risk-label">Peace deal formalised</div><div class="risk-bar"><div class="risk-fill" style="width:65%;background:var(--green)"></div></div><div class="risk-pct c-green">65%</div></div>
+  </div>
+  <div class="month-content">
+    <div class="month-col">
+      <div class="m-sec-title">Geopolitical dynamics</div>
+      <p class="m-analysis">August is <strong>ratification month</strong>. The July framework agreement moves through formal legal and diplomatic ratification. Aug 31's Jupiter trine Saturn — the "real deal" cosmic configuration — is the most auspicious date of 2026 for a durable, lasting peace framework. Mercury moves through Leo in August: authoritative, declarative, sovereignty-asserting communication — perfect for both leaders to announce the deal as a personal victory.</p>
+    </div>
+    <div class="month-col">
+      <div class="m-sec-title">Key milestones</div>
+      <div class="m-events">
+        <div class="m-event"><div class="m-dot" style="background:var(--green)"></div><div class="m-text"><strong>Aug 1–15:</strong> Formal ratification hearings. Mercury-Leo means both Trump and Pezeshkian frame the deal as personal triumphs — the sovereignty-asserting Leo energy helps both leaders sell the deal to their domestic audiences</div></div>
+        <div class="m-event"><div class="m-dot" style="background:var(--green)"></div><div class="m-text"><strong>Aug 20:</strong> Iran's Guardian Council approves nuclear monitoring framework in 7-5 vote — Mercury-Leo gives the moderate faction the bold, authoritative voice needed to win the internal argument</div></div>
+        <div class="m-event"><div class="m-dot" style="background:var(--green)"></div><div class="m-text"><strong>Aug 31: Jupiter trine Saturn</strong> — framework ratified, signed in Geneva. Hormuz declared permanently open to international shipping</div></div>
+        <div class="m-event"><div class="m-dot" style="background:var(--blue)"></div><div class="m-text"><strong>Late August:</strong> GCC reconstruction fund of $120B announced — Mercury-Leo makes this announcement a grand statement of Gulf unity and confidence</div></div>
+      </div>
+    </div>
+    <div class="month-col">
+      <div class="m-sec-title">Economic pulse</div>
+      <div class="m-metrics">
+        <div class="m-metric"><div class="m-mlabel">Brent crude</div><div class="m-mval c-green">$68–76</div></div>
+        <div class="m-metric"><div class="m-mlabel">Nifty</div><div class="m-mval c-green">Record highs</div></div>
+        <div class="m-metric"><div class="m-mlabel">INR/USD</div><div class="m-mval c-green">₹82–86</div></div>
+        <div class="m-metric"><div class="m-mlabel">EU recession risk</div><div class="m-mval c-green">Falls to 20%</div></div>
+      </div>
+    </div>
+    <div class="month-col">
+      <div class="m-sec-title">Cosmic climate</div>
+      <div class="m-events">
+        <div class="m-event"><div class="m-dot" style="background:var(--green)"></div><div class="m-text"><strong>Aug 31: Jupiter trine Saturn</strong> — the "real deal" configuration. Durable, sustainable agreements. Not a flash of optimism but the bedrock of a lasting framework</div></div>
+        <div class="m-event"><div class="m-dot" style="background:var(--amber)"></div><div class="m-text">Saturn still retrograde in Aries — war-cost accounting continues alongside the peace ratification process</div></div>
+      </div>
+    </div>
+    <div class="m-mercury-box">
+      <div class="mmb-title">☿ Mercury-Leo: both leaders claim the deal as their personal victory</div>
+      <div class="mmb-text">Mercury in Leo is the communication signature of <strong>authoritative, sovereignty-first declarations</strong>. This is exactly the energy needed for both Trump and Pezeshkian to sell the August peace deal to their domestic audiences. <strong>Trump: "I won. Iran gave up their nuclear weapons ambitions."</strong> Mercury-Leo supports bold, personal-victory framing. <strong>Iran: "We preserved our sovereign right to civilian enrichment, forced the US to lift sanctions, and reopened Hormuz on our terms."</strong> Mercury-Leo supports equally bold Iranian victory framing. Both statements are true from their respective frames. <strong>The deal works precisely because Mercury-Leo allows both leaders to claim it as a personal triumph without either being factually wrong.</strong></div>
+    </div>
+    <div class="m-verdict" style="border-color:var(--green);background:var(--green-bg)">
+      <p><strong>August outlook:</strong> Ratification month. The Aug 31 Jupiter-Saturn trine is the most auspicious signing date of 2026. Mercury-Leo provides both leaders the communication energy to frame the deal as a personal and national triumph — the prerequisite for domestic ratification in both countries. <strong>The peace deal announced in July is ratified in August because Mercury-Leo makes it politically sayable for both sides.</strong></p>
+    </div>
+  </div>
+</div>
+
+<!-- SEP-DEC CONDENSED -->
+<div class="month-card">
+  <div class="month-sidebar">
+    <div class="month-name c-blue">Sep</div>
+    <div class="month-year">2026</div>
+    <div class="month-phase pill-b">☿ Virgo · Implementation</div>
+    <div class="month-risk"><div class="risk-label">Deal durability</div><div class="risk-bar"><div class="risk-fill" style="width:72%;background:var(--blue)"></div></div><div class="risk-pct c-blue">72%</div></div>
+  </div>
+  <div class="month-content">
+    <div class="month-col">
+      <div class="m-sec-title">Geopolitical & economic dynamics</div>
+      <p class="m-analysis">September is <strong>implementation and accountability month</strong>. Phase 1 US sanctions relief takes effect. IAEA monitoring activated at Iranian nuclear sites. Mercury in Virgo is the ideal placement for implementation work: detailed, analytical, process-driven, and capable of managing complex multi-party verification systems. Mercury-Virgo catches errors in the deal's implementation before they become political crises — the planet of communication and information in the sign of precision and detail.</p>
+    </div>
+    <div class="month-col">
+      <div class="m-sec-title">Key milestones</div>
+      <div class="m-events">
+        <div class="m-event"><div class="m-dot" style="background:var(--blue)"></div><div class="m-text"><strong>Sep 1–15:</strong> IAEA monitoring system activated. Mercury-Virgo's analytical precision supports detailed inspection reporting — the first "clean" IAEA report under Mercury-Virgo carries high credibility</div></div>
+        <div class="m-event"><div class="m-dot" style="background:var(--green)"></div><div class="m-text"><strong>Sep 10:</strong> Phase 1 sanctions relief — Iran reconnected to SWIFT for food and medicine. Mercury-Virgo manages the detailed technical requirements of SWIFT reconnection without diplomatic friction</div></div>
+        <div class="m-event"><div class="m-dot" style="background:var(--blue)"></div><div class="m-text"><strong>UN General Assembly:</strong> Mercury-Virgo's precision in multilateral communication makes the UNGA sideline contacts more substantive than usual — specific, detailed bilateral agreements rather than vague statements of intent</div></div>
+      </div>
+    </div>
+    <div class="month-col">
+      <div class="m-sec-title">Economic pulse</div>
+      <div class="m-metrics">
+        <div class="m-metric"><div class="m-mlabel">Brent crude</div><div class="m-mval c-green">$65–72</div></div>
+        <div class="m-metric"><div class="m-mlabel">Nifty</div><div class="m-mval c-green">Sustained highs</div></div>
+        <div class="m-metric"><div class="m-mlabel">EU GDP</div><div class="m-mval c-green">Stabilising</div></div>
+        <div class="m-metric"><div class="m-mlabel">Iran economy</div><div class="m-mval c-amber">Hyperinflation easing</div></div>
+      </div>
+    </div>
+    <div class="month-col">
+      <div class="m-sec-title">Mercury note</div>
+      <div class="m-events">
+        <div class="m-event"><div class="m-dot" style="background:var(--mercury)"></div><div class="m-text">Mercury-Virgo (Sep): precise, detailed, analytical — ideal for implementation verification. Catches deal compliance issues early before they become political escalations</div></div>
+        <div class="m-event"><div class="m-dot" style="background:var(--amber)"></div><div class="m-text">Saturn retrograde still active — cost accounting and military budget reckonings ongoing. Mercury-Virgo's precision in this period supports accurate economic damage assessments that create pressure for continued compliance</div></div>
+      </div>
+    </div>
+    <div class="m-verdict" style="border-color:var(--blue);background:var(--blue-bg)">
+      <p><strong>September outlook:</strong> Implementation holds. Mercury-Virgo's precision catches and resolves compliance issues before they escalate. The IRGC minor incident in early September is contained because Mercury-Virgo communication environments are less prone to the "blurt first, regret later" dynamics of Mercury-Aries. Both capitals communicate through detailed diplomatic notes rather than public statements — the full reversal of the Aries window.</p>
+    </div>
+  </div>
+</div>
+
+<div class="month-card">
+  <div class="month-sidebar">
+    <div class="month-name c-amber">Oct–Nov</div>
+    <div class="month-year">2026</div>
+    <div class="month-phase pill-a">☿ Libra → Scorpio · Midterms</div>
+    <div class="month-risk"><div class="risk-label">Deal stability</div><div class="risk-bar"><div class="risk-fill" style="width:70%;background:var(--amber)"></div></div><div class="risk-pct c-amber">70%</div></div>
+  </div>
+  <div class="month-content">
+    <div class="month-col">
+      <div class="m-sec-title">Geopolitical dynamics</div>
+      <p class="m-analysis">October is <strong>US midterm election politics</strong>. Mercury moves through Libra (balance, diplomacy, weighing costs and benefits) then Scorpio (investigative, deep-dive, exposing hidden realities). Mercury-Libra supports the Senate ratification vote — the balance-seeking energy of Libra finds the 52-48 bipartisan majority. Mercury-Scorpio in November exposes the hidden costs and beneficiaries of the war (Russia losing oil revenue; Iran's internal opposition still active; IRGC restructuring debates).</p>
+    </div>
+    <div class="month-col">
+      <div class="m-sec-title">Key milestones</div>
+      <div class="m-events">
+        <div class="m-event"><div class="m-dot" style="background:var(--amber)"></div><div class="m-text"><strong>Oct 5:</strong> Minor IRGC naval incident — Mercury-Libra's balance-seeking energy makes both governments quick to declare it "resolved" rather than escalating</div></div>
+        <div class="m-event"><div class="m-dot" style="background:var(--blue)"></div><div class="m-text"><strong>Oct 15:</strong> Senate ratification vote passes 52-48. Mercury-Libra's balance energy produces the exact narrow bipartisan majority needed</div></div>
+        <div class="m-event"><div class="m-dot" style="background:var(--blue)"></div><div class="m-text"><strong>Nov 3: US Midterms</strong> — Mercury-Scorpio investigates the true political costs and benefits of the Iran deal for each candidate. Republicans who voted for ratification claim credit; those who voted against defend their position</div></div>
+        <div class="m-event"><div class="m-dot" style="background:var(--green)"></div><div class="m-text"><strong>Nov 10:</strong> India-Iran 10-year oil agreement signed — Mercury-Scorpio enables the deep, long-term strategic commitment language that a decade-long energy deal requires</div></div>
+      </div>
+    </div>
+    <div class="month-col">
+      <div class="m-sec-title">Economic pulse</div>
+      <div class="m-metrics">
+        <div class="m-metric"><div class="m-mlabel">Oct Brent crude</div><div class="m-mval c-green">$62–70</div></div>
+        <div class="m-metric"><div class="m-mlabel">Nov Nifty</div><div class="m-mval c-green">+12–15% YTD</div></div>
+        <div class="m-metric"><div class="m-mlabel">US gas prices</div><div class="m-mval c-green">$3.40–3.60/gal</div></div>
+        <div class="m-metric"><div class="m-mlabel">Russia oil revenue</div><div class="m-mval c-red">Declining sharply</div></div>
+      </div>
+    </div>
+    <div class="month-col">
+      <div class="m-sec-title">Mercury note</div>
+      <div class="m-events">
+        <div class="m-event"><div class="m-dot" style="background:var(--mercury)"></div><div class="m-text">Mercury-Libra (Oct): balance, diplomacy, weighing costs — the Senate ratification vote is a Mercury-Libra event. The planet of communication in the sign of balance produces the narrow bipartisan majority</div></div>
+        <div class="m-event"><div class="m-dot" style="background:var(--mercury)"></div><div class="m-text">Mercury-Scorpio (Nov): deep investigation, hidden truths exposed. Russia's covert Iran arms supply becomes public knowledge under Mercury-Scorpio's investigative energy. India-Iran long-term deal's deep strategic logic is clearly articulated</div></div>
+      </div>
+    </div>
+    <div class="m-verdict" style="border-color:var(--amber);background:var(--amber-bg)">
+      <p><strong>Oct-Nov outlook:</strong> Mercury-Libra enables the Senate ratification; Mercury-Scorpio exposes the hidden dynamics of the post-war order. Russia's covert weapons supply to Iran is the biggest Mercury-Scorpio revelation — it fractures Russia-Iran relations and accelerates Iran's pivot toward the deal framework. India's bilateral oil deal is the biggest Mercury-Scorpio strategic commitment — a decade-long structural energy security agreement that transforms India's structural vulnerability into advantage.</p>
+    </div>
+  </div>
+</div>
+
+<div class="month-card">
+  <div class="month-sidebar">
+    <div class="month-name c-purple">Dec</div>
+    <div class="month-year">2026</div>
+    <div class="month-phase pill-p">☿ Sagittarius · ♄ direct Dec 10</div>
+    <div class="month-risk"><div class="risk-label">New order stability</div><div class="risk-bar"><div class="risk-fill" style="width:82%;background:var(--purple)"></div></div><div class="risk-pct c-purple">82%</div></div>
+  </div>
+  <div class="month-content">
+    <div class="month-col">
+      <div class="m-sec-title">Geopolitical dynamics</div>
+      <p class="m-analysis">December closes the most consequential year in Middle East geopolitics since 2003. <strong>Saturn turns direct on Dec 10</strong> — ending the 5-month retrograde that has forced both the US and Iran through prolonged cost reckoning. Mercury in Sagittarius brings the year to its philosophical and visionary close: big-picture thinking, long-horizon commitments, and the narrative of what this year means. The Hormuz Free Passage Treaty and the nuclear monitoring framework are reframed by Mercury-Sagittarius as civilisational achievements rather than merely technical agreements.</p>
+    </div>
+    <div class="month-col">
+      <div class="m-sec-title">Key milestones</div>
+      <div class="m-events">
+        <div class="m-event"><div class="m-dot" style="background:var(--purple)"></div><div class="m-text"><strong>Dec 10: Saturn direct in Aries</strong> — the 5-month retrograde review chapter closes. Mercury-Sagittarius frames this as the beginning of a new structural era rather than the end of a crisis</div></div>
+        <div class="m-event"><div class="m-dot" style="background:var(--green)"></div><div class="m-text"><strong>Dec 12:</strong> Hormuz Free Passage Treaty signed at UN — Mercury-Sagittarius gives this the language of universal principle ("the freedom of navigation is a universal human right") rather than merely bilateral agreement</div></div>
+        <div class="m-event"><div class="m-dot" style="background:var(--blue)"></div><div class="m-text"><strong>Dec 15:</strong> Phase 3 sanctions relief — Iran's full oil sector reconnected. Mercury-Sagittarius frames this as Iran's "return to the community of nations"</div></div>
+        <div class="m-event"><div class="m-dot" style="background:var(--green)"></div><div class="m-text"><strong>Dec 31:</strong> Year-end — Brent $58–65. Nifty +15–20% from April lows. Mercury-Sagittarius closes 2026 with the most optimistic possible narrative framing of what was achieved</div></div>
+      </div>
+    </div>
+    <div class="month-col">
+      <div class="m-sec-title">Economic pulse</div>
+      <div class="m-metrics">
+        <div class="m-metric"><div class="m-mlabel">Brent crude</div><div class="m-mval c-green">$58–65</div></div>
+        <div class="m-metric"><div class="m-mlabel">Nifty YTD</div><div class="m-mval c-green">+15–20%</div></div>
+        <div class="m-metric"><div class="m-mlabel">Iran exports</div><div class="m-mval c-green">2.5 Mbpd restored</div></div>
+        <div class="m-metric"><div class="m-mlabel">Russia oil revenue</div><div class="m-mval c-red">−30% vs Apr peak</div></div>
+      </div>
+    </div>
+    <div class="month-col">
+      <div class="m-sec-title">Mercury note</div>
+      <div class="m-events">
+        <div class="m-event"><div class="m-dot" style="background:var(--mercury)"></div><div class="m-text">Mercury-Sagittarius (Dec): big-picture, philosophical, visionary — the year's events are reframed as a civilisational turning point rather than a crisis managed. The narrative of 2026 is written under Mercury-Sagittarius energy</div></div>
+        <div class="m-event"><div class="m-dot" style="background:var(--purple)"></div><div class="m-text"><strong>Dec 10: Saturn direct</strong> — the full Mercury-Aries → Saturn-direct arc of 2026 is now complete. The year began with Mercury-Pisces diplomatic fog, accelerated through Mercury-Aries confrontation, and closes with Mercury-Sagittarius philosophical integration. <strong>The communication arc of 2026 is: fog → fire → wisdom.</strong></div></div>
+      </div>
+    </div>
+    <div class="m-mercury-box">
+      <div class="mmb-title">☿ The 2026 Mercury arc: fog → fire → wisdom</div>
+      <div class="mmb-text">The full Mercury journey through 2026's crisis tells a complete story: <strong>Mercury-Pisces (Apr 8–14)</strong> produced the deceptive, ambiguous ceasefire born in fog. <strong>Mercury-Aries (Apr 14–May 2)</strong> stripped that fog away and forced both sides into blunt confrontation — the most dangerous 18 days of the crisis, but also the 18 days that made a genuine deal inevitable by making ambiguity impossible. <strong>Mercury-Taurus (May)</strong> brought patience and economic focus. <strong>Mercury-Gemini (June)</strong> built the multi-track Geneva architecture. <strong>Mercury-Cancer (July)</strong> unlocked the nuclear question through emotional-historical framing. <strong>Mercury-Leo (August)</strong> gave both leaders the language to claim the deal as personal victories. <strong>Mercury-Virgo (September)</strong> managed implementation with precision. <strong>Mercury-Libra (October)</strong> balanced the Senate ratification. <strong>Mercury-Scorpio (November)</strong> exposed the hidden costs and covert actors. And <strong>Mercury-Sagittarius (December)</strong> reframes the entire year as a civilisational turning point. The Mercury transit sequence is not incidental to 2026's geopolitical story — it <strong>is</strong> the story.</div>
+    </div>
+    <div class="m-verdict" style="border-color:var(--purple);background:var(--purple-bg)">
+      <p><strong>December outlook — year-end:</strong> 2026 closes with a fundamentally restructured Middle East order. Saturn direct on Dec 10 signals the end of the review period and the beginning of the new structural order. Mercury-Sagittarius frames the Hormuz Free Passage Treaty not as a bilateral agreement but as a civilisational achievement — the first internationally governed maritime security framework to formally include Iran as a co-sovereign rather than a threat to be contained. <strong>The communication arc of 2026 — from Mercury-Pisces fog through Mercury-Aries fire to Mercury-Sagittarius wisdom — mirrors the geopolitical arc exactly: ambiguity → confrontation → resolution.</strong></p>
+    </div>
+  </div>
+</div>
+
+</div>
+</div>
+</div>
+
+<script>
+function switchTab(id,btn){
+  document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('tab-'+id).classList.add('active');
+  btn.classList.add('active');
+}
+</script>
+</body>
+</html>

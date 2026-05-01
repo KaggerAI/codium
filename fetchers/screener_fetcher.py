@@ -298,6 +298,7 @@ async def fetch_consolidated_async(ticker: str) -> tuple[dict[str, pd.DataFrame]
     is_consolidated = False
     standalone_url = f"https://www.screener.in/company/{ticker}/"
     consolidated_url = standalone_url + "consolidated/"
+    final_url = ""
     
     # --- STAGE 1: FAST FETCH ---
     log_progress(f"Attempting fast fetch for {ticker} (Checking Consolidated vs Standalone)...")
@@ -324,6 +325,7 @@ async def fetch_consolidated_async(ticker: str) -> tuple[dict[str, pd.DataFrame]
                 response.raise_for_status()
                 text = response.text
                 is_consolidated = False
+                final_url = str(response.url)
             except Exception as e:
                 log_progress(f"Error fetching standalone for {ticker}: {e}")
                 text = ""
@@ -407,7 +409,12 @@ async def fetch_consolidated_async(ticker: str) -> tuple[dict[str, pd.DataFrame]
             page = await browser.new_page()
             try:
                 # Use standalone_url as the safest root
-                await page.goto(standalone_url, wait_until='networkidle', timeout=45000)
+                await page.goto(standalone_url, wait_until='domcontentloaded', timeout=45000)
+                try:
+                    # Wait briefly for the core financial tables to appear in the DOM
+                    await page.wait_for_selector("#quarters", timeout=10000)
+                except Exception:
+                    pass
                 text = await page.content()
             finally:
                 await browser.close()
@@ -622,6 +629,7 @@ def fetch_consolidated(ticker: str) -> tuple[dict[str, pd.DataFrame], str, dict,
     is_consolidated = False
     standalone_url = f"https://www.screener.in/company/{ticker}/"
     consolidated_url = standalone_url + "consolidated/"
+    final_url = ""
     
     log_progress(f"Attempting sync fetch for {ticker} (Checking Consolidated vs Standalone)...")
     try:
@@ -641,6 +649,7 @@ def fetch_consolidated(ticker: str) -> tuple[dict[str, pd.DataFrame], str, dict,
             response.raise_for_status()
             text = response.text
             is_consolidated = False
+            final_url = str(response.url)
         except Exception as e2:
             log_progress(f"Error fetching standalone for {ticker}: {e2}")
             raise e2

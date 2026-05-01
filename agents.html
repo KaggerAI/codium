@@ -60,7 +60,7 @@
         }
 
         .nav-inner {
-            max-width: 1680px;
+            max-width: 1152px;
             margin: 0 auto;
             display: flex;
             align-items: center;
@@ -2417,14 +2417,14 @@
                     style="height:28px;object-fit:contain;filter:invert(1) hue-rotate(-40deg) saturate(3) brightness(1.1);mix-blend-mode:screen;" />
             </a>
             <div class="nav-links">
-                <a href="/app" class="nav-link" onclick="saveAgentsState()">🏠 Home</a>
-                <a href="/agents" class="nav-link active">🤖 Agents</a>
-                <a href="/app" class="nav-link"
-                    onclick="saveAgentsState(); localStorage.setItem('kagger_goto','news')">📰 News</a>
-                <a href="/app" class="nav-link"
-                    onclick="saveAgentsState(); localStorage.setItem('kagger_goto','chart')">📈 Charts</a>
-                <a href="/admin" class="nav-btn-admin" id="admin-link" title="Admin Panel">⚙️</a>
-                <button class="nav-btn-logout" onclick="logout()">Logout</button>
+                <button onclick="saveAgentsState(); window.location.href='/app'"
+                    class="px-5 py-2.5 bg-white/10 hover:bg-white/20 rounded-xl text-white transition-all text-sm font-semibold flex items-center gap-2 border border-white/10"
+                    style="background: rgba(255, 255, 255, 0.1); border-radius: 0.75rem; border: 1px solid rgba(255, 255, 255, 0.1); display: flex; align-items: center; gap: 0.5rem; color: white; padding: 0.625rem 1.25rem; font-size: 0.875rem; font-weight: 600; cursor: pointer; transition: all 0.2s;">
+                    <svg style="width: 1rem; height: 1rem;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                    </svg>
+                    Back to Analyze
+                </button>
             </div>
         </div>
     </nav>
@@ -4111,7 +4111,16 @@
 
         // Restore state on page load
         (function initAgentsState() {
-            // Only restore if there's saved state (means user navigated back)
+            // Check for URL query param first (from navbar deep-links like /agents?tab=concall)
+            const urlParams = new URLSearchParams(window.location.search);
+            const urlTab = urlParams.get('tab');
+            if (urlTab && typeof switchAgent === 'function') {
+                switchAgent(urlTab);
+                // Clean URL without reload so refresh goes to default tab
+                window.history.replaceState({}, '', '/agents');
+                return; // Skip session restore — URL param takes precedence
+            }
+            // Otherwise restore from sessionStorage (user navigated back)
             if (sessionStorage.getItem('kagger_agents_tab')) {
                 restoreAgentsState();
             }

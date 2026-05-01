@@ -1,0 +1,1271 @@
+
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=IBM+Plex+Mono:wght@400;500&family=Source+Serif+4:wght@300;400;600&display=swap');
+
+  :root {
+    --gold: #C9A84C;
+    --gold-light: #E8C96A;
+    --ink: #1A1814;
+    --cream: #F5F0E6;
+    --cream-dark: #EAE3D0;
+    --red-alert: #B83232;
+    --teal-accent: #2A7A6E;
+    --indigo: #2C3E7A;
+    --muted: #7A7260;
+    --border: rgba(201,168,76,0.25);
+  }
+
+  .report-wrap {
+    background: var(--cream);
+    color: var(--ink);
+    font-family: 'Source Serif 4', Georgia, serif;
+    padding: 0;
+    max-width: 860px;
+    margin: 0 auto;
+  }
+
+  .report-header {
+    background: var(--ink);
+    color: var(--cream);
+    padding: 2rem 2.5rem 1.5rem;
+    border-bottom: 3px solid var(--gold);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .report-header::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: radial-gradient(ellipse at 80% 50%, rgba(201,168,76,0.08) 0%, transparent 60%);
+    pointer-events: none;
+  }
+
+  .classify-badge {
+    display: inline-block;
+    border: 1.5px solid var(--gold);
+    color: var(--gold);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 3px;
+    padding: 3px 10px;
+    margin-bottom: 1rem;
+    text-transform: uppercase;
+  }
+
+  .report-title {
+    font-family: 'Playfair Display', Georgia, serif;
+    font-size: 32px;
+    font-weight: 700;
+    line-height: 1.1;
+    color: var(--cream);
+    margin: 0 0 0.4rem;
+    letter-spacing: -0.5px;
+  }
+
+  .report-subtitle {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: rgba(245,240,230,0.55);
+    letter-spacing: 2px;
+    margin: 0 0 1.2rem;
+  }
+
+  .header-meta {
+    display: flex;
+    gap: 2rem;
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .meta-item {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    color: rgba(245,240,230,0.5);
+    letter-spacing: 1px;
+  }
+
+  .meta-item strong {
+    display: block;
+    color: var(--gold);
+    font-size: 11px;
+    margin-bottom: 2px;
+  }
+
+  .planet-banner {
+    background: var(--ink);
+    border-top: 1px solid rgba(201,168,76,0.2);
+    padding: 0.75rem 2.5rem;
+    display: flex;
+    gap: 0;
+    overflow-x: auto;
+  }
+
+  .planet-tag {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    color: var(--gold);
+    letter-spacing: 1.5px;
+    padding: 0 1.5rem 0 0;
+    border-right: 1px solid rgba(201,168,76,0.2);
+    margin-right: 1.5rem;
+    white-space: nowrap;
+  }
+
+  .planet-tag:last-child { border-right: none; margin-right: 0; }
+
+  .planet-tag span { color: rgba(245,240,230,0.5); }
+
+  .report-body { padding: 0 2.5rem 2rem; }
+
+  .section {
+    border-bottom: 1px solid var(--border);
+    padding: 1.8rem 0;
+  }
+
+  .section:last-child { border-bottom: none; }
+
+  .section-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 3px;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 0.6rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .section-label::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  .section-title {
+    font-family: 'Playfair Display', Georgia, serif;
+    font-size: 20px;
+    font-weight: 600;
+    margin: 0 0 1rem;
+    color: var(--ink);
+    line-height: 1.2;
+  }
+
+  .section-title .planet-icon {
+    color: var(--gold);
+    font-size: 18px;
+    margin-right: 6px;
+  }
+
+  .body-text {
+    font-size: 14px;
+    line-height: 1.75;
+    color: #3A3525;
+    margin: 0 0 1rem;
+  }
+
+  .planet-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 10px;
+    margin: 1rem 0;
+  }
+
+  .planet-card {
+    background: var(--ink);
+    color: var(--cream);
+    padding: 14px 16px;
+    border-radius: 4px;
+    border-top: 2px solid var(--gold);
+    position: relative;
+  }
+
+  .planet-card.secondary { border-top-color: var(--teal-accent); }
+  .planet-card.tertiary { border-top-color: var(--indigo); }
+  .planet-card.warning { border-top-color: var(--red-alert); }
+
+  .planet-card-name {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 2px;
+    color: var(--gold);
+    margin-bottom: 6px;
+    text-transform: uppercase;
+  }
+
+  .planet-card.secondary .planet-card-name { color: #5EC4B5; }
+  .planet-card.tertiary .planet-card-name { color: #8899DD; }
+  .planet-card.warning .planet-card-name { color: #E87070; }
+
+  .planet-card-body {
+    font-size: 11px;
+    line-height: 1.6;
+    color: rgba(245,240,230,0.75);
+  }
+
+  .signal-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12.5px;
+    margin: 1rem 0;
+  }
+
+  .signal-table th {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 2px;
+    color: var(--muted);
+    text-align: left;
+    padding: 6px 10px;
+    border-bottom: 1.5px solid var(--border);
+    text-transform: uppercase;
+  }
+
+  .signal-table td {
+    padding: 9px 10px;
+    border-bottom: 0.5px solid rgba(201,168,76,0.12);
+    vertical-align: top;
+    color: #3A3525;
+    line-height: 1.5;
+  }
+
+  .signal-table tr:last-child td { border-bottom: none; }
+
+  .signal-table tr:hover td { background: rgba(201,168,76,0.04); }
+
+  .pill {
+    display: inline-block;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 1px;
+    padding: 2px 7px;
+    border-radius: 2px;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  .pill-red { background: rgba(184,50,50,0.12); color: #A02020; border: 0.5px solid rgba(184,50,50,0.3); }
+  .pill-amber { background: rgba(180,117,23,0.12); color: #8A5A0A; border: 0.5px solid rgba(180,117,23,0.3); }
+  .pill-green { background: rgba(42,122,110,0.12); color: #1A5A50; border: 0.5px solid rgba(42,122,110,0.3); }
+  .pill-indigo { background: rgba(44,62,122,0.12); color: #1C2C6A; border: 0.5px solid rgba(44,62,122,0.3); }
+  .pill-gold { background: rgba(201,168,76,0.15); color: #7A5A10; border: 0.5px solid rgba(201,168,76,0.4); }
+
+  .geo-events {
+    display: grid;
+    gap: 0;
+    margin: 1rem 0;
+  }
+
+  .geo-event {
+    display: grid;
+    grid-template-columns: 90px 1fr;
+    gap: 0;
+    border-bottom: 0.5px solid rgba(201,168,76,0.12);
+    padding: 10px 0;
+    align-items: start;
+  }
+
+  .geo-event:last-child { border-bottom: none; }
+
+  .geo-event-loc {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9px;
+    color: var(--muted);
+    letter-spacing: 1px;
+    padding-top: 2px;
+    text-transform: uppercase;
+  }
+
+  .geo-event-text {
+    font-size: 13px;
+    line-height: 1.6;
+    color: #3A3525;
+  }
+
+  .geo-event-text strong { color: var(--ink); font-weight: 600; }
+
+  .transit-timeline {
+    position: relative;
+    padding-left: 20px;
+    margin: 1rem 0;
+  }
+
+  .transit-timeline::before {
+    content: '';
+    position: absolute;
+    left: 6px;
+    top: 4px;
+    bottom: 4px;
+    width: 1px;
+    background: linear-gradient(to bottom, var(--gold), rgba(201,168,76,0.1));
+  }
+
+  .transit-item {
+    position: relative;
+    margin-bottom: 1.2rem;
+    padding-left: 18px;
+  }
+
+  .transit-item::before {
+    content: '';
+    position: absolute;
+    left: -14px;
+    top: 6px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--gold);
+    border: 2px solid var(--cream);
+    box-shadow: 0 0 0 1px var(--gold);
+  }
+
+  .transit-period {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 2px;
+    color: var(--gold);
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+
+  .transit-head {
+    font-family: 'Playfair Display', serif;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--ink);
+    margin-bottom: 4px;
+  }
+
+  .transit-body {
+    font-size: 12.5px;
+    line-height: 1.65;
+    color: #5A5242;
+  }
+
+  .impact-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    margin: 1rem 0;
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .impact-cell {
+    background: var(--cream);
+    padding: 14px 16px;
+  }
+
+  .impact-cell-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 2px;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+
+  .impact-cell-value {
+    font-size: 22px;
+    font-weight: 600;
+    font-family: 'Playfair Display', serif;
+    color: var(--ink);
+    margin-bottom: 4px;
+  }
+
+  .impact-cell-note {
+    font-size: 11px;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+
+  .impact-cell.alert .impact-cell-value { color: var(--red-alert); }
+  .impact-cell.warn .impact-cell-value { color: #8A5A0A; }
+  .impact-cell.pos .impact-cell-value { color: var(--teal-accent); }
+
+  .dashboard-section {
+    background: var(--ink);
+    color: var(--cream);
+    margin: 1.8rem 0;
+    padding: 1.5rem 2rem;
+    border-radius: 4px;
+  }
+
+  .dashboard-title {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 3px;
+    color: var(--gold);
+    text-transform: uppercase;
+    margin-bottom: 1.2rem;
+  }
+
+  .signal-row {
+    display: grid;
+    grid-template-columns: 160px 1fr 80px;
+    gap: 12px;
+    align-items: center;
+    padding: 9px 0;
+    border-bottom: 0.5px solid rgba(255,255,255,0.06);
+    font-size: 12.5px;
+  }
+
+  .signal-row:last-child { border-bottom: none; }
+
+  .signal-label { color: rgba(245,240,230,0.7); font-size: 11.5px; }
+
+  .signal-bar-wrap {
+    height: 6px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+
+  .signal-bar {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.3s;
+  }
+
+  .bar-red { background: #B83232; }
+  .bar-amber { background: #C9A84C; }
+  .bar-green { background: #2A7A6E; }
+  .bar-indigo { background: #5566CC; }
+
+  .signal-pct {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    text-align: right;
+    color: rgba(245,240,230,0.5);
+  }
+
+  .scenario-cards {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin: 1rem 0;
+  }
+
+  .scenario-card {
+    border: 1px solid var(--border);
+    padding: 14px;
+    border-radius: 4px;
+    background: var(--cream-dark);
+  }
+
+  .scenario-card.best { border-top: 3px solid var(--teal-accent); }
+  .scenario-card.base { border-top: 3px solid var(--gold); }
+  .scenario-card.worst { border-top: 3px solid var(--red-alert); }
+
+  .scenario-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 2px;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+
+  .scenario-card.best .scenario-label { color: var(--teal-accent); }
+  .scenario-card.base .scenario-label { color: #8A5A0A; }
+  .scenario-card.worst .scenario-label { color: var(--red-alert); }
+
+  .scenario-prob {
+    font-family: 'Playfair Display', serif;
+    font-size: 24px;
+    font-weight: 700;
+    margin-bottom: 6px;
+    color: var(--ink);
+  }
+
+  .scenario-desc {
+    font-size: 11.5px;
+    line-height: 1.6;
+    color: #5A5242;
+  }
+
+  .pullquote {
+    border-left: 3px solid var(--gold);
+    margin: 1.5rem 0;
+    padding: 0.8rem 1.5rem;
+    background: rgba(201,168,76,0.05);
+  }
+
+  .pullquote p {
+    font-family: 'Playfair Display', serif;
+    font-size: 16px;
+    font-style: italic;
+    line-height: 1.6;
+    color: var(--ink);
+    margin: 0 0 0.4rem;
+  }
+
+  .pullquote cite {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 2px;
+    color: var(--muted);
+    text-transform: uppercase;
+  }
+
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+  }
+
+  .cosmic-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--ink);
+    color: var(--gold);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 1.5px;
+    padding: 3px 8px;
+    border-radius: 2px;
+    margin-right: 6px;
+    margin-bottom: 4px;
+    text-transform: uppercase;
+  }
+
+  .insight-box {
+    background: rgba(42,122,110,0.06);
+    border: 1px solid rgba(42,122,110,0.25);
+    border-radius: 4px;
+    padding: 14px 16px;
+    margin: 1rem 0;
+    font-size: 13px;
+    line-height: 1.65;
+    color: #1A3530;
+  }
+
+  .insight-box .insight-head {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 2px;
+    color: var(--teal-accent);
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+
+  .risk-box {
+    background: rgba(184,50,50,0.05);
+    border: 1px solid rgba(184,50,50,0.2);
+    border-radius: 4px;
+    padding: 14px 16px;
+    margin: 1rem 0;
+    font-size: 13px;
+    line-height: 1.65;
+    color: #3A1515;
+  }
+
+  .risk-box .risk-head {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 2px;
+    color: var(--red-alert);
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+
+  .footer-bar {
+    background: var(--ink);
+    padding: 1rem 2.5rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-top: 1px solid var(--gold);
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .footer-text {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9px;
+    color: rgba(245,240,230,0.35);
+    letter-spacing: 1px;
+  }
+
+  .footer-text span { color: var(--gold); }
+
+  @media (max-width: 600px) {
+    .two-col { grid-template-columns: 1fr; }
+    .scenario-cards { grid-template-columns: 1fr; }
+    .report-header { padding: 1.5rem; }
+    .report-body { padding: 0 1.5rem 1.5rem; }
+    .planet-banner { padding: 0.75rem 1.5rem; }
+    .footer-bar { padding: 1rem 1.5rem; }
+    .signal-row { grid-template-columns: 130px 1fr 60px; }
+  }
+</style>
+
+<div class="report-wrap">
+
+  <div class="report-header">
+    <div class="classify-badge">Cosmic Financial Intelligence</div>
+    <h1 class="report-title">The Fertilizer Industry:<br>Planetary, Geopolitical &amp; Market Intelligence Report</h1>
+    <p class="report-subtitle">SECTOR DEEP DIVE · COMMODITY INTELLIGENCE · APRIL 2026</p>
+    <div class="header-meta">
+      <div class="meta-item"><strong>Primary Planetary Ruler</strong>Saturn (Shani) + Moon</div>
+      <div class="meta-item"><strong>Current Threat Level</strong>Critical — Strait of Hormuz Crisis</div>
+      <div class="meta-item"><strong>Price Signal</strong>Urea $800+/ton (↑128% YTD)</div>
+      <div class="meta-item"><strong>Cosmic Climate</strong>Saturn in Aries (Fall) · Saturn-Neptune Conjunction</div>
+    </div>
+  </div>
+
+  <div class="planet-banner">
+    <div class="planet-tag">♄ SATURN <span>Primary Ruler</span></div>
+    <div class="planet-tag">☽ MOON <span>Agriculture</span></div>
+    <div class="planet-tag">♀ VENUS <span>Crop Prosperity</span></div>
+    <div class="planet-tag">♂ MARS <span>Chemical Processes</span></div>
+    <div class="planet-tag">☊ RAHU <span>Disruption Agent</span></div>
+    <div class="planet-tag">♃ JUPITER <span>Abundance Signifier</span></div>
+  </div>
+
+  <div class="report-body">
+
+    <!-- SECTION 1: Planetary Governance -->
+    <div class="section">
+      <div class="section-label">Module I</div>
+      <h2 class="section-title"><span class="planet-icon">♄</span>Planetary Governance of the Fertilizer Industry</h2>
+
+      <p class="body-text">In Jyotish (Vedic Mundane Astrology), each industry sector is governed by specific planets that reflect its nature — elemental, chemical, and productive. The fertilizer industry sits at the critical intersection of <em>earth minerals</em>, <em>chemical synthesis</em>, <em>agricultural production</em>, and <em>food security</em>, drawing energy from multiple celestial bodies.</p>
+
+      <div class="planet-cards">
+        <div class="planet-card">
+          <div class="planet-card-name">♄ Saturn — Primary Ruler</div>
+          <div class="planet-card-body">Saturn governs all chemical industries, earth minerals (potash, phosphate rock), nitrogen compounds, structural constraints, scarcity, and slow-moving heavy industry. Fertilizer production — dense, structural, mineral-based — is quintessentially Saturnine. Saturn also rules the Haber-Bosch process: industrial, high-pressure, energy-intensive.</div>
+        </div>
+        <div class="planet-card secondary">
+          <div class="planet-card-name">☽ Moon — Co-ruler</div>
+          <div class="planet-card-body">Moon governs all of agriculture, food security, crop cycles, public consumption, and water (essential for crop irrigation). Moon as the karaka of food makes it the ultimate demand-side ruler of the fertilizer industry — every crop cycle is lunar-governed.</div>
+        </div>
+        <div class="planet-card tertiary">
+          <div class="planet-card-name">♀ Venus — Supporting Ruler</div>
+          <div class="planet-card-body">Venus governs agricultural prosperity, natural abundance, and the fertility of the earth (literally). The word "fertilizer" resonates with Venusian fertility energy. Venus also rules luxury agricultural exports — cash crops, flowers, high-value produce fed by premium fertilizers.</div>
+        </div>
+        <div class="planet-card warning">
+          <div class="planet-card-name">♂ Mars — Process Ruler</div>
+          <div class="planet-card-body">Mars governs heat, chemical reactions, industrial manufacturing, fire-based processes, and conflict. The Haber-Bosch synthesis of ammonia uses extreme heat and pressure — pure Martian energy. Mars also governs geopolitical conflict that disrupts fertilizer supply chains.</div>
+        </div>
+        <div class="planet-card">
+          <div class="planet-card-name">☊ Rahu — Disruption Karaka</div>
+          <div class="planet-card-body">Rahu (North Node) governs sudden shocks, supply chain disruptions, foreign trade imbalances, shadowy cartels, and unexpected price explosions. Every fertilizer supply crisis since 2022 carries a Rahu signature — sudden, destabilizing, geopolitically driven.</div>
+        </div>
+        <div class="planet-card secondary">
+          <div class="planet-card-name">♃ Jupiter — Expansion Karaka</div>
+          <div class="planet-card-body">Jupiter governs agricultural abundance, food production, growth, and optimism. When Jupiter is strong, fertilizer demand rises organically. Jupiter in Cancer (its exaltation sign, current position until June 30, 2026) amplifies food security consciousness and government procurement.</div>
+        </div>
+      </div>
+
+      <div class="pullquote">
+        <p>"Saturn in its shadow governs the mineral bones of the earth — potash, phosphate, nitrogen locked in stone. When Saturn is afflicted, the bones of food production crack. When Saturn is exalted, they rebuild stronger than before."</p>
+        <cite>Classical Mundane Astrology Principle on Agricultural Chemistry</cite>
+      </div>
+    </div>
+
+    <!-- SECTION 2: Current Planetary Climate -->
+    <div class="section">
+      <div class="section-label">Module II</div>
+      <h2 class="section-title">Current Planetary Climate — April 2026</h2>
+
+      <p class="body-text">The current celestial configuration is one of the most challenging for the fertilizer and agricultural supply sector in a generation. Multiple malefic alignments are simultaneously active, creating a multi-vector crisis that is perfectly mirrored in the physical world's supply chain collapse.</p>
+
+      <table class="signal-table">
+        <thead>
+          <tr>
+            <th>Planet</th>
+            <th>Current Position</th>
+            <th>Status</th>
+            <th>Fertilizer Implication</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>♄ Saturn</strong></td>
+            <td>Aries (0°–14°) since Feb 13, 2026</td>
+            <td><span class="pill pill-red">In Fall</span></td>
+            <td>Saturn in Aries is debilitated — its worst placement. Structural supply systems collapse. Chemical industry faces extreme constraint. Policy frameworks break down. Sanctions intensify. This explains the Strait of Hormuz crisis perfectly.</td>
+          </tr>
+          <tr>
+            <td><strong>♆ Neptune</strong></td>
+            <td>Aries 0°–4° (conjunct Saturn)</td>
+            <td><span class="pill pill-red">Exact Conjunction</span></td>
+            <td>Saturn-Neptune conjunction in Aries dissolves established chemical supply structures. Confusion, deception, and hidden actors in fertilizer trade. Spot market volatility. Fog-of-war in pricing. Invisible force majeure chains cascade globally.</td>
+          </tr>
+          <tr>
+            <td><strong>♃ Jupiter</strong></td>
+            <td>Cancer (until June 30, 2026)</td>
+            <td><span class="pill pill-green">Exalted</span></td>
+            <td>Jupiter in exaltation provides the one positive force — food security is top-of-mind for governments, emergency procurement is active, subsidies expand. India, Brazil, and major importers are aggressively stockpiling despite prices. Demand resilience holds.</td>
+          </tr>
+          <tr>
+            <td><strong>♅ Uranus</strong></td>
+            <td>Gemini (new ingress)</td>
+            <td><span class="pill pill-amber">Disruptive</span></td>
+            <td>Uranus in Gemini disrupts global trade routes, shipping logistics, and communications networks. The Red Sea blockade, Strait of Hormuz closure — these are Uranus-in-Gemini events: sudden, route-based, logistics-chain disruptions.</td>
+          </tr>
+          <tr>
+            <td><strong>♇ Pluto</strong></td>
+            <td>Aquarius (long transit)</td>
+            <td><span class="pill pill-indigo">Transformative</span></td>
+            <td>Pluto in Aquarius is restructuring global supply networks at a systemic level. The era of open fertilizer markets ending — nations now treating fertilizers as strategic assets. Resource nationalism deepening. China's "Great Wall" export restrictions are Pluto-Aquarius manifestations.</td>
+          </tr>
+          <tr>
+            <td><strong>☊ Rahu</strong></td>
+            <td>Aquarius (until July 2026)</td>
+            <td><span class="pill pill-red">Amplifying Pluto</span></td>
+            <td>Rahu conjunct Pluto in Aquarius amplifies systemic shock. Global supply chain instability, trade weaponization, sudden price explosions. The urea price doubling from $350 to $800+ in months carries a classic Rahu shock signature.</td>
+          </tr>
+          <tr>
+            <td><strong>♂ Mars</strong></td>
+            <td>Transiting through 2026</td>
+            <td><span class="pill pill-amber">Active</span></td>
+            <td>Mars, ruler of conflict and chemical processes, has activated military conflict (Iran-US-Israel war) that directly targeted energy infrastructure — ammonia plants, natural gas facilities, port operations. Martian energy is literally bombing fertilizer supply chains.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="insight-box">
+        <div class="insight-head">Cosmic Synthesis — Why Now is a Perfect Storm</div>
+        Saturn (primary fertilizer ruler) is in its worst placement (debilitated in Aries) while simultaneously conjunct Neptune (dissolution). Rahu amplifies systemic shock via Aquarius. Meanwhile, Mars has triggered literal military conflict destroying the physical infrastructure of fertilizer production. Jupiter's exaltation provides the only counterforce — governments are spending emergency funds to secure supply, but cannot overcome the structural disruption that Saturn's debilitation is creating.
+      </div>
+    </div>
+
+    <!-- SECTION 3: Geopolitical Crisis Map -->
+    <div class="section">
+      <div class="section-label">Module III</div>
+      <h2 class="section-title">Geopolitical Crisis Map — The Perfect Storm</h2>
+
+      <p class="body-text">The global fertilizer supply chain is experiencing its deepest structural crisis since 1973. Six simultaneous geopolitical disruptions — each severe on its own — have compounded into a systemic supply collapse that is threatening food security across the developing world.</p>
+
+      <div class="impact-grid">
+        <div class="impact-cell alert">
+          <div class="impact-cell-label">Urea Price (US Gulf)</div>
+          <div class="impact-cell-value">$800+</div>
+          <div class="impact-cell-note">Per ton — up from $350 in late 2025. +128% YTD. Crisis-level pricing.</div>
+        </div>
+        <div class="impact-cell alert">
+          <div class="impact-cell-label">Supply Contraction</div>
+          <div class="impact-cell-value">33%</div>
+          <div class="impact-cell-note">Global fertilizer supply chain contracted due to Strait of Hormuz disruption.</div>
+        </div>
+        <div class="impact-cell alert">
+          <div class="impact-cell-label">Gulf Urea Halted</div>
+          <div class="impact-cell-value">46%</div>
+          <div class="impact-cell-note">Of global urea supply sourced from Gulf region — now effectively halted.</div>
+        </div>
+        <div class="impact-cell warn">
+          <div class="impact-cell-label">EU Nitrogen Costs</div>
+          <div class="impact-cell-value">+20%</div>
+          <div class="impact-cell-note">European prices above last year; urea at 2x pre-2020 levels due to Russian sanctions.</div>
+        </div>
+        <div class="impact-cell warn">
+          <div class="impact-cell-label">India Urea Production</div>
+          <div class="impact-cell-value">-800K</div>
+          <div class="impact-cell-note">Tons/month lost — ammonia import disruption from Gulf shutting Indian plants.</div>
+        </div>
+        <div class="impact-cell pos">
+          <div class="impact-cell-label">Brazil Imports (2025)</div>
+          <div class="impact-cell-value">49M MT</div>
+          <div class="impact-cell-note">Record — proactive stockpiling ahead of anticipated shortage. Demand resilience.</div>
+        </div>
+      </div>
+
+      <div class="geo-events">
+        <div class="geo-event">
+          <div class="geo-event-loc">Middle East</div>
+          <div class="geo-event-text"><strong>Strait of Hormuz Closure (Feb–Apr 2026):</strong> Following the US-Israel joint attack on Iran (Feb 28, 2026), Iran imposed control over the Strait — the world's single most critical fertilizer shipping corridor. <strong>38% of global nitrate supply and 20% of phosphate supply</strong> is routed through it. The annual 22M ton Gulf urea export effectively halted. Force majeure declarations cascaded across the industry.</div>
+        </div>
+        <div class="geo-event">
+          <div class="geo-event-loc">China</div>
+          <div class="geo-event-text"><strong>Great Wall of Export Restrictions:</strong> China implemented a dual-track pricing model banning phosphate exports until at least August 2026. The NDRC removed <strong>~5M tons of urea and 40% of global phosphate trade</strong> from international markets, declaring fertilizers a strategic national asset rather than a global commodity.</div>
+        </div>
+        <div class="geo-event">
+          <div class="geo-event-loc">Russia / EU</div>
+          <div class="geo-event-text"><strong>Russia-Belarus Sanctions Deepening:</strong> EU repeatedly escalated sanctions, despite <strong>over 25% of EU nitrogen imports</strong> originating from Russia. European urea is now at 2× pre-2020 price levels. Many EU farms have already reduced fertilizer application — risking significant grain yield shortfalls in 2026 harvest.</div>
+        </div>
+        <div class="geo-event">
+          <div class="geo-event-loc">Ukraine</div>
+          <div class="geo-event-text"><strong>Ongoing Export Suppression:</strong> Continued conflict limits Ukraine and Russia's reliable fertilizer export capability. Natural gas supply constraints to European fertilizer producers persist, maintaining elevated cost floors for European ammonia and urea production.</div>
+        </div>
+        <div class="geo-event">
+          <div class="geo-event-loc">India</div>
+          <div class="geo-event-text"><strong>DAP Crisis &amp; Ammonia Emergency:</strong> India, the world's largest DAP importer (nearly 100% import-dependent), faces shortfalls since 2024. Gulf disruption has cut ammonia supply (80% of needs from Gulf), forcing gas reallocation to non-fertilizer uses. Monthly urea production fell by ~800K tons, threatening the kharif planting season.</div>
+        </div>
+        <div class="geo-event">
+          <div class="geo-event-loc">Red Sea</div>
+          <div class="geo-event-text"><strong>Persistent Logistics Crisis:</strong> Houthi attacks on Red Sea shipping continue to disrupt alternative routing for European and South Asian fertilizer importers. This has added significant freight cost and time delays for shipments from Morocco, Egypt, and alternative suppliers attempting to fill Gulf supply gaps.</div>
+        </div>
+      </div>
+
+      <div class="risk-box">
+        <div class="risk-head">Critical Risk Alert — Food Security Domino Effect</div>
+        The fertilizer supply crisis of 2026 has a 6–9 month lag effect on food prices. Farmers reducing fertilizer application today (or being unable to procure it) will translate into reduced crop yields by Q4 2026 and Q1 2027 harvests. This sets up a potential food price inflation shock of significant magnitude — disproportionately impacting the Global South. The true cost of this geopolitical disruption will be paid at grocery shelves, not just commodity terminals.
+      </div>
+    </div>
+
+    <!-- SECTION 4: Country Impact Matrix -->
+    <div class="section">
+      <div class="section-label">Module IV</div>
+      <h2 class="section-title">Country &amp; Economy Impact Matrix</h2>
+
+      <table class="signal-table">
+        <thead>
+          <tr>
+            <th>Economy</th>
+            <th>Position</th>
+            <th>Vulnerability</th>
+            <th>Strategic Outlook</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>India 🇮🇳</strong></td>
+            <td>Largest DAP importer; 80% ammonia from Gulf</td>
+            <td><span class="pill pill-red">Critical</span></td>
+            <td>Fertilizer subsidy burden exploding. Emergency diplomatic channels with Gulf states, Russia, and Morocco being activated. Domestic urea output reduced. RBI faces food inflation pressure — rate cuts may be delayed. Short-term: severe. Medium-term: strategic push for domestic ammonia capacity.</td>
+          </tr>
+          <tr>
+            <td><strong>China 🇨🇳</strong></td>
+            <td>World's largest producer; export restrictor</td>
+            <td><span class="pill pill-green">Insulated</span></td>
+            <td>China has weaponized its dominant position. Domestic food security prioritized. Yuan gains strategic leverage as global buyers seek bilateral deals. Chinese fertilizer companies CNOOC Chemical, Yuntianhua — major beneficiaries of restricted global supply despite export bans.</td>
+          </tr>
+          <tr>
+            <td><strong>USA 🇺🇸</strong></td>
+            <td>75% domestic self-sufficient (nitrogen)</td>
+            <td><span class="pill pill-amber">Moderate</span></td>
+            <td>CF Industries (CF), Nutrien (NTR), Mosaic running at near-100% capacity utilization. Potash dependency remains from Canada. US becomes a net exporter advantage play as global prices surge. Farm income squeezed by input costs vs. falling crop prices — policy risk of new fertilizer subsidies.</td>
+          </tr>
+          <tr>
+            <td><strong>EU 🇪🇺</strong></td>
+            <td>Highly exposed — Russian import dependent</td>
+            <td><span class="pill pill-red">Severe</span></td>
+            <td>Self-defeating sanctions logic: EU's own restrictions raised its farmers' costs 20%+. Yara International (Norway) facing headwinds from European gas costs and Red Sea logistics. Significant grain yield risk for 2026 harvest — policy reversal pressure mounting from agricultural lobbies.</td>
+          </tr>
+          <tr>
+            <td><strong>Brazil 🇧🇷</strong></td>
+            <td>World's largest importer (43M MT in 2025)</td>
+            <td><span class="pill pill-red">High</span></td>
+            <td>Record stockpiling has provided some buffer, but Russia (28%) and China (28%) — its two largest suppliers — are both under threat/restriction. Soy and corn crop competitiveness at risk. BRL pressure from agricultural import costs. Long-term: urgent domestic production investment needed.</td>
+          </tr>
+          <tr>
+            <td><strong>Russia 🇷🇺</strong></td>
+            <td>Major producer of all 3 nutrients</td>
+            <td><span class="pill pill-green">Strategic Beneficiary</span></td>
+            <td>Russia is one of the few countries gaining strategic advantage — high prices benefit PhosAgro, Uralchem, Acron. Despite western sanctions, bilateral deals with India, Brazil, Africa continue. Russia is exploiting the Western self-isolation of the fertilizer market.</td>
+          </tr>
+          <tr>
+            <td><strong>Morocco 🇲🇦</strong></td>
+            <td>OCP Group — phosphate powerhouse</td>
+            <td><span class="pill pill-green">Opportunity</span></td>
+            <td>Rapidly filling phosphate supply gap left by China and Russia. Phosphate and derivative exports up 19.2% in Q1-Q3 2025. Morocco is becoming Europe's strategic fertilizer lifeline. OCP stock and Moroccan dirham both benefitting from geopolitical repositioning.</td>
+          </tr>
+          <tr>
+            <td><strong>Egypt 🇪🇬</strong></td>
+            <td>Emerging ammonia supplier to Europe</td>
+            <td><span class="pill pill-amber">Moderate</span></td>
+            <td>Fertilizer exports hit $2.2B — decade high. Increased export cap from 45% to 55% of production. Gas import challenges from Israel conflict complicating operations. Net strategic beneficiary in medium term if regional tensions ease.</td>
+          </tr>
+          <tr>
+            <td><strong>Japan 🇯🇵</strong></td>
+            <td>Net importer, low domestic production</td>
+            <td><span class="pill pill-amber">Moderate</span></td>
+            <td>BOJ policy decisions complicated by food inflation feed-through. Yen weakness magnifies import costs. Japan's food security dependency forces emergency bilateral procurement deals. Agricultural deflation thesis challenged by fertilizer-driven cost-push inflation.</td>
+          </tr>
+          <tr>
+            <td><strong>Global South</strong></td>
+            <td>Africa, SE Asia, Central America</td>
+            <td><span class="pill pill-red">Existential</span></td>
+            <td>No strategic reserves, no domestic production, high price sensitivity. Food import bills surging. Nations like Ethiopia, Sudan, Bangladesh, Sri Lanka face acute food security risk. Potential for social instability in 2026–2027 if prices persist above $600/ton.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- SECTION 5: Sector Performance -->
+    <div class="section">
+      <div class="section-label">Module V</div>
+      <h2 class="section-title">Sector Performance &amp; Investment Signals</h2>
+
+      <div class="dashboard-section">
+        <div class="dashboard-title">Fertilizer Sub-Sector Signal Strength Dashboard</div>
+        <div class="signal-row">
+          <div class="signal-label">Nitrogen (Urea/Ammonia)</div>
+          <div class="signal-bar-wrap"><div class="signal-bar bar-red" style="width:92%"></div></div>
+          <div class="signal-pct">Bullish 92%</div>
+        </div>
+        <div class="signal-row">
+          <div class="signal-label">Phosphate (DAP/MAP)</div>
+          <div class="signal-bar-wrap"><div class="signal-bar bar-red" style="width:88%"></div></div>
+          <div class="signal-pct">Bullish 88%</div>
+        </div>
+        <div class="signal-row">
+          <div class="signal-label">Potash (MOP/SOP)</div>
+          <div class="signal-bar-wrap"><div class="signal-bar bar-amber" style="width:72%"></div></div>
+          <div class="signal-pct">Bullish 72%</div>
+        </div>
+        <div class="signal-row">
+          <div class="signal-label">N. American Producers (CF, NTR)</div>
+          <div class="signal-bar-wrap"><div class="signal-bar bar-green" style="width:85%"></div></div>
+          <div class="signal-pct">Bullish 85%</div>
+        </div>
+        <div class="signal-row">
+          <div class="signal-label">Morocco (OCP Group)</div>
+          <div class="signal-bar-wrap"><div class="signal-bar bar-green" style="width:80%"></div></div>
+          <div class="signal-pct">Bullish 80%</div>
+        </div>
+        <div class="signal-row">
+          <div class="signal-label">European Producers (Yara)</div>
+          <div class="signal-bar-wrap"><div class="signal-bar bar-red" style="width:68%"></div></div>
+          <div class="signal-pct">Bearish 68%</div>
+        </div>
+        <div class="signal-row">
+          <div class="signal-label">Green/Blue Ammonia Tech</div>
+          <div class="signal-bar-wrap"><div class="signal-bar bar-green" style="width:78%"></div></div>
+          <div class="signal-pct">Bullish 78%</div>
+        </div>
+        <div class="signal-row">
+          <div class="signal-label">Fertilizer Shipping/Logistics</div>
+          <div class="signal-bar-wrap"><div class="signal-bar bar-indigo" style="width:55%"></div></div>
+          <div class="signal-pct">Neutral 55%</div>
+        </div>
+      </div>
+
+      <div class="two-col">
+        <div>
+          <p class="body-text" style="font-size:13px;"><strong>Outperformers:</strong></p>
+          <p class="body-text" style="font-size:12.5px;">
+            <strong>CF Industries (CF):</strong> 97% capacity utilization, domestic US gas advantage, pivoting to blue ammonia. Maximum beneficiary of supply tightness.<br><br>
+            <strong>Nutrien (NTR):</strong> World's largest potash producer — unique position as geopolitical disruption limits Russian/Belarusian supply.<br><br>
+            <strong>OCP Group (Morocco):</strong> Filling the China-Russia phosphate void. Strategic positioning as Europe's new fertilizer partner. Unprecedented revenue growth.<br><br>
+            <strong>Mosaic Company (MOS):</strong> North American phosphate and potash — operational leverage at current price levels.<br><br>
+            <strong>PhosAgro (Russia):</strong> High prices, bilateral deals with developing nations. Geopolitical beneficiary despite Western isolation.
+          </p>
+        </div>
+        <div>
+          <p class="body-text" style="font-size:13px;"><strong>Underperformers:</strong></p>
+          <p class="body-text" style="font-size:12.5px;">
+            <strong>Yara International (YARIY):</strong> European gas exposure, Red Sea logistics costs, EU regulatory burden. Operational headwinds on multiple fronts.<br><br>
+            <strong>RCF / IFFCO (India — unlisted):</strong> Facing production cuts due to gas allocation downgrade. Dependent on government subsidy extension to stay solvent at current prices.<br><br>
+            <strong>Asian Importers &amp; Distributors:</strong> Margin squeeze — buying at spot crisis prices, unable to pass full cost through to government-regulated farm gate prices.<br><br>
+            <strong>Small Farm Agri-input Retailers:</strong> Demand destruction risk as $800+ urea prices force application rate reductions by farmers.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- SECTION 6: Future Planetary Alignments -->
+    <div class="section">
+      <div class="section-label">Module VI</div>
+      <h2 class="section-title">Future Planetary Alignments &amp; Fertilizer Industry Forecast</h2>
+
+      <p class="body-text">The next five years will see a dramatic transformation in the fertilizer industry's planetary and physical landscape. The current period of maximum stress (Saturn debilitated in Aries) will give way to a progressive structural rebuilding — but the transition will not be smooth, and the industry will emerge fundamentally restructured.</p>
+
+      <div class="transit-timeline">
+
+        <div class="transit-item">
+          <div class="transit-period">Now — June 2026 · Short Term</div>
+          <div class="transit-head">Saturn-Neptune Conjunction in Aries + Jupiter in Cancer (Exalted)</div>
+          <div class="transit-body">The fertilizer crisis intensifies through June 2026. Saturn debilitated, Neptune dissolving supply structures, Rahu amplifying shocks. However, Jupiter exalted in Cancer provides emergency government response. Countries are aggressively stockpiling and signing bilateral deals. Prices remain in the $700–$900/ton range for urea. Phosphate markets remain constricted by China's August 2026 ban. Food inflation accelerates globally. <span class="pill pill-red">Bearish for supply · Bullish for prices</span></div>
+        </div>
+
+        <div class="transit-item">
+          <div class="transit-period">Jul–Sep 2026 · Short-Medium Term</div>
+          <div class="transit-head">Jupiter enters Leo (Jun 30) + Jupiter trine Saturn (Aug 31) + Rahu shifts to Capricorn</div>
+          <div class="transit-body">A significant inflection point. Jupiter entering Leo brings confidence, leadership decisions, and supply-side action by major producers. The Jupiter trine Saturn alignment on August 31, 2026 is the first truly supportive planetary aspect — discipline meeting opportunity. Rahu leaving Aquarius (July 2026) reduces the amplification of systemic global shock. China may begin relaxing phosphate export restrictions from August 2026 (aligned with their own stated timeline). First signs of price stabilization emerge, though prices remain structurally elevated at $550–$700/ton for urea. <span class="pill pill-amber">Stabilization signal emerging</span></div>
+        </div>
+
+        <div class="transit-item">
+          <div class="transit-period">Oct 2026 — Apr 2028 · Medium Term</div>
+          <div class="transit-head">Saturn in Aries (continuing) + Uranus in Gemini + Magic Triangle forming</div>
+          <div class="transit-body">Saturn continues its difficult journey through Aries until April 2028, maintaining structural pressure on chemical and mineral industries. However, the Uranus-Neptune-Pluto "Magic Triangle" (Gemini-Aries-Aquarius) active from July 2026 through 2028 begins opening extraordinary innovation pathways. Green hydrogen and blue ammonia projects accelerate dramatically — Uranus in Gemini governs technological innovation in communications and trade logistics. New trade corridors emerge bypassing traditional chokepoints. The fertilizer industry begins its technological transition. Prices gradually ease from peak but remain 40–60% above pre-2022 levels. <span class="pill pill-amber">Structural transition underway</span></div>
+        </div>
+
+        <div class="transit-item">
+          <div class="transit-period">April 2028 — Jul 2030 · Medium-Long Term</div>
+          <div class="transit-head">CRITICAL: Saturn enters Taurus (April 12, 2028) — The Great Restructuring</div>
+          <div class="transit-body">This is the single most transformative planetary event for the fertilizer industry in the next decade. Saturn in Taurus governs: earth minerals (potash, phosphate), agricultural land, material resources, and stable physical industries. Saturn is well-positioned in Taurus (its friendly sign) — creating STRUCTURE rather than disruption. This transit will: (1) Create new, stable long-term supply agreements and strategic reserves. (2) Consolidate the fertilizer industry — major M&amp;A activity, fewer but stronger producers. (3) Institutionalize green fertilizer standards globally. (4) Stabilize prices at a new, higher "normal" floor. (5) Reward nations that invested in domestic production during the crisis period. India's new ammonia capacity, US expansion projects, Morocco's scaled-up OCP operations — all come to fruition. <span class="pill pill-green">Strongly Bullish for sector restructuring</span></div>
+        </div>
+
+        <div class="transit-item">
+          <div class="transit-period">2028–2030 · Long Term</div>
+          <div class="transit-head">Jupiter in Virgo (2027–28) + Pluto deepening in Aquarius</div>
+          <div class="transit-body">Jupiter in Virgo governs precision agriculture, efficiency, and scientific refinement — directly beneficial to the fertilizer technology sector. Slow-release fertilizers, nano-fertilizers, biostimulants, and AI-driven precision application will see investment surges. Pluto in Aquarius completes the systemic transformation: the open, globalized fertilizer market of 2010–2022 will be replaced by a regional, strategic, and technology-intensive model. Nations and blocs will manage their own fertilizer food-chains rather than relying on open market procurement. This transformation creates long-term winners (innovators, domestic producers, Morocco, Canada, North America) and losers (nations that failed to diversify during the crisis). <span class="pill pill-indigo">Transformative — new industry architecture</span></div>
+        </div>
+
+        <div class="transit-item">
+          <div class="transit-period">2030+ · Long Term Vision</div>
+          <div class="transit-head">Chiron in Taurus (from 2027) — Healing the Agricultural Wound</div>
+          <div class="transit-body">Chiron in Taurus represents healing of the deep wound in humanity's relationship with the earth and food security — the crisis of 2022–2028 will ultimately catalyze the most profound transformation of global agriculture since the Green Revolution. Green ammonia powered by renewable energy will begin reaching cost parity with conventional ammonia by late 2020s. The fertilizer industry, having survived an existential supply crisis, will emerge leaner, greener, and more geopolitically resilient. <span class="pill pill-green">Long-term positive transformation</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SECTION 7: Time-Based Forecasts -->
+    <div class="section">
+      <div class="section-label">Module VII</div>
+      <h2 class="section-title">Probabilistic Scenario Analysis</h2>
+
+      <p class="body-text">Based on the synthesis of planetary transits and geopolitical intelligence, three probability-weighted scenarios are presented across key timeframes:</p>
+
+      <p style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:2px;color:var(--muted);margin:0 0 8px;text-transform:uppercase;">Short-Term (0–3 Months) · Urea Pricing Scenarios</p>
+      <div class="scenario-cards">
+        <div class="scenario-card best">
+          <div class="scenario-label">Best Case</div>
+          <div class="scenario-prob">25%</div>
+          <div class="scenario-desc">Iran ceasefire, Strait of Hormuz reopens within 6 weeks. China partially lifts phosphate ban. Urea retreats to $550–$650/ton by July 2026. Jupiter-Saturn trine acts as stabilizing force.</div>
+        </div>
+        <div class="scenario-card base">
+          <div class="scenario-label">Base Case</div>
+          <div class="scenario-prob">55%</div>
+          <div class="scenario-desc">Strait remains partially disrupted. China ban extends till August 2026. Urea stays $700–$850/ton. Food inflation accelerates. Demand destruction begins in price-sensitive markets. Partial stabilization by Q4 2026.</div>
+        </div>
+        <div class="scenario-card worst">
+          <div class="scenario-label">Worst Case</div>
+          <div class="scenario-prob">20%</div>
+          <div class="scenario-desc">Iran conflict escalates. Strait fully closed for 3+ months. Gulf infrastructure sabotaged. Urea exceeds $1,000/ton. Food crisis in Global South accelerates into famine risk. Emergency G7 coordination required.</div>
+        </div>
+      </div>
+
+      <p style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:2px;color:var(--muted);margin:1.5rem 0 8px;text-transform:uppercase;">Medium-Term (3–12 Months) · Sector Structure Scenarios</p>
+      <div class="scenario-cards">
+        <div class="scenario-card best">
+          <div class="scenario-label">Best Case</div>
+          <div class="scenario-prob">30%</div>
+          <div class="scenario-desc">Jupiter-Saturn trine (Aug 2026) catalyzes geopolitical settlement. New bilateral supply corridors formalized. Green ammonia projects fast-tracked globally. Sector begins orderly restructuring with prices normalizing to $400–$500/ton.</div>
+        </div>
+        <div class="scenario-card base">
+          <div class="scenario-label">Base Case</div>
+          <div class="scenario-prob">50%</div>
+          <div class="scenario-desc">Partial stabilization. New supply corridors (Morocco, Egypt, Canada, Qatar) offset 60–70% of Gulf losses. Prices settle in $500–$650/ton range. North American producers lock in multi-year high margins. Major M&amp;A begins.</div>
+        </div>
+        <div class="scenario-card worst">
+          <div class="scenario-label">Worst Case</div>
+          <div class="scenario-prob">20%</div>
+          <div class="scenario-desc">Extended conflict, Russian sanction escalation, and China's continued restrictions create semi-permanent supply compression. Food inflation becomes entrenched. Agricultural output in EU and South Asia falls 8–12%. Social instability risk rises in 15+ countries.</div>
+        </div>
+      </div>
+
+      <p style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:2px;color:var(--muted);margin:1.5rem 0 8px;text-transform:uppercase;">Long-Term (1–5 Years) · Industry Architecture</p>
+      <div class="scenario-cards">
+        <div class="scenario-card best">
+          <div class="scenario-label">Bull Case</div>
+          <div class="scenario-prob">35%</div>
+          <div class="scenario-desc">Saturn-in-Taurus (Apr 2028) catalyzes a green fertilizer revolution. Green ammonia reaches cost parity by 2030. New geopolitically stable supply hubs (N. America, Morocco, Australia, Norway). Sector worth 2× 2020 market cap by 2030.</div>
+        </div>
+        <div class="scenario-card base">
+          <div class="scenario-label">Base Case</div>
+          <div class="scenario-prob">45%</div>
+          <div class="scenario-desc">Fragmented regionalization of the fertilizer market. Higher structural prices ($350–$500/ton floor for urea vs. $250 pre-crisis). Major consolidation — top 10 producers control 70%+ of market. Geopolitical premium baked permanently into pricing.</div>
+        </div>
+        <div class="scenario-card worst">
+          <div class="scenario-label">Bear Case</div>
+          <div class="scenario-prob">20%</div>
+          <div class="scenario-desc">Chronic supply inadequacy meets climate-driven crop failures. Global food system under sustained structural stress. Agricultural output growth falls below population growth for first time since 1970s. Significant geopolitical realignments forced by food scarcity.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SECTION 8: Actionable Investment Thesis -->
+    <div class="section">
+      <div class="section-label">Module VIII</div>
+      <h2 class="section-title">Actionable Investment Thesis &amp; Strategic Recommendations</h2>
+
+      <div class="insight-box">
+        <div class="insight-head">Core Thesis — The Fertilizer Secular Bull Market</div>
+        The fertilizer industry is at the epicentre of the most powerful planetary and geopolitical convergence since the 1970s oil shock. The crisis of 2022–2028 is not a temporary spike — it is a permanent structural repricing of agricultural inputs driven by: (1) resource nationalism, (2) climate-driven agricultural uncertainty, (3) energy transition disrupting natural gas supply, and (4) the demise of the post-Cold War global supply chain model. The secular thesis: fertilizer companies with domestic gas access, strategic mineral positions, and green technology pipelines will generate multi-year superior returns.
+      </div>
+
+      <table class="signal-table">
+        <thead>
+          <tr>
+            <th>Theme</th>
+            <th>Strategy</th>
+            <th>Horizon</th>
+            <th>Risk</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>N. American Nitrogen</strong></td>
+            <td>Long CF Industries (CF), Nutrien (NTR) — beneficiaries of domestic US gas advantage and global supply tightness. Operating at capacity. High EBITDA margins.</td>
+            <td><span class="pill pill-amber">0–18 Months</span></td>
+            <td><span class="pill pill-green">Low–Medium</span></td>
+          </tr>
+          <tr>
+            <td><strong>Strategic Phosphate</strong></td>
+            <td>Morocco's OCP Group (if accessible via bonds/instruments), Mosaic Company (MOS). Phosphate is the most geographically concentrated and hardest to substitute mineral nutrient.</td>
+            <td><span class="pill pill-amber">6–36 Months</span></td>
+            <td><span class="pill pill-green">Low–Medium</span></td>
+          </tr>
+          <tr>
+            <td><strong>Potash Security Play</strong></td>
+            <td>Nutrien (NTR) remains world's largest potash producer. Canadian Canpotex exports fill Belarusian/Russian void. Strategic sovereign potash assets in Saskatchewan — a geopolitical safe haven.</td>
+            <td><span class="pill pill-gold">12–48 Months</span></td>
+            <td><span class="pill pill-green">Low</span></td>
+          </tr>
+          <tr>
+            <td><strong>Green Ammonia Technology</strong></td>
+            <td>CF Industries' blue ammonia, Yara's green hydrogen pipeline, Nel ASA, Plug Power — anticipating Saturn-in-Taurus (2028) industrialization of green fertilizer. Long-term structural play.</td>
+            <td><span class="pill pill-indigo">36–60 Months</span></td>
+            <td><span class="pill pill-amber">Medium–High</span></td>
+          </tr>
+          <tr>
+            <td><strong>India Domestic Build-out</strong></td>
+            <td>GSFC, RCF, Coromandel International, Chambal Fertilisers — India is being forced by crisis to build domestic ammonia and urea capacity. Government capex cycle just beginning. Saturn-in-Taurus will crystallize this into completed infrastructure.</td>
+            <td><span class="pill pill-indigo">24–60 Months</span></td>
+            <td><span class="pill pill-amber">Medium</span></td>
+          </tr>
+          <tr>
+            <td><strong>Precision Ag Tech</strong></td>
+            <td>Jupiter in Virgo (2027–28) signals the precision agriculture wave. Companies enabling farmers to use less fertilizer more effectively — Corteva Agriscience, FMC Corp, Yara Digital Farming — will see strong demand as fertilizer prices force efficiency optimization.</td>
+            <td><span class="pill pill-indigo">24–48 Months</span></td>
+            <td><span class="pill pill-amber">Medium</span></td>
+          </tr>
+          <tr>
+            <td><strong>Avoid: EU-Exposed</strong></td>
+            <td>Short or underweight European producers heavily exposed to gas costs and regulatory burden — particularly those without access to low-cost gas or strategic mineral ownership. Yara's logistics and cost profile remains under pressure until geopolitical clarity emerges.</td>
+            <td><span class="pill pill-amber">0–12 Months</span></td>
+            <td><span class="pill pill-red">High</span></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="pullquote">
+        <p>"The single most important insight is this: fertilizer has transitioned from a global commodity to a strategic national asset. This regime change — from open market to resource nationalism — will not reverse. Every investment thesis must be rebuilt on this new foundation."</p>
+        <cite>Cosmic Financial Intelligence Synthesis · April 2026</cite>
+      </div>
+    </div>
+
+    <!-- SECTION 9: Macroeconomic Linkages -->
+    <div class="section">
+      <div class="section-label">Module IX</div>
+      <h2 class="section-title">Macroeconomic &amp; Central Bank Implications</h2>
+
+      <div class="two-col">
+        <div>
+          <p class="body-text" style="font-size:13px;"><strong>Inflation Dynamics</strong></p>
+          <p class="body-text" style="font-size:12.5px;">The fertilizer-to-food inflation transmission operates on a 6–9 month lag. The current fertilizer price spike (urea $800+/ton) will register in global food CPIs by Q4 2026–Q1 2027. This represents a new "cost-push" inflationary wave — different from the 2022 demand-pull episode — and harder for central banks to combat through rate hikes alone. Emerging market central banks (RBI, Central Bank of Brazil, Bank of Thailand) face the sharpest tradeoff between growth and food inflation.</p>
+          <p class="body-text" style="font-size:12.5px;"><strong>Astrological correlation:</strong> Saturn in Aries (debilitated) historically correlates with stagflationary pressures — supply constraints driving prices up while economic activity stagnates. The Saturn-Neptune conjunction adds a "fog" dimension — policy makers cannot see clearly through price signals distorted by geopolitical noise.</p>
+        </div>
+        <div>
+          <p class="body-text" style="font-size:13px;"><strong>Central Bank Expected Responses</strong></p>
+          <p class="body-text" style="font-size:12.5px;"><strong>US Fed:</strong> Fertilizer-driven food CPI complicates the rate-cut cycle. Expect Fed to pause any planned easing — particularly with headline food inflation re-accelerating. CF Industries and Nutrien benefit from higher-for-longer domestic pricing.</p>
+          <p class="body-text" style="font-size:12.5px;"><strong>ECB:</strong> EU faces both economic slowdown (energy costs) and food inflation — a true stagflation trap. ECB stuck between growth support and price stability. Expect selective credit facilities for European fertilizer producers rather than broad rate action.</p>
+          <p class="body-text" style="font-size:12.5px;"><strong>RBI (India):</strong> Food inflation is India's most politically sensitive CPI component. Fertilizer subsidies will expand massively — fiscal cost significant. RBI rate cuts delayed. Emergency agricultural credit lines expanding. INR under moderate depreciation pressure from import bill.</p>
+          <p class="body-text" style="font-size:12.5px;"><strong>BOJ:</strong> Fertilizer-driven food import inflation creates rare upward pressure in Japan — a country structurally fighting deflation. BOJ may find this a welcome development, but yen weakness magnifying the import cost is a complexity the BOJ did not anticipate in its normalization plans.</p>
+        </div>
+      </div>
+
+      <div class="risk-box">
+        <div class="risk-head">Systemic Risk — The Food-Finance Feedback Loop</div>
+        If the fertilizer crisis persists at current severity through the Northern Hemisphere planting window (April–June 2026 already at risk), global grain yields in 2026 will fall meaningfully. This feeds directly into: (1) Agricultural commodity price surges (wheat, corn, soybeans), (2) Escalating food import bills for developing nations, (3) Rising sovereign debt stress in food-importing emerging markets, (4) Potential for debt crises in highly exposed nations — triggering a financial stress event that is fertilizer-rooted but manifests in bond markets. This "slow-burn" systemic risk is significantly underpriced by mainstream financial markets, which are focused on the direct commodity price signal but not on the downstream agricultural-financial cascade.
+      </div>
+    </div>
+
+    <!-- SUMMARY DASHBOARD -->
+    <div class="section">
+      <div class="section-label">Summary</div>
+      <h2 class="section-title">Strategic Summary Dashboard</h2>
+
+      <table class="signal-table">
+        <thead>
+          <tr>
+            <th>Indicator</th>
+            <th>Signal</th>
+            <th>0–3 Months</th>
+            <th>3–12 Months</th>
+            <th>1–5 Years</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Urea/Nitrogen Prices</strong></td>
+            <td><span class="pill pill-red">Crisis Elevated</span></td>
+            <td>$700–$900/ton</td>
+            <td>$550–$700/ton</td>
+            <td>$350–$500/ton (new floor)</td>
+          </tr>
+          <tr>
+            <td><strong>Phosphate Prices</strong></td>
+            <td><span class="pill pill-red">China-Restricted</span></td>
+            <td>Very tight</td>
+            <td>Ease post-Aug 2026</td>
+            <td>Morocco strategic pivot</td>
+          </tr>
+          <tr>
+            <td><strong>Potash Prices</strong></td>
+            <td><span class="pill pill-amber">Elevated</span></td>
+            <td>Rising</td>
+            <td>Stable-high</td>
+            <td>Canada dominates</td>
+          </tr>
+          <tr>
+            <td><strong>N. American Stocks</strong></td>
+            <td><span class="pill pill-green">Outperform</span></td>
+            <td>Bullish</td>
+            <td>Bullish</td>
+            <td>Selectively bullish</td>
+          </tr>
+          <tr>
+            <td><strong>European Stocks</strong></td>
+            <td><span class="pill pill-red">Underperform</span></td>
+            <td>Bearish</td>
+            <td>Neutral-Bearish</td>
+            <td>Improving (green pivot)</td>
+          </tr>
+          <tr>
+            <td><strong>Global Food CPI</strong></td>
+            <td><span class="pill pill-red">Accelerating</span></td>
+            <td>Rising sharply</td>
+            <td>Peaks Q4 2026</td>
+            <td>Normalization by 2028</td>
+          </tr>
+          <tr>
+            <td><strong>Industry Structure</strong></td>
+            <td><span class="pill pill-indigo">Transforming</span></td>
+            <td>Crisis mode</td>
+            <td>Restructuring</td>
+            <td>Regionalized, strategic</td>
+          </tr>
+          <tr>
+            <td><strong>Green Ammonia</strong></td>
+            <td><span class="pill pill-green">Accelerating</span></td>
+            <td>R&amp;D phase</td>
+            <td>Pilot scaling</td>
+            <td>Commercial deployment</td>
+          </tr>
+          <tr>
+            <td><strong>Planetary Climate</strong></td>
+            <td><span class="pill pill-red">Saturn Debilitated</span></td>
+            <td>Max stress (Aries)</td>
+            <td>Slight easing (Jupiter trine)</td>
+            <td>Saturn in Taurus = rebuild</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="cosmic-badge">♄ Saturn Signal</div>
+      <div class="cosmic-badge">☽ Moon Signal</div>
+      <div class="cosmic-badge">♃ Jupiter Signal</div>
+      <div class="cosmic-badge">☊ Rahu Alert</div>
+      <p class="body-text" style="font-size:12px;color:var(--muted);margin-top:0.8rem;">The Saturn-in-Taurus ingress of April 2028 is the pivotal event to watch. It marks the transition from the current era of fertilizer crisis and supply fragmentation to a new era of structured, strategic, and technology-enabled fertilizer production. Position accordingly — the window to build long-duration positions in strategic fertilizer assets at current (still relatively early-crisis) valuations is the 12–24 months ahead, before the Saturn-in-Taurus structural re-rating begins.</p>
+    </div>
+
+  </div>
+
+  <div class="footer-bar">
+    <div class="footer-text">Cosmic Financial Intelligence Report · <span>Fertilizer Sector</span> · April 27, 2026</div>
+    <div class="footer-text">Planetary data: Jyotish Mundane Astrology framework · <span>Interpretive &amp; Probabilistic — not investment advice</span></div>
+    <div class="footer-text">Sources: IFPRI, Carnegie Endowment, Farmdoc, IFA, American Farm Bureau</div>
+  </div>
+
+</div>

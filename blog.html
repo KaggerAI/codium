@@ -111,18 +111,21 @@
 
 <body class="gradient-bg min-h-screen text-white">
     <!-- Navigation -->
-    <nav class="container mx-auto px-6 py-6">
+    <nav class="max-w-6xl mx-auto px-6 py-6">
         <div class="flex items-center justify-between">
             <a href="/" class="flex items-center space-x-2">
                 <img src="/kagger_logo_full.jpg" alt="Kagger AI" class="h-8 object-contain"
                     style="filter:invert(1) hue-rotate(-80deg) saturate(3) brightness(1.1);mix-blend-mode:screen;" />
             </a>
             <div class="flex items-center space-x-4">
-                <a href="/blog" class="text-blue-400 hover:text-blue-300 font-medium transition-colors">Blog</a>
-                <div id="nav-auth-container" class="flex items-center gap-4">
-                    <!-- Loading state -->
-                    <div class="w-20 h-8 bg-slate-800 animate-pulse rounded-lg"></div>
-                </div>
+                <button onclick="window.location.href='/app'"
+                    class="px-5 py-2.5 bg-white/10 hover:bg-white/20 rounded-xl text-white transition-all text-sm font-semibold flex items-center gap-2 border border-white/10"
+                    style="background: rgba(255, 255, 255, 0.1); border-radius: 0.75rem; border: 1px solid rgba(255, 255, 255, 0.1); display: flex; align-items: center; gap: 0.5rem; color: white; padding: 0.625rem 1.25rem; font-size: 0.875rem; font-weight: 600; cursor: pointer; transition: all 0.2s;">
+                    <svg style="width: 1rem; height: 1rem;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                    </svg>
+                    Back to Analyze
+                </button>
             </div>
         </div>
     </nav>
@@ -238,6 +241,7 @@
             .then(res => res.json())
             .then(data => {
                 const container = document.getElementById('nav-auth-container');
+                if (!container) return; // Skip if container was removed
                 if (data.id) {
                     // User is logged in - show Home (App)
                     container.innerHTML = `
@@ -260,7 +264,7 @@
             })
             .catch(() => {
                 const container = document.getElementById('nav-auth-container');
-                container.innerHTML = `<a href="/login" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg font-semibold transition-all text-sm">Login</a>`;
+                if (container) container.innerHTML = `<a href="/login" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg font-semibold transition-all text-sm">Login</a>`;
             });
 
         // Determine if we're on a detail page or listing

@@ -837,7 +837,9 @@
     }
 
     @keyframes spin {
-      to { transform: rotate(360deg); }
+      to {
+        transform: rotate(360deg);
+      }
     }
 
     .segment-loading p {
@@ -848,8 +850,15 @@
     }
 
     @keyframes segmentSlideDown {
-      from { opacity: 0; max-height: 0; }
-      to { opacity: 1; max-height: 5000px; }
+      from {
+        opacity: 0;
+        max-height: 0;
+      }
+
+      to {
+        opacity: 1;
+        max-height: 5000px;
+      }
     }
 
     .segment-analysis-wrapper {
@@ -3198,7 +3207,8 @@
         <div id="watchlistEmpty" class="hidden text-center py-20">
           <div
             class="w-20 h-20 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-amber-500/10 to-orange-600/10 flex items-center justify-center">
-            <span class="text-4xl">👀</span></div>
+            <span class="text-4xl">👀</span>
+          </div>
           <h3 class="text-xl font-bold text-white mb-2">Your watchlist is empty</h3>
           <p class="text-slate-400 max-w-md mx-auto">Search for stocks above to add them. Once added, you can launch any
             of 7 AI agents on each stock instantly.</p>
@@ -3538,117 +3548,216 @@
     });
   </script>
   <!-- NAVBAR -->
-  <nav class="bg-white/95 backdrop-blur-md shadow-sm sticky top-0 z-50 border-b border-slate-200/80">
+  <nav style="background:#14532d;" class="backdrop-blur-md shadow-lg sticky top-0 z-50 border-b border-emerald-900/50">
     <div class="container mx-auto px-6 py-2.5 flex items-center justify-between">
-      <a href="#" id="navLogo" class="flex items-center hover:opacity-80 transition-opacity">
-        <img src="/kagger_logo_full.jpg" alt="Kagger AI" class="h-8 object-contain" />
+      <!-- Logo -->
+      <a href="#" id="navLogo" class="flex items-center hover:opacity-80 transition-opacity flex-shrink-0 gap-2">
+        <div
+          style="background:#22c55e;width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-weight:800;color:white;font-size:18px;">
+          K</div>
+        <span style="color:white;font-weight:700;font-size:1.15rem;letter-spacing:-0.02em;">Kagger</span>
       </a>
-      <div class="flex items-center gap-4">
-        <!-- Agents -->
-        <a href="/agents" class="nav-link-slim nav-btn-agents" onclick="saveAppState()">🤖 Advanced Agents</a>
-        <!-- AI News -->
-        <button onclick="showSection('news')" id="news-tab-btn" class="nav-link-slim nav-btn-news">📰 AI Search and
-          News</button>
-        <!-- AI Chart Analysis -->
-        <button onclick="showSection('chart')" id="chart-tab-btn" class="nav-link-slim nav-btn-chart">📈 AI Chart
-          Analysis</button>
-        <!-- Live Budget -->
-        <button onclick="showSection('budget')" id="budget-tab-btn" class="nav-link-slim nav-btn-budget">🇮🇳 Live
-          Budget 2026</button>
-        <!-- Ask the Unanswerable -->
-        <button onclick="showSection('unanswerable')" id="unanswerable-tab-btn" class="nav-link-slim nav-btn-cosmic">🌌
-          Ask the
-          Unanswerable</button>
-        <!-- My Watchlist -->
-        <button onclick="showSection('watchlist')" id="watchlist-tab-btn" class="nav-link-slim nav-btn-watchlist">👀
-          Watchlist</button>
-        <!-- My Portfolio -->
-        <a href="/portfolio" class="nav-link-slim nav-btn-portfolio" onclick="saveAppState()">📁 My Portfolio (beta)</a>
-        <!-- Blog -->
-        <a href="/blog" class="nav-link-slim nav-btn-blog">📝 Blog</a>
-        <!-- Admin (icon only) -->
+
+      <!-- Nav Items -->
+      <div class="flex items-center gap-1">
+
+        <!-- 1. Analysis Dropdown -->
+        <div class="relative group">
+          <button class="flex items-center gap-1.5 px-3.5 py-1.5 text-sm font-medium rounded-full transition-all"
+            style="color:#d1fae5;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12);">
+            <span>📊</span> Analysis
+            <svg class="w-3.5 h-3.5 opacity-60 group-hover:rotate-180 transition-transform duration-200" fill="none"
+              stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          <div
+            class="absolute left-0 top-full pt-2 w-72 opacity-0 invisible translate-y-1 group-hover:opacity-100 group-hover:visible group-hover:translate-y-0 transition-all duration-200 z-50 pointer-events-none group-hover:pointer-events-auto">
+            <div class="bg-white rounded-xl shadow-2xl border border-slate-100 py-2 overflow-hidden">
+              <a href="#" onclick="setMode('company'); return false;"
+                class="flex items-center gap-3 px-4 py-3 hover:bg-emerald-50 transition-colors cursor-pointer no-underline">
+                <span class="text-xl w-8 text-center flex-shrink-0">🏢</span>
+                <div>
+                  <div class="font-semibold text-sm text-slate-800">Company Analysis</div>
+                  <div class="text-xs text-slate-500">In-depth analysis of any company</div>
+                </div>
+              </a>
+              <a href="#" onclick="setMode('industry'); return false;"
+                class="flex items-center gap-3 px-4 py-3 hover:bg-emerald-50 transition-colors cursor-pointer no-underline">
+                <span class="text-xl w-8 text-center flex-shrink-0">🏭</span>
+                <div>
+                  <div class="font-semibold text-sm text-slate-800">Industry Analysis</div>
+                  <div class="text-xs text-slate-500">Analyze industries and sectors</div>
+                </div>
+              </a>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. AI Agents Dropdown -->
+        <div class="relative group">
+          <button class="flex items-center gap-1.5 px-3.5 py-1.5 text-sm font-medium rounded-full transition-all"
+            style="color:#d1fae5;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12);">
+            <span>🤖</span> AI Agents
+            <svg class="w-3.5 h-3.5 opacity-60 group-hover:rotate-180 transition-transform duration-200" fill="none"
+              stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          <div
+            class="absolute left-0 top-full pt-2 w-80 opacity-0 invisible translate-y-1 group-hover:opacity-100 group-hover:visible group-hover:translate-y-0 transition-all duration-200 z-50 pointer-events-none group-hover:pointer-events-auto">
+            <div class="bg-white rounded-xl shadow-2xl border border-slate-100 py-2 overflow-hidden">
+              <a href="/agents?tab=concall" onclick="saveAppState()"
+                class="flex items-center gap-3 px-4 py-3 hover:bg-emerald-50 transition-colors no-underline"><span
+                  class="text-xl w-8 text-center flex-shrink-0">📞</span>
+                <div>
+                  <div class="font-semibold text-sm text-slate-800">Concall Agent</div>
+                  <div class="text-xs text-slate-500">Analyze earnings calls</div>
+                </div>
+              </a>
+              <a href="/agents?tab=forensic" onclick="saveAppState()"
+                class="flex items-center gap-3 px-4 py-3 hover:bg-emerald-50 transition-colors no-underline"><span
+                  class="text-xl w-8 text-center flex-shrink-0">🔍</span>
+                <div>
+                  <div class="font-semibold text-sm text-slate-800">Forensic Agent</div>
+                  <div class="text-xs text-slate-500">Deep dive into financials</div>
+                </div>
+              </a>
+              <a href="/agents?tab=analyst" onclick="saveAppState()"
+                class="flex items-center gap-3 px-4 py-3 hover:bg-emerald-50 transition-colors no-underline"><span
+                  class="text-xl w-8 text-center flex-shrink-0">📄</span>
+                <div>
+                  <div class="font-semibold text-sm text-slate-800">Analyst/Brokerage Reports Agent</div>
+                  <div class="text-xs text-slate-500">Summarize analyst reports</div>
+                </div>
+              </a>
+              <a href="/agents?tab=forecasting" onclick="saveAppState()"
+                class="flex items-center gap-3 px-4 py-3 hover:bg-emerald-50 transition-colors no-underline"><span
+                  class="text-xl w-8 text-center flex-shrink-0">📊</span>
+                <div>
+                  <div class="font-semibold text-sm text-slate-800">Forecasting Agent</div>
+                  <div class="text-xs text-slate-500">AI-powered future projections</div>
+                </div>
+              </a>
+              <a href="/agents?tab=cosmic" onclick="saveAppState()"
+                class="flex items-center gap-3 px-4 py-3 hover:bg-emerald-50 transition-colors no-underline"><span
+                  class="text-xl w-8 text-center flex-shrink-0">🌌</span>
+                <div>
+                  <div class="font-semibold text-sm text-slate-800">Astro Agent</div>
+                  <div class="text-xs text-slate-500">Astrology-based market insights</div>
+                </div>
+              </a>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3. AI Search Dropdown -->
+        <div class="relative group">
+          <button class="flex items-center gap-1.5 px-3.5 py-1.5 text-sm font-medium rounded-full transition-all"
+            style="color:#d1fae5;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12);">
+            <span>🔍</span> AI Search
+            <svg class="w-3.5 h-3.5 opacity-60 group-hover:rotate-180 transition-transform duration-200" fill="none"
+              stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          <div
+            class="absolute left-0 top-full pt-2 w-80 opacity-0 invisible translate-y-1 group-hover:opacity-100 group-hover:visible group-hover:translate-y-0 transition-all duration-200 z-50 pointer-events-none group-hover:pointer-events-auto">
+            <div class="bg-white rounded-xl shadow-2xl border border-slate-100 py-2 overflow-hidden">
+              <a href="#" onclick="showSection('news'); return false;"
+                class="flex items-center gap-3 px-4 py-3 hover:bg-emerald-50 transition-colors cursor-pointer no-underline"><span
+                  class="text-xl w-8 text-center flex-shrink-0">📰</span>
+                <div>
+                  <div class="font-semibold text-sm text-slate-800">AI Search</div>
+                  <div class="text-xs text-slate-500">Search stock-related news with AI</div>
+                </div>
+              </a>
+              <a href="#" onclick="showSection('chart'); return false;"
+                class="flex items-center gap-3 px-4 py-3 hover:bg-emerald-50 transition-colors cursor-pointer no-underline"><span
+                  class="text-xl w-8 text-center flex-shrink-0">📈</span>
+                <div>
+                  <div class="font-semibold text-sm text-slate-800">AI Technical Analysis</div>
+                  <div class="text-xs text-slate-500">Technical analysis using AI</div>
+                </div>
+              </a>
+              <a href="/astro" onclick="saveAppState()"
+                class="flex items-center gap-3 px-4 py-3 hover:bg-emerald-50 transition-colors no-underline"><span
+                  class="text-xl w-8 text-center flex-shrink-0">🌌</span>
+                <div>
+                  <div class="font-semibold text-sm text-slate-800">AI Astro Search</div>
+                  <div class="text-xs text-slate-500">Astro insights for stocks</div>
+                </div>
+              </a>
+              <a href="#" onclick="showSection('budget'); return false;"
+                class="flex items-center gap-3 px-4 py-3 hover:bg-emerald-50 transition-colors cursor-pointer no-underline"><span
+                  class="text-xl w-8 text-center flex-shrink-0">📋</span>
+                <div>
+                  <div class="font-semibold text-sm text-slate-800">AI Budget Search</div>
+                  <div class="text-xs text-slate-500">Analyze Union Budget using AI</div>
+                </div>
+              </a>
+              <a href="#" onclick="showSection('unanswerable'); return false;"
+                class="flex items-center gap-3 px-4 py-3 hover:bg-emerald-50 transition-colors cursor-pointer no-underline"><span
+                  class="text-xl w-8 text-center flex-shrink-0">🧠</span>
+                <div>
+                  <div class="font-semibold text-sm text-slate-800">AI Advanced Search</div>
+                  <div class="text-xs text-slate-500">Multi-agentic AI search</div>
+                </div>
+              </a>
+            </div>
+          </div>
+        </div>
+
+        <!-- 4. Market Intelligence -->
+        <a href="/blog"
+          class="flex items-center gap-1.5 px-3.5 py-1.5 text-sm font-medium rounded-full transition-all no-underline"
+          style="color:#d1fae5;">
+          <span>📡</span> Market Intelligence
+        </a>
+
+        <!-- 5. Watchlist -->
+        <button onclick="showSection('watchlist')" id="watchlist-tab-btn"
+          class="flex items-center gap-1.5 px-3.5 py-1.5 text-sm font-medium rounded-full transition-all border-0 cursor-pointer"
+          style="color:#d1fae5;background:transparent;font-family:inherit;">
+          <span>👀</span> Watchlist
+        </button>
+
+        <!-- 6. My Portfolio -->
+        <a href="/portfolio" onclick="saveAppState()"
+          class="flex items-center gap-1.5 px-3.5 py-1.5 text-sm font-medium rounded-full transition-all no-underline"
+          style="color:#d1fae5;">
+          <span>📁</span> My Portfolio
+        </a>
+      </div>
+
+      <!-- Right: Search + Admin + Logout -->
+      <div class="flex items-center gap-3 flex-shrink-0">
+        <button id="navSearchTrigger"
+          onclick="document.getElementById('tickerInput').focus(); window.scrollTo({top:0,behavior:'smooth'})"
+          class="flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg transition-all cursor-pointer"
+          style="min-width:200px;color:#94a3b8;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);">
+          <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          <span class="truncate">Search companies, sectors...</span>
+          <kbd class="ml-auto text-xs rounded px-1.5 py-0.5 flex-shrink-0"
+            style="background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);color:#94a3b8;">⌘K</kbd>
+        </button>
         <a href="/admin" id="admin-link"
-          class="hidden w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-purple-600 hover:bg-purple-50 transition-all text-sm"
-          title="Admin Panel">⚙️</a>
-        <!-- Logout -->
-        <button onclick="logout()"
-          class="ml-1 px-3 py-1.5 text-xs font-medium text-slate-500 hover:text-red-600 bg-slate-100 hover:bg-red-50 rounded-lg transition-all border border-slate-200 hover:border-red-200">
+          class="hidden w-8 h-8 flex items-center justify-center rounded-lg transition-all text-sm"
+          style="color:#a7f3d0;" title="Admin Panel">⚙️</a>
+        <button onclick="logout()" class="ml-1 px-3 py-1.5 text-xs font-medium rounded-lg transition-all"
+          style="color:#fca5a5;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);">
           Logout
         </button>
       </div>
     </div>
   </nav>
   <style>
-    .nav-link-slim {
-      padding: 0.375rem 0.875rem;
-      font-size: 0.8125rem;
-      font-weight: 500;
-      color: #64748b;
-      border-radius: 999px;
-      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-      background: white;
-      border: 1px solid #e2e8f0;
-      cursor: pointer;
-      font-family: inherit;
-      white-space: nowrap;
-      display: flex;
-      align-items: center;
-      gap: 0.375rem;
-    }
-
-    .nav-btn-agents {
-      color: white !important;
-      background: linear-gradient(135deg, #3b82f6, #2563eb) !important;
-      border-color: #2563eb !important;
-      box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2);
-    }
-
-    .nav-btn-news {
-      color: white !important;
-      background: linear-gradient(135deg, #7c3aed, #6366f1) !important;
-      border-color: #6366f1 !important;
-      box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2);
-    }
-
-    .nav-btn-chart {
-      color: white !important;
-      background: linear-gradient(135deg, #0fb48d, #0d9488) !important;
-      border-color: #0d9488 !important;
-      box-shadow: 0 4px 12px rgba(13, 148, 136, 0.2);
-    }
-
-    .nav-btn-budget {
-      color: white !important;
-      background: linear-gradient(135deg, #f97316, #ef4444) !important;
-      border-color: #ef4444 !important;
-      box-shadow: 0 4px 12px rgba(239, 68, 68, 0.2);
-    }
-
-    .nav-btn-cosmic {
-      color: white !important;
-      background: linear-gradient(135deg, #1e1b4b, #0f172a) !important;
-      border-color: #1e1b4b !important;
-      box-shadow: 0 4px 12px rgba(30, 27, 75, 0.3);
-    }
-
-    .nav-btn-blog {
-      color: white !important;
-      background: linear-gradient(135deg, #f59e0b, #d97706) !important;
-      border-color: #d97706 !important;
-      box-shadow: 0 4px 12px rgba(217, 119, 6, 0.25);
-    }
-
-    .nav-btn-portfolio {
-      color: white !important;
-      background: linear-gradient(135deg, #22c55e, #16a34a) !important;
-      border-color: #16a34a !important;
-      box-shadow: 0 4px 12px rgba(22, 163, 74, 0.25);
-      text-decoration: none;
-    }
-
-    .nav-link-slim:hover {
-      opacity: 0.9;
-      transform: translateY(-1px);
+    /* Dropdown pointer-events fix for gap between trigger and menu */
+    .group:hover>div[class*="pointer-events-none"] {
+      pointer-events: auto !important;
     }
   </style>
   <script>
@@ -3694,40 +3803,73 @@
 
 
 
-        <!-- Main Search Card (Company/Industry Toggle) -->
+        <!-- Main Search Card (Redesigned Hero) -->
         <div id="searchCard"
-          class="bg-white p-8 rounded-xl shadow-lg w-full mb-12 theme-transition border border-slate-100">
-          <!-- Toggle Switch -->
-          <div class="mode-toggle-container">
-            <span id="companyLabel" class="mode-label text-green-700">🏢 Company Search</span>
-            <div id="modeToggle" class="toggle-switch theme-transition" role="switch" aria-checked="false" tabindex="0">
+          class="bg-white p-8 rounded-2xl shadow-lg w-full mb-6 theme-transition border border-slate-100">
+
+          <!-- Hero Greeting Row -->
+          <div class="flex items-center justify-between mb-8">
+            <div>
+              <h1 id="mainTitle" class="text-3xl font-bold text-slate-800 theme-transition" style="line-height:1.3;">
+                <span id="heroGreeting">Good morning!</span> 👋
+              </h1>
+              <p id="mainSubtitle" class="text-slate-500 mt-1 theme-transition">Let's uncover market opportunities with
+                AI-powered intelligence.</p>
             </div>
-            <span id="industryLabel" class="mode-label text-blue-700 inactive">🏭 Industry Research</span>
+            <!-- Mascot + Speech Bubble -->
+            <div class="flex items-center gap-4 flex-shrink-0">
+              <img src="/kagger_mascot.png" alt="Kagger AI" style="height:120px;object-fit:contain;" />
+              <div
+                style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:12px 16px;max-width:200px;position:relative;">
+                <div style="font-weight:700;font-size:0.85rem;color:#14532d;">I'm Kagger AI</div>
+                <div style="font-size:0.75rem;color:#475569;margin-top:2px;line-height:1.4;">Your AI research partner.
+                  Ask me anything about stocks, sectors, or market trends!</div>
+              </div>
+            </div>
           </div>
 
-          <!-- Dynamic Title -->
-          <h1 id="mainTitle" class="text-4xl font-bold mb-2 text-center text-slate-700 theme-transition">AI-based Stock
-            Research</h1>
-          <p id="mainSubtitle" class="text-center text-slate-500 mb-8 theme-transition">Analyze stocks using Kagger's
-            Multi-agentic AI system created exclusively for Indian Companies</p>
-
-          <!-- Company Search Form -->
+          <!-- Company Search Form (restyled) -->
           <div id="companyForm">
             <div class="flex relative">
               <div class="flex-grow relative">
+                <div class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                </div>
                 <input id="tickerInput" type="text"
-                  placeholder="Search stock name or ticker (e.g. TCS, Reliance, HDFC Bank)"
-                  class="w-full border border-slate-300 rounded-l-md px-4 py-3 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-lg theme-transition"
-                  autocomplete="off" />
+                  placeholder="Search for companies, stocks, sectors or ask anything..."
+                  class="w-full border border-slate-200 rounded-l-xl pl-12 pr-4 py-4 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-base theme-transition"
+                  style="background:#f8fafc;" autocomplete="off" />
+                <kbd
+                  class="absolute right-4 top-1/2 -translate-y-1/2 text-xs bg-white border border-slate-200 rounded px-2 py-1 text-slate-400">⌘K</kbd>
                 <div id="stockDropdown"
-                  class="absolute left-0 right-0 top-full bg-white border border-slate-300 rounded-b-md shadow-lg z-50 max-h-64 overflow-y-auto hidden">
-                  <!-- Autocomplete results will appear here -->
+                  class="absolute left-0 right-0 top-full bg-white border border-slate-300 rounded-b-xl shadow-lg z-50 max-h-64 overflow-y-auto hidden">
                 </div>
               </div>
               <button id="goBtn"
-                class="bg-gradient-to-r from-green-500 to-green-600 text-white px-8 py-3 rounded-r-md hover:from-green-600 hover:to-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-all duration-150 ease-in-out font-semibold text-lg theme-transition">
-                Analyze
+                class="bg-gradient-to-r from-emerald-600 to-emerald-700 text-white px-8 py-4 rounded-r-xl hover:from-emerald-700 hover:to-emerald-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 transition-all duration-150 ease-in-out font-semibold text-base theme-transition flex items-center gap-2 whitespace-nowrap">
+                ✨ Analyze Now
               </button>
+              </button>
+            </div>
+
+            <!-- Popular Stocks -->
+            <div class="flex items-center gap-3 mt-5 flex-wrap" id="popularStocksRow">
+              <span class="text-sm text-slate-400 font-medium">Popular:</span>
+              <button onclick="quickAnalyze('RELIANCE')"
+                class="px-3 py-1 text-sm font-medium border border-slate-200 rounded-full hover:bg-emerald-50 hover:border-emerald-300 transition-all text-slate-700 bg-white cursor-pointer">RELIANCE</button>
+              <button onclick="quickAnalyze('TCS')"
+                class="px-3 py-1 text-sm font-medium border border-slate-200 rounded-full hover:bg-emerald-50 hover:border-emerald-300 transition-all text-slate-700 bg-white cursor-pointer">TCS</button>
+              <button onclick="quickAnalyze('HDFCBANK')"
+                class="px-3 py-1 text-sm font-medium border border-slate-200 rounded-full hover:bg-emerald-50 hover:border-emerald-300 transition-all text-slate-700 bg-white cursor-pointer">HDFCBANK</button>
+              <button onclick="quickAnalyze('INFY')"
+                class="px-3 py-1 text-sm font-medium border border-slate-200 rounded-full hover:bg-emerald-50 hover:border-emerald-300 transition-all text-slate-700 bg-white cursor-pointer">INFY</button>
+              <button onclick="quickAnalyze('ICICIBANK')"
+                class="px-3 py-1 text-sm font-medium border border-slate-200 rounded-full hover:bg-emerald-50 hover:border-emerald-300 transition-all text-slate-700 bg-white cursor-pointer">ICICIBANK</button>
+              <a href="#" class="text-sm font-medium text-emerald-600 hover:text-emerald-800 transition-colors">More
+                →</a>
             </div>
           </div>
 
@@ -3736,17 +3878,35 @@
             <div class="flex">
               <input id="industryInput" type="text"
                 placeholder="Enter an industry (e.g. EV Battery, Generic Pharma, Specialty Chemicals)"
-                class="flex-grow border border-slate-300 rounded-l-md px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-lg" />
+                class="flex-grow border border-slate-200 rounded-l-xl px-4 py-4 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base"
+                style="background:#f8fafc;" />
               <button id="industryGoBtn"
-                class="bg-gradient-to-r from-blue-500 to-blue-600 text-white px-8 py-3 rounded-r-md hover:from-blue-600 hover:to-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-150 ease-in-out font-semibold text-lg">
+                class="bg-gradient-to-r from-blue-500 to-blue-600 text-white px-8 py-4 rounded-r-xl hover:from-blue-600 hover:to-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-150 ease-in-out font-semibold text-base">
                 🔍 Research
               </button>
             </div>
 
-            <!-- Industry Options -->
+            <!-- Popular Industries -->
+            <div class="flex items-center gap-3 mt-5 flex-wrap" id="popularIndustryRow">
+              <span class="text-sm text-slate-400 font-medium">Popular:</span>
+              <button onclick="quickAnalyzeIndustry('EV Battery')"
+                class="px-3 py-1 text-sm font-medium border border-slate-200 rounded-full hover:bg-blue-50 hover:border-blue-300 transition-all text-slate-700 bg-white cursor-pointer">EV
+                Battery</button>
+              <button onclick="quickAnalyzeIndustry('Renewable Energy')"
+                class="px-3 py-1 text-sm font-medium border border-slate-200 rounded-full hover:bg-blue-50 hover:border-blue-300 transition-all text-slate-700 bg-white cursor-pointer">Renewable
+                Energy</button>
+              <button onclick="quickAnalyzeIndustry('Railways')"
+                class="px-3 py-1 text-sm font-medium border border-slate-200 rounded-full hover:bg-blue-50 hover:border-blue-300 transition-all text-slate-700 bg-white cursor-pointer">Railways</button>
+              <button onclick="quickAnalyzeIndustry('Defense')"
+                class="px-3 py-1 text-sm font-medium border border-slate-200 rounded-full hover:bg-blue-50 hover:border-blue-300 transition-all text-slate-700 bg-white cursor-pointer">Defense</button>
+              <button onclick="quickAnalyzeIndustry('Textile Manufacturing')"
+                class="px-3 py-1 text-sm font-medium border border-slate-200 rounded-full hover:bg-blue-50 hover:border-blue-300 transition-all text-slate-700 bg-white cursor-pointer">Textile
+                Manufacturing</button>
+              <a href="#" class="text-sm font-medium text-blue-600 hover:text-blue-800 transition-colors">More →</a>
+            </div>
+
             <div class="industry-fields">
-              <div>
-                <label for="horizonSelect">Time Horizon</label>
+              <div><label for="horizonSelect">Time Horizon</label>
                 <select id="horizonSelect">
                   <option value="3">3 Years</option>
                   <option value="5" selected>5 Years</option>
@@ -3754,28 +3914,22 @@
                   <option value="10">10 Years</option>
                 </select>
               </div>
-              <div>
-                <label for="depthSelect">Research Depth</label>
+              <div><label for="depthSelect">Research Depth</label>
                 <select id="depthSelect">
                   <option value="BRIEF">Brief</option>
                   <option value="STANDARD" selected>Standard</option>
                   <option value="DEEP">Deep</option>
                 </select>
               </div>
-              <div>
-                <label for="tickersInput">Specific Tickers (optional)</label>
+              <div><label for="tickersInput">Specific Tickers (optional)</label>
                 <input id="tickersInput" type="text" placeholder="e.g. TATAMOTORS, M&M" />
               </div>
             </div>
-
             <p class="text-xs text-slate-400 mt-3 text-center">⏱️ Deep research may take 3-5 minutes. Results are
               comprehensive investor-grade reports.</p>
-
-            <!-- Industry History Panel -->
             <div class="mt-4 flex items-center justify-between">
-              <button class="kagger-history-toggle blue" onclick="toggleHistoryPanel('industry')">
-                🕐 Recent Searches
-              </button>
+              <button class="kagger-history-toggle blue" onclick="toggleHistoryPanel('industry')">🕐 Recent
+                Searches</button>
               <button class="kagger-history-clear-btn" style="color:#3b82f6;border-color:#bfdbfe;"
                 onclick="KaggerHistory.clear('industry');renderIndustryHistory();" title="Clear history">Clear</button>
             </div>
@@ -3784,6 +3938,55 @@
             </div>
           </div>
         </div> <!-- end searchCard -->
+
+        <!-- Market Indices Ticker Strip -->
+        <div id="marketIndicesCard" class="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 mb-6 w-full">
+          <div class="grid grid-cols-6 gap-4" id="marketIndicesStrip">
+            <div class="text-center">
+              <div class="text-xs text-slate-400 font-medium mb-1">NIFTY 50</div>
+              <div class="text-lg font-bold text-slate-800">22,530.70</div>
+              <div class="text-xs text-emerald-600 font-medium">+0.62%</div>
+            </div>
+            <div class="text-center">
+              <div class="text-xs text-slate-400 font-medium mb-1">SENSEX</div>
+              <div class="text-lg font-bold text-slate-800">74,102.32</div>
+              <div class="text-xs text-emerald-600 font-medium">+0.58%</div>
+            </div>
+            <div class="text-center">
+              <div class="text-xs text-slate-400 font-medium mb-1">NIFTY BANK</div>
+              <div class="text-lg font-bold text-slate-800">48,915.65</div>
+              <div class="text-xs text-emerald-600 font-medium">+0.71%</div>
+            </div>
+            <div class="text-center">
+              <div class="text-xs text-slate-400 font-medium mb-1">NIFTY IT</div>
+              <div class="text-lg font-bold text-slate-800">34,150.80</div>
+              <div class="text-xs text-red-500 font-medium">-0.21%</div>
+            </div>
+            <div class="text-center">
+              <div class="text-xs text-slate-400 font-medium mb-1">INDIA VIX</div>
+              <div class="text-lg font-bold text-slate-800">13.24</div>
+              <div class="text-xs text-red-500 font-medium">-1.18%</div>
+            </div>
+            <div class="text-center flex flex-col justify-center">
+              <div class="text-xs text-slate-400 font-medium">Market Closed</div>
+              <div class="text-xs text-slate-400 mt-1">3:30 PM IST</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Key Portfolio Metrics -->
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 mb-6 w-full" id="portfolioMetricsCard">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="text-base font-bold text-slate-800">Key Portfolio Metrics <span
+                class="text-slate-400 cursor-help" title="Summary of your portfolio performance">ⓘ</span></h3>
+            <a href="/portfolio" onclick="saveAppState()"
+              class="text-sm font-medium text-emerald-600 hover:text-emerald-800 transition-colors no-underline">View
+              Portfolio →</a>
+          </div>
+          <div class="grid grid-cols-7 gap-3" id="portfolioMetricsGrid">
+            <!-- Dynamically populated by fetchPortfolioMetrics() -->
+          </div>
+        </div>
 
         <div id="progress-container" class="theme-transition">
           <div id="progress-messages"></div>
@@ -4177,7 +4380,7 @@
       const containerId = `segment-analysis-${section.replace(/\s/g, '-')}`;
       const container = document.getElementById(containerId);
       const btn = document.querySelector(`.segment-extract-btn[data-section="${section}"]`);
-      
+
       if (!container || !btn) {
         console.error('Segment container or button not found for:', section);
         return;
@@ -4194,7 +4397,7 @@
         }
         return;
       }
-      
+
       // Show loading state
       container.classList.remove('hidden');
       container.innerHTML = `
@@ -4205,35 +4408,35 @@
         </div>`;
       btn.disabled = true;
       btn.innerHTML = '⏳ Analyzing...';
-      
+
       try {
         const ticker = window.currentTicker;
         if (!ticker) throw new Error('No ticker selected');
-        
+
         const resp = await fetch('/api/analyze-segments', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ticker, section })
         });
-        
+
         let data;
         try {
-            data = await resp.json();
+          data = await resp.json();
         } catch (e) {
-            const errText = await resp.text();
-            console.error("Non-JSON API response from segment extraction:", errText);
-            throw new Error(`Server returned an invalid response (possibly timed out due to document size). Status: ${resp.status}`);
+          const errText = await resp.text();
+          console.error("Non-JSON API response from segment extraction:", errText);
+          throw new Error(`Server returned an invalid response (possibly timed out due to document size). Status: ${resp.status}`);
         }
-        
+
         if (data.success) {
           container.innerHTML = data.html;
           container.style.animation = 'segmentSlideDown 0.4s ease-out';
-          
+
           // Setup toggle state
           btn.dataset.loaded = "true";
           btn.innerHTML = '− Hide Segment Details';
           btn.disabled = false;
-          
+
           // Gray theme for the toggle button
           btn.style.background = 'linear-gradient(135deg, #4b5563 0%, #374151 100%)';
           btn.style.boxShadow = '0 2px 8px rgba(75, 85, 99, 0.3)';
@@ -4389,8 +4592,8 @@
           class="ann-tab flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium whitespace-nowrap
                  rounded-t-lg border border-b-0 transition-all duration-200 shrink-0
                  ${isActive
-                   ? 'bg-white text-slate-800 border-slate-200 relative z-10 shadow-sm'
-                   : 'bg-slate-100 text-slate-500 border-transparent hover:bg-slate-50 hover:text-slate-700'}"
+            ? 'bg-white text-slate-800 border-slate-200 relative z-10 shadow-sm'
+            : 'bg-slate-100 text-slate-500 border-transparent hover:bg-slate-50 hover:text-slate-700'}"
           ${isActive ? `style="box-shadow: 0 1px 0 white, 0 -1px 3px rgba(0,0,0,0.04);"` : ''}>
           <span class="text-base">${icon}</span>
           <span>${category}</span>
@@ -4462,7 +4665,7 @@
       return html;
     }
 
-    window.switchAnnTab = function(uid, activeIdx, total) {
+    window.switchAnnTab = function (uid, activeIdx, total) {
       for (let i = 0; i < total; i++) {
         const tab = document.querySelector(`[data-ann-tab="${uid}-${i}"]`);
         const panel = document.getElementById(`${uid}-panel-${i}`);
@@ -4494,7 +4697,7 @@
       }
     };
 
-    window.toggleAnnCategory = function(catId, btn) {
+    window.toggleAnnCategory = function (catId, btn) {
       const el = document.getElementById(catId);
       if (!el) return;
       const isHidden = el.classList.toggle('hidden');
@@ -4518,7 +4721,7 @@
 
       progressMessages.innerHTML = '';
       progressContainer.classList.add('visible');
-      const channel = currentMode === 'industry' ? 'industry' : 'company';
+      const channel = currentMode === 'industry' ? 'industry' : 'default';
       sseConnection = new EventSource('/progress-stream?channel=' + channel);
       let messageElement = null, isAnimating = false;
       sseConnection.onmessage = function (event) {
@@ -4626,11 +4829,10 @@
       if (mode === 'industry') {
         // Switch to industry mode
         body.classList.add('theme-industry');
-        modeToggle.classList.add('industry');
-        modeToggle.setAttribute('aria-checked', 'true');
+        if (modeToggle) { modeToggle.classList.add('industry'); modeToggle.setAttribute('aria-checked', 'true'); }
 
-        companyLabel.classList.add('inactive');
-        industryLabel.classList.remove('inactive');
+        if (companyLabel) companyLabel.classList.add('inactive');
+        if (industryLabel) industryLabel.classList.remove('inactive');
 
         companyForm.classList.add('hidden');
         industryForm.classList.remove('hidden');
@@ -4638,7 +4840,6 @@
         companyResultsContainer.classList.add('hidden');
         industryResultsContainer.classList.remove('hidden');
 
-        mainTitle.textContent = 'AI-based Industry Research';
         mainSubtitle.textContent = 'Generate comprehensive investor-grade industry reports using Kagger\'s Deep Research AI';
 
         // Change logo to blue
@@ -4697,11 +4898,10 @@
       } else {
         // Switch to company mode
         body.classList.remove('theme-industry');
-        modeToggle.classList.remove('industry');
-        modeToggle.setAttribute('aria-checked', 'false');
+        if (modeToggle) { modeToggle.classList.remove('industry'); modeToggle.setAttribute('aria-checked', 'false'); }
 
-        companyLabel.classList.remove('inactive');
-        industryLabel.classList.add('inactive');
+        if (companyLabel) companyLabel.classList.remove('inactive');
+        if (industryLabel) industryLabel.classList.add('inactive');
 
         companyForm.classList.remove('hidden');
         industryForm.classList.add('hidden');
@@ -4709,8 +4909,7 @@
         companyResultsContainer.classList.remove('hidden');
         industryResultsContainer.classList.add('hidden');
 
-        mainTitle.textContent = 'AI-based Stock Research';
-        mainSubtitle.textContent = "Analyze stocks using Kagger's Multi-agentic AI system created exclusively for Indian Companies";
+        mainSubtitle.textContent = "Let's uncover market opportunities with AI-powered intelligence.";
 
         // Change logo to green
         navLogo.classList.remove('text-blue-600', 'hover:text-blue-700');
@@ -4760,22 +4959,125 @@
       }
     }
 
-    // Toggle click handler
-    modeToggle.addEventListener('click', () => {
-      setMode(currentMode === 'company' ? 'industry' : 'company');
-    });
-
-    // Keyboard accessibility
-    modeToggle.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
+    // Toggle click handler (guarded — toggle HTML removed, mode set from navbar dropdown)
+    if (modeToggle) {
+      modeToggle.addEventListener('click', () => {
         setMode(currentMode === 'company' ? 'industry' : 'company');
+      });
+      modeToggle.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          setMode(currentMode === 'company' ? 'industry' : 'company');
+        }
+      });
+    }
+    if (companyLabel) companyLabel.addEventListener('click', () => setMode('company'));
+    if (industryLabel) industryLabel.addEventListener('click', () => setMode('industry'));
+
+    // ⌘K / Ctrl+K keyboard shortcut for search focus
+    document.addEventListener('keydown', (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        document.getElementById('tickerInput')?.focus();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
       }
     });
 
-    // Label click handlers
-    companyLabel.addEventListener('click', () => setMode('company'));
-    industryLabel.addEventListener('click', () => setMode('industry'));
+    // Quick-analyze from popular stocks row
+    function quickAnalyze(ticker) {
+      const input = document.getElementById('tickerInput');
+      if (input) { input.value = ticker; document.getElementById('goBtn')?.click(); }
+    }
+
+    // Quick-analyze from popular industry row
+    function quickAnalyzeIndustry(industry) {
+      const input = document.getElementById('industryInput');
+      if (input) { input.value = industry; document.getElementById('industryGoBtn')?.click(); }
+    }
+
+    // Time-based hero greeting
+    (function initGreeting() {
+      const hour = new Date().getHours();
+      const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+      const el = document.getElementById('heroGreeting');
+      if (el) {
+        try {
+          fetch('/api/me').then(r => r.json()).then(data => {
+            const name = data.name || data.username || '';
+            el.textContent = name ? `${greeting}, ${name}!` : `${greeting}!`;
+          }).catch(() => { el.textContent = `${greeting}!`; });
+        } catch (e) { el.textContent = `${greeting}!`; }
+      }
+    })();
+
+    // Dynamic Portfolio Metrics
+    async function fetchPortfolioMetrics() {
+      const grid = document.getElementById('portfolioMetricsGrid');
+      if (!grid) return;
+
+      grid.innerHTML = '<div class="col-span-7 text-center py-4 text-slate-500">Loading portfolio metrics...</div>';
+
+      try {
+        const [dashRes, metricsRes] = await Promise.all([
+          fetch('/api/portfolio/dashboard'),
+          fetch('/api/portfolio/metrics')
+        ]);
+
+        const dashData = await dashRes.json();
+        const metricsData = await metricsRes.json();
+
+        if (dashData.error || metricsData.error || !dashData.holdings || dashData.holdings.length === 0) {
+          grid.innerHTML = '<div class="col-span-7 text-center py-4 text-slate-500 bg-slate-50 rounded-xl">No portfolio data available. <a href="/portfolio" class="text-emerald-600 font-medium hover:underline">Create Portfolio</a></div>';
+          return;
+        }
+
+        const summary = dashData.summary || {};
+        const formatMoney = (val) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(val);
+        const formatPct = (val) => (val > 0 ? '+' : '') + Number(val).toFixed(2) + '%';
+        const colorClass = (val) => val > 0 ? 'text-emerald-600' : (val < 0 ? 'text-red-500' : 'text-slate-600');
+
+        const currentValue = summary.total_current || 0;
+        const invested = summary.total_invested || 0;
+        const holdingsCount = summary.holding_count || 0;
+
+        // Calculate Day Change safely
+        let dayChangeRs = 0;
+        let prevDayTotal = 0;
+        dashData.holdings.forEach(h => {
+          if (h.current_price && h.day_change_pct !== undefined) {
+            const prevPrice = h.current_price / (1 + (h.day_change_pct / 100));
+            const prevVal = h.quantity * prevPrice;
+            dayChangeRs += (h.current_value - prevVal);
+            prevDayTotal += prevVal;
+          } else {
+            prevDayTotal += h.current_value;
+          }
+        });
+        const dayChangePct = prevDayTotal > 0 ? (dayChangeRs / prevDayTotal) * 100 : 0;
+
+        const alpha = metricsData.alpha !== null ? metricsData.alpha : 'N/A';
+        const beta = metricsData.portfolio_beta !== null ? metricsData.portfolio_beta : 'N/A';
+        const divScore = metricsData.diversification_score !== null ? metricsData.diversification_score : 'N/A';
+
+        const divColor = divScore >= 70 ? 'border-emerald-500 text-emerald-700' : (divScore >= 40 ? 'border-yellow-500 text-yellow-700' : 'border-red-500 text-red-700');
+        const divText = divScore >= 70 ? 'Well Diversified' : (divScore >= 40 ? 'Moderately Diversified' : 'Concentrated');
+
+        grid.innerHTML = `
+          <div class="text-center p-3 rounded-xl bg-slate-50"><div class="text-xs text-slate-400 mb-1">Current Value</div><div class="text-lg font-bold text-slate-800">${formatMoney(currentValue)}</div><div class="text-xs ${colorClass(dayChangePct)}">${formatPct(dayChangePct)} (Today)</div></div>
+          <div class="text-center p-3 rounded-xl bg-slate-50"><div class="text-xs text-slate-400 mb-1">Original Investment</div><div class="text-lg font-bold text-slate-800">${formatMoney(invested)}</div><div class="text-xs text-slate-400">Total Invested</div></div>
+          <div class="text-center p-3 rounded-xl bg-slate-50"><div class="text-xs text-slate-400 mb-1">No. of Holdings</div><div class="text-lg font-bold text-slate-800">${holdingsCount}</div><div class="text-xs text-slate-400">Portfolio</div></div>
+          <div class="text-center p-3 rounded-xl bg-slate-50"><div class="text-xs text-slate-400 mb-1">Day Change (Rs. / %)</div><div class="text-lg font-bold ${colorClass(dayChangeRs)}">${dayChangeRs > 0 ? '+' : ''}${formatMoney(dayChangeRs)}</div><div class="text-xs ${colorClass(dayChangePct)}">${formatPct(dayChangePct)}</div></div>
+          <div class="text-center p-3 rounded-xl bg-slate-50"><div class="text-xs text-slate-400 mb-1">Alpha (CAPM)</div><div class="text-lg font-bold ${alpha !== 'N/A' && alpha >= 0 ? 'text-emerald-600' : (alpha !== 'N/A' && alpha < 0 ? 'text-red-500' : 'text-slate-800')}">${alpha !== 'N/A' ? (alpha > 0 ? '+' : '') + alpha + '%' : 'N/A'}</div><div class="text-xs text-slate-400">${alpha !== 'N/A' && alpha >= 0 ? 'Outperforming' : 'Underperforming'}</div></div>
+          <div class="text-center p-3 rounded-xl bg-slate-50"><div class="text-xs text-slate-400 mb-1">Portfolio Beta</div><div class="text-lg font-bold text-slate-800">${beta}</div><div class="text-xs text-slate-400">${beta !== 'N/A' && beta < 1 ? 'Lower than market' : 'Higher than market'}</div></div>
+          <div class="text-center p-3 rounded-xl bg-slate-50"><div class="text-xs text-slate-400 mb-1">Diversification Score</div><div class="flex items-center justify-center mt-1"><div style="width:48px;height:48px;border-radius:50%;border:3px solid;display:flex;align-items:center;justify-content:center;" class="${divColor}"><span class="text-sm font-bold">${divScore}</span></div></div><div class="text-xs text-slate-400 mt-1">${divText}</div></div>
+        `;
+      } catch (e) {
+        console.error('Failed to load portfolio metrics', e);
+        grid.innerHTML = '<div class="col-span-7 text-center py-4 text-slate-500 bg-slate-50 rounded-xl">Failed to load live metrics.</div>';
+      }
+    }
+    fetchPortfolioMetrics();
+
 
     // ===================================================================================
     // END: MODE TOGGLE FUNCTIONALITY
@@ -5126,6 +5428,12 @@
 
     // Resume polling for an existing job
     async function resumeIndustryJob(job) {
+      // Hide dashboard elements to focus on results
+      const indicesCard = document.getElementById('marketIndicesCard');
+      const portfolioCard = document.getElementById('portfolioMetricsCard');
+      if (indicesCard) indicesCard.classList.add('hidden');
+      if (portfolioCard) portfolioCard.classList.add('hidden');
+
       industryResultsContainer.innerHTML = `
         <div class="bg-white p-8 rounded-xl shadow-lg">
           <div class="flex items-center justify-center space-x-4">
@@ -5143,9 +5451,12 @@
     }
 
     // Check for pending job when switching to industry mode
-    document.getElementById('industryLabel').addEventListener('click', () => {
-      setTimeout(checkPendingIndustryJob, 100);
-    });
+    const industryLabelForJob = document.getElementById('industryLabel');
+    if (industryLabelForJob) {
+      industryLabelForJob.addEventListener('click', () => {
+        setTimeout(checkPendingIndustryJob, 100);
+      });
+    }
 
     document.getElementById('industryGoBtn').addEventListener('click', async () => {
       const industry = document.getElementById('industryInput').value.trim();
@@ -5160,6 +5471,12 @@
       KaggerHistory.add('industry', { query: industry, horizon, depth });
       renderIndustryHistory();
       setupSseListener();
+
+      // Hide dashboard elements to focus on results
+      const indicesCard = document.getElementById('marketIndicesCard');
+      const portfolioCard = document.getElementById('portfolioMetricsCard');
+      if (indicesCard) indicesCard.classList.add('hidden');
+      if (portfolioCard) portfolioCard.classList.add('hidden');
 
       // Open AI Chat Sidebar moved to pollForIndustryResult (complete)
 
@@ -5589,6 +5906,12 @@
 
       const resultsContainer = document.getElementById('companyResults');
       resultsContainer.innerHTML = '';
+
+      // Hide dashboard elements to focus on results
+      const indicesCard = document.getElementById('marketIndicesCard');
+      const portfolioCard = document.getElementById('portfolioMetricsCard');
+      if (indicesCard) indicesCard.classList.add('hidden');
+      if (portfolioCard) portfolioCard.classList.add('hidden');
       setupSseListener();
 
       // Open AI Chat Sidebar moved to after initial payload load
@@ -7241,8 +7564,8 @@
         }
         // ── BSE Corporate Announcements Section ──
         if (payload.bse_announcements && payload.bse_announcements.success
-            && payload.bse_announcements.categories
-            && Object.keys(payload.bse_announcements.categories).length > 0) {
+          && payload.bse_announcements.categories
+          && Object.keys(payload.bse_announcements.categories).length > 0) {
           screenerHTML += renderBseAnnouncements(payload.bse_announcements);
         }
         if (payload.metric_charts && Object.keys(payload.metric_charts).length > 0) {
@@ -7854,7 +8177,7 @@
     const newsSelectedContainer = document.getElementById('newsSelectedCompanies');
 
     function filterNewsStocks(query) {
-      if (!query || !allStocks.length) return [];
+      if (!query || typeof allStocks === 'undefined' || !allStocks || !allStocks.length) return [];
       const q = query.toLowerCase();
       return allStocks.filter(s =>
         s.ticker.toLowerCase().startsWith(q) ||

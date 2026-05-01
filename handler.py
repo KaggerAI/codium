@@ -6719,11 +6719,13 @@ def industry_research():
                 # Progress callback - updates job status every 20s during streaming
                 def streaming_progress(elapsed_seconds, bytes_received):
                     """Called automatically by call_perplexity_api during streaming"""
+                    progress_msg = f"Receiving research data... ({elapsed_seconds}s, {bytes_received//1024}KB received)"
                     update_industry_job(job_id, {
-                        'progress': f"Receiving research data... ({elapsed_seconds}s, {bytes_received//1024}KB received)",
+                        'progress': progress_msg,
                         'heartbeat': time.time(),
                         'status': 'processing'  # Ensure status is preserved
                     })
+                    log_progress(progress_msg, channel="industry")
                     print(f"INDUSTRY_RESEARCH_HEARTBEAT: Job {job_id} alive - {elapsed_seconds}s, {bytes_received//1024}KB", file=sys.stderr)
                 
                 # Call with progress callback to keep job alive during long streaming
@@ -6745,6 +6747,7 @@ def industry_research():
                     'completed_at': time.time(),
                     'total_time': elapsed_total
                 })
+                log_progress('Industry report generation complete!', channel="industry")
                 print(f"INDUSTRY_RESEARCH_DEBUG: Job {job_id} completed successfully in {elapsed_total}s", file=sys.stderr)
                 
                 # Decrement active job counter
@@ -11778,6 +11781,26 @@ print("INFO: Agent Marketplace routes registered (Concall Agent, Forensic Agent,
 # =====================================================================
 
 # =====================================================================
+# START: Astro Predictions Hub
+# =====================================================================
+
+@app.route('/astro')
+def serve_astro_page():
+    """Serve the Astro Predictions Hub page"""
+    return send_from_directory('.', 'astro.html')
+
+@app.route('/astro-reports/<path:filename>')
+def serve_astro_report(filename):
+    """Serve astro prediction report files (PDFs and HTML)"""
+    return send_from_directory('astro_reports', filename)
+
+print("INFO: Astro Predictions Hub routes registered (/astro, /astro-reports/*)", file=sys.stderr)
+
+# =====================================================================
+# END: Astro Predictions Hub
+# =====================================================================
+
+# =====================================================================
 # START: Watchlist API
 # =====================================================================
 
@@ -11896,7 +11919,7 @@ threading.Thread(target=screener_daily_scheduler, daemon=True).start()
 
 if __name__ == '__main__':
     # Use socketio.run for WebSocket support
-    socketio.run(app, host='0.0.0.0', port=8000, debug=True)
+    socketio.run(app, host='0.0.0.0', port=8000, debug=True, allow_unsafe_werkzeug=True)
 
 # Wrap the WSGI app in ASGI middleware for Uvicorn
 # app = ASGIMiddleware(app)

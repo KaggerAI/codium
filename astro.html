@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Astro Predictions Hub — Kagger AI</title>
+    <meta name="description"
+        content="Vedic Mundane Astrology research reports covering geopolitics, economies, financial markets, and world events." />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap"
+        rel="stylesheet" />
+    <style>
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #111118;
+            --bg-card: #16161f;
+            --bg-card-hover: #1e1e2a;
+            --border-color: #2a2a3a;
+            --border-glow: #7c3aed;
+            --text-primary: #f0f0f5;
+            --text-secondary: #a0a0b8;
+            --text-muted: #6b6b80;
+            --accent-purple: #7c3aed;
+            --accent-violet: #8b5cf6;
+            --accent-indigo: #6366f1;
+            --accent-green: #10b981;
+            --accent-red: #ef4444;
+            --gradient-primary: linear-gradient(135deg, #7c3aed 0%, #6366f1 50%, #3b82f6 100%);
+            --gradient-card: linear-gradient(135deg, rgba(124, 58, 237, 0.1) 0%, rgba(99, 102, 241, 0.05) 100%);
+            --gold: #d4a843;
+            --gold-soft: rgba(212, 168, 67, 0.12);
+            --gold-border: rgba(212, 168, 67, 0.3);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* === NAVIGATION (matching agents.html) === */
+        .top-nav {
+            background: rgba(10, 10, 15, 0.85);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border-color);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            padding: 0.75rem 1.5rem;
+        }
+
+        .nav-inner {
+            max-width: 1152px;
+            margin: 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .nav-links {
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+
+        .nav-link {
+            padding: 0.5rem 0.875rem;
+            border-radius: 0.5rem;
+            font-size: 0.8125rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+            text-decoration: none;
+            transition: all 0.2s ease;
+            white-space: nowrap;
+        }
+
+        .nav-link:hover {
+            color: var(--text-primary);
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .nav-link.active {
+            color: white;
+            background: var(--gradient-primary);
+        }
+
+        .nav-btn-admin {
+            width: 36px;
+            height: 36px;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            border-radius: 0.5rem;
+            background: rgba(139, 92, 246, 0.15);
+            border: 1px solid rgba(139, 92, 246, 0.3);
+            color: var(--accent-violet);
+            text-decoration: none;
+            font-size: 1rem;
+            transition: all 0.2s ease;
+        }
+
+        .nav-btn-admin:hover {
+            background: rgba(139, 92, 246, 0.25);
+        }
+
+        .nav-btn-logout {
+            padding: 0.4rem 0.875rem;
+            border-radius: 0.5rem;
+            font-size: 0.75rem;
+            font-weight: 500;
+            color: var(--text-muted);
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid var(--border-color);
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .nav-btn-logout:hover {
+            color: var(--accent-red);
+            border-color: rgba(239, 68, 68, 0.3);
+            background: rgba(239, 68, 68, 0.08);
+        }
+
+        /* === PAGE HEADER === */
+        .page-header {
+            text-align: center;
+            padding: 3.5rem 1.5rem 2rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .page-header::before {
+            content: '';
+            position: absolute;
+            top: -120px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 600px;
+            height: 400px;
+            background: radial-gradient(ellipse, rgba(212, 168, 67, 0.08) 0%, transparent 70%);
+            pointer-events: none;
+        }
+
+        .page-header .eyebrow {
+            font-size: 0.6875rem;
+            font-weight: 600;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            color: var(--gold);
+            margin-bottom: 0.75rem;
+        }
+
+        .page-header h1 {
+            font-size: clamp(1.75rem, 4vw, 2.75rem);
+            font-weight: 800;
+            letter-spacing: -0.03em;
+            line-height: 1.1;
+            background: linear-gradient(135deg, var(--gold) 0%, #f0d080 60%, var(--gold) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .page-header .subtitle {
+            font-size: 0.9375rem;
+            color: var(--text-secondary);
+            margin-top: 0.75rem;
+            max-width: 540px;
+            margin-left: auto;
+            margin-right: auto;
+            line-height: 1.6;
+        }
+
+        /* === REPORT GRID === */
+        .main-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 1.5rem 4rem;
+        }
+
+        .report-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1.5rem;
+        }
+
+        @media (max-width: 768px) {
+            .report-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* === REPORT CATEGORY CARD === */
+        .report-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 1rem;
+            overflow: hidden;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .report-card:hover {
+            border-color: var(--gold-border);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 32px rgba(212, 168, 67, 0.08);
+        }
+
+        .report-card-header {
+            padding: 1.25rem 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+            background: var(--gold-soft);
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .report-card-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 0.625rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.25rem;
+            background: rgba(212, 168, 67, 0.15);
+            border: 1px solid var(--gold-border);
+            flex-shrink: 0;
+        }
+
+        .report-card-header h3 {
+            font-size: 1.0625rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            letter-spacing: -0.01em;
+        }
+
+        .report-card-header p {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-top: 0.125rem;
+        }
+
+        .report-card-body {
+            padding: 1rem 1.5rem 1.5rem;
+        }
+
+        /* === REPORT ITEM === */
+        .report-item {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.75rem 0.875rem;
+            border-radius: 0.625rem;
+            border: 1px solid transparent;
+            text-decoration: none;
+            color: var(--text-primary);
+            transition: all 0.2s ease;
+            margin-bottom: 0.5rem;
+        }
+
+        .report-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .report-item:hover {
+            border-color: var(--gold-border);
+            background: var(--gold-soft);
+        }
+
+        .report-item-num {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: var(--gradient-primary);
+            color: white;
+            font-size: 0.6875rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .report-item-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .report-item-title {
+            font-size: 0.8125rem;
+            font-weight: 600;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .report-item-date {
+            font-size: 0.6875rem;
+            color: var(--text-muted);
+            margin-top: 0.125rem;
+        }
+
+        .report-item-type {
+            font-size: 0.5625rem;
+            font-weight: 600;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            padding: 0.1875rem 0.5rem;
+            border-radius: 0.25rem;
+            flex-shrink: 0;
+        }
+
+        .type-html {
+            background: rgba(99, 102, 241, 0.12);
+            color: var(--accent-indigo);
+            border: 1px solid rgba(99, 102, 241, 0.25);
+        }
+
+        .type-pdf {
+            background: rgba(239, 68, 68, 0.1);
+            color: #f87171;
+            border: 1px solid rgba(239, 68, 68, 0.2);
+        }
+
+        .report-item-arrow {
+            color: var(--text-muted);
+            opacity: 0;
+            transition: opacity 0.2s ease, transform 0.2s ease;
+            flex-shrink: 0;
+            font-size: 0.875rem;
+        }
+
+        .report-item:hover .report-item-arrow {
+            opacity: 1;
+            transform: translateX(2px);
+        }
+
+        /* === COMING SOON === */
+        .coming-soon {
+            text-align: center;
+            padding: 2rem 1rem;
+            color: var(--text-muted);
+            font-size: 0.8125rem;
+            font-style: italic;
+        }
+
+        /* === COSMIC CTA BANNER === */
+        .cosmic-cta {
+            margin-top: 2.5rem;
+            padding: 2rem 2.5rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .cosmic-cta::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, rgba(124, 58, 237, 0.06) 0%, rgba(212, 168, 67, 0.04) 100%);
+            pointer-events: none;
+        }
+
+        .cosmic-cta-icon {
+            font-size: 2.5rem;
+            flex-shrink: 0;
+        }
+
+        .cosmic-cta-body {
+            flex: 1;
+            position: relative;
+        }
+
+        .cosmic-cta-body h3 {
+            font-size: 1rem;
+            font-weight: 700;
+            margin-bottom: 0.375rem;
+        }
+
+        .cosmic-cta-body p {
+            font-size: 0.8125rem;
+            color: var(--text-secondary);
+            line-height: 1.6;
+        }
+
+        .cosmic-cta-btn {
+            padding: 0.625rem 1.5rem;
+            border-radius: 0.5rem;
+            background: var(--gradient-primary);
+            color: white;
+            font-size: 0.8125rem;
+            font-weight: 600;
+            text-decoration: none;
+            white-space: nowrap;
+            transition: all 0.2s ease;
+            flex-shrink: 0;
+            position: relative;
+        }
+
+        .cosmic-cta-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 16px rgba(124, 58, 237, 0.3);
+        }
+
+        @media (max-width: 640px) {
+            .cosmic-cta {
+                flex-direction: column;
+                text-align: center;
+                padding: 1.5rem;
+            }
+        }
+
+        /* === FOOTER === */
+        .site-footer {
+            border-top: 1px solid var(--border-color);
+            padding: 2rem 1.5rem;
+            text-align: center;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        /* === ANIMATIONS === */
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .report-card {
+            animation: fadeInUp 0.5s ease forwards;
+            opacity: 0;
+        }
+
+        .report-card:nth-child(1) {
+            animation-delay: 0.05s;
+        }
+
+        .report-card:nth-child(2) {
+            animation-delay: 0.15s;
+        }
+
+        .report-card:nth-child(3) {
+            animation-delay: 0.25s;
+        }
+
+        .report-card:nth-child(4) {
+            animation-delay: 0.35s;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- ================================ -->
+    <!-- NAVIGATION BAR                    -->
+    <!-- ================================ -->
+    <nav class="top-nav">
+        <div class="nav-inner">
+            <a href="/app" class="nav-logo" style="display:flex;align-items:center;">
+                <img src="/kagger_logo_full.jpg" alt="Kagger AI"
+                    style="height:28px;object-fit:contain;filter:invert(1) hue-rotate(-40deg) saturate(3) brightness(1.1);mix-blend-mode:screen;" />
+            </a>
+            <div class="nav-links">
+                <button onclick="window.location.href='/app'"
+                    class="px-5 py-2.5 bg-white/10 hover:bg-white/20 rounded-xl text-white transition-all text-sm font-semibold flex items-center gap-2 border border-white/10"
+                    style="background: rgba(255, 255, 255, 0.1); border-radius: 0.75rem; border: 1px solid rgba(255, 255, 255, 0.1); display: flex; align-items: center; gap: 0.5rem; color: white; padding: 0.625rem 1.25rem; font-size: 0.875rem; font-weight: 600; cursor: pointer; transition: all 0.2s;">
+                    <svg style="width: 1rem; height: 1rem;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                    </svg>
+                    Back to Analyze
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- ================================ -->
+    <!-- PAGE HEADER                       -->
+    <!-- ================================ -->
+    <div class="page-header">
+        <div class="eyebrow">Vedic Mundane Astrology Research</div>
+        <h1>Astro Predictions Hub</h1>
+        <p class="subtitle">
+            Research-grade mundane astrology reports covering geopolitics, world economies,
+            financial markets, and global events. Click any report to read the full analysis.
+        </p>
+    </div>
+
+    <!-- ================================ -->
+    <!-- REPORT GRID                       -->
+    <!-- ================================ -->
+    <div class="main-container">
+        <div class="report-grid">
+
+            <!-- Geo-Political Predictions -->
+            <div class="report-card" id="geo-political-card">
+                <div class="report-card-header">
+                    <div class="report-card-icon">🌍</div>
+                    <div>
+                        <h3>Geo-Political Predictions</h3>
+                        <p>Global events, conflicts &amp; diplomacy</p>
+                    </div>
+                </div>
+                <div class="report-card-body">
+                    <a href="/astro-reports/US_IRAN_War_Prediction_Daywise_Month_wise.html" target="_blank"
+                        class="report-item">
+                        <span class="report-item-num">1</span>
+                        <div class="report-item-info">
+                            <div class="report-item-title">US–Iran War Prediction — Daywise &amp; Month-wise</div>
+                            <div class="report-item-date">Apr–Dec 2026</div>
+                        </div>
+                        <span class="report-item-type type-html">HTML</span>
+                        <span class="report-item-arrow">→</span>
+                    </a>
+                    <a href="/astro-reports/Predictions_Scorecard_Day_Wise_14th_-_22nd_Apr.html" target="_blank"
+                        class="report-item">
+                        <span class="report-item-num">2</span>
+                        <div class="report-item-info">
+                            <div class="report-item-title">Predictions Scorecard — Day-wise (14th – 22nd Apr)</div>
+                            <div class="report-item-date">April 2026</div>
+                        </div>
+                        <span class="report-item-type type-html">HTML</span>
+                        <span class="report-item-arrow">→</span>
+                    </a>
+                </div>
+            </div>
+
+            <!-- Country / Economy Predictions -->
+            <div class="report-card" id="country-economy-card">
+                <div class="report-card-header">
+                    <div class="report-card-icon">🏛️</div>
+                    <div>
+                        <h3>Country / Economy Predictions</h3>
+                        <p>National outlooks &amp; economic forecasts</p>
+                    </div>
+                </div>
+                <div class="report-card-body">
+                    <a href="/astro-reports/India_Mundane_Astrology_2026.pdf" target="_blank" class="report-item">
+                        <span class="report-item-num">1</span>
+                        <div class="report-item-info">
+                            <div class="report-item-title">India — Mundane Astrology 2026</div>
+                            <div class="report-item-date">2026</div>
+                        </div>
+                        <span class="report-item-type type-pdf">PDF</span>
+                        <span class="report-item-arrow">→</span>
+                    </a>
+                    <a href="/astro-reports/Japan_Mundane_Astrology_2026.pdf" target="_blank" class="report-item">
+                        <span class="report-item-num">2</span>
+                        <div class="report-item-info">
+                            <div class="report-item-title">Japan — Mundane Astrology 2026</div>
+                            <div class="report-item-date">2026</div>
+                        </div>
+                        <span class="report-item-type type-pdf">PDF</span>
+                        <span class="report-item-arrow">→</span>
+                    </a>
+                    <a href="/astro-reports/USA_Mundane_Astrology_2026.pdf" target="_blank" class="report-item">
+                        <span class="report-item-num">3</span>
+                        <div class="report-item-info">
+                            <div class="report-item-title">USA — Mundane Astrology 2026</div>
+                            <div class="report-item-date">2026</div>
+                        </div>
+                        <span class="report-item-type type-pdf">PDF</span>
+                        <span class="report-item-arrow">→</span>
+                    </a>
+                </div>
+            </div>
+
+            <!-- Stock Market & Commodity Predictions -->
+            <div class="report-card" id="stock-market-card">
+                <div class="report-card-header">
+                    <div class="report-card-icon">📊</div>
+                    <div>
+                        <h3>Stock Market &amp; Commodity Predictions</h3>
+                        <p>Equity, bullion &amp; commodity trends</p>
+                    </div>
+                </div>
+                <div class="report-card-body">
+                    <a href="/astro-reports/India_Banking_Intelligence_Report_April2026.pdf" target="_blank"
+                        class="report-item">
+                        <span class="report-item-num">1</span>
+                        <div class="report-item-info">
+                            <div class="report-item-title">India Banking Intelligence Report</div>
+                            <div class="report-item-date">April 2026</div>
+                        </div>
+                        <span class="report-item-type type-pdf">PDF</span>
+                        <span class="report-item-arrow">→</span>
+                    </a>
+                    <a href="/astro-reports/Fertilizer_Intelligence_Report.html" target="_blank" class="report-item">
+                        <span class="report-item-num">2</span>
+                        <div class="report-item-info">
+                            <div class="report-item-title">Fertilizer Intelligence Report</div>
+                            <div class="report-item-date">2026</div>
+                        </div>
+                        <span class="report-item-type type-html">HTML</span>
+                        <span class="report-item-arrow">→</span>
+                    </a>
+                </div>
+            </div>
+
+            <!-- Other Mundane Predictions -->
+            <div class="report-card" id="other-mundane-card">
+                <div class="report-card-header">
+                    <div class="report-card-icon">🔮</div>
+                    <div>
+                        <h3>Other Mundane Predictions</h3>
+                        <p>Weather, disasters &amp; world events</p>
+                    </div>
+                </div>
+                <div class="report-card-body">
+                    <div class="coming-soon">Reports coming soon.</div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Cosmic Agent CTA Banner -->
+        <div class="cosmic-cta">
+            <div class="cosmic-cta-icon">🌌</div>
+            <div class="cosmic-cta-body">
+                <h3>Try the Cosmic Financial Analyst Agent</h3>
+                <p>Get real-time AI-powered analysis blending Vedic mundane astrology with live market data.
+                    Ask any question about macro trends, geopolitics, or sector outlooks.</p>
+            </div>
+            <a href="/agents" class="cosmic-cta-btn">Launch Agent →</a>
+        </div>
+    </div>
+
+    <!-- ================================ -->
+    <!-- FOOTER                            -->
+    <!-- ================================ -->
+    <footer class="site-footer">
+        <p>© 2026 Kagger AI · Astro Predictions Hub · Vedic Mundane Astrology Research</p>
+    </footer>
+
+    <!-- ================================ -->
+    <!-- SCRIPTS                           -->
+    <!-- ================================ -->
+    <script>
+        // Auth check — same as agents.html
+        function checkAuth() {
+            return fetch('/api/stocks', { credentials: 'include' })
+                .then(r => {
+                    if (r.status === 401) { window.location.href = '/login'; return false; }
+                    return r.json();
+                })
+                .then(data => {
+                    if (data && data.is_admin) {
+                        const adminLink = document.getElementById('admin-link');
+                        if (adminLink) adminLink.style.display = 'flex';
+                    }
+                    return true;
+                })
+                .catch(() => { window.location.href = '/login'; return false; });
+        }
+
+        function logout() {
+            fetch('/api/stocks', { method: 'GET', credentials: 'include' })
+                .finally(() => {
+                    document.cookie.split(';').forEach(c => {
+                        document.cookie = c.replace(/^ +/, '').replace(/=.*/, '=;expires=Thu, 01 Jan 1970 00:00:00 UTC;path=/');
+                    });
+                    window.location.href = '/login';
+                });
+        }
+
+        checkAuth();
+    </script>
+</body>
+
+</html>
