@@ -2079,18 +2079,20 @@ def api_portfolio_add():
         if not stock_name:
             stock_name = ticker
 
-    # Fetch sector/industry from yfinance (best-effort, non-blocking)
+    # Fetch sector/industry/beta from yfinance (best-effort, non-blocking)
     sector = ''
     industry = ''
+    beta = None
     try:
         yf_ticker = yf.Ticker(f"{ticker}.NS")
         info = yf_ticker.info or {}
         sector = info.get('sector', '') or ''
         industry = info.get('industry', '') or ''
+        beta = info.get('beta', None)
     except Exception as e:
-        print(f"WARN: Could not fetch sector for {ticker}: {e}")
+        print(f"WARN: Could not fetch info for {ticker}: {e}")
 
-    Portfolio.add_holding(user_id, ticker, stock_name, quantity, avg_buy_price, sector, industry, buy_date)
+    Portfolio.add_holding(user_id, ticker, stock_name, quantity, avg_buy_price, sector, industry, buy_date, beta)
     return jsonify({'success': True, 'ticker': ticker, 'stock_name': stock_name, 'sector': sector, 'industry': industry})
 
 
@@ -2464,18 +2466,20 @@ def api_portfolio_upload_csv():
                 except Exception:
                     buy_date = buy_date_raw
 
-            # Fetch sector (best-effort)
+            # Fetch sector/industry/beta (best-effort)
             sector = ''
             industry = ''
+            beta = None
             try:
                 yf_ticker_obj = yf.Ticker(f"{ticker}.NS")
                 info = yf_ticker_obj.info or {}
                 sector = info.get('sector', '') or ''
                 industry = info.get('industry', '') or ''
+                beta = info.get('beta', None)
             except Exception:
                 pass
 
-            Portfolio.add_holding(user_id, ticker, stock_name, qty, price, sector, industry, buy_date)
+            Portfolio.add_holding(user_id, ticker, stock_name, qty, price, sector, industry, buy_date, beta)
             added.append(ticker)
 
         return jsonify({
@@ -2506,18 +2510,43 @@ def api_portfolio_metrics():
         return jsonify({'error': 'No holdings'}), 400
 
     try:
-        # --- Gather current prices and values ---
+        # --- Gather current prices (batched) and values ---
+        price_map = {}
+        tickers_list = [f"{h.ticker}.NS" for h in holdings]
+        if tickers_list:
+            try:
+                import pandas as pd
+                batch_data = yf.download(" ".join(tickers_list), period="2d", progress=False)
+                is_single = len(tickers_list) == 1
+                for h in holdings:
+                    t_ns = f"{h.ticker}.NS"
+                    h_price = h.avg_buy_price
+                    if not batch_data.empty and 'Close' in batch_data:
+                        if is_single:
+                            hc = batch_data['Close']
+                        else:
+                            hc = batch_data['Close'][t_ns] if t_ns in batch_data['Close'] else pd.Series(dtype=float)
+                        hc = hc.dropna()
+                        if not hc.empty:
+                            h_price = float(hc.iloc[-1])
+                    price_map[h.ticker] = h_price
+            except Exception as e:
+                print(f"METRICS: Batch price error: {e}")
+
         total_value = 0
         holding_data = []
         for h in holdings:
-            try:
-                h_yf = yf.Ticker(f"{h.ticker}.NS")
-                h_info = h_yf.info or {}
-                h_price = h_info.get('currentPrice') or h_info.get('regularMarketPrice') or h_info.get('previousClose') or h.avg_buy_price
-                h_beta = h_info.get('beta', None)
-            except Exception:
-                h_price = h.avg_buy_price
-                h_beta = None
+            h_price = price_map.get(h.ticker, h.avg_buy_price)
+            h_beta = h.beta
+            
+            if h_beta is None:
+                # Lazy load beta for existing users
+                try:
+                    h_info = yf.Ticker(f"{h.ticker}.NS").info or {}
+                    h_beta = h_info.get('beta', None)
+                    Portfolio.update_beta(user_id, h.ticker, h_beta)
+                except Exception:
+                    h_beta = None
 
             value = h.quantity * h_price
             total_value += value
@@ -2648,10 +2677,7 @@ def api_portfolio_performance_chart():
     if not holdings:
         return jsonify({'dates': [], 'portfolio_returns': [], 'nifty_returns': []})
 
-    # Check for buy dates
-    has_buy_dates = any(h.buy_date for h in holdings)
-    if not has_buy_dates:
-        return jsonify({'dates': [], 'portfolio_returns': [], 'nifty_returns': []})
+
 
     timeframe = request.args.get('timeframe', '3M')
     end_date = datetime.now()
@@ -2668,6 +2694,9 @@ def api_portfolio_performance_chart():
         if nifty_hist.empty or len(nifty_hist) < 2:
             return jsonify({'dates': [], 'portfolio_returns': [], 'nifty_returns': []})
 
+        if nifty_hist.index.tz is not None:
+            nifty_hist.index = nifty_hist.index.tz_localize(None)
+
         # Create date index from NIFTY (trading days)
         trading_dates = nifty_hist.index
 
@@ -2677,27 +2706,48 @@ def api_portfolio_performance_chart():
         portfolio_daily = pd.Series(0.0, index=trading_dates)
         initial_capital = 0
 
+        # Batch fetch all holding histories
+        tickers_list = [f"{h.ticker}.NS" for h in holdings]
+        tickers_str = " ".join(tickers_list)
+        try:
+            batch_data = yf.download(tickers_str, start=start_date.strftime('%Y-%m-%d'), end=end_date.strftime('%Y-%m-%d'), progress=False)
+            if batch_data.index.tz is not None:
+                batch_data.index = batch_data.index.tz_localize(None)
+        except Exception as e:
+            print(f"PERF-CHART: Batch download error: {e}")
+            batch_data = pd.DataFrame()
+
+        is_single_ticker = len(tickers_list) == 1
+
         for h in holdings:
+            t_ns = f"{h.ticker}.NS"
             try:
-                yf_t = yf.Ticker(f"{h.ticker}.NS")
-                hist = yf_t.history(start=start_date.strftime('%Y-%m-%d'), end=end_date.strftime('%Y-%m-%d'))
-                if hist.empty:
+                hist_close = pd.Series(dtype=float)
+                if not batch_data.empty and 'Close' in batch_data:
+                    if is_single_ticker:
+                        hist_close = batch_data['Close']
+                    else:
+                        if t_ns in batch_data['Close']:
+                            hist_close = batch_data['Close'][t_ns]
+
+                if hist_close.empty or hist_close.dropna().empty:
+                    initial_capital += h.quantity * h.avg_buy_price
                     continue
 
                 # Reindex to match NIFTY trading days, forward-fill missing
-                hist = hist.reindex(trading_dates, method='ffill')
+                hist_close = hist_close.reindex(trading_dates, method='ffill')
 
                 # Contribution of this holding
-                holding_values = hist['Close'] * h.quantity
+                holding_values = hist_close * h.quantity
                 holding_values = holding_values.fillna(0)
                 portfolio_daily = portfolio_daily.add(holding_values, fill_value=0)
 
                 # Initial capital contribution (value of quantity at start date)
                 # We use the first valid price in the history window
-                start_price = hist['Close'].dropna().iloc[0] if not hist['Close'].dropna().empty else h.avg_buy_price
+                start_price = hist_close.dropna().iloc[0] if not hist_close.dropna().empty else h.avg_buy_price
                 initial_capital += h.quantity * start_price
             except Exception as e:
-                print(f"PERF-CHART: Error fetching {h.ticker}: {e}")
+                print(f"PERF-CHART: Error parsing {h.ticker}: {e}")
                 # Fallback: use avg_buy_price * quantity as a constant
                 initial_capital += h.quantity * h.avg_buy_price
 
@@ -2752,42 +2802,45 @@ def api_portfolio_dashboard():
         return jsonify({'holdings': [], 'summary': {}, 'sector_data': [], 'technical_health': []})
 
     # ------------------------------------------------------------------
-    # PHASE 1: Fetch current prices in parallel (lightweight, fast)
+    # PHASE 1: Fetch current prices in batch (optimized)
     # ------------------------------------------------------------------
-    def fetch_price(h):
-        """Fetch current price and day change % for a single holding."""
-        current_price = None
-        day_change_pct = 0
-        try:
-            yf_ticker = yf.Ticker(f"{h.ticker}.NS")
-            hist = yf_ticker.history(period="2d")
-            if hist is not None and not hist.empty:
-                current_price = float(hist['Close'].iloc[-1])
-                if len(hist) >= 2:
-                    prev_close = float(hist['Close'].iloc[-2])
-                    if prev_close > 0:
-                        day_change_pct = round(((current_price - prev_close) / prev_close) * 100, 2)
-        except Exception as e:
-            print(f"WARN: Price fetch failed for {h.ticker}: {e}")
-        return {
-            'ticker': h.ticker,
-            'current_price': current_price,
-            'day_change_pct': day_change_pct
-        }
-
-    # Use max 3 threads — conservative to avoid yfinance rate-limiting/blocking
     price_map = {}
-    num_workers = min(3, len(holdings))
-    with ThreadPoolExecutor(max_workers=num_workers) as executor:
-        futures = {executor.submit(fetch_price, h): h.ticker for h in holdings}
-        for future in as_completed(futures):
-            try:
-                result = future.result()
-                price_map[result['ticker']] = result
-            except Exception as e:
-                ticker_sym = futures[future]
-                print(f"WARN: Concurrent price fetch error for {ticker_sym}: {e}")
-                price_map[ticker_sym] = {'ticker': ticker_sym, 'current_price': None, 'day_change_pct': 0}
+    tickers_list = [f"{h.ticker}.NS" for h in holdings]
+    
+    if tickers_list:
+        try:
+            tickers_str = " ".join(tickers_list)
+            batch_data = yf.download(tickers_str, period="2d", progress=False)
+            is_single_ticker = len(tickers_list) == 1
+            
+            for h in holdings:
+                t_ns = f"{h.ticker}.NS"
+                current_price = None
+                day_change_pct = 0
+                
+                if not batch_data.empty and 'Close' in batch_data:
+                    if is_single_ticker:
+                        hist_close = batch_data['Close']
+                    else:
+                        hist_close = batch_data['Close'][t_ns] if t_ns in batch_data['Close'] else pd.Series(dtype=float)
+                        
+                    hist_close = hist_close.dropna()
+                    if len(hist_close) >= 1:
+                        current_price = float(hist_close.iloc[-1])
+                    if len(hist_close) >= 2:
+                        prev_close = float(hist_close.iloc[-2])
+                        if prev_close > 0:
+                            day_change_pct = round(((current_price - prev_close) / prev_close) * 100, 2)
+                            
+                price_map[h.ticker] = {
+                    'ticker': h.ticker,
+                    'current_price': current_price,
+                    'day_change_pct': day_change_pct
+                }
+        except Exception as e:
+            print(f"DASHBOARD: Batch price fetch error: {e}")
+            for h in holdings:
+                price_map[h.ticker] = {'ticker': h.ticker, 'current_price': None, 'day_change_pct': 0}
 
     # ------------------------------------------------------------------
     # PHASE 2: Build enriched holdings from fetched prices
@@ -4481,14 +4534,15 @@ YOUR CAPABILITIES:
 - Market context via web search (you have Google Search access for real-time market data, news, and analyst opinions)
 
 RESPONSE STYLE:
-- Be direct and actionable — this is a real portfolio with real money
-- Lead with the bottom line, then explain the reasoning
-- Use numbers from the portfolio data to support your analysis
-- When discussing stocks, always reference the investor's actual position size, P&L, and weight
-- Format your responses in clean markdown (use **bold** for emphasis, bullet points for lists, ### for section headers)
-- Keep responses concise but comprehensive — think FM-grade portfolio review, not academic essay
-- Use ₹ for Indian currency. Format large numbers in Lakhs (L) or Crores (Cr) as appropriate
-- If the investor asks about something outside their portfolio, use your Google Search to provide current market information
+- **EXTREME CONCISENESS & READABILITY:** Your output MUST be highly readable and avoid excessive scrolling.
+- **NO LONG TABLES OR LISTS:** Do NOT generate giant tables or long bulleted lists covering every single stock.
+- **NARRATIVE STITCHING:** Stitch your analysis into a natural, flowing narrative. Weave the critical numbers into short, punchy paragraphs rather than dumping raw data.
+- Lead with the bottom line: highlight only the 2-3 most critical insights or immediate actions required.
+- Focus strictly on outliers: the biggest winners, biggest losers, or immediate risks (e.g., over-concentration). Ignore noise.
+- Be direct and actionable — this is a real portfolio with real money.
+- Use clean, minimalist markdown. Avoid deep nesting or excessive headers that take up vertical space.
+- Use ₹ for Indian currency. Format large numbers in Lakhs (L) or Crores (Cr) as appropriate.
+- If the investor asks about something outside their portfolio, use your Google Search to provide current market information.
 
 {portfolio_context}{mention_context}
 """
@@ -4499,36 +4553,85 @@ RESPONSE STYLE:
 
     history = _PORTFOLIO_AI_HISTORY[user_id]
 
-    # Build messages for Gemini
-    messages = [{"role": "user", "content": system_prompt + "\n\nPlease acknowledge you have loaded the portfolio. Do not list all the holdings — just confirm you're ready."}]
+    # Build messages for OpenAI
+    messages = [{"role": "system", "content": system_prompt}]
+    
     # If no history, add a synthetic assistant greeting
     if not history:
-        messages.append({"role": "model", "content": "Portfolio loaded. I have full visibility into your holdings, P&L, sector allocation, technical signals, risk metrics, and the latest analyst research. How can I help you today?"})
+        messages.append({"role": "assistant", "content": "Portfolio loaded. I have full visibility into your holdings, P&L, sector allocation, technical signals, risk metrics, and the latest analyst research. How can I help you today?"})
 
     # Add conversation history
     for msg in history:
-        messages.append({"role": msg["role"], "content": msg["content"]})
+        role = "assistant" if msg["role"] == "model" else msg["role"]
+        messages.append({"role": role, "content": msg["content"]})
 
     # Add current user message
     messages.append({"role": "user", "content": user_message})
 
-    # Call Gemini
+    # Call OpenAI with Tool
     try:
-        ai_response = call_gemini_api(
-            messages=messages,
-            model="gemini-3.1-pro-preview",
-            temperature=0.7,
-            use_google_search=True,
-            thinking_level="HIGH"
-        )
+        import openai, json
+        tools = [
+            {
+                "type": "function",
+                "function": {
+                    "name": "search_web",
+                    "description": "Search the web for current market news, stock prices, or analysis.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "query": {
+                                "type": "string",
+                                "description": "The exact search query"
+                            }
+                        },
+                        "required": ["query"]
+                    }
+                }
+            }
+        ]
+        
+        ai_response = "I couldn't finish my analysis in time. Please try again."
+        for _ in range(3):
+            response = openai.chat.completions.create(
+                model="gpt-5.5",
+                messages=messages,
+                temperature=1,
+                tools=tools
+            )
+            msg = response.choices[0].message
+            if msg.tool_calls:
+                messages.append(msg)
+                for tool_call in msg.tool_calls:
+                    if tool_call.function.name == "search_web":
+                        args = json.loads(tool_call.function.arguments)
+                        query = args.get("query")
+                        print(f"AI-PM: Searching web for: {query}")
+                        try:
+                            search_msgs = [{"role": "system", "content": "You are a web search assistant. Search the web and summarize the answer."},
+                                           {"role": "user", "content": query}]
+                            search_result = call_perplexity_api(search_msgs, model="sonar-pro")
+                        except Exception as e:
+                            search_result = f"Search failed: {e}"
+                            
+                        messages.append({
+                            "role": "tool",
+                            "tool_call_id": tool_call.id,
+                            "name": "search_web",
+                            "content": search_result
+                        })
+            else:
+                ai_response = msg.content
+                break
+                
     except Exception as e:
-        print(f"AI-PM: Gemini call failed: {e}", file=sys.stderr)
+        print(f"AI-PM: OpenAI call failed: {e}", file=sys.stderr)
         traceback.print_exc()
         ai_response = "I'm sorry, I encountered an issue processing your request. Please try again in a moment."
 
     # Store in history (keep last 20 messages = 10 turns)
     history.append({"role": "user", "content": user_message})
-    history.append({"role": "model", "content": ai_response})
+    history.append({"role": "assistant", "content": ai_response})
     if len(history) > 20:
         history[:] = history[-20:]
 

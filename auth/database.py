@@ -114,9 +114,13 @@ def init_db():
             )
         ''')
 
-        # Migration: add buy_date column if not exists (for existing DBs)
+        # Migration: add buy_date and beta columns if not exists (for existing DBs)
         try:
             cursor.execute("ALTER TABLE portfolio_holdings ADD COLUMN buy_date TEXT DEFAULT ''")
+        except Exception:
+            pass  # Column already exists
+        try:
+            cursor.execute("ALTER TABLE portfolio_holdings ADD COLUMN beta REAL DEFAULT NULL")
         except Exception:
             pass  # Column already exists
         
@@ -354,7 +358,7 @@ class UserEvent:
 
 # Portfolio holding model
 class Portfolio:
-    def __init__(self, id, user_id, ticker, stock_name, quantity, avg_buy_price, sector, industry, buy_date=None, added_at=None, **kwargs):
+    def __init__(self, id, user_id, ticker, stock_name, quantity, avg_buy_price, sector, industry, buy_date=None, added_at=None, beta=None, **kwargs):
         self.id = id
         self.user_id = user_id
         self.ticker = ticker
@@ -365,6 +369,7 @@ class Portfolio:
         self.industry = industry or ''
         self.buy_date = buy_date or ''
         self.added_at = added_at
+        self.beta = beta
 
     def to_dict(self):
         return {
@@ -376,6 +381,7 @@ class Portfolio:
             'sector': self.sector,
             'industry': self.industry,
             'buy_date': self.buy_date,
+            'beta': self.beta,
             'added_at': str(self.added_at)
         }
 
@@ -396,21 +402,22 @@ class Portfolio:
             return results
 
     @classmethod
-    def add_holding(cls, user_id, ticker, stock_name, quantity, avg_buy_price, sector='', industry='', buy_date=''):
+    def add_holding(cls, user_id, ticker, stock_name, quantity, avg_buy_price, sector='', industry='', buy_date='', beta=None):
         """Add or update a holding (UPSERT)."""
         with get_db() as conn:
             cursor = conn.cursor()
             cursor.execute('''
-                INSERT INTO portfolio_holdings (user_id, ticker, stock_name, quantity, avg_buy_price, sector, industry, buy_date)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO portfolio_holdings (user_id, ticker, stock_name, quantity, avg_buy_price, sector, industry, buy_date, beta)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(user_id, ticker) DO UPDATE SET
                     stock_name = excluded.stock_name,
                     quantity = excluded.quantity,
                     avg_buy_price = excluded.avg_buy_price,
                     sector = excluded.sector,
                     industry = excluded.industry,
-                    buy_date = excluded.buy_date
-            ''', (user_id, ticker.upper(), stock_name, quantity, avg_buy_price, sector, industry, buy_date or ''))
+                    buy_date = excluded.buy_date,
+                    beta = excluded.beta
+            ''', (user_id, ticker.upper(), stock_name, quantity, avg_buy_price, sector, industry, buy_date or '', beta))
             return cursor.lastrowid
 
     @classmethod
@@ -430,6 +437,18 @@ class Portfolio:
                     SET quantity = ?, avg_buy_price = ?
                     WHERE user_id = ? AND ticker = ?
                 ''', (quantity, avg_buy_price, user_id, ticker.upper()))
+            return cursor.rowcount > 0
+
+    @classmethod
+    def update_beta(cls, user_id, ticker, beta):
+        """Update beta for an existing holding (lazy load)."""
+        with get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                UPDATE portfolio_holdings
+                SET beta = ?
+                WHERE user_id = ? AND ticker = ?
+            ''', (beta, user_id, ticker.upper()))
             return cursor.rowcount > 0
 
     @classmethod
