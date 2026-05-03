@@ -11877,7 +11877,11 @@ register_forecasting_routes(
 from agents.cosmic_agent import register_cosmic_routes
 register_cosmic_routes(app, call_openai_api, call_perplexity_api, call_perplexity_search_api)
 
-print("INFO: Agent Marketplace routes registered (Concall Agent, Forensic Agent, Analyst Agent, Forecasting Agent, Cosmic Agent)", file=sys.stderr)
+# Register Financial Document Summarizer Agent routes
+from agents.document_summarizer_agent import register_doc_summarizer_routes
+register_doc_summarizer_routes(app, call_openai_api)
+
+print("INFO: Agent Marketplace routes registered (Concall Agent, Forensic Agent, Analyst Agent, Forecasting Agent, Cosmic Agent, Doc Summarizer Agent)", file=sys.stderr)
 
 # =====================================================================
 # END: Agent Marketplace

@@ -3,6 +3,25 @@ import json
 import traceback
 import pandas as pd
 from datetime import datetime, timedelta
+from calculations.pattern_detection import detect_all_patterns
+
+def _enrich_with_patterns(df_chart, tick):
+    """Run pattern detection and return serializable overlay list."""
+    detected = detect_all_patterns(df_chart, tick)
+    overlays = []
+    for p in detected:
+        overlays.append({
+            'pattern': p['pattern'],
+            'signal': p['signal'],
+            'status': p.get('status', 'forming'),
+            'confidence': round(p['confidence'], 2),
+            'key_points': p['key_points'],
+            'shapes': p['shapes'],
+            'annotations': p['annotations'],
+            'description': p['description']
+        })
+    return overlays
+
 
 def execute_daily_screener_scan():
     """
@@ -87,12 +106,20 @@ def execute_daily_screener_scan():
             df_chart['SMA20'] = df_chart['Close'].rolling(window=20).mean()
             chart_json = build_close_figure(df_chart.dropna(), company_name, years=1).to_json()
             
+            # Pattern detection temporarily disabled
+            # pattern_overlays = []
+            # try:
+            #     pattern_overlays = _enrich_with_patterns(df_chart, tick)
+            # except Exception as e:
+            #     print(f"Pattern detection error for {tick}: {e}")
+            
             results.append({
                 'ticker': tick,
                 'company_name': company_name,
                 'sector_name': sector_name,
                 'industry_name': industry_name,
                 'chart_json': chart_json
+                # 'patterns': pattern_overlays
             })
             
         # Compile IST execution timestamp format natively so no library dependence
@@ -143,12 +170,20 @@ def execute_daily_screener_scan():
             df_chart['SMA20'] = df_chart['Close'].rolling(window=20).mean()
             chart_json = build_close_figure(df_chart.dropna(), company_name, years=1).to_json()
             
+            # Pattern detection temporarily disabled
+            # pattern_overlays = []
+            # try:
+            #     pattern_overlays = _enrich_with_patterns(df_chart, tick)
+            # except Exception as e:
+            #     print(f"Pattern detection error for {tick} (div): {e}")
+            
             div_results.append({
                 'ticker': tick,
                 'company_name': company_name,
                 'sector_name': sector_name,
                 'industry_name': industry_name,
                 'chart_json': chart_json
+                # 'patterns': pattern_overlays
             })
             
         div_payload = {

@@ -3647,6 +3647,14 @@
                   <div class="text-xs text-slate-500">Astrology-based market insights</div>
                 </div>
               </a>
+              <a href="/agents?tab=docsum" onclick="saveAppState()"
+                class="flex items-center gap-3 px-4 py-3 hover:bg-emerald-50 transition-colors no-underline"><span
+                  class="text-xl w-8 text-center flex-shrink-0">📑</span>
+                <div>
+                  <div class="font-semibold text-sm text-slate-800">Financial Document Summarizer</div>
+                  <div class="text-xs text-slate-500">Summarize PDF or Word financial docs</div>
+                </div>
+              </a>
             </div>
           </div>
         </div>
@@ -10062,6 +10070,7 @@
             tagBadges += `<span class="text-[10px] tracking-wide font-bold text-blue-300 bg-blue-500/20 px-2 py-0.5 rounded border border-blue-500/30 mt-1 mr-1 inline-block">${match.signal}</span>`;
           }
 
+
           card.innerHTML = `
                     <div class="px-5 py-4 border-b border-white/5 flex justify-between items-center bg-white/5">
                         <div>
@@ -10114,6 +10123,8 @@
                   chartData.layout[k].zeroline = false;
                 }
               });
+              
+
             }
 
             window._screenerMatches[idx] = { match, chartData };

@@ -2449,7 +2449,6 @@
                     <div class="agent-tab-name">Concall Agent</div>
                     <div class="agent-tab-desc">Conference call transcript analysis</div>
                 </div>
-                <span class="agent-badge badge-live">Live</span>
             </button>
             <button class="agent-tab" onclick="switchAgent('forensic')" role="tab" aria-selected="false"
                 id="tab-forensic">
@@ -2458,7 +2457,6 @@
                     <div class="agent-tab-name">Forensic Agent</div>
                     <div class="agent-tab-desc">Accounting red flags & governance</div>
                 </div>
-                <span class="agent-badge badge-live">Live</span>
             </button>
             <button class="agent-tab" onclick="switchAgent('analyst')" role="tab" aria-selected="false"
                 id="tab-analyst">
@@ -2467,7 +2465,6 @@
                     <div class="agent-tab-name">Analyst Agent</div>
                     <div class="agent-tab-desc">Domestic & global brokerage research</div>
                 </div>
-                <span class="agent-badge badge-live">Live</span>
             </button>
             <button class="agent-tab" onclick="switchAgent('forecasting')" role="tab" aria-selected="false"
                 id="tab-forecasting">
@@ -2476,7 +2473,6 @@
                     <div class="agent-tab-name">Forecasting Agent (beta)</div>
                     <div class="agent-tab-desc">Multi-method valuation & price targets</div>
                 </div>
-                <span class="agent-badge badge-live">Live</span>
             </button>
             <button class="agent-tab" onclick="switchAgent('cosmic')" role="tab" aria-selected="false" id="tab-cosmic">
                 <span class="agent-tab-icon">🌌</span>
@@ -2484,7 +2480,13 @@
                     <div class="agent-tab-name">Cosmic Macro Agent</div>
                     <div class="agent-tab-desc">Astro-geopolitical market intelligence</div>
                 </div>
-                <span class="agent-badge badge-live">Live</span>
+            </button>
+            <button class="agent-tab" onclick="switchAgent('docsum')" role="tab" aria-selected="false" id="tab-docsum">
+                <span class="agent-tab-icon">📑</span>
+                <div class="agent-tab-info">
+                    <div class="agent-tab-name">Doc Summarizer</div>
+                    <div class="agent-tab-desc">Summarize PDF/Word financial documents</div>
+                </div>
             </button>
         </div>
 
@@ -2902,6 +2904,97 @@
             </div>
 
         </div>
+
+        <!-- =============================== -->
+        <!-- FINANCIAL DOC SUMMARIZER WORKSPACE -->
+        <!-- =============================== -->
+        <div class="agent-workspace" id="workspace-docsum">
+            <div class="ticker-card">
+                <h2>📑 Financial Document Summarizer</h2>
+                <p class="subtitle">Upload a PDF or Word document (investor presentation, analyst report, etc.) to get an AI summary.</p>
+                <div class="ticker-input-row" style="flex-direction: column; align-items: flex-start; gap: 1rem;">
+                    <input type="file" id="docsumFileInput" accept=".pdf,.doc,.docx" class="ticker-input" style="width: 100%; max-width: 400px; padding: 0.5rem; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 0.625rem; color: var(--text-primary);" />
+                    <button class="analyze-btn" id="docsumAnalyzeBtn" onclick="startDocsumAnalysis()">
+                        <span id="docsumBtnText">Summarize Document</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Error -->
+            <div class="error-card" id="docsumError" style="display: none; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); padding: 1rem; border-radius: 0.5rem; margin-bottom: 1rem; color: #fca5a5;">
+                <h4 style="margin-bottom: 0.5rem;">⚠️ Analysis Error</h4>
+                <p id="docsumErrorText" style="font-size: 0.875rem;"></p>
+            </div>
+
+            <!-- Progress -->
+            <div class="progress-card" id="docsumProgress" style="display: none;">
+                <div class="progress-status">
+                    <div class="progress-dot"></div>
+                    <span id="docsumProgressText">Uploading and analyzing document...</span>
+                </div>
+                <div class="progress-bar-container">
+                    <div class="progress-bar"></div>
+                </div>
+            </div>
+
+            <!-- Result -->
+            <div class="analysis-card" id="docsumAnalysis" style="display: none;">
+                <div class="analysis-header">
+                    <div class="analysis-header-left">
+                        <h3>Document Summary</h3>
+                        <span class="analysis-meta" id="docsumAnalysisMeta"></span>
+                    </div>
+                </div>
+                <div class="analysis-body" id="docsumAnalysisBody"></div>
+            </div>
+        </div>
+
+        <script>
+            function startDocsumAnalysis() {
+                const fileInput = document.getElementById('docsumFileInput');
+                const file = fileInput.files[0];
+                if (!file) {
+                    alert('Please select a PDF or Word document to upload.');
+                    return;
+                }
+
+                document.getElementById('docsumError').style.display = 'none';
+                document.getElementById('docsumAnalysis').style.display = 'none';
+                document.getElementById('docsumProgress').style.display = 'block';
+                document.getElementById('docsumAnalyzeBtn').disabled = true;
+                document.getElementById('docsumBtnText').innerHTML = '<span class="spinner"></span> Analyzing...';
+
+                const formData = new FormData();
+                formData.append('file', file);
+
+                fetch('/agent/doc-summarizer/upload', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(r => r.json())
+                .then(data => {
+                    document.getElementById('docsumProgress').style.display = 'none';
+                    document.getElementById('docsumAnalyzeBtn').disabled = false;
+                    document.getElementById('docsumBtnText').textContent = 'Summarize Document';
+
+                    if (data.status === 'success') {
+                        document.getElementById('docsumAnalysis').style.display = 'block';
+                        document.getElementById('docsumAnalysisMeta').textContent = file.name;
+                        document.getElementById('docsumAnalysisBody').innerHTML = typeof marked !== 'undefined' ? marked.parse(data.summary || 'No summary generated.') : ('<pre style="white-space:pre-wrap;">' + (data.summary || '') + '</pre>');
+                    } else if (data.error) {
+                        document.getElementById('docsumError').style.display = 'block';
+                        document.getElementById('docsumErrorText').textContent = data.error;
+                    }
+                })
+                .catch(err => {
+                    document.getElementById('docsumProgress').style.display = 'none';
+                    document.getElementById('docsumAnalyzeBtn').disabled = false;
+                    document.getElementById('docsumBtnText').textContent = 'Summarize Document';
+                    document.getElementById('docsumError').style.display = 'block';
+                    document.getElementById('docsumErrorText').textContent = 'Upload failed: ' + err.message;
+                });
+            }
+        </script>
 
     </div>
 
