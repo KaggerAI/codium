@@ -4790,6 +4790,7 @@
             window.forecastingSelectedName = '';
 
             let fcOriginalAssumptions = null; // Stores deep copy for resetting
+            let fcOriginalModels = null; // Stores deep copy to restore AI baseline on scenario switch
 
             // =====================================================
             // TICKER AUTOCOMPLETE
@@ -4964,8 +4965,9 @@
             function onForecastingComplete(result) {
                 hideEl('forecastingProgress');
                 resetFcButton();
-                // Store deep copy of original AI assumptions
+                // Store deep copy of original AI assumptions and models
                 fcOriginalAssumptions = JSON.parse(JSON.stringify(result.assumptions || {}));
+                fcOriginalModels = JSON.parse(JSON.stringify(result.models || {}));
                 fcCurrentData = result;
                 fcActiveScenario = 'base';
                 openForecastingOverlay(result);
@@ -5558,7 +5560,12 @@
                         ? (originalValObj[activeScen] ?? originalValObj.base ?? 0)
                         : originalValObj;
 
-                    setNestedVal(fcCurrentData.assumptions, sp.key, targetVal);
+                    // Restore the full dictionary so scenarios calculate correctly
+                    if (typeof originalValObj === 'object' && originalValObj !== null) {
+                        setNestedVal(fcCurrentData.assumptions, sp.key, JSON.parse(JSON.stringify(originalValObj)));
+                    } else {
+                        setNestedVal(fcCurrentData.assumptions, sp.key, originalValObj);
+                    }
 
                     // Update HTML slider range element
                     const sliderInput = document.querySelector(`input[data-model="${modelKey}"][data-key="${sp.key}"]`);
@@ -5615,11 +5622,19 @@
                     });
                     const data = await resp.json();
                     if (data.status === 'success' && data.result) {
-                        // Update the model card fair value
+                        // Store the recalculated values back into memory so scenario switching works
+                        if (fcCurrentData.models[modelKey]) {
+                            fcCurrentData.models[modelKey].bear = data.result.bear;
+                            fcCurrentData.models[modelKey].base = data.result.base;
+                            fcCurrentData.models[modelKey].bull = data.result.bull;
+                        }
+
+                        // Update the model card fair value to reflect the ACTIVE scenario
                         const fvEl = document.getElementById(`fv_${modelKey}`);
-                        const baseVal = data.result.base?.fair_value;
-                        if (fvEl && baseVal) {
-                            fvEl.innerHTML = `<span class="fc-currency">₹</span>${formatNum(baseVal)}`;
+                        const activeScen = (fcActiveScenario === 'range') ? 'base' : fcActiveScenario;
+                        const dispVal = data.result[activeScen]?.fair_value;
+                        if (fvEl && dispVal) {
+                            fvEl.innerHTML = `<span class="fc-currency">₹</span>${formatNum(dispVal)}`;
                         }
 
                         // Update scenarios
@@ -5680,13 +5695,35 @@
                     Object.entries(fcCurrentData.models).forEach(([key, model]) => {
                         if (!model.applicable) return;
 
-                        // 1. Update Headline Prices (Inner Bear/Base/Bull static text stays untouched)
+                        // Restore model and assumptions to AI original baseline for this scenario
+                        if (fcOriginalModels && fcOriginalModels[key]) {
+                            fcCurrentData.models[key] = JSON.parse(JSON.stringify(fcOriginalModels[key]));
+                        }
+                        const restoredModel = fcCurrentData.models[key];
+
+                        // 1. Update Headline Prices
                         const fvEl = document.getElementById(`fv_${key}`);
-                        const val = model[activeScen]?.fair_value;
+                        const val = restoredModel[activeScen]?.fair_value;
                         if (fvEl && val) fvEl.innerHTML = `<span class="fc-currency">₹</span>${formatNum(val)}`;
 
-                        // 2. Update Assumption Sliders dynamically
-                        const cfg = model.config || {};
+                        // 2. Restore scenario values to bottom of card
+                        const card = document.getElementById(`card_${key}`);
+                        if (card) {
+                            const scenDiv = card.querySelector('.fc-model-scenarios');
+                            if (scenDiv) {
+                                const bearV = restoredModel.bear?.fair_value;
+                                const baseV = restoredModel.base?.fair_value;
+                                const bullV = restoredModel.bull?.fair_value;
+                                scenDiv.innerHTML = `
+                                <div class="fc-scenario-val bear">🔴 Bear<strong>₹${bearV ? formatNum(bearV) : 'N/A'}</strong></div>
+                                <div class="fc-scenario-val base">🟡 Base<strong>₹${baseV ? formatNum(baseV) : 'N/A'}</strong></div>
+                                <div class="fc-scenario-val bull">🟢 Bull<strong>₹${bullV ? formatNum(bullV) : 'N/A'}</strong></div>
+                                `;
+                            }
+                        }
+
+                        // 3. Update Assumption Sliders dynamically
+                        const cfg = restoredModel.config || {};
                         const sliders = cfg.slider_params || [];
                         sliders.forEach(sp => {
                             const originalValObj = getNestedVal(fcOriginalAssumptions, sp.key);
@@ -5701,8 +5738,10 @@
                                 const svEl = document.getElementById(svId);
                                 if (svEl) svEl.textContent = targetVal;
 
-                                // Memory Update so recalculations trigger off the new scenario baseline
-                                setNestedVal(fcCurrentData.assumptions, sp.key, targetVal);
+                                // We intentionally DO NOT update fcCurrentData.assumptions here.
+                                // We want to retain the {"bull":x, "base":y, "bear":z} dictionary structure 
+                                // so that the backend can calculate all 3 scenarios correctly.
+                                // If the user manually drags the slider, onFcSlider WILL overwrite it with a scalar.
                             }
                         });
                     });

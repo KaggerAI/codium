@@ -38,10 +38,7 @@ Return ONLY a valid JSON object with this exact structure. No markdown fences ar
     
     "dcf_assumptions": {{
         "revenue_growth_y1": {{"bull": 15, "base": 12, "bear": 8}},
-        "revenue_growth_y2": {{"bull": 14, "base": 11, "bear": 7}},
-        "revenue_growth_y3": {{"bull": 13, "base": 10, "bear": 6}},
-        "revenue_growth_y4": {{"bull": 12, "base": 9, "bear": 5}},
-        "revenue_growth_y5": {{"bull": 11, "base": 8, "bear": 4}},
+        "revenue_growth_y2_to_y5": {{"bull": 13, "base": 10, "bear": 6}},
         "ebitda_margin": {{"bull": 22, "base": 20, "bear": 17}},
         "capex_pct_of_revenue": {{"bull": 5, "base": 7, "bear": 9}},
         "tax_rate": 25.0,

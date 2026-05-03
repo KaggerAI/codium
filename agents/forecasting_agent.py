@@ -153,9 +153,10 @@ def compute_dcf_fcff(assumptions, scenario='base'):
 
         # Revenue growth rates for 5 years
         growth_rates = [
-            get_val(dcf, f'revenue_growth_y{i}') / 100
-            for i in range(1, 6)
-        ]
+            get_val(dcf, 'revenue_growth_y1') / 100
+        ] + [
+            get_val(dcf, 'revenue_growth_y2_to_y5') / 100
+        ] * 4
 
         ebitda_margin = get_val(dcf, 'ebitda_margin') / 100
         capex_pct = get_val(dcf, 'capex_pct_of_revenue', scenario) / 100 if isinstance(dcf.get('capex_pct_of_revenue'), dict) else dcf.get('capex_pct_of_revenue', 7) / 100
@@ -270,9 +271,10 @@ def compute_dcf_fcfe(assumptions, scenario='base'):
 
         # Growth rates
         growth_rates = [
-            get_val(dcf, f'revenue_growth_y{i}') / 100
-            for i in range(1, 6)
-        ]
+            get_val(dcf, 'revenue_growth_y1') / 100
+        ] + [
+            get_val(dcf, 'revenue_growth_y2_to_y5') / 100
+        ] * 4
 
         # Rough FCFE = Net Income * (1 - reinvestment rate)
         # Simplified: FCFE ≈ EPS * shares * payout ratio proxy
@@ -695,7 +697,7 @@ MODEL_CONFIGS = {
         'compute_fn': compute_dcf_fcff,
         'slider_params': [
             {'key': 'dcf_assumptions.revenue_growth_y1', 'label': 'Revenue Growth Y1 (%)', 'min': -5, 'max': 40, 'step': 0.5},
-            {'key': 'dcf_assumptions.revenue_growth_y2', 'label': 'Revenue Growth Y2 (%)', 'min': -5, 'max': 35, 'step': 0.5},
+            {'key': 'dcf_assumptions.revenue_growth_y2_to_y5', 'label': 'Revenue Growth Y2-Y5 Avg (%)', 'min': -5, 'max': 35, 'step': 0.5},
             {'key': 'dcf_assumptions.ebitda_margin', 'label': 'EBITDA Margin (%)', 'min': 5, 'max': 50, 'step': 0.5},
             {'key': 'wacc_components.equity_risk_premium', 'label': 'Equity Risk Premium (%)', 'min': 4, 'max': 10, 'step': 0.25},
             {'key': 'wacc_components.beta', 'label': 'Beta', 'min': 0.4, 'max': 2.0, 'step': 0.05},
@@ -710,6 +712,7 @@ MODEL_CONFIGS = {
         'compute_fn': compute_dcf_fcfe,
         'slider_params': [
             {'key': 'dcf_assumptions.revenue_growth_y1', 'label': 'Earnings Growth Y1 (%)', 'min': -5, 'max': 40, 'step': 0.5},
+            {'key': 'dcf_assumptions.revenue_growth_y2_to_y5', 'label': 'Earnings Growth Y2-Y5 Avg (%)', 'min': -5, 'max': 35, 'step': 0.5},
             {'key': 'wacc_components.equity_risk_premium', 'label': 'Equity Risk Premium (%)', 'min': 4, 'max': 10, 'step': 0.25},
             {'key': 'wacc_components.beta', 'label': 'Beta', 'min': 0.4, 'max': 2.0, 'step': 0.05},
             {'key': 'dcf_assumptions.terminal_growth', 'label': 'Terminal Growth (%)', 'min': 1, 'max': 6, 'step': 0.25},
