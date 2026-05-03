@@ -158,12 +158,15 @@
         .page-header h1 {
             font-size: 2.25rem;
             font-weight: 800;
+            margin-bottom: 0.5rem;
+            letter-spacing: -1px;
+        }
+
+        .page-header h1 .text-gradient {
             background: var(--gradient-primary);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
-            margin-bottom: 0.5rem;
-            letter-spacing: -1px;
         }
 
         .page-header p {
@@ -2421,7 +2424,8 @@
                     class="px-5 py-2.5 bg-white/10 hover:bg-white/20 rounded-xl text-white transition-all text-sm font-semibold flex items-center gap-2 border border-white/10"
                     style="background: rgba(255, 255, 255, 0.1); border-radius: 0.75rem; border: 1px solid rgba(255, 255, 255, 0.1); display: flex; align-items: center; gap: 0.5rem; color: white; padding: 0.625rem 1.25rem; font-size: 0.875rem; font-weight: 600; cursor: pointer; transition: all 0.2s;">
                     <svg style="width: 1rem; height: 1rem;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                     </svg>
                     Back to Analyze
                 </button>
@@ -2436,8 +2440,7 @@
 
         <!-- Page Header -->
         <div class="page-header">
-            <h1>🤖 Advanced Agents</h1>
-            <p>Specialized AI agents that perform deep, data-driven financial analysis at institutional grade.</p>
+            <h1>🤖 <span class="text-gradient">Advanced AI Agents</span></h1>
         </div>
 
         <!-- Agent Tabs -->
@@ -2911,9 +2914,11 @@
         <div class="agent-workspace" id="workspace-docsum">
             <div class="ticker-card">
                 <h2>📑 Financial Document Summarizer</h2>
-                <p class="subtitle">Upload a PDF or Word document (investor presentation, analyst report, etc.) to get an AI summary.</p>
+                <p class="subtitle">Upload a PDF or Word document (investor presentation, analyst report, etc.) to get
+                    an AI summary.</p>
                 <div class="ticker-input-row" style="flex-direction: column; align-items: flex-start; gap: 1rem;">
-                    <input type="file" id="docsumFileInput" accept=".pdf,.doc,.docx" class="ticker-input" style="width: 100%; max-width: 400px; padding: 0.5rem; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 0.625rem; color: var(--text-primary);" />
+                    <input type="file" id="docsumFileInput" accept=".pdf,.doc,.docx" class="ticker-input"
+                        style="width: 100%; max-width: 400px; padding: 0.5rem; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 0.625rem; color: var(--text-primary);" />
                     <button class="analyze-btn" id="docsumAnalyzeBtn" onclick="startDocsumAnalysis()">
                         <span id="docsumBtnText">Summarize Document</span>
                     </button>
@@ -2921,7 +2926,8 @@
             </div>
 
             <!-- Error -->
-            <div class="error-card" id="docsumError" style="display: none; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); padding: 1rem; border-radius: 0.5rem; margin-bottom: 1rem; color: #fca5a5;">
+            <div class="error-card" id="docsumError"
+                style="display: none; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); padding: 1rem; border-radius: 0.5rem; margin-bottom: 1rem; color: #fca5a5;">
                 <h4 style="margin-bottom: 0.5rem;">⚠️ Analysis Error</h4>
                 <p id="docsumErrorText" style="font-size: 0.875rem;"></p>
             </div>
@@ -2971,28 +2977,28 @@
                     method: 'POST',
                     body: formData
                 })
-                .then(r => r.json())
-                .then(data => {
-                    document.getElementById('docsumProgress').style.display = 'none';
-                    document.getElementById('docsumAnalyzeBtn').disabled = false;
-                    document.getElementById('docsumBtnText').textContent = 'Summarize Document';
+                    .then(r => r.json())
+                    .then(data => {
+                        document.getElementById('docsumProgress').style.display = 'none';
+                        document.getElementById('docsumAnalyzeBtn').disabled = false;
+                        document.getElementById('docsumBtnText').textContent = 'Summarize Document';
 
-                    if (data.status === 'success') {
-                        document.getElementById('docsumAnalysis').style.display = 'block';
-                        document.getElementById('docsumAnalysisMeta').textContent = file.name;
-                        document.getElementById('docsumAnalysisBody').innerHTML = typeof marked !== 'undefined' ? marked.parse(data.summary || 'No summary generated.') : ('<pre style="white-space:pre-wrap;">' + (data.summary || '') + '</pre>');
-                    } else if (data.error) {
+                        if (data.status === 'success') {
+                            document.getElementById('docsumAnalysis').style.display = 'block';
+                            document.getElementById('docsumAnalysisMeta').textContent = file.name;
+                            document.getElementById('docsumAnalysisBody').innerHTML = typeof marked !== 'undefined' ? marked.parse(data.summary || 'No summary generated.') : ('<pre style="white-space:pre-wrap;">' + (data.summary || '') + '</pre>');
+                        } else if (data.error) {
+                            document.getElementById('docsumError').style.display = 'block';
+                            document.getElementById('docsumErrorText').textContent = data.error;
+                        }
+                    })
+                    .catch(err => {
+                        document.getElementById('docsumProgress').style.display = 'none';
+                        document.getElementById('docsumAnalyzeBtn').disabled = false;
+                        document.getElementById('docsumBtnText').textContent = 'Summarize Document';
                         document.getElementById('docsumError').style.display = 'block';
-                        document.getElementById('docsumErrorText').textContent = data.error;
-                    }
-                })
-                .catch(err => {
-                    document.getElementById('docsumProgress').style.display = 'none';
-                    document.getElementById('docsumAnalyzeBtn').disabled = false;
-                    document.getElementById('docsumBtnText').textContent = 'Summarize Document';
-                    document.getElementById('docsumError').style.display = 'block';
-                    document.getElementById('docsumErrorText').textContent = 'Upload failed: ' + err.message;
-                });
+                        document.getElementById('docsumErrorText').textContent = 'Upload failed: ' + err.message;
+                    });
             }
         </script>
 
@@ -4601,7 +4607,7 @@
             html += `<div class="cr-planet-grid">`;
             (d.planets || []).forEach(p => {
                 let predHtml = '';
-                if (p.prediction) predHtml += `<div style="margin-top:6px;padding:4px 8px;background:rgba(99,102,241,0.1);border-radius:4px;font-size:11px;color:var(--text-primary);"><strong>⚡ Prediction:</strong> ${_esc(p.prediction)}${p.trigger_date ? ' <span style="color:var(--text-muted);">('+_esc(p.trigger_date)+')</span>' : ''}</div>`;
+                if (p.prediction) predHtml += `<div style="margin-top:6px;padding:4px 8px;background:rgba(99,102,241,0.1);border-radius:4px;font-size:11px;color:var(--text-primary);"><strong>⚡ Prediction:</strong> ${_esc(p.prediction)}${p.trigger_date ? ' <span style="color:var(--text-muted);">(' + _esc(p.trigger_date) + ')</span>' : ''}</div>`;
                 html += `<div class="cr-planet-card"><div class="cr-symbol">${p.symbol || '★'}</div><div class="cr-pname">${_esc(p.name)}</div><div class="cr-pos">${_esc(p.position)}</div><div class="cr-effect">${_esc(p.effect)}</div>${predHtml}${_badge(p.badge, p.sentiment)}</div>`;
             });
             html += `</div>`;
