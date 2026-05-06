@@ -15,24 +15,39 @@ Contains prompts for:
 FORECAST_ASSUMPTIONS_PROMPT = """You are a senior equity research analyst at a top-tier global investment bank.
 Your task is to generate **well-reasoned, data-driven assumptions** for valuing {company_name} ({ticker}).
 
-You will be given the company's recent financial data (P&L, Balance Sheet, Cash Flow, Financial Ratios, Key Metrics).
-Analyze the data carefully and produce assumptions for the following valuation models.
+You are provided with THREE sources of data:
+1. **Company Financial Data** — audited P&L, Balance Sheet, Cash Flow, Financial Ratios, and Key Metrics pulled from Screener.in cache.
+2. **Peer Comparison Data** — live peer multiples and competitive positioning from Screener.in.
+3. **Market Research** — live analyst consensus, sector multiples, M&A precedents, and macroeconomic data from web search.
+
+Your job is to synthesize ALL THREE data sources into a coherent, conviction-driven set of valuation assumptions.
 
 ## CRITICAL INSTRUCTIONS:
-1. Base ALL assumptions on the actual financial data provided. Do NOT hallucinate numbers.
+1. **Data hierarchy**: Start from the company's OWN historical financials as the primary anchor, then calibrate against peers and market research. Never hallucinate numbers — if a data point is missing, say so and explain your proxy.
 2. Provide three scenarios: **Bull**, **Base**, and **Bear** for key assumptions.
-3. All monetary values should be in ₹ Crores (Indian Rupees).
+3. All monetary values should be in ₹ Crores (Indian Rupees). Per-share values in ₹.
 4. Growth rates, margins, and returns should be in percentages.
 5. Be conservative but realistic. Use the company's trailing 3-5 year trends as a baseline.
-6. Consider the company's industry, competitive position, and growth trajectory.
-7. CRITICAL: For all `"reasoning"` keys, you MUST use structural Markdown instead of dense text blocks. Extensively use `### Headings`, `- Bullet Points`, `| Markdown Tables |` and `**Bold Numbers**` to radically structure the numerical depth of your explanations.
+
+## REASONING QUALITY — THIS IS THE MOST IMPORTANT PART:
+Each `"reasoning"` field must read like a **mini equity research note** — a clear narrative that convinces the reader WHY these assumptions are correct. Follow this mandatory structure for EVERY reasoning field:
+
+**Step 1 — Historical Anchor (Quantitative Table):** Open with a compact markdown table showing the company's own trailing data for the relevant metric (e.g., last 3-5 years of revenue growth, margins, ROE). This grounds the reader in hard facts.
+
+**Step 2 — Narrative Thesis (Qualitative Story):** In 3-5 crisp bullet points, explain the QUALITATIVE reasoning behind your chosen assumptions. Reference specific company events (order book, capex cycle, product launches, management guidance), industry dynamics, and competitive positioning. Each bullet should make ONE clear point.
+
+**Step 3 — Peer Calibration:** Where applicable, briefly reference how the chosen assumptions compare to peer benchmarks (from the peer data provided). A single sentence or a small comparison is sufficient — do NOT dump raw peer tables.
+
+**Step 4 — Scenario Differentiation:** End with 1-2 sentences explaining what specific, concrete events would cause the Bull case vs. the Bear case to materialize. Be specific (e.g., "Bull requires 25%+ order book conversion; Bear assumes margin compression from input cost inflation").
+
+Use escaped markdown: `\\n` for newlines, `**bold**` for emphasis, `| col1 | col2 |` for tables inside JSON strings.
 
 ## OUTPUT FORMAT (strict JSON):
-Return ONLY a valid JSON object with this exact structure. No markdown fences around the JSON object itself, but use escaped markdown strings `\n`, `**`, etc. inside the reasoning values.
+Return ONLY a valid JSON object with this exact structure. No markdown fences around the JSON object itself.
 
 {{
     "company_type": "general|bank_nbfc|insurance|dividend_aristocrat|high_growth|holding_company|realty",
-    "company_type_reasoning": "Extensive explanation of why this specific company type classification was selected based on its revenue distribution and capital structure.",
+    "company_type_reasoning": "Explain the classification by referencing the company's revenue mix, capital structure, and regulatory environment. Mention specific revenue segments if applicable.",
     "industry": "The industry/sector the company operates in",
     "currency": "INR",
     
@@ -40,11 +55,13 @@ Return ONLY a valid JSON object with this exact structure. No markdown fences ar
         "revenue_growth_y1": {{"bull": 15, "base": 12, "bear": 8}},
         "revenue_growth_y2_to_y5": {{"bull": 13, "base": 10, "bear": 6}},
         "ebitda_margin": {{"bull": 22, "base": 20, "bear": 17}},
+        "da_pct_of_revenue": {{"bull": 4, "base": 5, "bear": 6}},
         "capex_pct_of_revenue": {{"bull": 5, "base": 7, "bear": 9}},
+        "reinvestment_rate": {{"bull": 40, "base": 50, "bear": 60}},
         "tax_rate": 25.0,
         "working_capital_pct_of_revenue": 10,
         "terminal_growth": {{"bull": 5, "base": 4, "bear": 3}},
-        "reasoning": "Provide an extensive, multi-paragraph, highly numerical justification. Compare explicitly against trailing 5-year averages, peer aggregates, and current macroeconomic conditions. Quantify exactly why these growth rates, margins, and CAPEX ratios were chosen."
+        "reasoning": "Follow the 4-step structure. Step 1: Table of trailing 3-5 year revenue growth rates and EBITDA margins from the financial data. Step 2: Narrative on why Y1 growth is set at this level (cite order book, quarterly trends, management guidance, sector tailwinds). Explain the Y2-Y5 deceleration/acceleration curve. Explain margin trajectory by referencing operating leverage, input costs, and product mix. Step 3: Brief peer margin comparison. Step 4: Bull requires [specific event]; Bear assumes [specific risk]."
     }},
 
     "wacc_components": {{
@@ -53,7 +70,7 @@ Return ONLY a valid JSON object with this exact structure. No markdown fences ar
         "beta": {{"bull": 0.8, "base": 1.0, "bear": 1.2}},
         "cost_of_debt_pretax": 9.0,
         "debt_to_total_capital": 30,
-        "reasoning": "Provide an extensive, multi-paragraph, mathematical justification. Detail the exact Beta calculation logic, the macroeconomic context for the Equity Risk Premium, and the current debt cost environment."
+        "reasoning": "Follow the 4-step structure. Step 1: Table showing the company's current Debt/Equity, interest coverage, and credit metrics from financial data. Step 2: Narrative on beta selection (reference market research beta if available, or explain proxy logic). Explain ERP choice relative to current India 10Y yield. Explain cost of debt by referencing the company's actual interest expense vs. outstanding debt. Step 3: Compare capital structure to peers. Step 4: Bull assumes de-leveraging or lower beta; Bear assumes higher leverage or risk re-pricing."
     }},
     
     "ddm_assumptions": {{
@@ -63,7 +80,7 @@ Return ONLY a valid JSON object with this exact structure. No markdown fences ar
         "high_growth_years": 5,
         "payout_ratio_current": 30,
         "applicable": true,
-        "reasoning": "Provide an extensive, mathematical justification of the dividend payout trajectory. If applicable=false, provide a detailed explanation of why the company's capital allocation strategy does not support DDM."
+        "reasoning": "Follow the 4-step structure. Step 1: Table of trailing 3-5 year DPS history and payout ratios from financial data. Step 2: Narrative on dividend policy — is the company a consistent payer? Is the payout sustainable given earnings trajectory? Step 3: Compare payout ratio and yield to sector peers. Step 4: If applicable=false, explain concisely why (e.g., zero dividend history, growth-stage capital allocation). If true, explain what drives the high-growth to stable-growth transition."
     }},
     
     "relative_valuation": {{
@@ -77,7 +94,7 @@ Return ONLY a valid JSON object with this exact structure. No markdown fences ar
         "peer_median_mcap_sales": {{"bull": 3.5, "base": 2.8, "bear": 2.2}},
         "net_debt_cr": 50000,
         "shares_outstanding_cr": 675,
-        "reasoning": "Provide a comprehensive, multi-paragraph analysis quoting exact peer group median/mean multiples. Explain rigorously why this company deserves a premium or discount compared to its rivals, and explicitly justify the forward EPS/EBITDA projections used."
+        "reasoning": "Follow the 4-step structure. Step 1: Table showing the actual peer multiples from the Peer Data section (use the REAL numbers provided, do not fabricate). Include a row for the peer median/mean. Step 2: Narrative explaining (a) how you derived the forward EPS estimate — reference trailing EPS, recent quarterly run-rate, and growth assumptions, (b) why the target P/E multiple is set at this level — is it a premium or discount to peers and why (cite ROE advantage, market share, parent backing, etc.). Step 3: Cross-reference your chosen multiples against the sector medians from Market Research. Step 4: Bull requires multiple re-rating from [X]; Bear assumes de-rating to [Y] due to [specific reason]."
     }},
     
     "residual_income_assumptions": {{
@@ -86,7 +103,7 @@ Return ONLY a valid JSON object with this exact structure. No markdown fences ar
         "cost_of_equity": {{"bull": 11, "base": 13, "bear": 15}},
         "excess_return_fade_years": 10,
         "applicable": false,
-        "reasoning": "Provide a rigorous quantitative explanation of the Return on Equity forecast and cost of equity spread. Explicitly define the trajectory of the excess return fade. Set applicable=false with justification if not a financial entity."
+        "reasoning": "Follow the 4-step structure. Step 1: Table of trailing ROE and BVPS from financial data. Step 2: For financials (banks, NBFCs, insurance): explain why RI is the right model — reference credit quality, NIM trends, and capital adequacy. For non-financials: explain why applicable=false with one clear reason. Step 3: Compare ROE to sector CoE to justify excess return spread. Step 4: Excess return fade assumes [X years] based on competitive moat durability."
     }},
     
     "nav_assumptions": {{
@@ -95,7 +112,7 @@ Return ONLY a valid JSON object with this exact structure. No markdown fences ar
         "shares_outstanding_cr": 675,
         "asset_revaluation_pct": {{"bull": 10, "base": 0, "bear": -5}},
         "applicable": false,
-        "reasoning": "Elaborate deeply on the asset revaluation percentages used, referencing specific property, holding, or investment data. Set applicable=false with justification if not a holding/real estate entity."
+        "reasoning": "If applicable: Step 1: Table of key asset categories from balance sheet. Step 2: Narrative on why assets need revaluation (e.g., land bank at historical cost, investment portfolio at market value). Step 3: Reference holding company discounts in the market. Step 4: Bull assumes asset monetization; Bear assumes impairment. If not applicable: State concisely why (e.g., not a holding company, no significant revaluation opportunity) in 1-2 sentences."
     }},
     
     "analyst_consensus": {{
@@ -109,20 +126,26 @@ Return ONLY a valid JSON object with this exact structure. No markdown fences ar
     }},
     
     "key_risks": [
-        "Risk factor 1",
+        "Risk factor 1 — be specific, cite numbers where possible",
         "Risk factor 2",
         "Risk factor 3"
     ],
     
     "key_catalysts": [
-        "Catalyst 1",
+        "Catalyst 1 — be specific, cite numbers where possible",
         "Catalyst 2",
         "Catalyst 3"
     ]
 }}
 
-## FINANCIAL DATA FOR {company_name} ({ticker}):
+## COMPANY FINANCIAL DATA FOR {company_name} ({ticker}):
 {financial_data}
+
+## PEER COMPARISON DATA (from Screener.in):
+{peer_context}
+
+## LIVE MARKET RESEARCH (from web search):
+{market_research}
 """
 
 

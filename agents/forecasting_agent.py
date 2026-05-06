@@ -159,6 +159,7 @@ def compute_dcf_fcff(assumptions, scenario='base'):
         ] * 4
 
         ebitda_margin = get_val(dcf, 'ebitda_margin') / 100
+        da_pct = get_val(dcf, 'da_pct_of_revenue', scenario) / 100 if isinstance(dcf.get('da_pct_of_revenue'), dict) else dcf.get('da_pct_of_revenue', 4) / 100
         capex_pct = get_val(dcf, 'capex_pct_of_revenue', scenario) / 100 if isinstance(dcf.get('capex_pct_of_revenue'), dict) else dcf.get('capex_pct_of_revenue', 7) / 100
         tax_rate = dcf.get('tax_rate', 25) / 100
         wc_pct = dcf.get('working_capital_pct_of_revenue', 10) / 100
@@ -199,10 +200,12 @@ def compute_dcf_fcff(assumptions, scenario='base'):
         for i, g in enumerate(growth_rates):
             revenue = prev_revenue * (1 + g) if i > 0 else base_revenue * (1 + g)
             ebitda = revenue * ebitda_margin
-            nopat = ebitda * (1 - tax_rate)
+            da = revenue * da_pct
+            ebit = ebitda - da
+            nopat = ebit * (1 - tax_rate)
             capex = revenue * capex_pct
             delta_wc = (revenue - prev_revenue) * wc_pct
-            fcff = nopat - capex - delta_wc
+            fcff = nopat + da - capex - delta_wc
             projected_fcff.append(fcff)
             prev_revenue = revenue
 
@@ -280,7 +283,7 @@ def compute_dcf_fcfe(assumptions, scenario='base'):
         # Simplified: FCFE ≈ EPS * shares * payout ratio proxy
         tax_rate = dcf.get('tax_rate', 25) / 100
         net_income = forward_eps * shares
-        reinvestment_rate = 0.5  # 50% reinvestment assumption
+        reinvestment_rate = get_val(dcf, 'reinvestment_rate', scenario) / 100 if isinstance(dcf.get('reinvestment_rate'), dict) else dcf.get('reinvestment_rate', 50) / 100
 
         projected_fcfe = []
         current_ni = net_income
@@ -697,10 +700,17 @@ MODEL_CONFIGS = {
         'compute_fn': compute_dcf_fcff,
         'slider_params': [
             {'key': 'dcf_assumptions.revenue_growth_y1', 'label': 'Revenue Growth Y1 (%)', 'min': -5, 'max': 40, 'step': 0.5},
-            {'key': 'dcf_assumptions.revenue_growth_y2_to_y5', 'label': 'Revenue Growth Y2-Y5 Avg (%)', 'min': -5, 'max': 35, 'step': 0.5},
+            {'key': 'dcf_assumptions.revenue_growth_y2_to_y5', 'label': 'Revenue Y2-Y5 Avg (%)', 'min': -5, 'max': 35, 'step': 0.5},
             {'key': 'dcf_assumptions.ebitda_margin', 'label': 'EBITDA Margin (%)', 'min': 5, 'max': 50, 'step': 0.5},
+            {'key': 'dcf_assumptions.da_pct_of_revenue', 'label': 'D&A (% of Rev)', 'min': 1, 'max': 20, 'step': 0.5},
+            {'key': 'dcf_assumptions.capex_pct_of_revenue', 'label': 'CapEx (% of Rev)', 'min': 1, 'max': 30, 'step': 0.5},
+            {'key': 'dcf_assumptions.working_capital_pct_of_revenue', 'label': 'WC (% of Rev)', 'min': 1, 'max': 30, 'step': 0.5},
+            {'key': 'dcf_assumptions.tax_rate', 'label': 'Tax Rate (%)', 'min': 15, 'max': 35, 'step': 1},
+            {'key': 'wacc_components.risk_free_rate', 'label': 'Risk-Free Rate (%)', 'min': 4, 'max': 10, 'step': 0.25},
             {'key': 'wacc_components.equity_risk_premium', 'label': 'Equity Risk Premium (%)', 'min': 4, 'max': 10, 'step': 0.25},
             {'key': 'wacc_components.beta', 'label': 'Beta', 'min': 0.4, 'max': 2.0, 'step': 0.05},
+            {'key': 'wacc_components.cost_of_debt_pretax', 'label': 'Cost of Debt (%)', 'min': 5, 'max': 15, 'step': 0.5},
+            {'key': 'wacc_components.debt_to_total_capital', 'label': 'Debt to Capital (%)', 'min': 0, 'max': 80, 'step': 1},
             {'key': 'dcf_assumptions.terminal_growth', 'label': 'Terminal Growth (%)', 'min': 1, 'max': 6, 'step': 0.25},
         ]
     },
@@ -713,6 +723,8 @@ MODEL_CONFIGS = {
         'slider_params': [
             {'key': 'dcf_assumptions.revenue_growth_y1', 'label': 'Earnings Growth Y1 (%)', 'min': -5, 'max': 40, 'step': 0.5},
             {'key': 'dcf_assumptions.revenue_growth_y2_to_y5', 'label': 'Earnings Growth Y2-Y5 Avg (%)', 'min': -5, 'max': 35, 'step': 0.5},
+            {'key': 'dcf_assumptions.reinvestment_rate', 'label': 'Reinvestment Rate (%)', 'min': 10, 'max': 90, 'step': 1},
+            {'key': 'wacc_components.risk_free_rate', 'label': 'Risk-Free Rate (%)', 'min': 4, 'max': 10, 'step': 0.25},
             {'key': 'wacc_components.equity_risk_premium', 'label': 'Equity Risk Premium (%)', 'min': 4, 'max': 10, 'step': 0.25},
             {'key': 'wacc_components.beta', 'label': 'Beta', 'min': 0.4, 'max': 2.0, 'step': 0.05},
             {'key': 'dcf_assumptions.terminal_growth', 'label': 'Terminal Growth (%)', 'min': 1, 'max': 6, 'step': 0.25},
@@ -1150,12 +1162,14 @@ def _run_forecasting_pipeline(job_id, ticker, cached_data, call_gemini_api_fn,
         print(f"FORECASTING_AGENT: Stage 1 complete — {elapsed_s1}s", file=sys.stderr)
 
         # ==========================================================
-        # STAGE 2: AI Research (Parallel)
+        # STAGE 2: AI Research (2-Phase Hybrid)
+        # Phase 1: Fetch peer data + market research in parallel
+        # Phase 2: Feed ALL data into Gemini for assumption generation
         # ==========================================================
         update_agent_job(job_id, {
-            'progress': f'AI is researching {company_name} — generating assumptions and market data...'
+            'progress': f'AI is researching {company_name} — fetching peer data, market research, and generating assumptions...'
         })
-        print(f"FORECASTING_AGENT: Stage 2 — AI Research (parallel)", file=sys.stderr)
+        print(f"FORECASTING_AGENT: Stage 2 — AI Research (2-phase hybrid)", file=sys.stderr)
 
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
@@ -1295,19 +1309,72 @@ def _run_forecasting_pipeline(job_id, ticker, cached_data, call_gemini_api_fn,
 async def _fetch_ai_research_async(ticker, company_name, financial_context,
                                      call_gemini_api_fn, call_perplexity_api_fn, fetch_peer_fn):
     """
-    Run 3 AI research tasks in parallel:
-    1. Gemini — Generate assumptions from financial data
-    2. Perplexity — Fetch market research (multiples, M&A, consensus)
-    3. Screener — Fetch peer comparison data
+    2-Phase AI research pipeline:
+    Phase 1 (parallel): Fetch market research + peer data from external sources
+    Phase 2 (sequential): Feed ALL data into Gemini for assumption generation
+    
+    This ensures the AI sees real peer multiples, analyst consensus, and sector
+    data when generating assumptions — not hallucinated numbers.
     """
 
+    async def get_market_research():
+        """Fetch market data via Perplexity."""
+        try:
+            prompt = FORECAST_RESEARCH_PROMPT.format(
+                company_name=company_name,
+                ticker=ticker
+            )
+
+            result = await asyncio.to_thread(
+                call_perplexity_api_fn,
+                [{"role": "user", "content": prompt}],
+                "sonar-pro", 0.1, 90
+            )
+            return result
+
+        except Exception as e:
+            print(f"FORECASTING_AGENT: Market research failed: {e}", file=sys.stderr)
+            return f"Error: {e}"
+
+    async def get_peer_data():
+        """Fetch peer comparison from Screener."""
+        try:
+            result = await asyncio.to_thread(
+                fetch_peer_fn, ticker, company_name
+            )
+            return result
+        except Exception as e:
+            print(f"FORECASTING_AGENT: Peer data fetch failed: {e}", file=sys.stderr)
+            return {'company': {}, 'peers': []}
+
+    # ── PHASE 1: Fetch external data in parallel ──
+    print(f"FORECASTING_AGENT: Phase 1 — Fetching market research + peer data in parallel", file=sys.stderr)
+    phase1_results = await asyncio.gather(
+        get_market_research(),
+        get_peer_data(),
+        return_exceptions=True
+    )
+
+    market_research = phase1_results[0] if not isinstance(phase1_results[0], Exception) else "Error fetching market data"
+    peer_data = phase1_results[1] if not isinstance(phase1_results[1], Exception) else {'company': {}, 'peers': []}
+
+    print(f"FORECASTING_AGENT: Phase 1 complete — peer_count={len(peer_data.get('peers', []))}", file=sys.stderr)
+
+    # ── PHASE 2: Generate assumptions with ALL available data ──
+    print(f"FORECASTING_AGENT: Phase 2 — Generating assumptions with full context", file=sys.stderr)
+
+    peer_context = _build_peer_context(peer_data)
+    market_research_str = str(market_research)[:8000] if market_research else "No market research available."
+
     async def get_assumptions():
-        """Generate valuation assumptions using Gemini."""
+        """Generate valuation assumptions using Gemini with full context."""
         try:
             prompt = FORECAST_ASSUMPTIONS_PROMPT.format(
                 company_name=company_name,
                 ticker=ticker,
-                financial_data=financial_context
+                financial_data=financial_context,
+                peer_context=peer_context,
+                market_research=market_research_str
             )
 
             raw_response = await asyncio.to_thread(
@@ -1349,47 +1416,9 @@ async def _fetch_ai_research_async(ticker, company_name, financial_context,
             print(f"FORECASTING_AGENT: Assumption generation failed: {e}", file=sys.stderr)
             return _get_default_assumptions(ticker, company_name)
 
-    async def get_market_research():
-        """Fetch market data via Perplexity."""
-        try:
-            prompt = FORECAST_RESEARCH_PROMPT.format(
-                company_name=company_name,
-                ticker=ticker
-            )
-
-            result = await asyncio.to_thread(
-                call_perplexity_api_fn,
-                [{"role": "user", "content": prompt}],
-                "sonar-pro", 0.1, 90
-            )
-            return result
-
-        except Exception as e:
-            print(f"FORECASTING_AGENT: Market research failed: {e}", file=sys.stderr)
-            return f"Error: {e}"
-
-    async def get_peer_data():
-        """Fetch peer comparison from Screener."""
-        try:
-            result = await asyncio.to_thread(
-                fetch_peer_fn, ticker, company_name
-            )
-            return result
-        except Exception as e:
-            print(f"FORECASTING_AGENT: Peer data fetch failed: {e}", file=sys.stderr)
-            return {'company': {}, 'peers': []}
-
-    # Run all three in parallel
-    results = await asyncio.gather(
-        get_assumptions(),
-        get_market_research(),
-        get_peer_data(),
-        return_exceptions=True
-    )
-
-    assumptions = results[0] if not isinstance(results[0], Exception) else _get_default_assumptions(ticker, company_name)
-    market_research = results[1] if not isinstance(results[1], Exception) else "Error fetching market data"
-    peer_data = results[2] if not isinstance(results[2], Exception) else {'company': {}, 'peers': []}
+    assumptions = await get_assumptions()
+    if isinstance(assumptions, Exception):
+        assumptions = _get_default_assumptions(ticker, company_name)
 
     return assumptions, market_research, peer_data
 
@@ -1397,6 +1426,75 @@ async def _fetch_ai_research_async(ticker, company_name, financial_context,
 # =====================================================================
 # HELPER FUNCTIONS
 # =====================================================================
+
+def _build_peer_context(peer_data):
+    """
+    Format Screener peer data into a clean, structured context string
+    for the assumptions prompt. Extracts real multiples the AI can reference.
+    """
+    if not peer_data or (not peer_data.get('company') and not peer_data.get('peers')):
+        return "No peer comparison data available."
+
+    lines = []
+
+    # Company's own metrics
+    company = peer_data.get('company', {})
+    if company:
+        lines.append("### Target Company Metrics")
+        lines.append(f"- Name: {company.get('name', 'N/A')}")
+        for k, v in company.items():
+            if k != 'name' and v is not None:
+                lines.append(f"- {k}: {v}")
+        lines.append("")
+
+    # Peer comparison table
+    peers = peer_data.get('peers', [])
+    if peers:
+        lines.append("### Peer Comparison Table")
+
+        # Determine all available columns from peer data
+        all_keys = set()
+        for p in peers:
+            all_keys.update(p.keys())
+
+        # Prioritize useful columns
+        priority_cols = ['name', 'CMP', 'Mar Cap', 'P/E', 'P/B', 'EV/EBITDA',
+                         'MCap/Sales', 'ROE', 'ROCE', 'Div Yld', 'Sales', 'NP']
+        columns = [c for c in priority_cols if c in all_keys]
+        # Add any remaining columns
+        for k in sorted(all_keys):
+            if k not in columns:
+                columns.append(k)
+
+        # Build markdown table
+        header = "| " + " | ".join(columns) + " |"
+        separator = "| " + " | ".join(["---"] * len(columns)) + " |"
+        lines.append(header)
+        lines.append(separator)
+
+        for p in peers:
+            row = "| " + " | ".join(str(p.get(c, 'N/A')) for c in columns) + " |"
+            lines.append(row)
+
+        # Calculate medians for numeric columns
+        lines.append("")
+        lines.append("### Peer Medians (computed)")
+        numeric_cols = [c for c in columns if c not in ('name', 'Name')]
+        for col in numeric_cols:
+            vals = []
+            for p in peers:
+                v = _safe_float(p.get(col))
+                if v is not None and v > 0:
+                    vals.append(v)
+            if vals:
+                vals.sort()
+                mid = len(vals) // 2
+                median = vals[mid] if len(vals) % 2 == 1 else (vals[mid - 1] + vals[mid]) / 2
+                mean = sum(vals) / len(vals)
+                lines.append(f"- {col}: Median = {median:.2f}, Mean = {mean:.2f} (n={len(vals)})")
+
+    return "\n".join(lines) if lines else "No peer comparison data available."
+
 
 def _build_financial_context(ticker, company_name, fundamentals, key_metrics, target_meds=None):
     """Build a comprehensive financial data context string for AI prompts."""
@@ -1469,12 +1567,11 @@ def _get_default_assumptions(ticker, company_name):
         'currency': 'INR',
         'dcf_assumptions': {
             'revenue_growth_y1': {'bull': 15, 'base': 10, 'bear': 5},
-            'revenue_growth_y2': {'bull': 13, 'base': 9, 'bear': 4},
-            'revenue_growth_y3': {'bull': 12, 'base': 8, 'bear': 3},
-            'revenue_growth_y4': {'bull': 11, 'base': 7, 'bear': 3},
-            'revenue_growth_y5': {'bull': 10, 'base': 6, 'bear': 2},
+            'revenue_growth_y2_to_y5': {'bull': 13, 'base': 9, 'bear': 4},
             'ebitda_margin': {'bull': 20, 'base': 17, 'bear': 14},
+            'da_pct_of_revenue': {'bull': 4, 'base': 5, 'bear': 6},
             'capex_pct_of_revenue': 7,
+            'reinvestment_rate': {'bull': 40, 'base': 50, 'bear': 60},
             'tax_rate': 25,
             'working_capital_pct_of_revenue': 10,
             'terminal_growth': {'bull': 5, 'base': 4, 'bear': 3},
