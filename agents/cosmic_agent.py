@@ -455,7 +455,7 @@ def register_cosmic_routes(
             answer = call_openai_api_fn(
                 messages,
                 model="gpt-5.5",
-                temperature=0.7,
+                temperature=1,
                 timeout=180,
             )
 
