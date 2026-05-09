@@ -1,0 +1,1709 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Global Energy Intelligence Report 2026 â€” Cosmic Financial Analyst</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --gold: #C9A84C;
+  --gold-light: #E8C97A;
+  --gold-dark: #8B6914;
+  --deep-navy: #0A0F1E;
+  --navy: #0D1526;
+  --navy-mid: #142038;
+  --navy-light: #1E2D4A;
+  --slate: #2A3B5C;
+  --cosmic-blue: #1B3A6B;
+  --electric: #3D8EFF;
+  --teal: #0ECFBF;
+  --teal-dark: #089A8E;
+  --crimson: #C73B3B;
+  --crimson-light: #E05555;
+  --emerald: #1AAA6B;
+  --emerald-light: #22D486;
+  --amber: #E89B2A;
+  --text-primary: #F0EDE4;
+  --text-secondary: #B8B4A8;
+  --text-muted: #7A7870;
+  --border: rgba(201,168,76,0.18);
+  --border-bright: rgba(201,168,76,0.4);
+  --card-bg: rgba(20,32,56,0.7);
+  --card-hover: rgba(26,42,72,0.9);
+  --section-divider: linear-gradient(90deg, transparent, rgba(201,168,76,0.5), transparent);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--deep-navy);
+  color: var(--text-primary);
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-size: 15px;
+  line-height: 1.7;
+  min-height: 100vh;
+}
+
+/* Background star field */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(1px 1px at 10% 20%, rgba(255,255,255,0.15) 0%, transparent 100%),
+    radial-gradient(1px 1px at 30% 60%, rgba(255,255,255,0.1) 0%, transparent 100%),
+    radial-gradient(1px 1px at 50% 10%, rgba(255,255,255,0.12) 0%, transparent 100%),
+    radial-gradient(1px 1px at 70% 80%, rgba(255,255,255,0.08) 0%, transparent 100%),
+    radial-gradient(1px 1px at 85% 35%, rgba(255,255,255,0.1) 0%, transparent 100%),
+    radial-gradient(2px 2px at 20% 85%, rgba(201,168,76,0.15) 0%, transparent 100%),
+    radial-gradient(2px 2px at 65% 45%, rgba(61,142,255,0.1) 0%, transparent 100%),
+    radial-gradient(600px 600px at 20% 30%, rgba(27,58,107,0.25) 0%, transparent 70%),
+    radial-gradient(500px 500px at 80% 70%, rgba(14,207,191,0.06) 0%, transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.wrapper { position: relative; z-index: 1; max-width: 1100px; margin: 0 auto; padding: 0 24px 80px; }
+
+/* ===================== HEADER ===================== */
+.report-header {
+  text-align: center;
+  padding: 60px 0 40px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 48px;
+}
+
+.report-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(201,168,76,0.12);
+  border: 1px solid var(--border-bright);
+  border-radius: 20px;
+  padding: 6px 16px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 1.8px;
+  text-transform: uppercase;
+  color: var(--gold-light);
+  margin-bottom: 24px;
+}
+
+.report-badge .dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--gold);
+  animation: pulse 2s infinite;
+}
+@keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.5;transform:scale(0.8)} }
+
+h1.report-title {
+  font-family: 'Playfair Display', serif;
+  font-size: 48px;
+  font-weight: 700;
+  line-height: 1.15;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+h1.report-title span { color: var(--gold-light); }
+
+.report-subtitle {
+  font-size: 18px;
+  color: var(--text-secondary);
+  font-weight: 300;
+  margin-bottom: 28px;
+}
+
+.report-meta {
+  display: flex;
+  justify-content: center;
+  gap: 32px;
+  font-size: 12px;
+  color: var(--text-muted);
+  letter-spacing: 0.5px;
+}
+.report-meta span { display: flex; align-items: center; gap: 6px; }
+.meta-dot { width: 4px; height: 4px; border-radius: 50%; background: var(--gold); }
+
+/* ===================== NAV TABS ===================== */
+.tab-nav {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: rgba(10,15,30,0.95);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 48px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.tab-nav::-webkit-scrollbar { display: none; }
+
+.tab-list {
+  display: flex;
+  gap: 2px;
+  padding: 0 4px;
+  min-width: max-content;
+}
+
+.tab-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  padding: 14px 18px;
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.6px;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: color 0.2s, border-color 0.2s;
+  white-space: nowrap;
+}
+.tab-btn:hover { color: var(--text-secondary); }
+.tab-btn.active { color: var(--gold-light); border-bottom-color: var(--gold); }
+
+/* ===================== SECTION LAYOUT ===================== */
+.section { display: none; }
+.section.active { display: block; }
+
+.section-header {
+  margin-bottom: 36px;
+}
+
+h2.section-title {
+  font-family: 'Playfair Display', serif;
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+  line-height: 1.2;
+}
+h2.section-title .accent { color: var(--gold-light); }
+
+.section-lead {
+  font-size: 16px;
+  color: var(--text-secondary);
+  font-weight: 300;
+  max-width: 720px;
+  border-left: 3px solid var(--gold);
+  padding-left: 16px;
+  margin-top: 16px;
+}
+
+h3.sub-title {
+  font-family: 'Playfair Display', serif;
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--gold-light);
+  margin: 32px 0 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+h3.sub-title::before {
+  content: '';
+  display: inline-block;
+  width: 24px;
+  height: 1px;
+  background: var(--gold);
+}
+
+/* ===================== CARDS ===================== */
+.card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 20px;
+  transition: border-color 0.2s;
+}
+.card:hover { border-color: var(--border-bright); }
+
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.card-sm {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 18px 20px;
+}
+
+/* stat cards */
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  margin-bottom: 28px;
+}
+.stat-card {
+  background: var(--navy-mid);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px 18px;
+  text-align: center;
+}
+.stat-card .stat-val {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 26px;
+  font-weight: 500;
+  color: var(--gold-light);
+  line-height: 1.1;
+}
+.stat-card .stat-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  margin-top: 4px;
+}
+.stat-card .stat-change {
+  font-size: 12px;
+  margin-top: 4px;
+  font-weight: 500;
+}
+.up { color: var(--emerald-light); }
+.down { color: var(--crimson-light); }
+.neutral { color: var(--amber); }
+
+/* sentiment badges */
+.badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+.badge-bull { background: rgba(26,170,107,0.18); color: var(--emerald-light); border: 1px solid rgba(26,170,107,0.3); }
+.badge-bear { background: rgba(199,59,59,0.18); color: var(--crimson-light); border: 1px solid rgba(199,59,59,0.3); }
+.badge-neutral { background: rgba(232,155,42,0.18); color: var(--amber); border: 1px solid rgba(232,155,42,0.3); }
+.badge-hot { background: rgba(201,168,76,0.15); color: var(--gold-light); border: 1px solid var(--border-bright); }
+.badge-info { background: rgba(61,142,255,0.15); color: #7FB8FF; border: 1px solid rgba(61,142,255,0.3); }
+
+/* timeline */
+.timeline { position: relative; padding-left: 28px; margin: 8px 0; }
+.timeline::before {
+  content: '';
+  position: absolute;
+  left: 8px;
+  top: 4px;
+  bottom: 4px;
+  width: 1px;
+  background: linear-gradient(to bottom, var(--gold), var(--teal), transparent);
+}
+.timeline-item {
+  position: relative;
+  margin-bottom: 20px;
+}
+.timeline-item::before {
+  content: '';
+  position: absolute;
+  left: -23px;
+  top: 7px;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--gold);
+}
+.timeline-item .t-date {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  color: var(--gold-light);
+  margin-bottom: 2px;
+}
+.timeline-item .t-text {
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+/* divider */
+.divider {
+  height: 1px;
+  background: var(--section-divider);
+  margin: 40px 0;
+}
+
+/* highlight box */
+.highlight-box {
+  background: rgba(201,168,76,0.06);
+  border: 1px solid rgba(201,168,76,0.25);
+  border-left: 4px solid var(--gold);
+  border-radius: 8px;
+  padding: 18px 20px;
+  margin: 20px 0;
+  font-size: 14.5px;
+  color: var(--text-secondary);
+  line-height: 1.7;
+}
+.highlight-box strong { color: var(--gold-light); }
+
+.alert-box {
+  background: rgba(199,59,59,0.07);
+  border: 1px solid rgba(199,59,59,0.25);
+  border-left: 4px solid var(--crimson);
+  border-radius: 8px;
+  padding: 16px 20px;
+  margin: 16px 0;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+.alert-box strong { color: var(--crimson-light); }
+
+.success-box {
+  background: rgba(26,170,107,0.07);
+  border: 1px solid rgba(26,170,107,0.25);
+  border-left: 4px solid var(--emerald);
+  border-radius: 8px;
+  padding: 16px 20px;
+  margin: 16px 0;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+.success-box strong { color: var(--emerald-light); }
+
+/* two-col */
+.two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+@media(max-width:680px){ .two-col { grid-template-columns: 1fr; } }
+
+/* planet card */
+.planet-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 14px;
+  margin: 16px 0;
+}
+.planet-card {
+  background: var(--navy-mid);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+  text-align: center;
+}
+.planet-symbol {
+  font-family: 'Playfair Display', serif;
+  font-size: 28px;
+  color: var(--gold-light);
+  margin-bottom: 6px;
+}
+.planet-name {
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+.planet-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+/* company table */
+.company-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+.company-table th {
+  padding: 10px 14px;
+  text-align: left;
+  color: var(--gold-light);
+  font-weight: 500;
+  font-size: 11px;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--border);
+  background: rgba(201,168,76,0.05);
+}
+.company-table td {
+  padding: 12px 14px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  color: var(--text-secondary);
+  vertical-align: top;
+}
+.company-table tr:hover td { background: rgba(255,255,255,0.02); }
+.company-table .co-name { color: var(--text-primary); font-weight: 500; }
+.company-table .co-ticker {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  color: var(--gold);
+  background: rgba(201,168,76,0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+/* scenario cards */
+.scenario-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin: 20px 0;
+}
+@media(max-width:640px){ .scenario-grid { grid-template-columns: 1fr; } }
+.scenario-card {
+  border-radius: 12px;
+  padding: 20px;
+  border: 1px solid;
+}
+.scenario-best { background: rgba(26,170,107,0.07); border-color: rgba(26,170,107,0.25); }
+.scenario-base { background: rgba(61,142,255,0.07); border-color: rgba(61,142,255,0.25); }
+.scenario-worst { background: rgba(199,59,59,0.07); border-color: rgba(199,59,59,0.25); }
+.scenario-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+.scenario-best .scenario-label { color: var(--emerald-light); }
+.scenario-base .scenario-label { color: #7FB8FF; }
+.scenario-worst .scenario-label { color: var(--crimson-light); }
+.scenario-prob {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 28px;
+  font-weight: 500;
+  margin-bottom: 8px;
+}
+.scenario-best .scenario-prob { color: var(--emerald-light); }
+.scenario-base .scenario-prob { color: #7FB8FF; }
+.scenario-worst .scenario-prob { color: var(--crimson-light); }
+.scenario-desc {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+/* investment rating */
+.inv-rating {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.inv-dot {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+}
+.inv-strong { background: var(--emerald-light); }
+.inv-moderate { background: var(--amber); }
+.inv-speculative { background: var(--electric); }
+
+/* progress bar */
+.prog-bar {
+  background: rgba(255,255,255,0.06);
+  border-radius: 4px;
+  height: 6px;
+  margin-top: 8px;
+  overflow: hidden;
+}
+.prog-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 1s ease;
+}
+.fill-gold { background: linear-gradient(90deg, var(--gold-dark), var(--gold-light)); }
+.fill-teal { background: linear-gradient(90deg, var(--teal-dark), var(--teal)); }
+.fill-crimson { background: linear-gradient(90deg, #8B2020, var(--crimson-light)); }
+.fill-blue { background: linear-gradient(90deg, #1050A0, var(--electric)); }
+.fill-emerald { background: linear(90deg, #0B6B3E, var(--emerald-light)); }
+
+/* cosmic divider */
+.cosmic-divider {
+  text-align: center;
+  margin: 44px 0;
+  position: relative;
+}
+.cosmic-divider::before, .cosmic-divider::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  width: calc(50% - 60px);
+  height: 1px;
+  background: var(--section-divider);
+}
+.cosmic-divider::before { left: 0; }
+.cosmic-divider::after { right: 0; }
+.cosmic-divider span {
+  font-family: 'Playfair Display', serif;
+  font-size: 18px;
+  color: var(--gold);
+  background: var(--deep-navy);
+  padding: 0 12px;
+  position: relative;
+  z-index: 1;
+}
+
+/* footer */
+.report-footer {
+  text-align: center;
+  padding: 32px 0 16px;
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.8;
+}
+
+p { margin-bottom: 12px; }
+p:last-child { margin-bottom: 0; }
+ul, ol { padding-left: 20px; margin-bottom: 12px; }
+li { margin-bottom: 6px; color: var(--text-secondary); font-size: 14.5px; }
+li strong { color: var(--text-primary); }
+
+.tag {
+  display: inline-block;
+  padding: 3px 9px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  margin: 2px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  color: var(--text-secondary);
+}
+
+.quote-block {
+  border-left: 3px solid var(--teal);
+  padding: 12px 16px;
+  margin: 20px 0;
+  background: rgba(14,207,191,0.05);
+  border-radius: 0 8px 8px 0;
+}
+.quote-block p {
+  font-style: italic;
+  color: var(--text-secondary);
+  font-size: 14.5px;
+}
+.quote-block .attribution {
+  font-size: 12px;
+  color: var(--teal);
+  font-style: normal;
+  font-weight: 500;
+  margin-top: 6px;
+  margin-bottom: 0;
+}
+
+/* chart area */
+.chart-container {
+  position: relative;
+  width: 100%;
+  height: 260px;
+  margin: 20px 0;
+}
+
+/* Dashboard summary */
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 14px;
+  margin-bottom: 32px;
+}
+.dash-card {
+  background: var(--navy-mid);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 18px;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+.dash-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+}
+.dash-bull::before { background: linear-gradient(90deg, var(--emerald), var(--teal)); }
+.dash-bear::before { background: linear-gradient(90deg, var(--crimson), #FF6B6B); }
+.dash-neutral::before { background: linear-gradient(90deg, var(--amber), var(--gold)); }
+.dash-hot::before { background: linear-gradient(90deg, var(--gold), var(--gold-light)); }
+.dash-card .dc-sector { font-size: 12px; color: var(--text-muted); letter-spacing: 0.5px; margin-bottom: 6px; }
+.dash-card .dc-rating { font-size: 22px; font-weight: 600; margin-bottom: 4px; }
+.dash-bull .dc-rating { color: var(--emerald-light); }
+.dash-bear .dc-rating { color: var(--crimson-light); }
+.dash-neutral .dc-rating { color: var(--amber); }
+.dash-hot .dc-rating { color: var(--gold-light); }
+.dash-card .dc-note { font-size: 11px; color: var(--text-muted); }
+</style>
+</head>
+<body>
+<div class="wrapper">
+
+<!-- HEADER -->
+<header class="report-header">
+  <div class="report-badge"><span class="dot"></span> Cosmic Financial Intelligence Report â€” May 2026</div>
+  <h1 class="report-title">Global <span>Energy Sector</span><br>Intelligence Report</h1>
+  <div class="report-subtitle">AI, Electricity, Clean Energy & Investment Opportunities</div>
+  <div class="report-meta">
+    <span><span class="meta-dot"></span> Prepared: May 2026</span>
+    <span><span class="meta-dot"></span> Cosmic Financial Analyst</span>
+    <span><span class="meta-dot"></span> Astrological + Macroeconomic Framework</span>
+    <span><span class="meta-dot"></span> Jyotish Mundane Astrology Correlation</span>
+  </div>
+</header>
+
+<!-- NAV -->
+<nav class="tab-nav">
+  <div class="tab-list">
+    <button class="tab-btn active" onclick="showTab('dashboard')">Dashboard</button>
+    <button class="tab-btn" onclick="showTab('ai-crisis')">AI-Electricity Crisis</button>
+    <button class="tab-btn" onclick="showTab('aschenbrenner')">Situational Awareness</button>
+    <button class="tab-btn" onclick="showTab('global-companies')">Global Infrastructure Cos.</button>
+    <button class="tab-btn" onclick="showTab('solutions')">Energy Solutions</button>
+    <button class="tab-btn" onclick="showTab('india-energy')">India Energy</button>
+    <button class="tab-btn" onclick="showTab('investment')">Investment Opportunities</button>
+    <button class="tab-btn" onclick="showTab('astrology')">Astrological Analysis</button>
+    <button class="tab-btn" onclick="showTab('scenarios')">Scenarios & Outlook</button>
+  </div>
+</nav>
+
+<!-- ============================================================ -->
+<!-- TAB 1: DASHBOARD -->
+<!-- ============================================================ -->
+<section id="dashboard" class="section active">
+  <div class="section-header">
+    <h2 class="section-title">Executive <span class="accent">Summary Dashboard</span></h2>
+    <p class="section-lead">A comprehensive multi-dimensional view of the global energy sector â€” combining geopolitical intelligence, macroeconomic data, and astrological alignments for the May 2026 outlook.</p>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-val">945 TWh</div>
+      <div class="stat-label">Global DC Power by 2030</div>
+      <div class="stat-change up">+130% vs 2024</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-val">$650B</div>
+      <div class="stat-label">Hyperscaler Capex 2026</div>
+      <div class="stat-change up">+71% YoY</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-val">283 GW</div>
+      <div class="stat-label">India RE Capacity FY26</div>
+      <div class="stat-change up">World #3</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-val">100 GW</div>
+      <div class="stat-label">India Nuclear Target 2047</div>
+      <div class="stat-change neutral">PFBR Achieved Criticality</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-val">$5.2T</div>
+      <div class="stat-label">AI Infrastructure Need 2030</div>
+      <div class="stat-change neutral">McKinsey Estimate</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-val">10 GW</div>
+      <div class="stat-label">India DC Target by 2030</div>
+      <div class="stat-change up">From 1.2 GW today</div>
+    </div>
+  </div>
+
+  <h3 class="sub-title">Sector Sentiment Dashboard</h3>
+  <div class="dashboard-grid">
+    <div class="dash-card dash-hot"><div class="dc-sector">Solar & Wind (India)</div><div class="dc-rating">Strong Buy</div><div class="dc-note">Record capacity additions</div></div>
+    <div class="dash-card dash-hot"><div class="dc-sector">Nuclear Energy (India)</div><div class="dc-rating">Strong Buy</div><div class="dc-note">PFBR critical; SMR mission</div></div>
+    <div class="dash-card dash-bull"><div class="dc-sector">AI Power Infra (Global)</div><div class="dc-rating">Bullish</div><div class="dc-note">Bloom, Lumentum, Celestica</div></div>
+    <div class="dash-card dash-bull"><div class="dc-sector">India Power Grid & T&D</div><div class="dc-rating">Bullish</div><div class="dc-note">PGCIL, Adani Energy Sol.</div></div>
+    <div class="dash-card dash-bull"><div class="dc-sector">Green Hydrogen (India)</div><div class="dc-rating">Bullish</div><div class="dc-note">NTPC, Reliance, L&T</div></div>
+    <div class="dash-card dash-bull"><div class="dc-sector">Battery Storage (BESS)</div><div class="dc-rating">Bullish</div><div class="dc-note">Adani 50 GWh target</div></div>
+    <div class="dash-card dash-neutral"><div class="dc-sector">Conventional Oil & Gas</div><div class="dc-rating">Neutral</div><div class="dc-note">Iran war creates spike risk</div></div>
+    <div class="dash-card dash-neutral"><div class="dc-sector">Indian Coal Sector</div><div class="dc-rating">Neutral</div><div class="dc-note">Transitional, PLF declining</div></div>
+    <div class="dash-card dash-bear"><div class="dc-sector">Thermal-Only Utilities</div><div class="dc-rating">Cautious</div><div class="dc-note">Structural decline looming</div></div>
+  </div>
+
+  <h3 class="sub-title">Astrological Planetary Snapshot â€” May 2026</h3>
+  <div class="card">
+    <div class="planet-grid">
+      <div class="planet-card">
+        <div class="planet-symbol">â™ƒ</div>
+        <div class="planet-name">Jupiter in Gemini</div>
+        <div class="planet-desc">Expands communication, technology, and trade. Favors AI, data, and digital infrastructure investments. Creates optimism in markets.</div>
+      </div>
+      <div class="planet-card">
+        <div class="planet-symbol">â™„</div>
+        <div class="planet-name">Saturn in Pisces</div>
+        <div class="planet-desc">Discipline in liquidity. Tests of faith in structural transitions. Energy transition policy solidification. Caution for over-leveraged entities.</div>
+      </div>
+      <div class="planet-card">
+        <div class="planet-symbol">â™‚</div>
+        <div class="planet-name">Mars in Leo</div>
+        <div class="planet-desc">Geopolitical tensions (Iran/Middle East), conflict energy. Crude oil price volatility. Defence and energy stocks benefit. Market aggression.</div>
+      </div>
+      <div class="planet-card">
+        <div class="planet-symbol">â˜Š</div>
+        <div class="planet-name">Rahu in Pisces</div>
+        <div class="planet-desc">Shadow node creates confusion in global finance, sudden events in energy markets, disruption to old paradigms. AI disruption deepens.</div>
+      </div>
+      <div class="planet-card">
+        <div class="planet-symbol">â˜‹</div>
+        <div class="planet-name">Ketu in Virgo</div>
+        <div class="planet-desc">Detachment from conventional analysis, health-tech, and precision industries. Signals disruptive innovation in energy technology.</div>
+      </div>
+      <div class="planet-card">
+        <div class="planet-symbol">â™€</div>
+        <div class="planet-name">Venus in Taurus</div>
+        <div class="planet-desc">Own sign: very favorable for luxury consumption, clean energy aesthetics, EV adoption. Supports long-term capital accumulation in green assets.</div>
+      </div>
+    </div>
+  </div>
+
+  <h3 class="sub-title">Quick Probability-Weighted Scenarios</h3>
+  <div class="scenario-grid">
+    <div class="scenario-card scenario-best">
+      <div class="scenario-label">Best Case (Bull)</div>
+      <div class="scenario-prob">35%</div>
+      <div class="scenario-desc">AI capex cycle accelerates. India becomes global renewable + data center hub. Nuclear reform unlocks private capital. Energy supercycle drives 30â€“50% upside in sector stocks.</div>
+    </div>
+    <div class="scenario-card scenario-base">
+      <div class="scenario-label">Base Case (Moderate)</div>
+      <div class="scenario-prob">45%</div>
+      <div class="scenario-desc">Steady AI infrastructure buildout. India maintains 8â€“10% renewable CAGR. Grid bottlenecks slow data center expansion. Sector stocks deliver 15â€“25% return with selective opportunity.</div>
+    </div>
+    <div class="scenario-card scenario-worst">
+      <div class="scenario-label">Worst Case (Bear)</div>
+      <div class="scenario-prob">20%</div>
+      <div class="scenario-desc">AI bubble correction hits energy stocks. Iran war causes oil spike, energy inflation. Policy uncertainty delays nuclear and storage. Sector underperforms broad market.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<!-- TAB 2: AI ELECTRICITY CRISIS -->
+<!-- ============================================================ -->
+<section id="ai-crisis" class="section">
+  <div class="section-header">
+    <h2 class="section-title">The <span class="accent">AI-Electricity Nexus</span></h2>
+    <p class="section-lead">The Next World War Will Not Be Fought Over Chips â€” It Will Be Fought Over Electrons. AI is engineering the greatest electricity demand surge in human history.</p>
+  </div>
+
+  <div class="alert-box">
+    <strong>Critical Insight:</strong> The primary bottleneck for AI supremacy has already shifted from chip manufacturing to electricity generation and grid infrastructure. Countries and companies that solve the power equation will dominate the AI era.
+  </div>
+
+  <h3 class="sub-title">The Scale of the Problem</h3>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-val">25,000+</div><div class="stat-label">GPUs to Train ChatGPT</div><div class="stat-change neutral">~10 MW/day power</div></div>
+    <div class="stat-card"><div class="stat-val">415 TWh</div><div class="stat-label">Global DC Power 2024</div><div class="stat-change up">~1.5% of world total</div></div>
+    <div class="stat-card"><div class="stat-val">945 TWh</div><div class="stat-label">Projected 2030 Demand</div><div class="stat-change up">Doubles in 6 years (IEA)</div></div>
+    <div class="stat-card"><div class="stat-val">$720B</div><div class="stat-label">Grid Investment Needed</div><div class="stat-change neutral">Goldman Sachs estimate</div></div>
+    <div class="stat-card"><div class="stat-val">120â€“150 kW</div><div class="stat-label">Per AI Rack (Blackwell)</div><div class="stat-change down">10x vs 2023 standard</div></div>
+    <div class="stat-card"><div class="stat-val">300â€“600 kW</div><div class="stat-label">Next-gen Rack (2026â€“27)</div><div class="stat-change down">5x current gen</div></div>
+  </div>
+
+  <h3 class="sub-title">The Exponential Trajectory</h3>
+  <div class="card">
+    <div class="chart-container">
+      <canvas id="aiPowerChart" role="img" aria-label="AI data center power demand growth from 93 TWh in 2025 to 432 TWh in 2030">AI power: 93 TWh (2025) to 432 TWh (2030).</canvas>
+    </div>
+    <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:8px;font-size:12px;color:var(--text-muted)">
+      <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;border-radius:2px;background:#C9A84C;display:inline-block"></span>AI-Optimized Servers</span>
+      <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;border-radius:2px;background:#3D8EFF;display:inline-block"></span>Total Data Center</span>
+    </div>
+  </div>
+
+  <h3 class="sub-title">Why Electricity â€” Not Chips â€” Is the Real Bottleneck</h3>
+  <div class="card">
+    <p>Every major hyperscaler CEO has now confirmed the same conclusion. As Amazon's Andy Jassy stated, <em>"the single biggest constraint is power."</em> Microsoft's Satya Nadella echoed this, and OpenAI CFO Sara Friar put it bluntly: <em>"The real bottleneck isn't money. It's power."</em></p>
+    <p>The physics are unforgiving. A single AI-optimized GPU rack now consumes 120â€“150 kW â€” compared to just 10â€“15 kW for a standard server rack in 2023. This is a 10x increase in thermal density within three years. By 2026â€“27, Nvidia's next-generation rack-scale systems will require 300â€“600 kW per rack, representing a 5x further leap. Air cooling is already obsolete for modern AI infrastructure â€” the entire industry is migrating to liquid cooling systems.</p>
+    <p>The scale is almost incomprehensible: the IEA projects that by 2030, U.S. data centers alone will consume more electricity processing data than manufacturing all energy-intensive goods combined â€” including aluminium, steel, and chemicals.</p>
+  </div>
+
+  <div class="two-col">
+    <div>
+      <h3 class="sub-title">Geographic Concentration Risk</h3>
+      <div class="card">
+        <div class="timeline">
+          <div class="timeline-item">
+            <div class="t-date">Northern Virginia, USA</div>
+            <div class="t-text">Data centers consume 26% of regional electricity. Residential bills rising $16â€“18/month due to data center load growth.</div>
+          </div>
+          <div class="timeline-item">
+            <div class="t-date">Ireland (Dublin)</div>
+            <div class="t-text">Data centers consume ~21% of national electricity, projected 32% by 2026. Grid stress reaching critical levels.</div>
+          </div>
+          <div class="timeline-item">
+            <div class="t-date">Frankfurt, Germany</div>
+            <div class="t-text">Data centers account for 42% of local power demand. Europe's AI ambitions strain legacy grid infrastructure.</div>
+          </div>
+          <div class="timeline-item">
+            <div class="t-date">Oregon & Singapore</div>
+            <div class="t-text">PSI (Power Stress Index) exceeding 0.25, indicating high local grid vulnerability from AI cluster concentration.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <h3 class="sub-title">The Inference Surge</h3>
+      <div class="card">
+        <p>While AI training received the most attention, the emerging crisis is <strong>inference</strong> â€” running the models after training. BCG projects that generative AI inference power demand will grow at a staggering <strong>122% CAGR from 2023 to 2028</strong>, outpacing training growth (30% CAGR) by 4x.</p>
+        <p>Every ChatGPT query consumes ~10x more electricity than a Google Search. With billions of daily interactions projected across all AI services by 2027, the cumulative inference load will dwarf training requirements. This is why the AI race shifts from chip design labs to power plants and transmission lines.</p>
+        <div class="highlight-box">
+          <strong>Critical Implication:</strong> Unlike training clusters (which are episodic), inference infrastructure runs 24/7/365 â€” creating persistent, predictable, growing baseload demand. This transforms the energy investment thesis from cyclical to structural.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h3 class="sub-title">India's AI-Electricity Challenge</h3>
+  <div class="card">
+    <p><strong>India's data center capacity grew from 375 MW (2020) to 1,500 MW (2025)</strong> â€” a 4x increase in five years. By 2030, demand is projected to reach 10 GW. Electricity use will surge from 10â€“15 TWh to 40â€“45 TWh annually.</p>
+    <p>The government's $200 billion data center and AI infrastructure investment target will require India to develop dedicated power infrastructure. Google's groundbreaking of its gigawatt-scale AI Hub in Visakhapatnam (April 2026) â€” in partnership with AdaniConneX and Nxtra by Airtel â€” signals that India has arrived as a global AI infrastructure destination.</p>
+    <div class="success-box">
+      <strong>Strategic Opportunity:</strong> India's unique combination of cheap renewable power (solar at â‚¹1.99/kWh), vast coastline for data cooling, English-speaking technical talent, and government policy support creates a competitive moat for becoming a global AI compute hub.
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<!-- TAB 3: SITUATIONAL AWARENESS -->
+<!-- ============================================================ -->
+<section id="aschenbrenner" class="section">
+  <div class="section-header">
+    <h2 class="section-title">Leopold Aschenbrenner's <span class="accent">Situational Awareness</span></h2>
+    <p class="section-lead">Intelligent inferences from the 165-page manifesto that launched a $5.5B hedge fund â€” and its profound implications for energy investing.</p>
+  </div>
+
+  <div class="quote-block">
+    <p>"By the end of the decade, American electricity production will have grown tens of percent; from the shale fields of Pennsylvania to the solar farms of Nevada, hundreds of millions of GPUs will hum."</p>
+    <p class="attribution">â€” Leopold Aschenbrenner, Situational Awareness: The Decade Ahead (2024)</p>
+  </div>
+
+  <h3 class="sub-title">Core Thesis: The Five Claims</h3>
+  <div class="card-grid">
+    <div class="card-sm">
+      <div style="color:var(--gold-light);font-weight:600;margin-bottom:8px;font-size:13px">1. AGI BY 2027</div>
+      <p style="font-size:13px;color:var(--text-secondary)">Using "Counting the OOMs" (orders of magnitude) framework â€” compute scaling, algorithmic efficiency, and "unhobbling" â€” Aschenbrenner argues AGI (systems outperforming humans on most cognitive tasks) arrives by 2027. GPT progression: preschool â†’ elementary â†’ high school â†’ AGI is a straight line on log scale.</p>
+    </div>
+    <div class="card-sm">
+      <div style="color:var(--gold-light);font-weight:600;margin-bottom:8px;font-size:13px">2. ELECTRICITY AS THE HARD LIMIT</div>
+      <p style="font-size:13px;color:var(--text-secondary)">Post-AGI systems will require compute clusters consuming 20%+ of current total US electricity production â€” roughly $1 trillion per year in infrastructure. Electricity, not investment or chips, is the binding constraint. US natural gas and renewable expansion must proceed at unprecedented speed.</p>
+    </div>
+    <div class="card-sm">
+      <div style="color:var(--gold-light);font-weight:600;margin-bottom:8px;font-size:13px">3. INTELLIGENCE EXPLOSION</div>
+      <p style="font-size:13px;color:var(--text-secondary)">AGI systems will automate AI research itself. 100 million AI researchers at 10x human speed will compress a decade of progress into under a year, creating recursive self-improvement loops. The transition from AGI to superintelligence (ASI) happens within ~1 year of AGI.</p>
+    </div>
+    <div class="card-sm">
+      <div style="color:var(--gold-light);font-weight:600;margin-bottom:8px;font-size:13px">4. GEOPOLITICAL RACE</div>
+      <p style="font-size:13px;color:var(--text-secondary)">AGI/ASI will confer decisive strategic military advantage â€” accelerating all spheres of science, weapon design, and economic productivity. The US-China AI race is existential. Whichever nation achieves superintelligence first gains a potentially permanent strategic edge.</p>
+    </div>
+    <div class="card-sm">
+      <div style="color:var(--gold-light);font-weight:600;margin-bottom:8px;font-size:13px">5. SECURITY AS BOTTLENECK</div>
+      <p style="font-size:13px;color:var(--text-secondary)">Model weight theft (cyberattack on AI labs) is the critical vulnerability. If adversaries steal AGI weights, all safety and governance measures become irrelevant. US AI research needs military-grade cybersecurity. This creates massive defense and cybersecurity spending implications.</p>
+    </div>
+    <div class="card-sm">
+      <div style="color:var(--teal);font-weight:600;margin-bottom:8px;font-size:13px">VALIDATION: THE FUND</div>
+      <p style="font-size:13px;color:var(--text-secondary)">Situational Awareness LP â€” seeded by Patrick & John Collison (Stripe), Nat Friedman, Daniel Gross â€” grew from $254M (Q4 2024) to $5.52B (Feb 2026). The fund's early bet on Bloom Energy delivered 176%+ gains. The portfolio spans: electricity, compute, silicon, optics, memory, and strategic shorts.</p>
+    </div>
+  </div>
+
+  <h3 class="sub-title">Investment Portfolio Thesis Layers</h3>
+  <div class="card">
+    <table class="company-table">
+      <thead>
+        <tr><th>Thesis Layer</th><th>Theme</th><th>Key Holdings / Rationale</th><th>Status</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="co-name">Electrons</td><td>Power generation & grid</td><td>Bloom Energy (fuel cells for data centers), NextEra Energy, nuclear operators, Bitcoin miners as flexible load balancers</td><td><span class="badge badge-hot">Core Bet</span></td></tr>
+        <tr><td class="co-name">Compute</td><td>Chips & processors</td><td>Nvidia (long), Intel (long via custom silicon thesis), Broadcom (ASICs), short broader semiconductor sector for sector-specific revaluation</td><td><span class="badge badge-bull">Active</span></td></tr>
+        <tr><td class="co-name">Silicon</td><td>Chip manufacturing</td><td>Intel foundry division as strategic domestic alternative to TSMC. DeepSeek moment in Jan 2025 â€” bought into panic, not out</td><td><span class="badge badge-info">Evolving</span></td></tr>
+        <tr><td class="co-name">Optics</td><td>Optical interconnects</td><td>Lumentum (372% rally in 2025), Fabrinet (contract mfg for transceivers), Celestica (AI network switches)</td><td><span class="badge badge-hot">Validated</span></td></tr>
+        <tr><td class="co-name">Memory</td><td>AI data storage</td><td>Micron (HBM for AI), Western Digital, Seagate â€” all 200â€“300%+ in 2025</td><td><span class="badge badge-bull">Performing</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 class="sub-title">Key Inferences for India & Emerging Markets</h3>
+  <div class="highlight-box">
+    <p><strong>The Aschenbrenner thesis, applied to India, reveals a multi-decade structural opportunity:</strong></p>
+    <ul style="margin-top:10px">
+      <li>India's low-cost renewable electricity (â‚¹1.99/kWh solar) positions it as the preferred location for inference workloads â€” the highest-growth segment of AI power demand.</li>
+      <li>India's technical talent pool + government AI ambitions + cheap power = the optimal "offshore compute" destination for global AI companies seeking cost-effective inference infrastructure.</li>
+      <li>The security imperative means US and allied nations will preferentially direct AI infrastructure investments toward trusted democracies â€” placing India in pole position over China-adjacent locations.</li>
+      <li>India's nuclear program (PFBR criticality achieved April 2026) positions it uniquely for providing the always-on, carbon-free baseload power that AI data centers increasingly demand.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<!-- TAB 4: GLOBAL INFRASTRUCTURE COMPANIES -->
+<!-- ============================================================ -->
+<section id="global-companies" class="section">
+  <div class="section-header">
+    <h2 class="section-title">Data Center <span class="accent">Infrastructure Companies</span></h2>
+    <p class="section-lead">Beyond Nvidia: The complete pick-and-shovel ecosystem powering the AI revolution â€” power, optics, memory, cooling, and networking.</p>
+  </div>
+
+  <h3 class="sub-title">Power & Energy Infrastructure (The Bloom Energy Category)</h3>
+  <div class="card">
+    <table class="company-table">
+      <thead>
+        <tr><th>Company</th><th>Exchange</th><th>What They Do</th><th>AI Thesis</th><th>Signal</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="co-name">Bloom Energy <span class="co-ticker">BE</span></td><td>NYSE</td><td>Solid oxide fuel cells, on-site power generation for data centers</td><td>Solves "time-to-power" problem; 800V DC native for AI racks; $20B backlog; Brookfield $5B partnership</td><td><span class="badge badge-hot">Core Play</span></td></tr>
+        <tr><td class="co-name">NextEra Energy <span class="co-ticker">NEE</span></td><td>NYSE</td><td>World's largest renewables utility; Florida Power & Light</td><td>Primary beneficiary of AI-driven US electricity demand surge; solar + wind + storage at scale</td><td><span class="badge badge-bull">Strong</span></td></tr>
+        <tr><td class="co-name">Vistra Energy <span class="co-ticker">VST</span></td><td>NYSE</td><td>Nuclear + natural gas utility, largest power generator in ERCOT</td><td>Nuclear provides always-on AI power; acquired Illinois nuclear fleet; 200%+ performance in 2025</td><td><span class="badge badge-bull">Strong</span></td></tr>
+        <tr><td class="co-name">Constellation Energy <span class="co-ticker">CEG</span></td><td>NASDAQ</td><td>Largest US nuclear operator</td><td>Microsoft signed 20-year nuclear PPA; AI's "clean always-on" solution; Three Mile Island restart</td><td><span class="badge badge-hot">Core Play</span></td></tr>
+        <tr><td class="co-name">Plug Power <span class="co-ticker">PLUG</span></td><td>NASDAQ</td><td>Hydrogen fuel cells for data center backup</td><td>More expensive than Bloom for primary power; growing as backup/resilience play</td><td><span class="badge badge-neutral">Speculative</span></td></tr>
+        <tr><td class="co-name">Siemens Energy <span class="co-ticker">ENR.DE</span></td><td>XETRA</td><td>Grid infrastructure, transformers, gas turbines for data centers</td><td>Critical transformer shortage globally; every data center needs grid-scale transformers from Siemens/ABB</td><td><span class="badge badge-bull">Strong</span></td></tr>
+        <tr><td class="co-name">GE Vernova <span class="co-ticker">GEV</span></td><td>NYSE</td><td>Power generation equipment, grid solutions, gas turbines</td><td>New gas turbine orders booming; transmission upgrades; wind business recovering</td><td><span class="badge badge-bull">Strong</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 class="sub-title">Optical Components â€” The Lumentum Category</h3>
+  <div class="card">
+    <table class="company-table">
+      <thead>
+        <tr><th>Company</th><th>Exchange</th><th>What They Do</th><th>AI Thesis</th><th>Signal</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="co-name">Lumentum <span class="co-ticker">LITE</span></td><td>NASDAQ</td><td>Laser chips, optical transceivers, fiber-optic switches for data centers</td><td>372% rally in 2025; 60% revenue from AI infrastructure; connects every GPU in rack and rack-to-rack</td><td><span class="badge badge-hot">Core Play</span></td></tr>
+        <tr><td class="co-name">Coherent Corp <span class="co-ticker">COHR</span></td><td>NYSE</td><td>Optical transceivers, compound semiconductors, laser tech</td><td>Compete with Lumentum in 800G+ transceivers; AI hyperscaler demand drives 40â€“50% revenue growth</td><td><span class="badge badge-bull">Strong</span></td></tr>
+        <tr><td class="co-name">Fabrinet <span class="co-ticker">FN</span></td><td>NYSE</td><td>Contract manufacturing for optical transceivers (for Lumentum, Coherent)</td><td>The "TSMC of optics"; 24M to 63M units of 800G+ transceivers projected 2025â†’2026</td><td><span class="badge badge-bull">Strong</span></td></tr>
+        <tr><td class="co-name">Credo Technology <span class="co-ticker">CRDO</span></td><td>NASDAQ</td><td>Active Electrical Cables (AECs) for GPU-to-GPU connections inside clusters</td><td>272% YoY revenue growth; $1.2B annual run rate; dominates copper interconnects inside AI clusters</td><td><span class="badge badge-hot">Core Play</span></td></tr>
+        <tr><td class="co-name">Astera Labs <span class="co-ticker">ALAB</span></td><td>NASDAQ</td><td>AI fabric switches (Scorpio), PCIe retimers, optical integration</td><td>115% revenue growth in 2025; entering $20B switching market; bridges copper and optical worlds</td><td><span class="badge badge-bull">Growth</span></td></tr>
+        <tr><td class="co-name">Celestica <span class="co-ticker">CLS</span></td><td>NYSE</td><td>Network switches, custom ASIC compute platforms for hyperscalers</td><td>230%+ gain in 2025; builds switches for largest AI buyers; liquid-cooled rack-scale compute</td><td><span class="badge badge-bull">Strong</span></td></tr>
+        <tr><td class="co-name">InnoLight (China)</td><td>Private</td><td>Optical transceivers manufactured in China for global hyperscalers</td><td>Key risk: geopolitical de-risking may redirect orders to US/Taiwan suppliers</td><td><span class="badge badge-neutral">Watch</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 class="sub-title">Memory & Storage â€” The SanDisk/Micron Category</h3>
+  <div class="card">
+    <table class="company-table">
+      <thead>
+        <tr><th>Company</th><th>Exchange</th><th>What They Do</th><th>AI Thesis</th><th>Signal</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="co-name">Micron Technology <span class="co-ticker">MU</span></td><td>NASDAQ</td><td>HBM (High Bandwidth Memory), DRAM, NAND flash</td><td>HBM3E is inside every AI GPU; near monopoly with Samsung, SK Hynix on HBM; +200% in 2025</td><td><span class="badge badge-hot">Core Play</span></td></tr>
+        <tr><td class="co-name">SK Hynix (Korea)</td><td>KRX: 000660</td><td>World's leading HBM supplier; Samsung competitor</td><td>Dominant HBM4 producer; every H100/H200 GPU uses SK Hynix memory stacks</td><td><span class="badge badge-hot">Core Play</span></td></tr>
+        <tr><td class="co-name">Western Digital <span class="co-ticker">WDC</span></td><td>NASDAQ</td><td>Hard drives, SSDs (SanDisk brand), storage systems</td><td>300%+ gain in 2025; AI training datasets require petabytes of storage; SanDisk Flash for inference caching</td><td><span class="badge badge-bull">Strong</span></td></tr>
+        <tr><td class="co-name">Seagate <span class="co-ticker">STX</span></td><td>NASDAQ</td><td>High-capacity hard disk drives (HDD)</td><td>AI requires massive cold storage; Seagate HAMR technology enables 30TB+ drives for data lakes</td><td><span class="badge badge-bull">Strong</span></td></tr>
+        <tr><td class="co-name">Samsung Electronics</td><td>KRX: 005930</td><td>NAND flash, DRAM, HBM, logic chips â€” full stack</td><td>Critical bottleneck: HBM ramp-up behind SK Hynix; diversified exposure but less pure-play premium</td><td><span class="badge badge-neutral">Moderate</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 class="sub-title">Asia-Pacific & Europe Equivalents</h3>
+  <div class="two-col">
+    <div>
+      <div class="card-sm" style="margin-bottom:14px">
+        <div style="color:var(--gold-light);font-weight:600;font-size:13px;margin-bottom:10px">JAPAN</div>
+        <ul>
+          <li><strong>Furukawa Electric</strong> â€” Fiber optic cables; superconducting wire for grid and data centers</li>
+          <li><strong>NTT Data</strong> â€” Data center operator; AI infrastructure in Japan and globally</li>
+          <li><strong>Toshiba</strong> â€” Power semiconductors, nuclear technology (Advanced BWR reactors)</li>
+          <li><strong>Mitsubishi Electric</strong> â€” Power systems, transformers, industrial automation</li>
+          <li><strong>SoftBank</strong> â€” Massive AI infrastructure bets; ARM Holdings (chips); Japan data center buildout</li>
+        </ul>
+      </div>
+      <div class="card-sm">
+        <div style="color:var(--gold-light);font-weight:600;font-size:13px;margin-bottom:10px">SOUTH KOREA</div>
+        <ul>
+          <li><strong>SK Telecom</strong> â€” AI data center infrastructure in Korea and globally</li>
+          <li><strong>Doosan Enerbility</strong> â€” Nuclear reactors (APR1400 design), hydrogen turbines</li>
+          <li><strong>Hanwha Solutions</strong> â€” Solar panels + BESS; major export player</li>
+          <li><strong>LS Electric</strong> â€” Power distribution equipment, smart grid systems</li>
+        </ul>
+      </div>
+    </div>
+    <div>
+      <div class="card-sm" style="margin-bottom:14px">
+        <div style="color:var(--gold-light);font-weight:600;font-size:13px;margin-bottom:10px">EUROPE</div>
+        <ul>
+          <li><strong>ABB (Switzerland)</strong> â€” Transformers, grid automation, power distribution critical for every data center</li>
+          <li><strong>Schneider Electric (France)</strong> â€” Data center power management (UPS, cooling, automation)</li>
+          <li><strong>Siemens Energy (Germany)</strong> â€” Grid infrastructure, hydrogen turbines, offshore wind</li>
+          <li><strong>Aker ASA (Norway)</strong> â€” Offshore wind, green hydrogen, carbon capture technology</li>
+          <li><strong>Equinix (US/Europe)</strong> â€” Global colocation data centers; expanding capacity for AI</li>
+        </ul>
+      </div>
+      <div class="card-sm">
+        <div style="color:var(--gold-light);font-weight:600;font-size:13px;margin-bottom:10px">SOUTHEAST ASIA</div>
+        <ul>
+          <li><strong>Pertamina (Indonesia)</strong> â€” Geothermal energy (world's largest potential) for AI data centers</li>
+          <li><strong>GreenPower (Singapore/ASEAN)</strong> â€” Distributed renewables for Southeast Asian data centers</li>
+          <li><strong>Sunseap/ST Telemedia (Singapore)</strong> â€” Data center operators powered by renewable energy</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<!-- TAB 5: ENERGY SOLUTIONS -->
+<!-- ============================================================ -->
+<section id="solutions" class="section">
+  <div class="section-header">
+    <h2 class="section-title">Global <span class="accent">Energy Solutions</span></h2>
+    <p class="section-lead">Humanity is engineering the greatest energy transition in history â€” driven by both climate imperative and AI's insatiable demand. Innovation is exploding across every sub-sector.</p>
+  </div>
+
+  <h3 class="sub-title">1. Nuclear Renaissance</h3>
+  <div class="card">
+    <p>Nuclear power is experiencing its most significant revival since the 1970s, driven by AI's need for always-on, carbon-free power. Key global developments:</p>
+    <ul>
+      <li><strong>Small Modular Reactors (SMRs):</strong> NuScale (US), Rolls-Royce (UK), Kairos Power, TerraPower (Bill Gates), X-energy â€” all racing to commercialize 50â€“300 MW modular designs deployable in 3â€“5 years vs. 15 years for conventional reactors.</li>
+      <li><strong>Microsoft + Constellation Energy (Three Mile Island):</strong> 20-year PPA signed for nuclear power to feed Microsoft AI data centers â€” a landmark validation of nuclear for AI.</li>
+      <li><strong>Google's 7-reactor SMR Deal with Kairos Power:</strong> Direct corporate procurement of nuclear energy for AI clusters â€” unprecedented in history.</li>
+      <li><strong>Amazon NuScale Investment:</strong> AWS committed to SMRs for powering its data center fleet.</li>
+      <li><strong>India's PFBR Criticality (April 2026):</strong> India becomes second country globally (after Russia) to operate a commercial fast breeder reactor â€” unlocking its 3-stage nuclear program and eventual thorium utilization.</li>
+      <li><strong>Nuclear Fusion Progress:</strong> Commonwealth Fusion Systems and TAE Technologies advancing toward commercial fusion demonstration by early 2030s.</li>
+    </ul>
+  </div>
+
+  <h3 class="sub-title">2. Renewable Energy: Record Deployment</h3>
+  <div class="two-col">
+    <div class="card-sm">
+      <div style="color:var(--gold-light);font-weight:600;font-size:14px;margin-bottom:12px">Solar Innovations</div>
+      <ul>
+        <li><strong>Perovskite-Silicon Tandem:</strong> Efficiency breaking 33%+ barrier; commercial viability by 2027</li>
+        <li><strong>Agrivoltaics:</strong> Dual-use land for agriculture + solar; expanding rapidly in India and Europe</li>
+        <li><strong>Floating Solar:</strong> India's Ramagundam (500 MW) and other projects maximizing unused water surfaces</li>
+        <li><strong>Building-Integrated PV (BIPV):</strong> Solar in windows, facades, roof tiles â€” architectural integration</li>
+      </ul>
+    </div>
+    <div class="card-sm">
+      <div style="color:var(--gold-light);font-weight:600;font-size:14px;margin-bottom:12px">Wind Innovations</div>
+      <ul>
+        <li><strong>Offshore Floating Wind:</strong> Norway, Scotland, Japan deploying floating turbines in deep water â€” no continental shelf limitations</li>
+        <li><strong>Airborne Wind Energy (AWE):</strong> Kite-based systems (Makani/Kite Power) harvesting high-altitude winds at 10â€“15% of conventional wind costs</li>
+        <li><strong>Repowering Old Sites:</strong> Replacing 20-year-old 2 MW turbines with 15 MW models at same locations</li>
+        <li><strong>Green Steel Wind Towers:</strong> Vestas manufacturing towers using green steel to reduce lifecycle emissions</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3 class="sub-title">3. Battery Energy Storage Systems (BESS)</h3>
+  <div class="card">
+    <p>BESS is the critical enabling technology for 24/7 renewable power â€” solving intermittency and making renewable energy suitable for always-on AI data centers.</p>
+    <div class="card-grid">
+      <div class="card-sm">
+        <div style="color:var(--teal);font-weight:600;font-size:13px;margin-bottom:8px">Lithium-Ion (Dominant)</div>
+        <p style="font-size:13px;color:var(--text-secondary)">LFP (LithiumFerroPhosphate) batteries dominating grid-scale storage; CATL and BYD leading. Cost below $100/kWh approaching.</p>
+      </div>
+      <div class="card-sm">
+        <div style="color:var(--teal);font-weight:600;font-size:13px;margin-bottom:8px">Sodium-Ion (Emerging)</div>
+        <p style="font-size:13px;color:var(--text-secondary)">CATL's 2nd gen sodium-ion: no lithium or cobalt; lower cost potential; ideal for warm climates like India and Africa.</p>
+      </div>
+      <div class="card-sm">
+        <div style="color:var(--teal);font-weight:600;font-size:13px;margin-bottom:8px">Flow Batteries (Long-Duration)</div>
+        <p style="font-size:13px;color:var(--text-secondary)">Vanadium flow (ESS Inc, VRB Energy) and iron-air (Form Energy) enabling 24â€“100 hour storage for true seasonal backup.</p>
+      </div>
+      <div class="card-sm">
+        <div style="color:var(--teal);font-weight:600;font-size:13px;margin-bottom:8px">Virtual Power Plants (VPP)</div>
+        <p style="font-size:13px;color:var(--text-secondary)">Aggregating distributed batteries (residential + commercial) into grid-scale virtual generators. Tesla Autobidder, Sonnen, AGL Australia leading.</p>
+      </div>
+    </div>
+  </div>
+
+  <h3 class="sub-title">4. Green Hydrogen</h3>
+  <div class="card">
+    <p>Green hydrogen (Hâ‚‚ produced via electrolysis powered by renewables) represents the next frontier for decarbonizing hard-to-abate sectors: steel, cement, shipping, aviation, and heavy industry.</p>
+    <div class="highlight-box">
+      <strong>Cost Trajectory:</strong> Green hydrogen currently costs $4â€“7/kg vs. grey hydrogen at $1â€“2/kg. Reliance Industries targets $1/kg by 2030. NTPC targets sub-$2/kg by 2025â€“26. The IEA projects costs falling below grey hydrogen by 2035 in best-resource locations.
+    </div>
+    <ul>
+      <li><strong>Export Markets:</strong> India's coastal Green Hydrogen Hubs (Kandla, Thoothukudi, Paradip) targeting export to Germany, Japan, and South Korea â€” all with signed bilateral agreements.</li>
+      <li><strong>Industrial Use:</strong> Replacing grey hydrogen in Indian refineries (IOC's Mathura refinery first), fertilizer production, and steel making (SAIL, Tata Steel).</li>
+      <li><strong>Transport:</strong> NTPC hydrogen fuel cell buses operated at Mahakumbh 2025 â€” India's first mass public hydrogen transport event.</li>
+      <li><strong>Global Leaders:</strong> Linde, Air Products, Siemens Energy (electrolyzers), Nel ASA (Norway), ITM Power (UK), McPhy (France) â€” L&T's technology partner for Indian electrolyzers.</li>
+    </ul>
+  </div>
+
+  <h3 class="sub-title">5. Electric Vehicles & Clean Transportation</h3>
+  <div class="card">
+    <p>India's EV sector is at an inflection point, supported by PLI schemes, FAME-III policy framework, and the collapse of 2-wheeler and 3-wheeler ownership costs to near-parity with ICE vehicles.</p>
+    <ul>
+      <li><strong>Two-Wheeler Leadership:</strong> Ola Electric, Bajaj (Chetak), TVS (iQube), Hero MotoCorp (Vida) â€” combined EV 2W market share exceeding 10% in FY26</li>
+      <li><strong>Four-Wheeler Push:</strong> Tata Motors (Nexon EV, Curvv), Mahindra (BE 6e, XEV 9e), Maruti entering EV with Toyota collaboration</li>
+      <li><strong>EV Charging Infrastructure:</strong> 10 lakh public EV chargers targeted by 2030; Tata Power EV charging network exceeding 100,000 points by FY26</li>
+      <li><strong>Battery Localization:</strong> Advanced Chemistry Cell PLI scheme attracting CATL, Samsung SDI, Maruti-Toyota JV â€” reducing EV cost parity timeline</li>
+    </ul>
+  </div>
+
+  <h3 class="sub-title">6. Grid Technology & Smart Grids</h3>
+  <div class="card">
+    <p>AI data centers require not just more electricity, but smarter, more resilient delivery. The grid itself is being reinvented.</p>
+    <ul>
+      <li><strong>HVDC Transmission:</strong> ABB and Siemens Energy deploying High Voltage Direct Current lines for long-distance power transfer with 30% lower losses â€” critical for India's Ladakh-to-Delhi solar corridor</li>
+      <li><strong>AI-Managed Grid:</strong> Google's DeepMind reduced data center cooling energy by 40% using AI. Same technology now being applied to national grid balancing.</li>
+      <li><strong>Smart Meters:</strong> India's 250 million smart meter rollout (6.9M installed by 2023, accelerating) enabling real-time demand response</li>
+      <li><strong>Superconductors:</strong> Room-temperature superconductor breakthrough (if confirmed) would eliminate grid transmission losses â€” the single biggest energy efficiency opportunity</li>
+      <li><strong>Microgrids:</strong> Behind-the-meter power for data centers (Bloom Energy model); reduces grid dependency and speeds time-to-power from 3 years to 55 days</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<!-- TAB 6: INDIA ENERGY -->
+<!-- ============================================================ -->
+<section id="india-energy" class="section">
+  <div class="section-header">
+    <h2 class="section-title">India Energy <span class="accent">Supercycle</span></h2>
+    <p class="section-lead">India has achieved its 2030 Paris Agreement target 5 years early. It is now the world's 3rd largest renewable energy market â€” and its fastest-growing economy is creating the most compelling energy investment opportunity on earth.</p>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card"><div class="stat-val">283 GW</div><div class="stat-label">RE Installed Capacity FY26</div><div class="stat-change up">World #3</div></div>
+    <div class="stat-card"><div class="stat-val">130 GW</div><div class="stat-label">Solar Capacity Aug 2025</div><div class="stat-change up">42x in a decade</div></div>
+    <div class="stat-card"><div class="stat-val">52 GW</div><div class="stat-val">Wind Capacity 2025</div><div class="stat-change up">150% decade growth</div></div>
+    <div class="stat-card"><div class="stat-val">500 GW</div><div class="stat-label">Non-Fossil Target 2030</div><div class="stat-change neutral">On track ahead</div></div>
+    <div class="stat-card"><div class="stat-val">100 GW</div><div class="stat-label">Solar Module Mfg Capacity</div><div class="stat-change up">ALMM milestone 2026</div></div>
+    <div class="stat-card"><div class="stat-val">22 GW</div><div class="stat-label">Renewable Additions H1 2025</div><div class="stat-change up">Highest ever 6 months</div></div>
+  </div>
+
+  <h3 class="sub-title">1. Solar Energy â€” The Cornerstone</h3>
+  <div class="card">
+    <p>India has executed one of the fastest solar scale-ups in human history â€” growing from 2.82 GW in 2014 to 130 GW in 2025, a 42-fold increase in 11 years. India has officially surpassed Japan to become the world's 3rd largest solar energy producer.</p>
+    <ul>
+      <li><strong>Bhadla Solar Park (Rajasthan):</strong> 2,245 MW â€” one of world's largest single-site installations; land of extreme solar irradiance (8+ kWh/mÂ²/day)</li>
+      <li><strong>Khavda Renewable Park (Gujarat):</strong> 30 GW hybrid capacity under construction â€” will be the world's single largest energy park when complete</li>
+      <li><strong>Manufacturing Breakthrough:</strong> Solar module manufacturing capacity doubled from 74 GW (FY25) to 172 GW (FY26) â€” India now exports panels and components globally</li>
+      <li><strong>PM Surya Ghar (Muft Bijli Yojana):</strong> 1 crore rooftop solar installations targeted; 100% FDI allowed in renewable generation</li>
+    </ul>
+  </div>
+
+  <h3 class="sub-title">2. Nuclear Energy â€” The Strategic Transformation</h3>
+  <div class="card">
+    <div class="alert-box" style="margin-bottom:16px">
+      <strong>Historic Milestone:</strong> India's Prototype Fast Breeder Reactor (PFBR) at Kalpakkam achieved first criticality on April 6, 2026 â€” marking India's entry into Stage 2 of its 3-Stage nuclear program. India becomes only the 2nd country globally (after Russia) to operate a commercial fast breeder reactor.
+    </div>
+    <div class="timeline">
+      <div class="timeline-item">
+        <div class="t-date">Feb 2025 â€” Nuclear Energy Mission Launched</div>
+        <div class="t-text">â‚¹20,000 crore allocated for SMR R&D. Target: 5 indigenous SMRs by 2033. Target: 100 GW nuclear by 2047. Private sector participation unlocked via SHANTI Bill 2025.</div>
+      </div>
+      <div class="timeline-item">
+        <div class="t-date">Dec 2025 â€” SHANTI Act Passed by Parliament</div>
+        <div class="t-text">The Sustainable Harnessing and Advancement of Nuclear Energy for Transforming India Act 2025 replaces the 1962 Atomic Energy Act â€” enabling private sector investment and resolving nuclear liability concerns that blocked international cooperation for 15 years.</div>
+      </div>
+      <div class="timeline-item">
+        <div class="t-date">Mar 2026 â€” SMR Design Approvals</div>
+        <div class="t-text">BSMR-200 (200 MWe, Tarapur site), SMR-55 (55 MWe), HTGCR (5 MWt for hydrogen generation) approved. Six major Indian companies â€” Hindalco, Jindal Steel, Tata Power, Reliance, JSW Energy, Adani Power â€” submitted proposals for 16 SMR sites across 6 states.</div>
+      </div>
+      <div class="timeline-item">
+        <div class="t-date">Apr 2026 â€” PFBR Achieves Criticality</div>
+        <div class="t-text">500 MWe fast breeder reactor at Kalpakkam achieves sustained nuclear chain reaction. Opens India's path to using plutonium breeding and eventually thorium â€” giving India virtually unlimited clean energy from its own thorium reserves.</div>
+      </div>
+    </div>
+    <div class="highlight-box">
+      <strong>Strategic Significance of the 3-Stage Program:</strong> India has the world's largest thorium reserves (~846,000 tonnes â€” 30% of global supply). Stage 1 (PHWRs) â†’ Stage 2 (Fast Breeders) â†’ Stage 3 (Thorium Breeders). A fully operational Stage 3 program could power India for thousands of years without any fuel imports. The PFBR criticality is not just an energy milestone â€” it is a civilizational one.
+    </div>
+  </div>
+
+  <h3 class="sub-title">3. Green Hydrogen â€” India's Next Export</h3>
+  <div class="card">
+    <p>India's National Green Hydrogen Mission targets 5 MMTPA production and 125 GW additional renewable capacity by 2030. Three coastal Green Hydrogen Hubs designated: Kandla (Gujarat), Thoothukudi (Tamil Nadu), and Paradip (Odisha).</p>
+    <ul>
+      <li><strong>Reliance Industries:</strong> Jamnagar New Energy ecosystem; electrolyzer giga-factory targeting 3 GW annual capacity by late 2026; sub-$1/kg cost target by 2030</li>
+      <li><strong>NTPC Green Energy:</strong> Pudimadaka Green Hydrogen Hub (â‚¹1.85 lakh crore) â€” 1,500 TPD production targeting export of green ammonia</li>
+      <li><strong>L&T:</strong> Hazira electrolyzer factory (McPhy technology partnership); L&T Green Energy Kandla subsidiary dedicated to Hâ‚‚ projects</li>
+      <li><strong>Adani New Industries:</strong> TotalEnergies $50B partnership over 10 years for green hydrogen</li>
+      <li><strong>Export Ambition:</strong> Indiaâ€“Germany Green Hydrogen Partnership, Indiaâ€“Japan Hydrogen corridor, Indiaâ€“South Korea ammonia agreements â€” all signed and progressing</li>
+    </ul>
+  </div>
+
+  <h3 class="sub-title">4. Battery Storage â€” The Missing Piece</h3>
+  <div class="card">
+    <p>India is targeting 140â€“200 GW of battery storage by 2040 â€” the largest BESS program for any single country globally. This is the critical infrastructure layer enabling round-the-clock renewable power.</p>
+    <ul>
+      <li><strong>Adani Group's 1,126 MW / 3,530 MWh BESS</strong> at Khavda Solar Park â€” one of world's largest single-location deployments; commissioned March 2026; targeting 50 GWh total by 2030</li>
+      <li><strong>Pumped Hydro Energy Storage (PHES):</strong> India has 96 GW of identified pumped hydro potential; 4 major projects by Adani Green; Greenko's integrated RE-PHES complexes</li>
+      <li><strong>ACC PLI Scheme:</strong> 50 GWh battery manufacturing capacity with PLI incentives; CATL and Samsung SDI partnering with domestic cos</li>
+      <li><strong>India Energy Storage Alliance (IESA):</strong> Industry body coordinating policy, technology, and investment for storage ecosystem development</li>
+    </ul>
+  </div>
+
+  <h3 class="sub-title">5. India's Free Trade Agreement Synergies in Energy</h3>
+  <div class="card">
+    <table class="company-table">
+      <thead>
+        <tr><th>Partner</th><th>Agreement/Alliance</th><th>Energy Synergies</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="co-name">European Union</td><td>India-EU Trade & Technology Council (TTC); EFTA-India TEPA ($100B target)</td><td>Green hydrogen export to Germany/Netherlands; Solar module supply chain; EV battery technology transfer; Offshore wind collaboration; Carbon market linkages under EU CBAM</td></tr>
+        <tr><td class="co-name">Japan</td><td>India-Japan Act East Forum; JATP (Japan-Asia Transition Plan)</td><td>Hydrogen corridor (Japan importing Indian green Hâ‚‚/ammonia); Nuclear cooperation (Toshiba-NPCIL); SMR technology sharing; Offshore wind (Vestas-Adani)</td></tr>
+        <tr><td class="co-name">United States</td><td>US-India iCET (Initiative on Critical and Emerging Technology)</td><td>Nuclear cooperation (post-SHANTI Act); SMR technology (Holtec, X-energy); Critical minerals (lithium, cobalt); AI data center co-investment; QUAD clean energy initiatives</td></tr>
+        <tr><td class="co-name">Australia</td><td>ECTA (Economic Cooperation and Trade Agreement)</td><td>Critical minerals supply (lithium, nickel for batteries); Green hydrogen export collaboration; Offshore wind technology; Solar module supply</td></tr>
+        <tr><td class="co-name">UAE/Middle East</td><td>CEPA (Comprehensive Economic Partnership Agreement)</td><td>Green ammonia export to Abu Dhabi; Solar technology collaboration; Energy financing via Abu Dhabi sovereign wealth; Masdar-India solar co-investment</td></tr>
+        <tr><td class="co-name">UK</td><td>India-UK FTA (under finalization)</td><td>Rolls-Royce SMR nuclear technology collaboration; Offshore floating wind; Green finance; Carbon markets</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<!-- TAB 7: INVESTMENT OPPORTUNITIES -->
+<!-- ============================================================ -->
+<section id="investment" class="section">
+  <div class="section-header">
+    <h2 class="section-title">India Energy <span class="accent">Investment Opportunities</span></h2>
+    <p class="section-lead">Sector-by-sector guide to India's most compelling energy investment themes â€” from large-cap anchors to high-growth opportunities across the clean energy value chain.</p>
+  </div>
+
+  <h3 class="sub-title">Tier 1 â€” Core Holdings (Large Cap, High Conviction)</h3>
+  <div class="card">
+    <table class="company-table">
+      <thead>
+        <tr><th>Company</th><th>Segment</th><th>Investment Thesis</th><th>Catalysts</th><th>Rating</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="co-name">NTPC Ltd <span class="co-ticker">NTPC.NS</span></td>
+          <td>Power Generation + Green</td>
+          <td>India's largest power generator transitioning to renewable + nuclear. NTPC Green Energy listed subsidiary. Backbone for AI data center power. 40+ GW new capacity pipeline.</td>
+          <td>SMR development, green hydrogen hub, PFBR benefit, data center PPAs</td>
+          <td><div class="inv-rating"><span class="inv-dot inv-strong"></span> Strong Buy</div></td>
+        </tr>
+        <tr>
+          <td class="co-name">Adani Green Energy <span class="co-ticker">ADANIGREEN.NS</span></td>
+          <td>Solar + Wind + Storage + Hâ‚‚</td>
+          <td>India's largest renewable developer; 12+ GW operational; 30 GW Khavda park; world's largest BESS deployment; Google partnership in Vizag. Full ecosystem play.</td>
+          <td>Khavda completion, BESS scale-up, data center PPAs, green hydrogen export</td>
+          <td><div class="inv-rating"><span class="inv-dot inv-strong"></span> Strong Buy</div></td>
+        </tr>
+        <tr>
+          <td class="co-name">Power Grid Corp <span class="co-ticker">POWERGRID.NS</span></td>
+          <td>Transmission & Distribution</td>
+          <td>National transmission monopoly; essential infrastructure for all power â€” renewable and AI alike. Annuity-model cash flows. Every GW of new capacity needs PGCIL's grid.</td>
+          <td>Green Energy Corridor, HVDC investments, data center transmission corridors</td>
+          <td><div class="inv-rating"><span class="inv-dot inv-strong"></span> Strong Buy</div></td>
+        </tr>
+        <tr>
+          <td class="co-name">Tata Power <span class="co-ticker">TATAPOWER.NS</span></td>
+          <td>Generation + Distribution + EV Charging + Solar Mfg</td>
+          <td>Most diversified energy play in India. 11.6 GW renewable portfolio; 4.3 GW solar cell-module plant (Tirunelveli); 100,000+ EV chargers; AI-linked through Tata Group ecosystem.</td>
+          <td>Tirunelveli factory ramp, EV charging scale, green PPAs, data center energy</td>
+          <td><div class="inv-rating"><span class="inv-dot inv-strong"></span> Strong Buy</div></td>
+        </tr>
+        <tr>
+          <td class="co-name">Adani Energy Solutions <span class="co-ticker">ADANIENT.NS</span></td>
+          <td>Transmission + Smart Metering</td>
+          <td>One of India's largest private transmission operators. 250M smart meter program execution. Grid upgrades for data center loads specifically. Annuity revenue model.</td>
+          <td>Smart meter rollout, AI data center transmission demand, Green Corridor projects</td>
+          <td><div class="inv-rating"><span class="inv-dot inv-strong"></span> Strong Buy</div></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 class="sub-title">Tier 2 â€” Growth Holdings (Mid Cap, High Growth)</h3>
+  <div class="card">
+    <table class="company-table">
+      <thead>
+        <tr><th>Company</th><th>Segment</th><th>Investment Thesis</th><th>Rating</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="co-name">Waaree Energies <span class="co-ticker">WAAREEENER.NS</span></td>
+          <td>Solar Module Manufacturing</td>
+          <td>India's largest solar module maker; massive PLI benefit; export ambitions to US and EU; 172 GW national capacity milestone beneficiary. Manufacturing leverage on RE supercycle.</td>
+          <td><div class="inv-rating"><span class="inv-dot inv-strong"></span> Strong Buy</div></td>
+        </tr>
+        <tr>
+          <td class="co-name">Premier Energies <span class="co-ticker">PREMIENRG.NS</span></td>
+          <td>Solar Cells + Modules</td>
+          <td>India's 2nd largest integrated solar manufacturer; cell-to-module integration provides cost advantage; PLI beneficiary; growing export book to US and Middle East</td>
+          <td><div class="inv-rating"><span class="inv-dot inv-moderate"></span> Buy</div></td>
+        </tr>
+        <tr>
+          <td class="co-name">IREDA <span class="co-ticker">IREDA.NS</span></td>
+          <td>Green Finance / NBFC</td>
+          <td>India's renewable energy financing NBFC (Navratna); loans to all green projects â€” solar, wind, storage, hydro. Every RE project in India needs IREDA financing. CAGR 25%+ on loan book.</td>
+          <td><div class="inv-rating"><span class="inv-dot inv-strong"></span> Strong Buy</div></td>
+        </tr>
+        <tr>
+          <td class="co-name">Suzlon Energy <span class="co-ticker">SUZLON.NS</span></td>
+          <td>Wind Energy</td>
+          <td>India's largest wind turbine manufacturer; debt-free after restructuring; massive order book recovery; 100 GW wind target by 2030 drives decade-long order visibility</td>
+          <td><div class="inv-rating"><span class="inv-dot inv-moderate"></span> Buy</div></td>
+        </tr>
+        <tr>
+          <td class="co-name">Inox Wind <span class="co-ticker">INOXWIND.NS</span></td>
+          <td>Wind Energy (Mfg + EPC)</td>
+          <td>Wind turbine manufacturer and EPC with 3,000+ MW order book; recovered from 2021 crisis; lean cost structure; high operating leverage as wind capacity additions accelerate</td>
+          <td><div class="inv-rating"><span class="inv-dot inv-moderate"></span> Buy</div></td>
+        </tr>
+        <tr>
+          <td class="co-name">JSW Energy <span class="co-ticker">JSWENERGY.NS</span></td>
+          <td>Renewable + Storage + Hydro</td>
+          <td>Specialist in dispatchable renewable power (solar+wind+storage hybrid); corporate PPA leader for AI data centers seeking 24x7 green power. Fast-growing portfolio.</td>
+          <td><div class="inv-rating"><span class="inv-dot inv-moderate"></span> Buy</div></td>
+        </tr>
+        <tr>
+          <td class="co-name">NHPC <span class="co-ticker">NHPC.NS</span></td>
+          <td>Hydropower + Pumped Hydro</td>
+          <td>Clean baseload power at high capacity factor (40%); pumped hydro storage development; undervalued relative to solar and wind; critical for AI data center 24x7 reliability needs</td>
+          <td><div class="inv-rating"><span class="inv-dot inv-moderate"></span> Buy</div></td>
+        </tr>
+        <tr>
+          <td class="co-name">Larsen & Toubro <span class="co-ticker">LT.NS</span></td>
+          <td>EPC â€” Data Centers + Power Infra</td>
+          <td>Bernstein identifies as primary direct beneficiary of India's AI data center buildout; EPC for data centers AND associated power infrastructure; electrolyzer manufacturing (McPhy JV)</td>
+          <td><div class="inv-rating"><span class="inv-dot inv-strong"></span> Strong Buy</div></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 class="sub-title">Tier 3 â€” Thematic / Speculative (Higher Risk, Higher Return)</h3>
+  <div class="card">
+    <table class="company-table">
+      <thead>
+        <tr><th>Company</th><th>Segment</th><th>Speculative Thesis</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="co-name">REC Limited <span class="co-ticker">RECLTD.NS</span></td><td>Green Infrastructure Finance</td><td>Government-backed power sector lender; green bond market leader; EPC project financing at scale; strong dividend yield + growth combination</td></tr>
+        <tr><td class="co-name">KEC International <span class="co-ticker">KEC.NS</span></td><td>Power Transmission EPC</td><td>Transmission line EPC; every GW of renewable capacity addition needs KEC's towers and lines; direct beneficiary of Green Energy Corridor</td></tr>
+        <tr><td class="co-name">Polycab India <span class="co-ticker">POLYCAB.NS</span></td><td>Cables & Wires</td><td>Every data center, solar park, and EV charger needs cables; market leader; strong manufacturing moat; direct beneficiary of AI infrastructure build</td></tr>
+        <tr><td class="co-name">KEI Industries <span class="co-ticker">KEI.NS</span></td><td>Power Cables</td><td>Extra-high voltage cables for transmission; data center power delivery cables; EV charging cables â€” all growing simultaneously</td></tr>
+        <tr><td class="co-name">Thermax <span class="co-ticker">THERMAX.NS</span></td><td>Industrial Energy + Cooling</td><td>Waste heat recovery; data center cooling systems (absorption chillers); hydrogen process equipment; industrial energy efficiency solutions</td></tr>
+        <tr><td class="co-name">ABB India <span class="co-ticker">ABB.NS</span></td><td>Power Distribution + Automation</td><td>Transformers, switchgear, and automation for data centers and RE plants; severe global transformer shortage means ABB India order book growing sharply</td></tr>
+        <tr><td class="co-name">E2E Networks <span class="co-ticker">E2E.NS</span></td><td>Indian AI Cloud + Data Centers</td><td>India's domestic Nvidia GPU cloud; direct AI infrastructure play; partnered with Nvidia; 18%+ weekly moves on AI news</td></tr>
+        <tr><td class="co-name">Borosil Renewables <span class="co-ticker">BORORENEW.NS</span></td><td>Solar Glass Manufacturing</td><td>India's only solar glass manufacturer; massive anti-dumping protection from Chinese imports; entire India solar expansion needs Borosil's glass</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 class="sub-title">Time-Horizoned Investment Framework</h3>
+  <div class="card-grid">
+    <div class="card-sm">
+      <div style="color:var(--gold-light);font-size:13px;font-weight:600;margin-bottom:10px">Short Term (0â€“3 Months)</div>
+      <ul>
+        <li>Ride AI-data center tailwind: L&T, NTPC, Power Grid, Adani Energy Solutions</li>
+        <li>Avoid: Commodity-exposed cos with no AI/RE narrative</li>
+        <li>Watch: Mars in Leo creates geopolitical shock risk â†’ keep 10% cash buffer</li>
+        <li>Sector: Power equipment (ABB, Siemens India, KEC) benefiting from transformer shortage</li>
+      </ul>
+    </div>
+    <div class="card-sm">
+      <div style="color:var(--gold-light);font-size:13px;font-weight:600;margin-bottom:10px">Medium Term (3â€“12 Months)</div>
+      <ul>
+        <li>Core Accumulation: Waaree Energies, Premier Energies on manufacturing scale-up</li>
+        <li>IREDA on green financing growth</li>
+        <li>Nuclear-adjacent: BHEL (reactor manufacturing component contracts), L&T (SMR construction)</li>
+        <li>Battery storage: Watch for BESS-focused mid-cap listings</li>
+      </ul>
+    </div>
+    <div class="card-sm">
+      <div style="color:var(--gold-light);font-size:13px;font-weight:600;margin-bottom:10px">Long Term (1â€“5 Years)</div>
+      <ul>
+        <li>Nuclear: NPCIL (when listed/accessible), BHAVINI component suppliers</li>
+        <li>Green Hydrogen: NTPC Green, Reliance Industries (New Energy), GAIL</li>
+        <li>Offshore Wind: Watch new entrants as sector gets policy clarity</li>
+        <li>Electrolyzer Manufacturing: L&T, Thermax â€” early mover advantage</li>
+        <li>Storage: Companies building ACC manufacturing in India under PLI</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<!-- TAB 8: ASTROLOGY -->
+<!-- ============================================================ -->
+<section id="astrology" class="section">
+  <div class="section-header">
+    <h2 class="section-title">Jyotish Mundane <span class="accent">Astrological Analysis</span></h2>
+    <p class="section-lead">Correlating planetary transits and cosmic events with energy sector trends â€” using the framework of Vedic Mundane Astrology (Jyotish) as described in M.N. Kedar's treatise.</p>
+  </div>
+
+  <div class="highlight-box">
+    <strong>Interpretive Disclaimer:</strong> Astrological analysis is interpretative and probabilistic â€” not deterministic. It is used here as a complementary lens alongside macroeconomic and fundamental analysis, consistent with the Jyotish Mundane Astrology framework. Correlations are observed patterns, not causal certainties.
+  </div>
+
+  <h3 class="sub-title">Planetary Roles in Mundane Economic Analysis</h3>
+  <div class="planet-grid">
+    <div class="planet-card">
+      <div class="planet-symbol">â™ƒ</div>
+      <div class="planet-name">Jupiter â€” Expansion</div>
+      <div class="planet-desc">Rules growth, optimism, liquidity, religion, law, and long-distance trade. Jupiter transiting favorable signs = bull markets, credit expansion, IPO booms. Rules banks, courts, governments.</div>
+    </div>
+    <div class="planet-card">
+      <div class="planet-symbol">â™„</div>
+      <div class="planet-name">Saturn â€” Discipline</div>
+      <div class="planet-desc">Rules structure, slowdown, workers, poverty, suffering, and endurance. Saturn's difficult transits correlate with recessions, austerity, market corrections. Rules coal, iron, mass public. Currently in Pisces (spiritual discipline).</div>
+    </div>
+    <div class="planet-card">
+      <div class="planet-symbol">â™‚</div>
+      <div class="planet-name">Mars â€” Conflict</div>
+      <div class="planet-desc">Rules wars, fire, explosions, surgery, military, and energy generation. Mars creates geopolitical volatility, sudden energy price spikes, conflict-related disruptions. Mars in Leo (May 2026) intensifies power struggles.</div>
+    </div>
+    <div class="planet-card">
+      <div class="planet-symbol">â˜¿</div>
+      <div class="planet-name">Mercury â€” Commerce</div>
+      <div class="planet-desc">Rules trade, communication, technology, data, intellect. AI/data infrastructure is quintessentially Mercurian. Mercury retrograde periods create technology glitches, contract delays, communication breakdowns.</div>
+    </div>
+    <div class="planet-card">
+      <div class="planet-symbol">â™€</div>
+      <div class="planet-name">Venus â€” Luxury</div>
+      <div class="planet-desc">Rules luxury, arts, finance, beauty, comfort. In own sign Taurus: strong support for clean energy aesthetics (EVs, solar panels as status symbols), sustainable consumption premium, green finance growth.</div>
+    </div>
+    <div class="planet-card">
+      <div class="planet-symbol">â˜€</div>
+      <div class="planet-name">Sun â€” Government</div>
+      <div class="planet-desc">Rules kings, governments, political authority, gold. Sun's transit through Aries (Aprilâ€“May) energizes government initiatives. India's nuclear mission announcements, energy policy decisions timed with Sun's favorable transits.</div>
+    </div>
+    <div class="planet-card">
+      <div class="planet-symbol">â˜Š</div>
+      <div class="planet-name">Rahu â€” Disruption</div>
+      <div class="planet-desc">Shadow node causing sudden events, illusions, foreign influence, obsessions, and paradigm shifts. AI obsession is classically Rahu â€” meteoric rise, potentially deceptive promises. In Pisces (2024â€“2025): dissolving old structures.</div>
+    </div>
+    <div class="planet-card">
+      <div class="planet-symbol">â˜‹</div>
+      <div class="planet-name">Ketu â€” Detachment</div>
+      <div class="planet-desc">Moksha planet: liberation from material attachment, sudden endings, spiritual insight. Ketu in Virgo 2024â€“25: dissolution of conventional precision industries, disruption in healthcare/pharma, mystical insights into technology.</div>
+    </div>
+  </div>
+
+  <div class="cosmic-divider"><span>â™¦</span></div>
+
+  <h3 class="sub-title">Current Planetary Configuration â€” Energy Sector Implications</h3>
+  <div class="card">
+    <div class="two-col">
+      <div>
+        <h3 style="color:var(--emerald-light);font-size:16px;margin-bottom:12px">Favorable Configurations</h3>
+        <ul>
+          <li><strong>Jupiter in Gemini:</strong> Powerful support for technology, AI, data, communication infrastructure. Expansion of digital economy. Green energy information-sharing and technology transfer alliances. Very favorable for India's data center ambitions.</li>
+          <li><strong>Venus in Taurus (own sign):</strong> Long-term bullish for sustainable luxury â€” EVs, solar panels as status symbols, green bonds, ESG investing. Strengthens capital accumulation in clean energy assets.</li>
+          <li><strong>Saturn in Pisces (trinal to Scorpio):</strong> Disciplined energy transition â€” not chaotic but systematic. Policy structures being finalized (SHANTI Act, Green Hydrogen Mission). Long-term structural support for renewable buildout.</li>
+          <li><strong>Sun in Taurus (Aprilâ€“May 2026):</strong> Government energy policy implementation. Nuclear project clearances. Budget allocations for energy infrastructure. Auspicious for NPCIL and SECI project timelines.</li>
+        </ul>
+      </div>
+      <div>
+        <h3 style="color:var(--crimson-light);font-size:16px;margin-bottom:12px">Challenging Configurations</h3>
+        <ul>
+          <li><strong>Mars in Leo:</strong> Intensified geopolitical conflict â€” particularly Middle East (Iran war/ceasefire dynamics). Crude oil price spikes. Energy inflation risk. Mars also rules nuclear â€” PFBR criticality and SMR decisions happening under Mars activation.</li>
+          <li><strong>Rahu in Pisces (conjunct Saturn):</strong> Creates confusion, illusions, and sudden shocks in global financial systems. AI bubble risk is amplified by this conjunction. Watch for sudden reversal of AI market sentiment.</li>
+          <li><strong>Mercury Retrogrades (2026):</strong> Augustâ€“September Mercury retrograde â€” contracts for AI data center projects may face delays, technology glitches in energy infrastructure projects. Avoid signing major energy PPAs during retrograde.</li>
+          <li><strong>Jupiter opposition (late 2026):</strong> When Jupiter moves to oppose Saturn, expect policy contradictions â€” government energy ambitions vs. fiscal constraints. Important for investors to monitor Q3â€“Q4 2026.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <h3 class="sub-title">Astrological Sector Correlations (Short/Medium/Long-Term)</h3>
+  <div class="card-grid">
+    <div class="card-sm">
+      <div class="badge badge-bull" style="margin-bottom:10px">0â€“3 Months</div>
+      <ul>
+        <li>Jupiter in Gemini â†’ <strong>Technology & AI Infrastructure Bullish</strong></li>
+        <li>Venus in Taurus â†’ <strong>EV & Green Energy Favorable</strong></li>
+        <li>Mars in Leo â†’ <strong>Energy price volatility; geopolitical risk</strong></li>
+        <li>Sun in Gemini (June) â†’ <strong>Technology regulation decisions</strong></li>
+      </ul>
+    </div>
+    <div class="card-sm">
+      <div class="badge badge-neutral" style="margin-bottom:10px">3â€“12 Months</div>
+      <ul>
+        <li>Jupiter moves to Cancer (Sept 2026) â†’ <strong>Shift to home/domestic sectors; nuclear family, real estate</strong></li>
+        <li>Saturn-Rahu conjunction ends â†’ <strong>Global financial clarity returns</strong></li>
+        <li>Ketu enters Leo â†’ <strong>Sudden changes in government energy policy</strong></li>
+        <li>Mars enters Virgo â†’ <strong>Precision in energy efficiency; engineering focus</strong></li>
+      </ul>
+    </div>
+    <div class="card-sm">
+      <div class="badge badge-hot" style="margin-bottom:10px">1â€“5 Years</div>
+      <ul>
+        <li>Jupiter in Leo (2027â€“28) â†’ <strong>Massive expansion phase for energy stocks</strong></li>
+        <li>Saturn in Aries (2028) â†’ <strong>Reckoning for over-leveraged energy cos</strong></li>
+        <li>Rahu-Ketu axis shift â†’ <strong>New energy paradigm crystallizes; clean tech matures</strong></li>
+        <li>Jupiter-Saturn conjunction cycle â†’ <strong>New 20-year economic cycle begins mid-2030s</strong></li>
+      </ul>
+    </div>
+  </div>
+
+  <h3 class="sub-title">India-Specific Astrological Factors</h3>
+  <div class="card">
+    <p>For India's natal chart (15 August 1947, 00:00, Delhi), the current transits are particularly significant:</p>
+    <ul>
+      <li><strong>Jupiter transiting India's 10th house (Gemini):</strong> Peak period for India's global reputation in technology and services. AI leadership ambitions have cosmic support. Data center hub ambitions aligned with planetary energies.</li>
+      <li><strong>Saturn transiting India's 7th house (Pisces):</strong> Discipline in partnerships and international agreements. SHANTI Act, FTAs, and nuclear cooperation agreements getting structured properly. Challenges in some bilateral trade disputes.</li>
+      <li><strong>Rahu transiting India's 7th house:</strong> Sudden and transformative changes in international partnerships. India-US nuclear deal finalization (post-SHANTI Act). Unexpected alliance opportunities. Also suggests caution â€” not all partnerships will be as beneficial as they appear.</li>
+      <li><strong>PFBR Criticality (April 2026):</strong> Achieved during Sun transiting Aries (sign of fire and beginnings) â€” deeply auspicious for India's nuclear dawn. Mars also strong â€” activation of fire energy (nuclear) at this time is cosmically supported.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<!-- TAB 9: SCENARIOS -->
+<!-- ============================================================ -->
+<section id="scenarios" class="section">
+  <div class="section-header">
+    <h2 class="section-title">Scenarios, Risks <span class="accent">& Outlook</span></h2>
+    <p class="section-lead">Probability-weighted scenarios for the global and India energy sector over 0â€“5 year horizons.</p>
+  </div>
+
+  <h3 class="sub-title">Global Energy Sector Scenarios</h3>
+  <div class="scenario-grid">
+    <div class="scenario-card scenario-best">
+      <div class="scenario-label">Bull Case</div>
+      <div class="scenario-prob">35%</div>
+      <div class="scenario-desc">AGI arrives 2027â€“28. AI power demand exceeds all projections. Nuclear renaissance accelerates (SMRs commercialize by 2030). Green hydrogen reaches cost parity by 2028. Energy stocks deliver 200â€“400% returns 2026â€“2030. India becomes world's largest renewable energy market.</div>
+    </div>
+    <div class="scenario-card scenario-base">
+      <div class="scenario-label">Base Case</div>
+      <div class="scenario-prob">45%</div>
+      <div class="scenario-desc">AI infrastructure buildout continues steadily. Data center power doubles to 945 TWh by 2030. India achieves 500 GW RE target. Nuclear SMRs come online by 2033. Energy sector stocks deliver 50â€“100% returns. Green hydrogen reaches $3/kg by 2030.</div>
+    </div>
+    <div class="scenario-card scenario-worst">
+      <div class="scenario-label">Bear Case</div>
+      <div class="scenario-prob">20%</div>
+      <div class="scenario-desc">AI bubble bursts (DeepSeek-type efficiency breakthrough reduces power demand projections). Iran war escalation causes sustained oil spike + global recession. Energy sector re-rates lower. Nuclear delays persist. Green hydrogen fails on cost without policy support.</div>
+    </div>
+  </div>
+
+  <h3 class="sub-title">Key Risk Factors</h3>
+  <div class="two-col">
+    <div>
+      <h3 style="color:var(--crimson-light);font-size:15px;margin-bottom:12px">Macro Risks</h3>
+      <ul>
+        <li><strong>AI Efficiency Breakthrough:</strong> If DeepSeek-style algorithmic improvements dramatically reduce per-query power consumption, demand projections shrink</li>
+        <li><strong>Global Recession:</strong> Saturn-Rahu conjunction warns of financial system stress. Central bank policy errors could trigger demand destruction</li>
+        <li><strong>Geopolitical Escalation:</strong> Iran war + US tariff regime could disrupt critical mineral supply chains (lithium, cobalt, silicon) needed for solar and battery manufacturing</li>
+        <li><strong>Grid Infrastructure Lag:</strong> Power generation capacity additions outpacing transmission capacity â€” creating curtailment and stranded asset risk</li>
+      </ul>
+    </div>
+    <div>
+      <h3 style="color:var(--emerald-light);font-size:15px;margin-bottom:12px">India-Specific Risks</h3>
+      <ul>
+        <li><strong>DISCOM Financial Health:</strong> State electricity distribution companies' weak finances threaten payment security for renewable developers</li>
+        <li><strong>Land Acquisition:</strong> Large renewable and nuclear projects face land acquisition challenges; political opposition at local levels</li>
+        <li><strong>Policy Continuity:</strong> Any rollback of nuclear reforms or green subsidy schemes would impact investment thesis</li>
+        <li><strong>Chinese Equipment Competition:</strong> While PLI schemes are building domestic manufacturing, China's solar/wind equipment is still cheaper; import substitution trajectory needs monitoring</li>
+        <li><strong>Water Stress:</strong> Nuclear plants and thermal backup require water cooling; India's water stress in certain states creates siting constraints</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3 class="sub-title">Central Bank & Macro Implications for Energy Investment</h3>
+  <div class="card">
+    <table class="company-table">
+      <thead>
+        <tr><th>Central Bank</th><th>Current Stance</th><th>Energy Sector Impact</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="co-name">Federal Reserve (FED)</td><td>Cautious cuts; watching inflation</td><td>Lower US rates = cheaper capital for AI infrastructure. Green bonds benefit. Nuclear project financing improves. Long-duration renewable assets re-rate higher.</td></tr>
+        <tr><td class="co-name">RBI (India)</td><td>Cutting cycle; support growth</td><td>Lower rates directly reduce cost of capital for India's capital-intensive renewable and nuclear projects. Solar and wind tariffs can fall further, accelerating adoption.</td></tr>
+        <tr><td class="co-name">ECB (Europe)</td><td>Easing; recession risk</td><td>Europe's AI data center buildout accelerates under lower rates. Green bond market deepens. India-EU green hydrogen corridors become more financially viable.</td></tr>
+        <tr><td class="co-name">BOJ (Japan)</td><td>Gradual tightening</td><td>Yen strengthening could affect Japan-India energy investment flows. Stronger yen helps Japanese hydrogen importers. Equipment imports from Japan more expensive.</td></tr>
+        <tr><td class="co-name">PBOC (China)</td><td>Stimulus mode</td><td>Chinese competition in solar/battery manufacturing intensifies. Geopolitical decoupling drives higher costs for non-China supply chains â€” benefiting India's PLI manufacturing buildout.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 class="sub-title">Final Actionable Investment Themes</h3>
+  <div class="success-box">
+    <strong>The Five Mega-Themes for Energy Investors (2026â€“2030):</strong>
+    <ol style="margin-top:10px;padding-left:20px">
+      <li><strong>AI Power Infrastructure:</strong> The #1 theme globally. Bloom Energy, NextEra, Constellation (US). NTPC, Power Grid, Adani Green, L&T (India). Structural multi-year demand driver.</li>
+      <li><strong>India Nuclear Renaissance:</strong> PFBR criticality + SHANTI Act = private capital entering nuclear for first time. L&T (SMR construction EPC), BHEL (reactor components), NTPC (nuclear subsidiary). Decade-long build cycle.</li>
+      <li><strong>India Solar Manufacturing:</strong> Waaree Energies, Premier Energies, Borosil Renewables benefit from both domestic buildout and export to US/EU as supply chains decouple from China. PLI schemes = extraordinary margin support.</li>
+      <li><strong>Green Hydrogen Export:</strong> India positioned as cheapest green hydrogen producer globally. NTPC Green, Reliance, GAIL for production. L&T for electrolyzer manufacturing. Early-stage but multi-decade opportunity.</li>
+      <li><strong>Energy Transmission & Distribution:</strong> Every electron needs wires. Power Grid, KEC International, Polycab, KEI Industries â€” the ultimate "picks and shovels" play on India's energy supercycle. Boring but highly predictable returns.</li>
+    </ol>
+  </div>
+
+  <div class="cosmic-divider"><span>âœ¦</span></div>
+
+  <div class="report-footer">
+    <p><strong>Global Energy Intelligence Report â€” May 2026</strong></p>
+    <p>Prepared by: Cosmic Financial Analyst | Astrological Framework: Jyotish Mundane Astrology (M.N. Kedar)</p>
+    <p>This report is interpretative and probabilistic in nature. It does not constitute investment advice.<br>All forecasts carry uncertainty. Past planetary correlations are not guarantees of future results.<br>Please consult qualified financial and investment advisors before making investment decisions.</p>
+    <p style="color:var(--text-muted);font-size:11px;margin-top:12px">Data sources: IEA, Gartner, Goldman Sachs, BCG, McKinsey, Invest India, MNRE, World Nuclear Association, PIB India, Brookings, Motley Fool, CNBC, Forbes, Situational Awareness LP 13F filings</p>
+  </div>
+</section>
+
+</div>
+
+<!-- Scripts -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+function showTab(id) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  event.target.classList.add('active');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+const aiChart = document.getElementById('aiPowerChart');
+if (aiChart) {
+  new Chart(aiChart, {
+    type: 'bar',
+    data: {
+      labels: ['2024', '2025', '2026E', '2027E', '2028E', '2029E', '2030E'],
+      datasets: [
+        {
+          label: 'AI-Optimized Servers (TWh)',
+          data: [65, 93, 140, 205, 285, 360, 432],
+          backgroundColor: 'rgba(201,168,76,0.75)',
+          borderColor: '#C9A84C',
+          borderWidth: 1,
+        },
+        {
+          label: 'Total Data Center (TWh)',
+          data: [415, 485, 580, 680, 780, 870, 945],
+          type: 'line',
+          borderColor: '#3D8EFF',
+          backgroundColor: 'rgba(61,142,255,0.1)',
+          borderWidth: 2,
+          tension: 0.4,
+          fill: false,
+          pointRadius: 4,
+          pointBackgroundColor: '#3D8EFF',
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#0D1526',
+          borderColor: '#C9A84C',
+          borderWidth: 1,
+          titleColor: '#C9A84C',
+          bodyColor: '#B8B4A8',
+          callbacks: {
+            label: ctx => ctx.dataset.label + ': ' + ctx.parsed.y + ' TWh'
+          }
+        }
+      },
+      scales: {
+        x: {
+          ticks: { color: '#7A7870', font: { size: 12 } },
+          grid: { color: 'rgba(255,255,255,0.05)' }
+        },
+        y: {
+          ticks: {
+            color: '#7A7870',
+            font: { size: 12 },
+            callback: v => v + ' TWh'
+          },
+          grid: { color: 'rgba(255,255,255,0.05)' }
+        }
+      }
+    }
+  });
+}
+</script>
+</body>
+</html>
+
