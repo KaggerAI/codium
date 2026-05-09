@@ -3369,6 +3369,93 @@ def fetch_index_data():
     return result
 
 
+# --- Market Indices API (for homepage ticker strip) ---
+_market_indices_cache = {'data': None, 'timestamp': 0}
+
+@app.route('/api/market-indices', methods=['GET'])
+def api_market_indices():
+    """
+    Return live market index data for NIFTY 50, SENSEX, NIFTY BANK, NIFTY IT, INDIA VIX.
+    Cached for 5 minutes to avoid excessive yfinance calls.
+    """
+    import yfinance as yf
+    from datetime import datetime as dt
+    import pytz
+
+    cache_ttl = 300  # 5 minutes
+    now = time.time()
+
+    # Return cached data if fresh enough
+    if _market_indices_cache['data'] and (now - _market_indices_cache['timestamp']) < cache_ttl:
+        return jsonify(_market_indices_cache['data'])
+
+    # Yahoo Finance tickers for Indian indices
+    index_map = {
+        '^NSEI':    'NIFTY 50',
+        '^BSESN':   'SENSEX',
+        '^NSEBANK': 'NIFTY BANK',
+        '^CNXIT':   'NIFTY IT',
+        '^INDIAVIX': 'INDIA VIX',
+    }
+
+    indices = []
+    try:
+        tickers_str = ' '.join(index_map.keys())
+        data = yf.download(tickers_str, period='5d', interval='1d', auto_adjust=False, progress=False)
+
+        for symbol, label in index_map.items():
+            try:
+                if len(index_map) > 1:
+                    if 'Close' in data and symbol in data['Close']:
+                        close_series = data['Close'][symbol].dropna()
+                    else:
+                        close_series = None
+                else:
+                    close_series = data['Close'].dropna()
+
+                if close_series is not None and len(close_series) >= 2:
+                    close = float(close_series.iloc[-1])
+                    prev_close = float(close_series.iloc[-2])
+                    change_pct = round(((close - prev_close) / prev_close) * 100, 2) if prev_close > 0 else 0
+                    indices.append({
+                        'label': label,
+                        'close': round(close, 2),
+                        'prev_close': round(prev_close, 2),
+                        'change_pct': change_pct,
+                    })
+                else:
+                    indices.append({'label': label, 'close': None, 'prev_close': None, 'change_pct': None})
+            except Exception as e:
+                print(f"MARKET-INDICES: Failed to parse {symbol}: {e}", file=sys.stderr)
+                indices.append({'label': label, 'close': None, 'prev_close': None, 'change_pct': None})
+    except Exception as e:
+        print(f"MARKET-INDICES: Batch download failed: {e}", file=sys.stderr)
+        for label in index_map.values():
+            indices.append({'label': label, 'close': None, 'prev_close': None, 'change_pct': None})
+
+    # Determine market status
+    ist = pytz.timezone('Asia/Kolkata')
+    now_ist = dt.now(ist)
+    market_open = now_ist.replace(hour=9, minute=15, second=0, microsecond=0)
+    market_close = now_ist.replace(hour=15, minute=30, second=0, microsecond=0)
+    is_weekday = now_ist.weekday() < 5
+    is_market_open = is_weekday and market_open <= now_ist <= market_close
+
+    result = {
+        'indices': indices,
+        'market_open': is_market_open,
+        'market_status': 'Market Open' if is_market_open else 'Market Closed',
+        'market_time': now_ist.strftime('%I:%M %p IST').lstrip('0') if is_market_open else '3:30 PM IST',
+        'fetched_at': dt.now().isoformat(),
+    }
+
+    # Update cache
+    _market_indices_cache['data'] = result
+    _market_indices_cache['timestamp'] = now
+
+    return jsonify(result)
+
+
 # --- Parallel Per-Stock Data Gathering ---
 def _gather_stock_data_for_brief(holding, brief_type='post'):
     """

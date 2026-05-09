@@ -3950,35 +3950,8 @@
         <!-- Market Indices Ticker Strip -->
         <div id="marketIndicesCard" class="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 mb-6 w-full">
           <div class="grid grid-cols-6 gap-4" id="marketIndicesStrip">
-            <div class="text-center">
-              <div class="text-xs text-slate-400 font-medium mb-1">NIFTY 50</div>
-              <div class="text-lg font-bold text-slate-800">22,530.70</div>
-              <div class="text-xs text-emerald-600 font-medium">+0.62%</div>
-            </div>
-            <div class="text-center">
-              <div class="text-xs text-slate-400 font-medium mb-1">SENSEX</div>
-              <div class="text-lg font-bold text-slate-800">74,102.32</div>
-              <div class="text-xs text-emerald-600 font-medium">+0.58%</div>
-            </div>
-            <div class="text-center">
-              <div class="text-xs text-slate-400 font-medium mb-1">NIFTY BANK</div>
-              <div class="text-lg font-bold text-slate-800">48,915.65</div>
-              <div class="text-xs text-emerald-600 font-medium">+0.71%</div>
-            </div>
-            <div class="text-center">
-              <div class="text-xs text-slate-400 font-medium mb-1">NIFTY IT</div>
-              <div class="text-lg font-bold text-slate-800">34,150.80</div>
-              <div class="text-xs text-red-500 font-medium">-0.21%</div>
-            </div>
-            <div class="text-center">
-              <div class="text-xs text-slate-400 font-medium mb-1">INDIA VIX</div>
-              <div class="text-lg font-bold text-slate-800">13.24</div>
-              <div class="text-xs text-red-500 font-medium">-1.18%</div>
-            </div>
-            <div class="text-center flex flex-col justify-center">
-              <div class="text-xs text-slate-400 font-medium">Market Closed</div>
-              <div class="text-xs text-slate-400 mt-1">3:30 PM IST</div>
-            </div>
+            <!-- Dynamically populated by fetchMarketIndices() -->
+            <div class="col-span-6 text-center py-2 text-slate-400 text-sm">Loading market data...</div>
           </div>
         </div>
 
@@ -5017,6 +4990,61 @@
         } catch (e) { el.textContent = `${greeting}!`; }
       }
     })();
+
+    // Dynamic Market Indices
+    async function fetchMarketIndices() {
+      const strip = document.getElementById('marketIndicesStrip');
+      if (!strip) return;
+
+      try {
+        const res = await fetch('/api/market-indices');
+        const data = await res.json();
+
+        if (!data.indices || data.indices.length === 0) {
+          strip.innerHTML = '<div class="col-span-6 text-center py-2 text-slate-400 text-sm">Market data unavailable</div>';
+          return;
+        }
+
+        const formatNum = (val) => {
+          if (val == null) return '—';
+          return val.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        };
+        const formatPct = (val) => {
+          if (val == null) return '—';
+          return (val > 0 ? '+' : '') + val.toFixed(2) + '%';
+        };
+        const pctColor = (val) => {
+          if (val == null) return 'text-slate-500';
+          return val >= 0 ? 'text-emerald-600' : 'text-red-500';
+        };
+
+        let html = '';
+        data.indices.forEach(idx => {
+          html += `
+            <div class="text-center">
+              <div class="text-xs text-slate-400 font-medium mb-1">${idx.label}</div>
+              <div class="text-lg font-bold text-slate-800">${formatNum(idx.close)}</div>
+              <div class="text-xs ${pctColor(idx.change_pct)} font-medium">${formatPct(idx.change_pct)}</div>
+            </div>`;
+        });
+
+        // Market status column
+        const statusDot = data.market_open
+          ? '<span class="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse mr-1"></span>'
+          : '';
+        html += `
+          <div class="text-center flex flex-col justify-center">
+            <div class="text-xs text-slate-400 font-medium">${statusDot}${data.market_status || 'Market Closed'}</div>
+            <div class="text-xs text-slate-400 mt-1">${data.market_time || '3:30 PM IST'}</div>
+          </div>`;
+
+        strip.innerHTML = html;
+      } catch (e) {
+        console.error('Failed to load market indices', e);
+        strip.innerHTML = '<div class="col-span-6 text-center py-2 text-slate-400 text-sm">Failed to load market data</div>';
+      }
+    }
+    fetchMarketIndices();
 
     // Dynamic Portfolio Metrics
     async function fetchPortfolioMetrics() {
