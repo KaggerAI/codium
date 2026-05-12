@@ -231,7 +231,11 @@ async def _fetch_latest_results_quarter(ticker: str) -> str:
     try:
         consolidated_url = f"https://www.screener.in/company/{ticker}/consolidated/"
         standalone_url = f"https://www.screener.in/company/{ticker}/"
-        headers = {"User-Agent": "Mozilla/5.0"}
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
+        }
         quarter_pattern = re.compile(r'^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{4}$', re.IGNORECASE)
 
         async def _get_quarter_from_url(url):
@@ -295,7 +299,11 @@ async def _extract_text_from_webpage(url: str, max_chars: int = 80000) -> str:
     hosted on sites like Trendlyne, MoneyControl, etc.).
     """
     try:
-        headers = {"User-Agent": "Mozilla/5.0"}
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
+        }
         async with httpx.AsyncClient(follow_redirects=True) as client:
             response = await client.get(url, headers=headers, timeout=30.0)
             response.raise_for_status()
@@ -546,7 +554,12 @@ async def _transcribe_audio_video_from_url(url: str, media_type: str = 'audio',
         print(f"CONCALL_AGENT: Downloading {media_type} from {url}", file=sys.stderr)
 
         # Download the file
-        headers = {"User-Agent": "Mozilla/5.0"}
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+            "Accept": "audio/mpeg,audio/*,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Referer": url.rsplit('/', 1)[0] + "/",
+        }
         async with httpx.AsyncClient(follow_redirects=True) as client:
             response = await client.get(url, headers=headers, timeout=120.0)
             response.raise_for_status()

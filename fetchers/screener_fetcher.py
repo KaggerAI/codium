@@ -5,6 +5,7 @@ This module encapsulates all the functions required to scrape and parse
 company information, financial tables, and documents from the Screener.in website.
 """
 
+import sys
 import requests
 import pandas as pd
 from bs4 import BeautifulSoup
@@ -42,7 +43,13 @@ else:
 # --- Constants related to Screener.in ---
 BASE_URL = "https://www.screener.in/company/{ticker}/consolidated/"
 
-HEADERS = {"User-Agent": "Mozilla/5.0"}
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,application/pdf,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Connection": "keep-alive",
+}
 LABELS = {
     1: "Quarterly Results",
     2: "Annual Results",
@@ -1346,13 +1353,17 @@ async def fetch_latest_document_dates_async(ticker: str) -> dict:
 async def fetch_latest_documents_async(ticker: str) -> list[dict]:
     try:
         url = BASE_URL.format(ticker=ticker)
+        print(f"CONCALL_AGENT: fetch_latest_documents_async — fetching {url}", file=sys.stderr)
         async with httpx.AsyncClient(follow_redirects=True) as client:
             response = await client.get(url, headers=HEADERS, timeout=45.0)
             response.raise_for_status()
         
+        print(f"CONCALL_AGENT: Screener page fetched OK ({response.status_code}, {len(response.text)} chars)", file=sys.stderr)
         soup = BeautifulSoup(response.text, 'html.parser')
         concalls_section = soup.find('div', class_='concalls')
-        if not concalls_section: return []
+        if not concalls_section:
+            print(f"CONCALL_AGENT: ⚠️ No 'concalls' section found on Screener page for {ticker}", file=sys.stderr)
+            return []
 
         tasks_to_run = []
         doc_infos = []
@@ -1373,6 +1384,8 @@ async def fetch_latest_documents_async(ticker: str) -> list[dict]:
                     if rec_link:
                         doc_info["rec_link"] = rec_link['href']
                     
+                    print(f"CONCALL_AGENT: Found Concall doc — transcript_link={'YES' if transcript_link else 'NO'}, rec_link={'YES' if rec_link else 'NO'}, pdf={link[:80] if link else 'NONE'}", file=sys.stderr)
+                    
                     if link:
                         tasks_to_run.append(get_text_from_pdf_url_async(doc_info['link']))
                     else:
@@ -1391,8 +1404,11 @@ async def fetch_latest_documents_async(ticker: str) -> list[dict]:
                     doc_infos.append(doc_info)
                     found_types.add('Presentation')
         
-        if not tasks_to_run: return []
+        if not tasks_to_run:
+            print(f"CONCALL_AGENT: ⚠️ No Concall/Presentation documents found in concalls section for {ticker}", file=sys.stderr)
+            return []
         
+        print(f"CONCALL_AGENT: Fetching and analyzing {len(tasks_to_run)} documents in parallel...", file=sys.stderr)
         log_progress(f"Fetching and analyzing {len(tasks_to_run)} documents in parallel...")
         summaries = await asyncio.gather(*tasks_to_run, return_exceptions=True)
         
@@ -1400,9 +1416,11 @@ async def fetch_latest_documents_async(ticker: str) -> list[dict]:
         for i, summary in enumerate(summaries):
             doc_info = doc_infos[i]
             if isinstance(summary, Exception):
-                print(f"Failed to process document {doc_info['link']}: {summary}")
+                print(f"CONCALL_AGENT: ❌ Failed to process document {doc_info['type']} {doc_info['link'][:80]}: {summary}", file=sys.stderr)
                 doc_info['content_summary'] = f"Error processing document: {summary}"
             else:
+                content_len = len(summary) if summary else 0
+                print(f"CONCALL_AGENT: ✓ Processed {doc_info['type']} — {content_len} chars", file=sys.stderr)
                 doc_info['content_summary'] = summary
             final_docs.append(doc_info)
         

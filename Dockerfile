@@ -5,6 +5,7 @@ FROM python:3.10-slim
 WORKDIR /app
 
 # 1. Install System Dependencies required for compiling TA-Lib and Playwright
+#    nodejs is needed by yt-dlp for YouTube JS extraction
 RUN apt-get update && apt-get install -y \
     gcc \
     g++ \
@@ -14,6 +15,7 @@ RUN apt-get update && apt-get install -y \
     git \
     libffi-dev \
     libssl-dev \
+    nodejs \
     && rm -rf /var/lib/apt/lists/*
 
 # 2. Compile and Install TA-Lib (The C-Library) from source

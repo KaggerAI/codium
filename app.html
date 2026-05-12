@@ -4073,7 +4073,14 @@
           </div>
         </div>
 
-        <form id="sidebarChatForm" class="p-4 bg-white border-t border-slate-200 shadow-lg">
+        <form id="sidebarChatForm" class="p-4 bg-white border-t border-slate-200 shadow-lg relative">
+          <!-- @Mention dropdown for Industry Mode (positioned above the input) -->
+          <div id="sidebarMentionDropdown"
+            class="absolute bottom-full left-0 right-0 mb-1 mx-4 bg-white border border-slate-300 rounded-lg shadow-xl max-h-48 overflow-y-auto hidden z-50"
+            style="font-size: 13px;">
+          </div>
+          <!-- Selected company tags (Industry Mode) -->
+          <div id="sidebarSelectedCompanies" class="flex flex-wrap gap-1.5 mb-2 hidden"></div>
           <div class="flex gap-2">
             <input id="sidebarChatInput" type="text" placeholder="Ask about this analysis..."
               class="flex-grow border border-slate-200 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm" />
@@ -5620,6 +5627,56 @@
       }
     });
 
+    // =====================================================================
+    // COMPANY REGISTRY: Extract tickers from industry report text
+    // Used by AI-powered company detection in industry chat
+    // =====================================================================
+    function extractCompanyRegistry(reportMarkdown) {
+      if (!reportMarkdown || typeof allStocks === 'undefined' || !allStocks || !allStocks.length) {
+        console.warn('[REGISTRY] Cannot extract: allStocks not loaded or no report text');
+        return [];
+      }
+      const reportUpper = reportMarkdown.toUpperCase();
+      const found = [];
+      const seen = new Set();
+
+      for (const stock of allStocks) {
+        if (seen.has(stock.ticker)) continue;
+        let matched = false;
+
+        // 1. Match ticker symbol (word boundary, min 4 chars to avoid false positives like YES, CAN, IT)
+        if (stock.ticker.length >= 4) {
+          try {
+            const escaped = stock.ticker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const tickerRegex = new RegExp('\\b' + escaped + '\\b');
+            if (tickerRegex.test(reportUpper)) {
+              matched = true;
+            }
+          } catch (e) { /* skip invalid regex */ }
+        }
+
+        // 2. Match company name (clean common suffixes, require >= 6 chars to avoid noise)
+        if (!matched && stock.name) {
+          const cleanName = stock.name
+            .replace(/\s*(Limited|Ltd\.?|Corporation|Corp\.?|Inc\.?|Pvt\.?|Private|Company|Co\.?)\s*/gi, '')
+            .trim();
+          if (cleanName.length >= 6) {
+            const nameUpper = cleanName.toUpperCase();
+            if (reportUpper.includes(nameUpper)) {
+              matched = true;
+            }
+          }
+        }
+
+        if (matched) {
+          found.push({ ticker: stock.ticker, name: stock.name });
+          seen.add(stock.ticker);
+        }
+      }
+      console.log(`[REGISTRY] Extracted ${found.length} companies from industry report:`, found.map(c => c.ticker));
+      return found;
+    }
+
     // Shared polling function - can be called from new research or resume
     async function pollForIndustryResult(jobId, industry, horizon, depth) {
       const pollInterval = 5000; // 5 seconds
@@ -5702,6 +5759,10 @@
             // Save context for Industry Chatbot
             window.currentIndustryName = industry;
             window.currentIndustryReport = statusPayload.report;
+
+            // Extract company registry from report for AI-powered company detection
+            window.currentIndustryCompanyRegistry = extractCompanyRegistry(statusPayload.report);
+            console.log(`[REGISTRY] ${window.currentIndustryCompanyRegistry.length} companies available for smart detection`);
 
             // Open AI Chat Sidebar now that we have results
             if (typeof toggleChatSidebar === 'function') {
@@ -7814,8 +7875,43 @@
     chatModal.addEventListener('click', (event) => { if (event.target === chatModal) { chatModal.classList.add('hidden'); if (isFullscreen) toggleFullscreen(); } });
     chatForm.addEventListener('submit', async e => {
       e.preventDefault();
-      const q = chatInput.value.trim();
+      let q = chatInput.value.trim();
       if (!q) return;
+
+      // In Industry Mode: if companies were selected via @mention dropdown,
+      // inject them back into the question text so the AI knows what to look up
+      let companiesToSend = [];
+      if (typeof currentMode !== 'undefined' && currentMode === 'industry') {
+        const sidebarCompanies = window.sidebarSelectedCompanies || [];
+
+        // Extract any @TICKER mentions already in the typed text
+        const tickerRegex = /@([A-Z0-9-]+)/gi;
+        let match;
+        const inlineCompanies = [];
+        const inlineTickers = new Set();
+        while ((match = tickerRegex.exec(q)) !== null) {
+          const ticker = match[1].toUpperCase();
+          inlineTickers.add(ticker);
+          const tracked = sidebarCompanies.find(c => c.ticker === ticker);
+          inlineCompanies.push({ name: tracked ? tracked.name : ticker, ticker });
+        }
+
+        // Merge: add sidebar-selected companies that aren't already @mentioned in text
+        const allCompanies = [...inlineCompanies];
+        for (const sc of sidebarCompanies) {
+          if (!inlineTickers.has(sc.ticker)) {
+            allCompanies.push(sc);
+            // Prepend @TICKER to the question so the AI sees it
+            q = `@${sc.ticker} ${q}`;
+          }
+        }
+        companiesToSend = allCompanies;
+
+        // Clear selected companies after sending
+        window.sidebarSelectedCompanies = [];
+        renderSidebarSelectedCompanies();
+      }
+
       appendMessage(q, 'user');
       chatInput.value = '';
       chatInput.disabled = true;
@@ -7832,7 +7928,9 @@
             body: JSON.stringify({
               question: q,
               industry: window.currentIndustryName || '',
-              report_context: window.currentIndustryReport || ''
+              report_context: window.currentIndustryReport || '',
+              companies: companiesToSend,
+              company_registry: window.currentIndustryCompanyRegistry || []
             })
           });
         } else {
@@ -7945,6 +8043,119 @@
         industryContainer.classList.remove('hidden');
       }
     }
+
+    // =====================================================================
+    // SIDEBAR @MENTION AUTOCOMPLETE (Industry Mode)
+    // Reuses the global allStocks array from company search
+    // =====================================================================
+    window.sidebarSelectedCompanies = [];
+    const sidebarMentionDropdown = document.getElementById('sidebarMentionDropdown');
+    const sidebarSelectedContainer = document.getElementById('sidebarSelectedCompanies');
+
+    function filterSidebarStocks(query) {
+      if (!query || typeof allStocks === 'undefined' || !allStocks || !allStocks.length) return [];
+      const q = query.toLowerCase();
+      return allStocks.filter(s =>
+        s.ticker.toLowerCase().startsWith(q) ||
+        s.name.toLowerCase().includes(q)
+      ).slice(0, 8);
+    }
+
+    function renderSidebarMentionDropdown(stocks) {
+      if (!sidebarMentionDropdown) return;
+      if (!stocks.length) { sidebarMentionDropdown.classList.add('hidden'); return; }
+      sidebarMentionDropdown.classList.remove('hidden');
+      sidebarMentionDropdown.innerHTML = stocks.map((s, i) => `
+        <div class="px-3 py-2 cursor-pointer hover:bg-blue-50 flex items-center justify-between ${i === 0 ? 'bg-blue-50' : ''}"
+             data-ticker="${s.ticker}" data-name="${s.name}"
+             onclick="selectSidebarMention('${s.ticker}', '${s.name.replace(/'/g, "\\'")}')">
+          <span class="font-semibold text-slate-800">${s.ticker}</span>
+          <span class="text-slate-500 text-xs ml-2 truncate" style="max-width:160px">${s.name}</span>
+        </div>
+      `).join('');
+    }
+
+    function selectSidebarMention(ticker, name) {
+      if (!window.sidebarSelectedCompanies.find(c => c.ticker === ticker)) {
+        window.sidebarSelectedCompanies.push({ ticker, name });
+        renderSidebarSelectedCompanies();
+      }
+      // Remove the @query from input
+      if (chatInput) {
+        chatInput.value = chatInput.value.replace(/@[A-Za-z0-9-]*$/, '').trim();
+        chatInput.focus();
+      }
+      if (sidebarMentionDropdown) sidebarMentionDropdown.classList.add('hidden');
+    }
+
+    function renderSidebarSelectedCompanies() {
+      if (!sidebarSelectedContainer) return;
+      if (!window.sidebarSelectedCompanies.length) {
+        sidebarSelectedContainer.classList.add('hidden');
+        return;
+      }
+      sidebarSelectedContainer.classList.remove('hidden');
+      sidebarSelectedContainer.innerHTML = window.sidebarSelectedCompanies.map(c => `
+        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700 border border-blue-200">
+          ${c.ticker}
+          <button onclick="removeSidebarMention('${c.ticker}')" class="hover:text-red-500 ml-0.5">&times;</button>
+        </span>
+      `).join('');
+    }
+
+    window.removeSidebarMention = function(ticker) {
+      window.sidebarSelectedCompanies = window.sidebarSelectedCompanies.filter(c => c.ticker !== ticker);
+      renderSidebarSelectedCompanies();
+    };
+
+    // Listen for @mentions in sidebar input (only in industry mode)
+    if (chatInput) {
+      chatInput.addEventListener('input', function() {
+        if (typeof currentMode === 'undefined' || currentMode !== 'industry') {
+          if (sidebarMentionDropdown) sidebarMentionDropdown.classList.add('hidden');
+          return;
+        }
+        const val = this.value;
+        const atMatch = val.match(/@([A-Za-z0-9-]*)$/);
+        if (atMatch && atMatch[1].length >= 1) {
+          const results = filterSidebarStocks(atMatch[1]);
+          renderSidebarMentionDropdown(results);
+        } else {
+          if (sidebarMentionDropdown) sidebarMentionDropdown.classList.add('hidden');
+        }
+      });
+    }
+
+    // Update placeholder when mode switches
+    function updateSidebarPlaceholder(mode) {
+      if (!chatInput) return;
+      if (mode === 'industry') {
+        chatInput.placeholder = 'Ask about this industry... (use @ to tag companies)';
+      } else {
+        chatInput.placeholder = 'Ask about this analysis...';
+      }
+      // Hide/show selected companies based on mode
+      if (sidebarSelectedContainer) {
+        if (mode !== 'industry') sidebarSelectedContainer.classList.add('hidden');
+        else if (window.sidebarSelectedCompanies.length) sidebarSelectedContainer.classList.remove('hidden');
+      }
+    }
+
+    // Hook into setMode if it exists
+    const _origSetMode = typeof setMode === 'function' ? setMode : null;
+    if (_origSetMode) {
+      // We'll patch setMode to also update the placeholder
+      // But setMode is defined elsewhere, so we add a MutationObserver on the toggle instead
+    }
+    // Use an interval to detect mode changes (lightweight)
+    let _lastMode = typeof currentMode !== 'undefined' ? currentMode : 'company';
+    setInterval(() => {
+      const m = typeof currentMode !== 'undefined' ? currentMode : 'company';
+      if (m !== _lastMode) {
+        _lastMode = m;
+        updateSidebarPlaceholder(m);
+      }
+    }, 500);
 
     let currentAnalysisKey = null; 
   </script>
