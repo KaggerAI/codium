@@ -1429,7 +1429,7 @@ async def fetch_latest_documents_async(ticker: str) -> list[dict]:
                     if rec_link:
                         doc_info["rec_link"] = rec_link['href']
                     
-                    print(f"CONCALL_AGENT: Found Concall doc — transcript_link={'YES' if transcript_link else 'NO'}, rec_link={'YES' if rec_link else 'NO'}, pdf={link[:80] if link else 'NONE'}", file=sys.stderr)
+                    print(f"CONCALL_AGENT: Found Concall doc — transcript_link={'YES' if transcript_link else 'NO'}, rec_link={'YES' if rec_link else 'NO'}, pdf={link or 'NONE'}", file=sys.stderr)
                     
                     if link:
                         tasks_to_run.append(get_text_from_pdf_url_async(doc_info['link']))
