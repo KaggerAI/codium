@@ -922,20 +922,76 @@ async def get_text_from_pdf_url_async(pdf_url: str, max_pages_to_process=75, max
     """
     Downloads a PDF and extracts text. Uses pdfplumber first, then falls back to
     Gemini Vision for scanned PDFs (images instead of selectable text).
+    If httpx download fails (403), retries with curl_cffi Chrome TLS impersonation.
     """
     MIN_TEXT_THRESHOLD = 500  # If less than this, assume scanned PDF
     
+    pdf_content = None
+    response = None
+    
+    # ── STAGE 1: Try httpx download ──
     try:
         # NOTE: verify=False for corporate IR sites with SSL cert issues
         async with httpx.AsyncClient(follow_redirects=True, verify=False) as client:
             response = await client.get(pdf_url, headers=HEADERS, timeout=45.0)
             response.raise_for_status()
-        
         pdf_content = response.content
-        
+        print(f"CONCALL_AGENT: PDF downloaded via httpx ({len(pdf_content)} bytes) from {pdf_url[:80]}", file=sys.stderr)
+    except Exception as httpx_err:
+        print(f"CONCALL_AGENT: httpx download failed for {pdf_url[:80]}: {httpx_err}", file=sys.stderr)
+    
+    # ── STAGE 2: If httpx failed, retry with curl_cffi (Chrome TLS impersonation) ──
+    if not pdf_content:
+        try:
+            def _curl_cffi_download(url):
+                from curl_cffi import requests as cffi_requests
+                proxy_url = os.environ.get("RESIDENTIAL_PROXY_URL")
+                proxies = {"http": proxy_url, "https": proxy_url} if proxy_url else None
+                if proxy_url:
+                    print(f"CONCALL_AGENT: Using residential proxy for {url[:80]}", file=sys.stderr)
+                else:
+                    print(f"CONCALL_AGENT: Retrying with curl_cffi (Chrome TLS impersonation) for {url[:80]}", file=sys.stderr)
+                
+                session = cffi_requests.Session(impersonate="chrome110", proxies=proxies)
+                r = session.get(
+                    url,
+                    headers={
+                        "Referer": url.rsplit('/', 1)[0] + "/",
+                        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,application/pdf,*/*;q=0.8",
+                    },
+                    allow_redirects=True,
+                    timeout=45
+                )
+                if r.status_code == 200 and r.content:
+                    print(f"CONCALL_AGENT: ✓ curl_cffi downloaded {len(r.content)} bytes", file=sys.stderr)
+                    return r.content, r.headers.get('content-type', ''), r.status_code
+                else:
+                    print(f"CONCALL_AGENT: curl_cffi returned status {r.status_code}", file=sys.stderr)
+                    return None, '', r.status_code
+            
+            result = await asyncio.to_thread(_curl_cffi_download, pdf_url)
+            if result[0]:
+                pdf_content = result[0]
+                # Create a mock response-like object for content-type checks below
+                class _MockResponse:
+                    def __init__(self, content, ct):
+                        self.content = content
+                        self.text = content.decode('utf-8', errors='replace') if content else ''
+                        self.headers = {'content-type': ct}
+                response = _MockResponse(pdf_content, result[1])
+        except ImportError:
+            print(f"CONCALL_AGENT: curl_cffi not installed, cannot retry PDF download", file=sys.stderr)
+        except Exception as cffi_err:
+            print(f"CONCALL_AGENT: curl_cffi fallback also failed for {pdf_url[:80]}: {cffi_err}", file=sys.stderr)
+    
+    if not pdf_content:
+        print(f"CONCALL_AGENT: ❌ All download methods failed for {pdf_url[:80]}", file=sys.stderr)
+        return None
+    
+    try:
         # --- FIX: Check if it's actually HTML (CRISIL often returns HTML pages for ratings) ---
         # 1. Check Content-Type header
-        content_type = response.headers.get('content-type', '').lower()
+        content_type = response.headers.get('content-type', '').lower() if response else ''
         # 2. Check Magic Bytes (%PDF)
         is_pdf_signature = pdf_content.strip().startswith(b'%PDF')
         
@@ -943,39 +999,28 @@ async def get_text_from_pdf_url_async(pdf_url: str, max_pages_to_process=75, max
             # It's likely an HTML page, not a PDF
             print(f"INFO: URL {pdf_url} appears to be HTML (Type: {content_type}). Parsing with BeautifulSoup...")
             try:
-                soup = BeautifulSoup(response.text, 'html.parser')
+                html_text = pdf_content.decode('utf-8', errors='replace') if isinstance(pdf_content, bytes) else response.text
+                soup = BeautifulSoup(html_text, 'html.parser')
                 
                 # --- SPECIAL CASE: ICRA Wrapper Page ---
-                # ICRA often embeds the PDF in an iframe with id="iframeRationaleReport"
-                # or has a script for DownloadRatingReport
                 icra_iframe = soup.find('iframe', id='iframeRationaleReport')
                 if icra_iframe:
-                    # src example: /web/viewer.html?file=/Rating/ShowRationalReportFilePdf/139291
-                    # We want to extract the ID: 139291
                     src = icra_iframe.get('src', '')
                     import re
                     match = re.search(r'ShowRationalReportFilePdf/(\d+)', src)
                     if match:
                         report_id = match.group(1)
-                        # Construct the direct download URL which is usually more reliable
-                        # https://www.icra.in/Rating/GetRationalReportFilePdf?Id=139291
                         direct_pdf_url = f"https://www.icra.in/Rating/GetRationalReportFilePdf?Id={report_id}"
                         print(f"INFO: Detected ICRA Wrapper. Redirecting to real PDF: {direct_pdf_url}")
-                        # Recursively fetch the real PDF
                         return await get_text_from_pdf_url_async(direct_pdf_url)
 
-                # Extract text using space separator
                 text = soup.get_text(separator=' ', strip=True)
-                
-                # --- CLEANING: Remove excessive whitespace ---
-                # HTML often results in many multiple spaces/newlines
                 import re
                 text = re.sub(r'\s+', ' ', text).strip()
                 
                 return text[:max_chars_to_return]
             except Exception as e:
                 print(f"WARN: HTML parsing failed for {pdf_url}: {e}")
-                # Fallthrough to try PDF parsing just in case, or return error
         
         pdf_file = BytesIO(pdf_content)
 
@@ -1020,7 +1065,7 @@ async def get_text_from_pdf_url_async(pdf_url: str, max_pages_to_process=75, max
         return extracted_text
         
     except Exception as e:
-        print(f"ERROR (async): Failed to get text from PDF URL {pdf_url}. Reason: {e}")
+        print(f"CONCALL_AGENT: ❌ get_text_from_pdf_url_async failed for {pdf_url}: {e}", file=sys.stderr)
         return None
 
 

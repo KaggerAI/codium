@@ -553,18 +553,47 @@ async def _transcribe_audio_video_from_url(url: str, media_type: str = 'audio',
     try:
         print(f"CONCALL_AGENT: Downloading {media_type} from {url}", file=sys.stderr)
 
-        # Download the file
+        # Download the file — try httpx first, then curl_cffi fallback
+        file_bytes = None
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
             "Accept": "audio/mpeg,audio/*,*/*;q=0.8",
             "Accept-Language": "en-US,en;q=0.9",
             "Referer": url.rsplit('/', 1)[0] + "/",
         }
-        async with httpx.AsyncClient(follow_redirects=True) as client:
-            response = await client.get(url, headers=headers, timeout=120.0)
-            response.raise_for_status()
+        try:
+            async with httpx.AsyncClient(follow_redirects=True) as client:
+                response = await client.get(url, headers=headers, timeout=120.0)
+                response.raise_for_status()
+            file_bytes = response.content
+        except Exception as httpx_err:
+            print(f"CONCALL_AGENT: httpx audio download failed ({httpx_err}), trying curl_cffi...", file=sys.stderr)
+            try:
+                def _cffi_audio_download(audio_url):
+                    from curl_cffi import requests as cffi_requests
+                    import os as _os2
+                    proxy_url = _os2.environ.get("RESIDENTIAL_PROXY_URL")
+                    proxies = {"http": proxy_url, "https": proxy_url} if proxy_url else None
+                    session = cffi_requests.Session(impersonate="chrome110", proxies=proxies)
+                    r = session.get(
+                        audio_url,
+                        headers={"Referer": audio_url.rsplit('/', 1)[0] + "/",
+                                 "Accept": "audio/mpeg,audio/*,*/*;q=0.8"},
+                        allow_redirects=True, timeout=120
+                    )
+                    if r.status_code == 200 and r.content:
+                        return r.content
+                    return None
+                file_bytes = await asyncio.to_thread(_cffi_audio_download, url)
+                if file_bytes:
+                    print(f"CONCALL_AGENT: ✓ curl_cffi audio download succeeded ({len(file_bytes)} bytes)", file=sys.stderr)
+            except Exception as cffi_err:
+                print(f"CONCALL_AGENT: curl_cffi audio fallback also failed: {cffi_err}", file=sys.stderr)
 
-        file_bytes = response.content
+        if not file_bytes:
+            print(f"CONCALL_AGENT: ❌ All audio download methods failed for {url}", file=sys.stderr)
+            return ''
+
         file_size_mb = len(file_bytes) / (1024 * 1024)
         print(f"CONCALL_AGENT: Downloaded {file_size_mb:.1f} MB of {media_type}", file=sys.stderr)
 
