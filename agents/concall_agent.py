@@ -126,11 +126,16 @@ def _search_youtube_concall(company_name: str, ticker: str, quarter: str = '') -
     # Limit to 4 most promising queries to avoid excessive API calls
     unique_queries = unique_queries[:4]
     
+    import os as _os
+    proxy_url = _os.environ.get("RESIDENTIAL_PROXY_URL")
+    
     ydl_opts = {
         'quiet': True,
         'skip_download': True,
         'extract_flat': False,
     }
+    if proxy_url:
+        ydl_opts['proxy'] = proxy_url
     
     def _is_valid_video(vid):
         """Check if video meets duration and recency criteria."""
@@ -434,8 +439,10 @@ async def _extract_youtube_transcript(url: str, max_chars: int = 80000) -> str:
             with tempfile.TemporaryDirectory() as tmp_dir:
                 output_path = f"{tmp_dir}/audio.%(ext)s"
 
-                # Download audio only via yt-dlp
                 import yt_dlp
+                import os as _os
+                proxy_url = _os.environ.get("RESIDENTIAL_PROXY_URL")
+                
                 ydl_opts = {
                     'format': 'bestaudio[ext=m4a]/bestaudio/best',
                     'outtmpl': output_path,
@@ -443,6 +450,8 @@ async def _extract_youtube_transcript(url: str, max_chars: int = 80000) -> str:
                     'no_warnings': True,
                     'extract_flat': False,
                 }
+                if proxy_url:
+                    ydl_opts['proxy'] = proxy_url
 
                 print(f"CONCALL_AGENT: Downloading YouTube audio via yt-dlp...", file=sys.stderr)
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -569,11 +578,16 @@ async def _transcribe_audio_video_from_url(url: str, media_type: str = 'audio',
         except Exception as httpx_err:
             print(f"CONCALL_AGENT: httpx audio download failed ({httpx_err}), trying curl_cffi...", file=sys.stderr)
             try:
-                def _cffi_audio_download(audio_url):
+                def _cffi_audio_download(audio_url, use_proxy=False):
                     from curl_cffi import requests as cffi_requests
                     import os as _os2
-                    proxy_url = _os2.environ.get("RESIDENTIAL_PROXY_URL")
-                    proxies = {"http": proxy_url, "https": proxy_url} if proxy_url else None
+                    proxies = None
+                    if use_proxy:
+                        proxy_url = _os2.environ.get("RESIDENTIAL_PROXY_URL")
+                        if proxy_url:
+                            proxies = {"http": proxy_url, "https": proxy_url}
+                        else:
+                            return None
                     session = cffi_requests.Session(impersonate="chrome110", proxies=proxies)
                     r = session.get(
                         audio_url,
@@ -584,7 +598,11 @@ async def _transcribe_audio_video_from_url(url: str, media_type: str = 'audio',
                     if r.status_code == 200 and r.content:
                         return r.content
                     return None
-                file_bytes = await asyncio.to_thread(_cffi_audio_download, url)
+                # Attempt 1: Direct (no proxy)
+                file_bytes = await asyncio.to_thread(_cffi_audio_download, url, False)
+                if not file_bytes:
+                    # Attempt 2: With proxy
+                    file_bytes = await asyncio.to_thread(_cffi_audio_download, url, True)
                 if file_bytes:
                     print(f"CONCALL_AGENT: ✓ curl_cffi audio download succeeded ({len(file_bytes)} bytes)", file=sys.stderr)
             except Exception as cffi_err:

@@ -9302,7 +9302,7 @@ def get_analysis_for_ticker(tick, skip_ai_summary=False):
             
             try:
                 frontend_compressed = zlib.compress(pickle.dumps(cache_payload))
-                timeout_val = get_seconds_to_next_quarter_boundary()
+                timeout_val = 10368000  # 4 months — consistent with run_batch_precache
                 cache.set(stock_cache_key, frontend_compressed, timeout=timeout_val)
                 DIRECT_REDIS_CLIENT.setex(stock_cache_key, timeout_val, frontend_compressed)
                 print(f"INFO: Successfully cached fallthrough data (no charts) for {tick} in Redis (timeout={timeout_val})", file=sys.stderr)
@@ -9707,7 +9707,9 @@ def analyze():
                             
                             try:
                                 frontend_compressed = zlib.compress(pickle.dumps(cache_payload))
-                                cache.set(stock_cache_key, frontend_compressed, timeout=STOCK_CACHE_TTL)
+                                cache.set(stock_cache_key, frontend_compressed, timeout=10368000)
+                                if DIRECT_REDIS_CLIENT:
+                                    DIRECT_REDIS_CLIENT.setex(stock_cache_key, 10368000, frontend_compressed)
                                 print(f"INFO: Saved light cache (no charts) for {tick}")
                             except Exception as e:
                                 print(f"WARN: Failed to save cache for {tick}: {e}")
@@ -9866,9 +9868,9 @@ def analyze():
                                             # 6. Re-save to Redis
                                             try:
                                                 frontend_compressed = zlib.compress(pickle.dumps(cached_result))
-                                                cache.set(stock_cache_key, frontend_compressed, timeout=STOCK_CACHE_TTL)
+                                                cache.set(stock_cache_key, frontend_compressed, timeout=10368000)
                                                 if DIRECT_REDIS_CLIENT:
-                                                    DIRECT_REDIS_CLIENT.setex(stock_cache_key, STOCK_CACHE_TTL, frontend_compressed)
+                                                    DIRECT_REDIS_CLIENT.setex(stock_cache_key, 10368000, frontend_compressed)
                                                 print(f"INFO: Updated cache with new documents + AI Summary for {tick}")
                                             except Exception as cache_save_err:
                                                 print(f"WARN: Failed to save updated cache for {tick}: {cache_save_err}")

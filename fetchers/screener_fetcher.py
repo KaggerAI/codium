@@ -938,19 +938,24 @@ async def get_text_from_pdf_url_async(pdf_url: str, max_pages_to_process=75, max
         pdf_content = response.content
         print(f"CONCALL_AGENT: PDF downloaded via httpx ({len(pdf_content)} bytes) from {pdf_url[:80]}", file=sys.stderr)
     except Exception as httpx_err:
-        print(f"CONCALL_AGENT: httpx download failed for {pdf_url[:80]}: {httpx_err}", file=sys.stderr)
+        print(f"CONCALL_AGENT: httpx download failed for {pdf_url}: {httpx_err}", file=sys.stderr)
     
     # ── STAGE 2: If httpx failed, retry with curl_cffi (Chrome TLS impersonation) ──
+    # Try direct first (TLS impersonation alone often bypasses 403), then with proxy
     if not pdf_content:
         try:
-            def _curl_cffi_download(url):
+            def _curl_cffi_download(url, use_proxy=False):
                 from curl_cffi import requests as cffi_requests
-                proxy_url = os.environ.get("RESIDENTIAL_PROXY_URL")
-                proxies = {"http": proxy_url, "https": proxy_url} if proxy_url else None
-                if proxy_url:
-                    print(f"CONCALL_AGENT: Using residential proxy for {url[:80]}", file=sys.stderr)
+                proxies = None
+                if use_proxy:
+                    proxy_url = os.environ.get("RESIDENTIAL_PROXY_URL")
+                    if proxy_url:
+                        proxies = {"http": proxy_url, "https": proxy_url}
+                        print(f"CONCALL_AGENT: Retrying with curl_cffi + residential proxy for {url}", file=sys.stderr)
+                    else:
+                        return None, '', 0  # No proxy configured
                 else:
-                    print(f"CONCALL_AGENT: Retrying with curl_cffi (Chrome TLS impersonation) for {url[:80]}", file=sys.stderr)
+                    print(f"CONCALL_AGENT: Retrying with curl_cffi (Chrome TLS impersonation, direct) for {url}", file=sys.stderr)
                 
                 session = cffi_requests.Session(impersonate="chrome110", proxies=proxies)
                 r = session.get(
@@ -969,10 +974,18 @@ async def get_text_from_pdf_url_async(pdf_url: str, max_pages_to_process=75, max
                     print(f"CONCALL_AGENT: curl_cffi returned status {r.status_code}", file=sys.stderr)
                     return None, '', r.status_code
             
-            result = await asyncio.to_thread(_curl_cffi_download, pdf_url)
+            # Attempt 1: Direct (no proxy) — TLS impersonation alone
+            result = await asyncio.to_thread(_curl_cffi_download, pdf_url, False)
             if result[0]:
                 pdf_content = result[0]
-                # Create a mock response-like object for content-type checks below
+            else:
+                # Attempt 2: With residential proxy
+                print(f"CONCALL_AGENT: Direct curl_cffi failed, trying with proxy...", file=sys.stderr)
+                result = await asyncio.to_thread(_curl_cffi_download, pdf_url, True)
+                if result[0]:
+                    pdf_content = result[0]
+            
+            if pdf_content:
                 class _MockResponse:
                     def __init__(self, content, ct):
                         self.content = content
@@ -982,10 +995,10 @@ async def get_text_from_pdf_url_async(pdf_url: str, max_pages_to_process=75, max
         except ImportError:
             print(f"CONCALL_AGENT: curl_cffi not installed, cannot retry PDF download", file=sys.stderr)
         except Exception as cffi_err:
-            print(f"CONCALL_AGENT: curl_cffi fallback also failed for {pdf_url[:80]}: {cffi_err}", file=sys.stderr)
+            print(f"CONCALL_AGENT: curl_cffi fallback also failed for {pdf_url}: {cffi_err}", file=sys.stderr)
     
     if not pdf_content:
-        print(f"CONCALL_AGENT: ❌ All download methods failed for {pdf_url[:80]}", file=sys.stderr)
+        print(f"CONCALL_AGENT: ❌ All download methods failed for {pdf_url}", file=sys.stderr)
         return None
     
     try:
