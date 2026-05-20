@@ -2568,8 +2568,15 @@
                             <div class="analysis-meta" id="concallAnalysisMeta"></div>
                         </div>
                     </div>
-                    <a href="#" class="analysis-source-link" id="concallSourceLink" target="_blank">View Transcript
-                        ↗</a>
+                    <div style="display:flex;align-items:center;gap:0.75rem;">
+                        <button class="analyze-btn" id="concallRefreshBtn"
+                            style="padding:0.5rem 1rem;font-size:0.75rem;"
+                            onclick="startConcallAnalysis(true)">
+                            🔄 Refresh
+                        </button>
+                        <a href="#" class="analysis-source-link" id="concallSourceLink" target="_blank">View Transcript
+                            ↗</a>
+                    </div>
                 </div>
                 <div class="analysis-body" id="concallAnalysisBody"></div>
             </div>
@@ -2919,6 +2926,8 @@
                 <div class="ticker-input-row" style="flex-direction: column; align-items: flex-start; gap: 1rem;">
                     <input type="file" id="docsumFileInput" accept=".pdf,.doc,.docx" class="ticker-input"
                         style="width: 100%; max-width: 400px; padding: 0.5rem; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 0.625rem; color: var(--text-primary);" />
+                    <textarea id="docsumUserPrompt" placeholder="Optional: Ask a specific question or give an instruction (e.g. 'What are the key risks?' or 'Summarize the revenue trends')"
+                        style="width: 100%; max-width: 600px; min-height: 80px; padding: 0.625rem; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 0.625rem; color: var(--text-primary); font-size: 0.875rem; resize: vertical; font-family: inherit;"></textarea>
                     <button class="analyze-btn" id="docsumAnalyzeBtn" onclick="startDocsumAnalysis()">
                         <span id="docsumBtnText">Summarize Document</span>
                     </button>
@@ -2970,8 +2979,11 @@
                 document.getElementById('docsumAnalyzeBtn').disabled = true;
                 document.getElementById('docsumBtnText').innerHTML = '<span class="spinner"></span> Analyzing...';
 
+                const userPrompt = document.getElementById('docsumUserPrompt').value.trim();
+
                 const formData = new FormData();
                 formData.append('file', file);
+                if (userPrompt) formData.append('user_prompt', userPrompt);
 
                 fetch('/agent/doc-summarizer/upload', {
                     method: 'POST',
@@ -3137,7 +3149,7 @@
         let concallTimerInterval = null;
         let currentConcallData = null;  // Persisted analysis data
 
-        function startConcallAnalysis() {
+        function startConcallAnalysis(forceRefresh = false) {
             // Determine ticker
             const ticker = concallSelectedTicker || concallInput.value.replace(/\s*\(.*\)\s*$/, '').trim().toUpperCase();
             if (!ticker) { return; }
@@ -3148,7 +3160,9 @@
             hideEl('concallChat');
             hideEl('concallMismatchNotice');
             showEl('concallProgress');
-            document.getElementById('concallProgressText').textContent = 'Starting concall analysis...';
+            document.getElementById('concallProgressText').textContent = forceRefresh
+                ? 'Refreshing concall analysis (ignoring cache)...'
+                : 'Starting concall analysis...';
             document.getElementById('concallAnalyzeBtn').disabled = true;
             document.getElementById('concallBtnText').innerHTML = '<span class="spinner"></span> Analyzing...';
 
@@ -3168,7 +3182,7 @@
             fetch('/agent/concall/analyze', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ticker })
+                body: JSON.stringify({ ticker, force_refresh: forceRefresh })
             })
                 .then(r => r.json())
                 .then(data => {

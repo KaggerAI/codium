@@ -5190,7 +5190,7 @@ def convert_to_gemini_format(messages):
             gemini_messages.append({'role': role, 'parts': [msg["content"]]})
     return gemini_messages
 
-def call_openai_api(messages, model="gpt-5.4-mini", expect_json_format_flag=False, temperature=1, timeout=180):
+def call_openai_api(messages, model="gpt-5.4-mini", expect_json_format_flag=False, temperature=1, timeout=180, max_tokens=None):
     """
     Call OpenAI API with configurable timeout.
     Default timeout is 180 seconds (3 minutes) for slower models like gpt-5.4-mini.
@@ -5204,6 +5204,8 @@ def call_openai_api(messages, model="gpt-5.4-mini", expect_json_format_flag=Fals
             "temperature": temperature,
             "timeout": timeout,  # Explicit timeout in seconds
         }
+        if max_tokens is not None:
+            completion_params["max_tokens"] = max_tokens
         # Use OpenAI's JSON mode for reliable structured output
         if expect_json_format_flag and ("-turbo" in model or "-o" in model):
             completion_params["response_format"] = {"type": "json_object"}
@@ -6552,12 +6554,141 @@ def ai_news_chat():
         }), 500
 
 
+INDUSTRY_FORMAT_SYSTEM_PROMPT = """You are a document formatting assistant for equity research reports. You receive one section of an industry report at a time. Your ONLY job is to apply structural markdown formatting improvements to make the section analyst-friendly.
+
+=== WHAT YOU MUST NEVER CHANGE ===
+Treat the following as sacred — reproduce them character-for-character:
+- All research text, analysis, narrative sentences, and paragraph content
+- All numbers, percentages, figures, statistics, estimates, ranges, and CAGRs
+- All company names, ticker symbols, and proper nouns
+- All markdown tables (every | character, header row, separator row, and data row)
+- All ```chart-line```, ```chart-pie```, and ```chart-bar``` code blocks
+- All citations, source references, URLs, and footnotes
+- All "Investor Implication:" paragraphs that already exist — reproduce verbatim
+- All sub-section titles (existing ### and #### headings) — preserve exact wording
+
+=== WHAT YOU MUST DO ===
+
+RULE 1 — SECTION HEADING NORMALISATION:
+The very first line must be formatted as: ## N) Title
+Where N is the section number given by the user, and Title is the original title text.
+Strip any existing number/prefix from the original (e.g. "## Executive Summary", "## Section 3:", "## 7. Value Chain") and reformat canonically.
+Preserve the title text EXACTLY after stripping the prefix.
+
+RULE 2 — PROSE LIST → BULLETS AND PARAGRAPH BREAKING:
+If a paragraph embeds 3 or more discrete items (demand drivers, risk factors, catalysts, participants, regulations, KPIs, constraints, policy measures) separated by commas, semicolons, "and", or "or":
+→ Convert each item to its own bullet point.
+→ LONG PARAGRAPH BREAKING: Any paragraph with more than 6 sentences MUST be broken into 2-3 shorter paragraphs, each covering one main idea.
+→ CRITICAL: You are ONLY allowed to restructure the text (e.g., convert sentences into bullet points or split paragraphs). You MUST NOT summarize, delete, omit, or alter any facts, data points, or meaning from the original text. ALL original content must be present in your reformatted output.
+→ Do NOT convert analytical narrative paragraphs (cause→effect reasoning, investment thesis, "Investor Implication") to bullets.
+→ When in doubt, convert to bullets.
+
+RULE 3 — VALUE CHAIN MAP (Section 7 ONLY):
+If the user says this is Section 7, do the following:
+a) Ensure exactly three ### sub-headings exist in the order:
+   ### Upstream: [subtitle]
+   ### Midstream: [subtitle]
+   ### Downstream: [subtitle]
+   If these headings already exist, keep their subtitle text exactly. If they are missing, infer short subtitles from the stage content.
+b) IMMEDIATELY after each ### heading, insert structured summary bullets.
+   Extract values from the existing text of that stage only — never invent data:
+   - **Key activities:** [3–5 specific activities from this stage's text, separated by semicolons; include specific materials, products, or processes named in the text — e.g. "Mining and refining of lithium, nickel and cobalt" not just "Mining and refining"; if fewer than 3 activities are mentioned, list only what is explicitly stated]
+   - **Key players:** [comma-separated company names and NSE/BSE tickers ONLY — real named companies and listed entities found in this stage's text; do NOT include abbreviations like OEM, EPC, BMS, EV, or generic phrases like "upstream suppliers", "global manufacturers", "battery makers"; if no named companies appear in this stage's text, omit this bullet entirely]
+   - **Margin profile:** [margin % range found in this stage's text]
+   - **Import dependency:** [import level and source countries found in this stage's text]
+   - **Key constraint:** [primary bottleneck found in this stage's text, one phrase]
+   - **Bargaining power:** [High / Moderate / Low — one-phrase detail from this stage's text]
+   Omit any bullet whose field cannot be found in that stage's original text.
+c) After the structured summary bullets, reproduce ALL original text for that stage VERBATIM
+   (prose paragraphs, existing bullet lists, tables, chart blocks — everything).
+
+RULE 4 — INVESTOR IMPLICATION:
+Every section must end with a **Investor Implication:** paragraph.
+- If one already exists → reproduce it VERBATIM. Do not move, rephrase, or shorten it.
+- If genuinely absent → write ONE sentence synthesised ONLY from facts already stated in this section. No new data, no new claims.
+
+RULE 5 — SUB-HEADINGS:
+Use ### for sub-sections, #### for sub-sub-sections. Preserve existing sub-heading title text exactly.
+
+=== OUTPUT RULE ===
+Return ONLY the reformatted section content. No preamble, no explanation, no "Here is the formatted section:", no commentary of any kind.
+"""
+
 INDUSTRY_RESEARCH_PROMPT = '''You are a buy-side equity research analyst writing an investor-grade INDIA industry report for a GROWTH stock investor.
+
+=== CRITICAL FORMATTING RULES (NEVER SKIP THESE — APPLY TO EVERY SECTION) ===
+1. Every numbered section MUST start with a ## Markdown heading (e.g., ## 1) Executive Summary (Investor Verdict))
+2. You MUST include AT LEAST 8 markdown data tables with real numbers using proper | header | separator | rows | format
+3. Every section MUST have at least 3 substantive paragraphs or equivalent bullet points with specific data
+4. Use ### for sub-sections within each major section, #### for sub-sub-sections
+5. Tables MUST have headers, alignment separators, and real data — NEVER use placeholder text like "X%" or "TBD"
+6. End EVERY major section with a bold "**Investor Implication:**" callout paragraph summarizing the section's investment relevance
+7. Be specific and numbers-driven. Prefer ranges and scenarios over vague statements.
+8. Separate FACTS vs ASSUMPTIONS vs OPINIONS explicitly.
+9. Use the most recent data available; always state "Data as of: <month year>".
+10. Provide citations/sources for key claims. If you cannot verify a number, write "Unknown", give a plausible range, and list what must be checked.
+11. MANDATORY: Include chart data blocks (see CHART DATA FORMAT below) — at least 4-6 across the full report
+
+=== READABILITY & VISUAL FORMATTING RULES ===
+Use BULLET POINTS (not paragraphs) when presenting:
+- Lists of 3+ demand drivers, supply constraints, risks, catalysts, or factors
+- Enumerated comparisons (e.g., "Company A does X, Company B does Y")
+- Checklists, due diligence items, or action items
+- Key takeaways or summary points within a section
+- Policy/regulation lists, technology comparisons, scenario assumptions
+
+Use PARAGRAPHS (not bullets) when presenting:
+- Narrative analysis explaining WHY something matters for investors
+- Thesis statements and investment verdicts
+- "Investor Implication" callouts at the end of sections
+- Context-setting introductions to each section
+- Detailed reasoning chains that connect cause to effect
+
+GENERAL RULES for readability:
+- Each paragraph should cover ONE main idea. Break long paragraphs (>6 sentences) into shorter ones. NEVER write a paragraph with more than 6 sentences. If you have more to say, start a new paragraph or use bullets.
+- After every table, add a 1-2 sentence interpretation ("Key takeaway from this data: ...")
+- Use **bold** for key numbers, company names, and verdicts within text
+- Use `inline code` sparingly — only for tickers and specific data labels
+- When listing ANY items (companies, drivers, risks, policies, metrics), ALWAYS use bullet points, even if there are only 2 items. Never embed them in a single paragraph.
+
+=== CHART DATA FORMAT (INCLUDE WHEREVER NUMERICAL DATA SUPPORTS VISUALIZATION) ===
+
+For time-series data (market size, growth, revenue trends), use a chart-line block:
+```chart-line
+title: Example Market Size Trend (INR Cr)
+x: ["FY21", "FY22", "FY23", "FY24", "FY25E", "FY26E", "FY27E"]
+y: [4500, 7200, 11000, 16500, 24000, 35000, 48000]
+ylabel: Market Size (INR Cr)
+```
+
+For market share, composition, or mix breakdowns, use a chart-pie block:
+```chart-pie
+title: Market Share Breakdown (FY25)
+labels: ["Company A", "Company B", "Company C", "Others"]
+values: [32, 24, 18, 26]
+```
+
+For company comparisons (ROCE, margins, growth rates), use a chart-bar block:
+```chart-bar
+title: ROCE Comparison (FY25)
+labels: ["Company A", "Company B", "Company C", "Company D"]
+values: [18.5, 15.2, 12.8, 22.1]
+ylabel: ROCE (%)
+```
+
+CHART RULES:
+- Include at least 4-6 chart blocks across the full report (market size trend, market share, ROCE comparison, margin comparison, scenario analysis, etc.)
+- Use chart-line for time series, chart-pie for composition/share, chart-bar for cross-company comparisons
+- All values must be real data or clearly-labeled estimates (use "E" suffix for estimates)
+- Place charts IMMEDIATELY AFTER the paragraph that discusses the data
+- Use real company names and tickers, not placeholders
+
+=== END FORMATTING RULES ===
 
 Fixed assumptions (do not ask the user):
 - Geography: India (include exports from India and imports into India where relevant)
 - Primary currency: INR; Secondary currency: USD (use USD mainly for global comps, commodities, trade, and FDI context)
-- Primary demonination: crores (for INR); Secondary demonination: millions (for USD)
+- Primary denomination: crores (for INR); Secondary denomination: millions (for USD)
 - Listed market focus: NSE & BSE
 - Company universe: ALL publicly listed entities (including conglomerates/proxies; clearly label exposure)
 - Risk tolerance: Medium to High (seek growth + rerating potential; accept some cyclicality but quantify it)
@@ -6568,19 +6699,12 @@ User inputs (only these vary):
 - Optional: specific companies/tickers to include: {OPTIONAL_TICKERS}
 - Optional: preferred depth: {DEPTH} (default STANDARD)
 
-Hard rules:
-- Be specific and numbers-driven. Prefer ranges and scenarios over vague statements.
-- Separate FACTS vs ASSUMPTIONS vs OPINIONS explicitly.
-- Use the most recent data available; always state "Data as of: <month year>".
-- Provide citations/sources for key claims (market size, growth, shares, regulation, FDI, pricing, input costs). If you cannot verify a number, write "Unknown", give a plausible range, and list what must be checked.
-- Tie every section back to revenue growth, margin trajectory, ROIC/ROCE, cash flows, and valuation/rerating potential for Indian listed companies.
-- Avoid fluff. If something doesn't impact investor outcomes, drop it.
+Tie every section back to revenue growth, margin trajectory, ROIC/ROCE, cash flows, and valuation/rerating potential for Indian listed companies.
+Avoid fluff. If something doesn't impact investor outcomes, drop it.
 
-OUTPUT FORMAT: Markdown with clear headings and tables. Start with a decisive executive summary.
+OUTPUT FORMAT: Markdown with ## headings, ### sub-headings, data tables, and chart data blocks. Start with a decisive executive summary.
 
-========================================
-1) Executive Summary (Investor Verdict)
-========================================
+## 1) Executive Summary (Investor Verdict)
 - One-line verdict: "Structurally Attractive / Mixed / Unattractive" for a 3–5 year growth investor.
 - 5 bullet "So what?" takeaways linking: growth drivers → pricing power → margins/ROIC → winners → risks.
 - Profit pools: where value is created/captured in the value chain (highest ROIC pockets).
@@ -6590,166 +6714,133 @@ OUTPUT FORMAT: Markdown with clear headings and tables. Start with a decisive ex
 - "Pickaxes vs Gold" upfront call: Is the best wealth-creation likely in the core industry or adjacent layers (upstream/downstream/enablers)? State which layer and why.
 - Thesis breakers (Top 5) + early warning indicators.
 - 6-18 month catalysts/headwinds (policy, capacity, price cycle, demand inflection, export tailwinds, tech shifts).
+Include a chart-bar block comparing Top Picks on a key metric (ROCE, revenue growth, or margin).
 
-========================================
-2) Industry Definition & Segmentation (India-first)
-========================================
+## 2) Industry Definition & Segmentation (India-first)
 - Define the industry precisely (include/exclude).
 - Segment revenue pools (product/service categories, customer segments, price tiers, geography within India).
 - India vs global: what is uniquely Indian vs globally driven?
+Include a chart-pie block showing revenue segmentation breakdown.
 
-========================================
-3) Market Size, Penetration, and Growth (History + Forecast)
-========================================
+## 3) Market Size, Penetration, and Growth (History + Forecast)
 - Current market size in INR and volume units (and USD where relevant).
 - Historical growth: 5-10 year CAGR + key inflection points (policy, commodity cycle, tech, demand shocks).
 - Forecast next {HORIZON_YEARS} years with Base/Bull/Bear:
   - Market size, CAGR, and key assumptions.
   - Penetration runway (if applicable): current penetration vs peers/China/US.
-Table:
-Year | Market size (INR) | YoY% | Key driver | Confidence (H/M/L)
 
-========================================
-4) Demand Engine (What grows it?)
-========================================
+MANDATORY table:
+| Year | Market Size (INR Cr) | YoY % | Key Driver | Confidence |
+|------|---------------------|-------|------------|------------|
+
+Include a chart-line block showing historical + forecast market size trend.
+
+## 4) Demand Engine (What grows it?)
 - Demand drivers: income, demographics, urbanization, capex cycle, exports, regulation, substitution.
 - Elasticity & pricing: discretionary vs non-discretionary; replacement/upgrade cycles.
 - Customer power & concentration (B2B/B2C) and impact on margins.
 - Cyclicality: sensitivity to GDP, rates, INR/USD, commodity prices.
 
-========================================
-5) Supply Engine (What constrains it?)
-========================================
+## 5) Supply Engine (What constrains it?)
 - Capacity landscape in India: utilization, constraints (raw material, energy, logistics, permits).
 - Capex pipeline: who is adding capacity, how much, when it comes online.
 - Demand vs supply balance: implications for pricing and margins for participants.
 
-========================================
-6) Competitive Landscape (Shares + Winners)
-========================================
-Provide a table:
-Company (NSE/BSE) | Exposure type (Pure/Mixed/Proxy) | Est. % revenue from industry | Market share (if applicable) | 3Y growth | Margins | ROCE | Net debt/EBITDA | Moat | Notes
+## 6) Competitive Landscape (Shares + Winners)
+
+MANDATORY table:
+| Company (NSE/BSE) | Exposure | Rev. from Industry | Market Share | 3Y Revenue Growth | EBITDA Margin | ROCE | Net Debt/EBITDA | Moat | Notes |
+|--------------------|----------|--------------------|--------------|--------------------|---------------|------|-----------------|------|-------|
+
 Include:
 - Top participants and share estimates (with method/source).
 - Fastest-growing participants and WHY (distribution, capacity, product, cost, tech).
 - Most profitable participants and WHY (cost position, branding, regulation, scale, integration).
+Include a chart-bar block comparing ROCE or EBITDA margins across top listed players.
 
-========================================
-7) Value Chain Map (Upstream → Midstream → Downstream)
-========================================
+## 7) Value Chain Map (Upstream → Midstream → Downstream)
 - Upstream industries + key suppliers (India/import dependence), concentration risk, alternative sourcing.
 - Midstream/core processes: where value add occurs and key bottlenecks.
 - Downstream industries + key customers/end markets and their health.
 - Identify who holds bargaining power and where margins structurally sit.
 
-========================================
-8) "Pickaxes vs Gold" Allocation: Where to Invest in the Value Chain
-========================================
-Objective: Assess whether an investor is better off investing in upstream or downstream industries/companies (NSE/BSE listed) rather than the focal industry, using a "pickaxes vs gold" framework.
+## 8) "Pickaxes vs Gold" Allocation: Where to Invest in the Value Chain
 
-Do this in 4 parts:
+### A) Profit Pool & Pricing Power by Layer
 
-A) Profit Pool & Pricing Power by Layer
-- For each layer (Upstream / Core industry / Downstream / Enablers), rate:
-  - Pricing power (High/Med/Low)
-  - Margin stability (High/Med/Low)
-  - ROIC durability (High/Med/Low)
-  - Cyclicality exposure (High/Med/Low)
-  - Disruption risk (High/Med/Low)
-- Explain, in investor terms, where the structurally better economics likely sit and why.
+MANDATORY table:
+| Layer | Pricing Power | Margin Stability | ROIC Durability | Cyclicality | Disruption Risk |
+|-------|--------------|------------------|-----------------|-------------|-----------------|
 
-B) When Upstream Wins vs When Downstream Wins (Rules of Thumb)
-- List conditions under which upstream is the superior wealth creator (e.g., input scarcity, strong supplier concentration, commodity upcycle with tight supply, regulated pricing downstream, high switching costs).
-- List conditions under which downstream is superior (e.g., strong branding/distribution moat, customer lock-in, value-added services, fragmented suppliers, ability to pass through costs, premiumization).
+Explain, in investor terms, where the structurally better economics likely sit and why.
+
+### B) When Upstream Wins vs When Downstream Wins (Rules of Thumb)
+- List conditions under which upstream is the superior wealth creator.
+- List conditions under which downstream is superior.
 - Call out the current regime for India in this industry: upstream-favoring, downstream-favoring, or balanced—and why.
 
-C) India Listed "Alternative Bets" (Investable)
-- Provide a shortlist of NSE/BSE listed companies that represent:
-  - Upstream beneficiaries ("shovel sellers")
-  - Downstream beneficiaries ("distribution/consumption toll booths")
-  - Enablers (logistics, testing/certification, software, capital goods, staffing, financing, infrastructure)
-- For each alternative bet, specify:
-  - Exposure type (Pure/Mixed/Proxy) + estimated percentage linkage to the focal industry
-  - Why it benefits (mechanism)
-  - Key KPI to track
-  - Biggest risk to the alternative thesis
+### C) India Listed "Alternative Bets" (Investable)
+- Provide a shortlist of NSE/BSE listed companies for: Upstream beneficiaries, Downstream beneficiaries, Enablers.
+- For each: Exposure type, Why it benefits, Key KPI to track, Biggest risk.
 
-D) Recommendation: Best Risk-Adjusted Exposure
-- Recommend the best layer to invest in (Upstream vs Core vs Downstream vs Enablers) for a Growth investor with medium–high risk tolerance.
-- Provide 1-2 portfolio constructions:
-  - "Conservative Growth": higher quality/less cyclical layer mix
-  - "Aggressive Growth": higher beta/optionalities
-- State what would change this recommendation (trigger points).
+### D) Recommendation: Best Risk-Adjusted Exposure
 
-Include a summary table:
-Layer | Why it wins | Typical winners | Typical losers | Best listed routes (examples) | Key KPIs | Risk flags
+MANDATORY summary table:
+| Layer | Why It Wins | Typical Winners | Typical Losers | Best Listed Routes | Key KPIs | Risk Flags |
+|-------|-------------|-----------------|----------------|-------------------|----------|------------|
 
-========================================
-9) Input Cost & Margin Sensitivity (Critical for investors)
-========================================
+## 9) Input Cost & Margin Sensitivity (Critical for investors)
 - Break down typical cost structure: raw materials, energy, labor, logistics, S&M, depreciation.
 - Top 5-10 inputs: domestic vs imported; INR/USD sensitivity; hedging practices.
 - Pass-through ability: contract vs spot; reset frequency.
-- Sensitivity table (ranges ok):
-Input +10% | EBITDA margin impact (bps) | Who is most/least protected (companies)
 
-========================================
-10) Unit Economics & ROIC Durability
-========================================
+MANDATORY sensitivity table:
+| Input +10% | EBITDA Margin Impact (bps) | Most Protected Company | Least Protected Company |
+|------------|---------------------------|----------------------|------------------------|
+
+## 10) Unit Economics & ROIC Durability
 - Unit economics (where applicable): CAC/LTV, payback, contribution margin, utilization leverage.
 - Working capital dynamics: inventory/receivables/payables; cash conversion cycle.
 - ROIC/ROCE drivers: why returns are high/low; sustainability of returns.
 
-========================================
-11) Regulation, Policy, and Compliance (India)
-========================================
+## 11) Regulation, Policy, and Compliance (India)
 - Current framework: key regulators, licenses, tariffs/duties, price controls, standards, environmental norms.
 - Recent changes (3-5 years) and real impact on industry structure and profitability.
 - Potential upcoming changes: policy drafts, litigation/court risk, political direction.
 - Investor impact: winners/losers + probability x impact assessment.
 Add "Policy Watchlist" and "Compliance Cost" discussion.
 
-========================================
-12) Trade, FX, and Global Linkages (Exports/Imports)
-========================================
+## 12) Trade, FX, and Global Linkages (Exports/Imports)
 - Imports: dependency, key source countries, duty structure, vulnerability.
 - Exports: addressable markets, competitiveness, trade barriers, currency impact (INR/USD).
 - How FX and global commodity cycles flow into Indian margins/realizations.
 
-========================================
-13) Foreign Capital & Ownership (FII/FDI/PE/VC)
-========================================
+## 13) Foreign Capital & Ownership (FII/FDI/PE/VC)
 - FDI trends: major projects/deals, where capital is going and why.
 - FII trends: sector ownership patterns, flows, and sensitivity triggers.
 - PE/VC and M&A: consolidation signals, typical multiples, strategic buyers.
 
-========================================
-14) Technology, Disruption, and Substitution Risk
-========================================
+## 14) Technology, Disruption, and Substitution Risk
 - Tech shifts changing cost curves/product superiority/route-to-market.
 - Substitute threats (imports, new materials, new business models).
 - Time-to-disruption: near/medium/far + who is best positioned.
 
-========================================
-15) ESG, Litigation, and Hidden Risk Map
-========================================
+## 15) ESG, Litigation, and Hidden Risk Map
 - Material ESG risks (emissions, water, safety, governance, product liability).
 - Regulatory/litigation tail risks.
 - Company preparedness differences and potential valuation impact.
 
-========================================
-16) Scenario Analysis (Base/Bull/Bear) + What to Track
-========================================
-For each scenario, quantify:
-- Demand growth, pricing, input costs, utilization
-- Expected impact on revenue growth, EBITDA margin, ROCE, and cash flows
+## 16) Scenario Analysis (Base/Bull/Bear) + What to Track
+
+MANDATORY table:
+| Scenario | Demand Growth | Pricing | Input Costs | Utilization | Revenue Growth | EBITDA Margin | ROCE Impact |
+|----------|--------------|---------|-------------|-------------|----------------|---------------|-------------|
+
 Then provide:
 - "5 KPIs to track quarterly" (industry + company level)
 - "Early warning signals" (leading indicators)
 
-========================================
-17) Investable Conclusions (Growth Investor Playbook)
-========================================
+## 17) Investable Conclusions (Growth Investor Playbook)
 - Rank listed companies into:
   A) Top Picks (best growth + quality of growth + rerating odds)
   B) Watchlist (needs trigger/price)
@@ -6758,33 +6849,225 @@ For each Top Pick include:
 - Why it wins (2-3 bullets)
 - Key catalysts/tailwind/headwind (6-18 months)
 - Key risks + what would change your mind
-- Valuation anchors: what multiple is justified and why (relative + historical bands if available)
-- Preferred entry conditions (what you'd wait for / what confirms breakout)
+- Valuation anchors: what multiple is justified and why
+- Preferred entry conditions
 
-========================================
-18) Valuation Context & Rerating Framework
-========================================
+## 18) Valuation Context & Rerating Framework
 - Typical sector multiples (P/E, EV/EBITDA, P/B where relevant) and what drives them.
 - Historical multiple bands (if available) and cycle positioning.
-- What causes rerating vs derating (ROIC inflection, margin expansion, governance, policy, cycle turn).
+- What causes rerating vs derating.
 
-========================================
-19) Due Diligence Checklist (Actionable)
-========================================
+Include a chart-bar block comparing current vs historical P/E or EV/EBITDA multiples for top companies.
+
+## 19) Due Diligence Checklist (Actionable)
 - 10-15 questions for management/channel checks specific to this industry.
 - Data sources to verify (government, regulator, trade data, tenders, industry bodies, company filings).
 - Common accounting red flags and how to detect them.
 
-========================================
-20) Appendix: Assumptions, Sources, Confidence
-========================================
+## 20) Appendix: Assumptions, Sources, Confidence
 - List key assumptions and uncertainty areas.
 - Sources & links grouped by: market sizing, regulation, trade, input prices, company shares.
 - Confidence score for the overall verdict: High/Med/Low + why.
 
 End with:
 "If I could only track 3 things to validate this industry thesis over the next 12 months, they are: …"
+
+=== CRITICAL COMPLETION RULE ===
+YOU MUST COMPLETE ALL 20 SECTIONS. DO NOT stop mid-sentence or leave any section unfinished.
+If you are running long, write sections 12-20 more concisely (shorter paragraphs, fewer sub-sections), but ALWAYS complete every section with a proper ending.
+The report MUST end with Section 20 (Appendix) and the "3 things to track" closing statement.
+NEVER leave the last section incomplete or cut off mid-word. Budget your output to ensure full coverage.
+=== END COMPLETION RULE ===
 '''
+
+def validate_industry_report(report):
+    """Score report quality and return metrics for frontend display."""
+    import re as _re
+    # Count all ## headings (for grading, backwards-compatible)
+    section_count = len(_re.findall(r'^## ', report, _re.MULTILINE))
+    # Also track how many use the canonical ## N) Title format (post-formatting-pass)
+    canonical_section_count = len(_re.findall(r'^## \d+\)', report, _re.MULTILINE))
+    tables = _re.findall(r'\|.*\|.*\n\|[-:| ]+\|', report)
+    charts = _re.findall(r'```chart-(line|pie|bar)', report)
+    words = len(report.split())
+
+    table_count = len(tables)
+    chart_count = len(charts)
+
+    if section_count >= 15 and table_count >= 6 and words >= 5000:
+        quality_grade = 'A'
+    elif section_count >= 10 and table_count >= 3 and words >= 3000:
+        quality_grade = 'B'
+    else:
+        quality_grade = 'C'
+
+    metrics = {
+        'section_count': section_count,
+        'canonical_section_count': canonical_section_count,
+        'table_count': table_count,
+        'chart_count': chart_count,
+        'word_count': words,
+        'quality_grade': quality_grade
+    }
+    print(f"INDUSTRY_REPORT_QUALITY: {metrics}", file=sys.stderr)
+    return metrics
+
+def format_industry_report(raw_report, industry):
+    """
+    Post-process the sonar-deep-research report through a fast formatting model.
+    Splits into sections, formats each in parallel via ThreadPoolExecutor, then reassembles.
+    Only applies structural markdown changes — never alters research content.
+    Fails gracefully: on any section error the original text is preserved.
+    """
+    import re as _re
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    # Split on ## section boundaries (each ## heading starts a new section)
+    parts = _re.split(r'(?m)(?=^## )', raw_report)
+    preamble = ''
+    sections = []
+    for part in parts:
+        stripped = part.strip()
+        if stripped.startswith('## '):
+            sections.append(stripped)
+        elif stripped:
+            preamble = stripped
+
+    if not sections:
+        print("FORMAT_PASS_WARN: No ## sections found — returning raw report", file=sys.stderr)
+        return raw_report
+
+    total = len(sections)
+    print(f"FORMAT_PASS_DEBUG: Formatting {total} sections in parallel for industry: {industry}", file=sys.stderr)
+
+    def format_one_section(args):
+        idx, section_text = args
+        messages = [
+            {"role": "system", "content": INDUSTRY_FORMAT_SYSTEM_PROMPT},
+            {"role": "user", "content": (
+                f"Industry: {industry}\n"
+                f"Section number in this report: {idx + 1} of {total}\n\n"
+                f"{section_text}"
+            )}
+        ]
+        try:
+            result = call_openai_api(
+                messages,
+                model="gpt-5.4-mini",
+                temperature=0.5,
+                timeout=120,
+                max_tokens=16384
+            )
+            if not result:
+                return idx, section_text
+            # Strip any preamble the model added before the ## heading
+            match = _re.search(r'^## ', result, _re.MULTILINE)
+            if match and match.start() > 0:
+                result = result[match.start():]
+            return idx, result
+        except Exception as e:
+            print(f"FORMAT_PASS_WARN: Section {idx + 1} failed ({type(e).__name__}: {e}) — using original", file=sys.stderr)
+            return idx, section_text
+
+    formatted = {}
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        futures = {
+            executor.submit(format_one_section, (i, s)): i
+            for i, s in enumerate(sections)
+        }
+        for future in as_completed(futures):
+            try:
+                idx, result = future.result()
+                formatted[idx] = result
+            except Exception as e:
+                i = futures[future]
+                print(f"FORMAT_PASS_WARN: Section {i + 1} future error: {e} — using original", file=sys.stderr)
+                formatted[i] = sections[i]
+
+    ordered = [formatted.get(i, sections[i]) for i in range(total)]
+
+    # Attempt to extract structured value chain JSON for Section 7
+    for i, section_text in enumerate(ordered):
+        if re.search(r'^##\s*(?:7\)?\.?\s*)?Value\s+Chain', section_text, re.IGNORECASE):
+            print("FORMAT_PASS_DEBUG: Extracting structured JSON for Value Chain section", file=sys.stderr)
+            vc_json = extract_value_chain_data(section_text, industry)
+            if vc_json:
+                ordered[i] = section_text + "\n\n```value-chain-data\n" + vc_json + "\n```\n"
+            break
+
+    parts_out = ([preamble] if preamble else []) + ordered
+    return '\n\n'.join(parts_out)
+
+def extract_value_chain_data(section_text, industry):
+    """
+    Extracts structured data for the Value Chain visual from Section 7 text.
+    Uses sonar-pro with Pro Search to fill in gaps with deep research if the text lacks specifics.
+    """
+    import json
+    import re
+    
+    prompt = f"""You are extracting and researching structured data for a Value Chain visualization for the {industry} industry.
+Given the following report section text, extract the data into a JSON object with exactly three keys: "upstream", "midstream", and "downstream".
+
+CRITICAL INSTRUCTION: If the provided text is too generic (e.g. just says "Mining" or "Manufacturing"), you MUST use your web search capabilities to find HIGHLY SPECIFIC, REAL-WORLD details for the {industry} industry in India. Do NOT just copy generic placeholders.
+
+For each stage, provide:
+- "subtitle": A short 3-5 word subtitle.
+- "activities": An array of concise, single-line activities (maximum 10 words per activity). They must be highly specific to the text but extremely concise (e.g. use "Mining rare earth minerals like lithium" rather than a long paragraph explaining how they are mined).
+- "players": An array of specific company names/tickers. Find real listed or major companies if they aren't in the text.
+- "margin": The margin % or range.
+- "import_dependency": Import/export context or dependencies.
+- "key_constraint": Primary bottleneck or risk.
+- "bargaining_power": An object with "level" (High, Moderate, Low) and "detail" (short phrase).
+- "regulatory": Array of relevant regulations or policies (e.g. PLI, FAME).
+
+You MUST return ONLY a valid JSON object. Wrap your response in ```json ... ``` tags. Do NOT include any other text, explanation, or commentary.
+
+Text to extract from (supplement this with your own research):
+{section_text}
+"""
+    
+    messages = [
+        {"role": "system", "content": "You are a precise data extraction and research API. Always return valid JSON inside a ```json block."},
+        {"role": "user", "content": prompt}
+    ]
+    
+    try:
+        print(f"FORMAT_PASS_DEBUG: Calling sonar-pro for Value Chain extraction with Pro Search", file=sys.stderr)
+        result = call_perplexity_api(
+            messages,
+            model="sonar-pro",
+            temperature=0.3,
+            timeout=180,
+            enable_pro_search=True
+        )
+        if result:
+            # Robust JSON extraction from markdown block
+            json_str = result.strip()
+            match = re.search(r'```(?:json)?\s*(.*?)\s*```', json_str, re.DOTALL | re.IGNORECASE)
+            if match:
+                json_str = match.group(1).strip()
+            elif json_str.startswith('{') and json_str.endswith('}'):
+                pass # Already looks like JSON
+            else:
+                # Try to find the first { and last }
+                start = json_str.find('{')
+                end = json_str.rfind('}')
+                if start != -1 and end != -1:
+                    json_str = json_str[start:end+1]
+
+            # Basic validation
+            data = json.loads(json_str)
+            if "upstream" in data and "midstream" in data and "downstream" in data:
+                return json_str
+            else:
+                print(f"ERROR: Extracted JSON missing required keys: {data.keys()}", file=sys.stderr)
+    except json.JSONDecodeError as e:
+        print(f"ERROR decoding value chain JSON: {e}\nRaw output: {result[:500]}...", file=sys.stderr)
+    except Exception as e:
+        print(f"ERROR extracting value chain JSON: {e}", file=sys.stderr)
+    return None
+
 
 # Industry Research: Concurrent request limit
 MAX_CONCURRENT_INDUSTRY_RESEARCH = 5
@@ -6914,7 +7197,29 @@ def industry_research():
                 elapsed_total = int(time.time() - job_start_time)
                 print(f"INDUSTRY_RESEARCH_DEBUG: API call complete. Total time: {elapsed_total}s, Report length: {len(report)} chars", file=sys.stderr)
                 
-                # Store the result
+                # Initial quality check on raw sonar output
+                raw_quality = validate_industry_report(report)
+                print(f"INDUSTRY_RESEARCH_DEBUG: Raw quality (pre-format): {raw_quality}", file=sys.stderr)
+
+                # Formatting pass — standardise structure without altering research content
+                try:
+                    update_industry_job(job_id, {
+                        'progress': 'Standardising report format for readability...',
+                        'heartbeat': time.time(),
+                        'status': 'processing'
+                    })
+                    format_start = time.time()
+                    report = format_industry_report(report, industry)
+                    format_elapsed = int(time.time() - format_start)
+                    print(f"INDUSTRY_RESEARCH_DEBUG: Format pass done in {format_elapsed}s. Report length: {len(report)} chars", file=sys.stderr)
+                except Exception as fmt_err:
+                    print(f"FORMAT_PASS_ERROR: {type(fmt_err).__name__}: {fmt_err} — using raw report", file=sys.stderr)
+
+                # Final quality validation on the formatted report
+                quality_metrics = validate_industry_report(report)
+
+                # Store the result with quality metrics
+                elapsed_total = int(time.time() - job_start_time)
                 update_industry_job(job_id, {
                     'status': 'complete',
                     'progress': 'Industry report generation complete!',
@@ -6922,7 +7227,8 @@ def industry_research():
                         'report': report,
                         'industry': industry,
                         'horizon_years': horizon_years,
-                        'depth': depth
+                        'depth': depth,
+                        'quality': quality_metrics
                     },
                     'completed_at': time.time(),
                     'total_time': elapsed_total

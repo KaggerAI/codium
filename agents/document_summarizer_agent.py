@@ -69,8 +69,24 @@ def register_doc_summarizer_routes(app, call_openai_api_fn):
             if len(text_content) > MAX_CHARS:
                 text_content = text_content[:MAX_CHARS] + "\n\n...[TRUNCATED FOR LENGTH]..."
 
-            # Summarize with gpt-5.4-mini
-            prompt = f"""You are an elite financial analyst. The user has provided the text extracted from a document. 
+            user_prompt = request.form.get('user_prompt', '').strip()
+
+            if user_prompt:
+                prompt = f"""You are an elite financial analyst. The user has uploaded a document and has a specific instruction:
+
+"{user_prompt}"
+
+Please respond to the above instruction based solely on the document text provided below.
+Format your output cleanly in Markdown with appropriate headings, bullet points, and tables if applicable.
+
+Here is the document text:
+==========================
+{text_content}
+==========================
+"""
+            else:
+                # Summarize with gpt-5.4-mini
+                prompt = f"""You are an elite financial analyst. The user has provided the text extracted from a document.
 The document is expected to be a financial document such as an investor presentation, analyst report, brokerage report, credit report, quarterly results, annual report, etc.
 Please provide a comprehensive and structured summary of the document keeping its financial nature in mind.
 
