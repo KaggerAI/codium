@@ -221,11 +221,11 @@ def _search_youtube_concall(company_name: str, ticker: str, quarter: str = '') -
         ])
 
     def _is_preferred_channel(channel):
-        """Check if channel is 'AlphaStreet India' or 'Concall'."""
+        """Check if channel is 'Trendlyne', 'AlphaStreet India', or 'Concall'."""
         if not channel:
             return False
         chan_lower = channel.lower()
-        return "alphastreet" in chan_lower or "concall" in chan_lower
+        return "trendlyne" in chan_lower or "alphastreet" in chan_lower or "concall" in chan_lower
 
     # ── Collect candidates across all queries ──
     all_candidates = []       # list of dicts with metadata
@@ -299,7 +299,7 @@ def _search_youtube_concall(company_name: str, ticker: str, quarter: str = '') -
 
     candidates_text = ""
     for i, c in enumerate(all_candidates, 1):
-        pref_suffix = " [Preferred Channel: AlphaStreet India / Concall]" if c['is_preferred'] else ""
+        pref_suffix = " [Preferred Channel: Trendlyne / AlphaStreet India / Concall]" if c['is_preferred'] else ""
         candidates_text += (
             f"Video {i}:\n"
             f"  Title: {c['title']}\n"
@@ -321,7 +321,7 @@ def _search_youtube_concall(company_name: str, ticker: str, quarter: str = '') -
         "1. The video MUST be an earnings call / concall / conference call / analyst "
         "meet — NOT a news clip, analysis, or commentary.\n"
         f"2. It should match the target quarter ({target_quarter}) as closely as possible.\n"
-        "3. Prefer videos from preferred financial channels: 'AlphaStreet India' (@AlphaStreetIndia) "
+        "3. Prefer videos from preferred financial channels: 'Trendlyne' (@trendlyne), 'AlphaStreet India' (@AlphaStreetIndia) "
         "and 'Concall' (@concall_in), or the company's official channel.\n"
         '4. If none of the videos are a plausible match for the target quarter\'s '
         'concall, respond with "NONE".\n\n'
@@ -996,7 +996,7 @@ def register_concall_routes(app, call_gemini_api_fn, fetch_documents_fn, get_pdf
                 company_name=company_name,
                 ticker=ticker,
                 analysis=analysis_context[:40000],  # Limit context size
-                transcript=transcript_context[:30000] if transcript_context else "Original transcript not available."
+                transcript=transcript_context[:50000] if transcript_context else "Original transcript not available."
             )
 
             messages = [

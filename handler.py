@@ -5197,22 +5197,49 @@ def call_openai_api(messages, model="gpt-5.4-mini", expect_json_format_flag=Fals
     """
     if not openai.api_key:
         raise ValueError("OpenAI API key is not configured.")
-    try:
-        completion_params = {
-            "model": model,
-            "messages": messages,
-            "temperature": temperature,
-            "timeout": timeout,  # Explicit timeout in seconds
-        }
-        if max_tokens is not None:
-            completion_params["max_tokens"] = max_tokens
-        # Use OpenAI's JSON mode for reliable structured output
-        if expect_json_format_flag and ("-turbo" in model or "-o" in model):
-            completion_params["response_format"] = {"type": "json_object"}
+    
+    completion_params = {
+        "model": model,
+        "messages": messages,
+        "temperature": temperature,
+        "timeout": timeout,  # Explicit timeout in seconds
+    }
+    
+    # Use OpenAI's JSON mode for reliable structured output
+    if expect_json_format_flag and ("-turbo" in model or "-o" in model):
+        completion_params["response_format"] = {"type": "json_object"}
 
+    # Determine if this model requires max_completion_tokens instead of max_tokens
+    is_reasoning_model = (
+        model.startswith("o1-") or 
+        model.startswith("o3-") or 
+        model.startswith("o4-") or 
+        "gpt-5" in model
+    )
+
+    if max_tokens is not None:
+        if is_reasoning_model:
+            completion_params["max_completion_tokens"] = max_tokens
+        else:
+            completion_params["max_tokens"] = max_tokens
+
+    try:
         response = openai.chat.completions.create(**completion_params)
         return response.choices[0].message.content
     except Exception as e:
+        # If we failed due to max_tokens parameter, attempt fallback to max_completion_tokens
+        error_str = str(e)
+        if "max_tokens" in error_str and "max_completion_tokens" in error_str:
+            print(f"WARN in call_openai_api: Retrying with max_completion_tokens due to error: {e}")
+            if "max_tokens" in completion_params:
+                val = completion_params.pop("max_tokens")
+                completion_params["max_completion_tokens"] = val
+                try:
+                    response = openai.chat.completions.create(**completion_params)
+                    return response.choices[0].message.content
+                except Exception as retry_err:
+                    print(f"ERROR in call_openai_api retry: {retry_err}")
+                    raise retry_err
         print(f"ERROR in call_openai_api: {e}")
         raise
 
