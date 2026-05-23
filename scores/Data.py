@@ -125,7 +125,7 @@ class Data:
         master_df = master_df.reindex(date_index)
         
         master_df.interpolate(method='linear', limit_direction='both', inplace=True)
-        master_df.fillna(method='bfill', inplace=True)
+        master_df.bfill(inplace=True)
         master_df.fillna(0, inplace=True)
 
         # --- Part 4: Fill placeholders (Unchanged) ---

@@ -180,7 +180,7 @@ def compute_altman_zscore(fundamentals, key_metrics):
 
 def compute_signal_checks(fundamentals, key_metrics):
     """
-    Compute 8 additional forensic signals from financial data.
+    Compute 15 forensic signals from financial data.
     Returns a list of signal dicts with name, value, threshold, and flag.
     """
     signals = []
@@ -218,6 +218,34 @@ def compute_signal_checks(fundamentals, key_metrics):
         # 8. ROE Deterioration
         roe_trend = _compute_roe_deterioration(fundamentals)
         signals.append(roe_trend)
+        
+        # 9. Yield on Cash
+        cash_yield = _compute_yield_on_cash(fundamentals)
+        signals.append(cash_yield)
+        
+        # 10. Other Income Ratio
+        other_inc_ratio = _compute_other_income_ratio(fundamentals)
+        signals.append(other_inc_ratio)
+        
+        # 11. Effective Tax Rate Check
+        tax_check = _compute_tax_rate_check(fundamentals)
+        signals.append(tax_check)
+        
+        # 12. Receivables Days Change
+        debtor_change = _compute_debtor_days_change(fundamentals)
+        signals.append(debtor_change)
+        
+        # 13. Inventory Days Change
+        inventory_change = _compute_inventory_days_change(fundamentals)
+        signals.append(inventory_change)
+        
+        # 14. Asset Turnover Decline
+        turnover_decline = _compute_asset_turnover_decline(fundamentals)
+        signals.append(turnover_decline)
+        
+        # 15. Quarterly Sales Decline (YoY)
+        q_sales_decline = _compute_quarterly_sales_decline(fundamentals)
+        signals.append(q_sales_decline)
         
     except Exception as e:
         print(f"FORENSIC: Signal checks error: {e}", file=sys.stderr)
@@ -430,6 +458,193 @@ def _compute_roe_deterioration(fundamentals):
                 signal['flag'] = '🟡'
             else:
                 signal['flag'] = '🟢'
+    except Exception:
+        pass
+    return signal
+
+
+def _compute_yield_on_cash(fundamentals):
+    """Check cash yield: Other Income / Cash & Bank."""
+    signal = {'name': 'Yield on Cash', 'value': 'N/A', 'threshold': '<4% when Cash >10% of Assets = 🟡', 'flag': '⚪'}
+    try:
+        cash = _get_table_values(fundamentals, 'Balance Sheet', 'Cash & Equivalents', 1)
+        if not cash:
+            cash = _get_table_values(fundamentals, 'Balance Sheet', 'Cash & Bank', 1)
+        if not cash:
+            cash = _get_table_values(fundamentals, 'Balance Sheet', 'Cash', 1)
+        if not cash:
+            cash = _get_table_values(fundamentals, 'Balance Sheet', 'Other Assets', 1) # fallback
+            
+        assets = _get_table_values(fundamentals, 'Balance Sheet', 'Total Assets', 1)
+        
+        other_income = _get_table_values(fundamentals, 'Annual Results', 'Other Income', 1)
+        if not other_income:
+            other_income = _get_table_values(fundamentals, 'Profit & Loss', 'Other Income', 1)
+            
+        if cash and assets and other_income and cash[0] > 0 and assets[0] > 0:
+            cash_pct = (cash[0] / assets[0]) * 100
+            yield_pct = (other_income[0] / cash[0]) * 100
+            signal['value'] = f'{yield_pct:.2f}% (Cash: {cash_pct:.1f}% of assets)'
+            if cash_pct > 10:
+                if yield_pct < 2.0:
+                    signal['flag'] = '🔴'
+                elif yield_pct < 4.0:
+                    signal['flag'] = '🟡'
+                else:
+                    signal['flag'] = '🟢'
+            else:
+                signal['flag'] = '🟢'
+    except Exception:
+        pass
+    return signal
+
+
+def _compute_other_income_ratio(fundamentals):
+    """Check Other Income / PBT ratio."""
+    signal = {'name': 'Other Income / PBT', 'value': 'N/A', 'threshold': '>30% = 🟡, >50% = 🔴', 'flag': '⚪'}
+    try:
+        other_income = _get_table_values(fundamentals, 'Annual Results', 'Other Income', 1)
+        if not other_income:
+            other_income = _get_table_values(fundamentals, 'Profit & Loss', 'Other Income', 1)
+            
+        pbt = _get_table_values(fundamentals, 'Annual Results', 'Profit before tax', 1)
+        if not pbt:
+            pbt = _get_table_values(fundamentals, 'Profit & Loss', 'Profit before tax', 1)
+            
+        if other_income and pbt and pbt[0] > 0:
+            ratio = (other_income[0] / pbt[0]) * 100
+            signal['value'] = f'{ratio:.1f}%'
+            if ratio > 50:
+                signal['flag'] = '🔴'
+            elif ratio > 30:
+                signal['flag'] = '🟡'
+            else:
+                signal['flag'] = '🟢'
+        elif other_income and pbt and pbt[0] <= 0:
+            signal['value'] = f'Other Income: {other_income[0]} | PBT: {pbt[0]}'
+            signal['flag'] = '🟡'
+    except Exception:
+        pass
+    return signal
+
+
+def _compute_tax_rate_check(fundamentals):
+    """Check effective tax rate."""
+    signal = {'name': 'Effective Tax Rate', 'value': 'N/A', 'threshold': '<15% = 🟡, <5% = 🔴', 'flag': '⚪'}
+    try:
+        tax_pct = _get_table_values(fundamentals, 'Annual Results', 'Tax %', 1)
+        if not tax_pct:
+            tax_pct = _get_table_values(fundamentals, 'Profit & Loss', 'Tax %', 1)
+            
+        if tax_pct and tax_pct[0] is not None:
+            rate = tax_pct[0]
+            signal['value'] = f'{rate:.1f}%'
+            if rate < 5.0:
+                signal['flag'] = '🔴'
+            elif rate < 15.0:
+                signal['flag'] = '🟡'
+            else:
+                signal['flag'] = '🟢'
+        else:
+            tax = _get_table_values(fundamentals, 'Annual Results', 'Tax', 1)
+            if not tax:
+                tax = _get_table_values(fundamentals, 'Profit & Loss', 'Tax', 1)
+            pbt = _get_table_values(fundamentals, 'Annual Results', 'Profit before tax', 1)
+            if not pbt:
+                pbt = _get_table_values(fundamentals, 'Profit & Loss', 'Profit before tax', 1)
+                
+            if tax and pbt and pbt[0] > 0:
+                rate = (tax[0] / pbt[0]) * 100
+                signal['value'] = f'{rate:.1f}%'
+                if rate < 5.0:
+                    signal['flag'] = '🔴'
+                elif rate < 15.0:
+                    signal['flag'] = '🟡'
+                else:
+                    signal['flag'] = '🟢'
+    except Exception:
+        pass
+    return signal
+
+
+def _compute_debtor_days_change(fundamentals):
+    """Check debtor days YoY change."""
+    signal = {'name': 'Debtor Days Change', 'value': 'N/A', 'threshold': 'Increase >20 days = 🟡, >40 = 🔴', 'flag': '⚪'}
+    try:
+        dd = _get_table_values(fundamentals, 'Financial Ratios', 'Debtor Days', 2)
+        if len(dd) >= 2:
+            change = dd[0] - dd[1]
+            signal['value'] = f'{dd[0]:.0f} days (Change: {change:+.0f} days)'
+            if change > 40:
+                signal['flag'] = '🔴'
+            elif change > 20:
+                signal['flag'] = '🟡'
+            else:
+                signal['flag'] = '🟢'
+    except Exception:
+        pass
+    return signal
+
+
+def _compute_inventory_days_change(fundamentals):
+    """Check inventory days YoY change."""
+    signal = {'name': 'Inventory Days Change', 'value': 'N/A', 'threshold': 'Increase >25 days = 🟡, >50 = 🔴', 'flag': '⚪'}
+    try:
+        inv = _get_table_values(fundamentals, 'Financial Ratios', 'Inventory Days', 2)
+        if len(inv) >= 2:
+            change = inv[0] - inv[1]
+            signal['value'] = f'{inv[0]:.0f} days (Change: {change:+.0f} days)'
+            if change > 50:
+                signal['flag'] = '🔴'
+            elif change > 25:
+                signal['flag'] = '🟡'
+            else:
+                signal['flag'] = '🟢'
+    except Exception:
+        pass
+    return signal
+
+
+def _compute_asset_turnover_decline(fundamentals):
+    """Check Asset Turnover trend YoY."""
+    signal = {'name': 'Asset Turnover Decline', 'value': 'N/A', 'threshold': 'Drop >15% = 🟡, >30% = 🔴', 'flag': '⚪'}
+    try:
+        sales = _get_table_values(fundamentals, 'Annual Results', 'Sales', 2)
+        assets = _get_table_values(fundamentals, 'Balance Sheet', 'Total Assets', 2)
+        if len(sales) >= 2 and len(assets) >= 2:
+            turnover0 = _safe_div(sales[0], assets[0])
+            turnover1 = _safe_div(sales[1], assets[1])
+            if turnover0 is not None and turnover1 is not None and turnover1 > 0:
+                pct_change = ((turnover0 - turnover1) / turnover1) * 100
+                signal['value'] = f'{turnover0:.2f}x (Change: {pct_change:+.1f}%)'
+                if pct_change < -30:
+                    signal['flag'] = '🔴'
+                elif pct_change < -15:
+                    signal['flag'] = '🟡'
+                else:
+                    signal['flag'] = '🟢'
+    except Exception:
+        pass
+    return signal
+
+
+def _compute_quarterly_sales_decline(fundamentals):
+    """Check Quarterly Sales decline YoY (latest quarter vs 4 quarters ago)."""
+    signal = {'name': 'Quarterly Sales Decline (YoY)', 'value': 'N/A', 'threshold': 'Drop >15% = 🟡, >25% = 🔴', 'flag': '⚪'}
+    try:
+        q_sales = _get_table_values(fundamentals, 'Quarterly Results', 'Sales', 5)
+        if len(q_sales) >= 5:
+            latest = q_sales[0]
+            prior_yoy = q_sales[4]
+            if latest is not None and prior_yoy is not None and prior_yoy > 0:
+                pct_change = ((latest - prior_yoy) / prior_yoy) * 100
+                signal['value'] = f'{pct_change:+.1f}% YoY'
+                if pct_change < -25:
+                    signal['flag'] = '🔴'
+                elif pct_change < -15:
+                    signal['flag'] = '🟡'
+                else:
+                    signal['flag'] = '🟢'
     except Exception:
         pass
     return signal
@@ -751,7 +966,7 @@ def _run_forensic_analysis(job_id, ticker, cached_data, call_gemini_api_fn,
         asyncio.set_event_loop(loop)
 
         try:
-            analyst_recs, negative_news, forensic_docs = loop.run_until_complete(
+            analyst_recs, negative_news, forensic_docs, sebi_filings = loop.run_until_complete(
                 _fetch_fresh_data_async(ticker, company_name, call_perplexity_api_fn, fetch_forensic_docs_fn)
             )
         finally:
@@ -787,7 +1002,7 @@ def _run_forensic_analysis(job_id, ticker, cached_data, call_gemini_api_fn,
         # Build the data context for Gemini
         data_context = _build_gemini_context(
             ticker, company_name, fundamentals, key_metrics,
-            mscore, zscore, signals, analyst_recs, negative_news, forensic_docs
+            mscore, zscore, signals, analyst_recs, negative_news, forensic_docs, sebi_filings
         )
 
         analysis_prompt = f"""{FORENSIC_ANALYSIS_PROMPT}
@@ -826,7 +1041,8 @@ def _run_forensic_analysis(job_id, ticker, cached_data, call_gemini_api_fn,
                 'analyst_recs': analyst_recs[:2000] if analyst_recs else None,
                 'negative_news': negative_news[:2000] if negative_news else None,
                 'credit_ratings_count': len(forensic_docs.get('credit_ratings', [])),
-                'has_annual_report': forensic_docs.get('annual_report') is not None
+                'has_annual_report': forensic_docs.get('annual_report') is not None,
+                'sebi_filings_len': len(sebi_filings) if sebi_filings else 0
             },
             'analyzed_at': time.time(),
             'analysis_time_seconds': elapsed_step4
@@ -913,23 +1129,55 @@ Be factual and cite sources."""
             print(f"FORENSIC_AGENT: Forensic docs fetch failed: {e}", file=sys.stderr)
             return {'credit_ratings': [], 'annual_report': None}
     
-    # Run all three in parallel
+    async def get_sebi_reg30_filings():
+        """Fetch SEBI Regulation 30 LODR material disclosures via Perplexity."""
+        try:
+            query = f"""Search for any material disclosures or corporate announcements filed by
+{company_name} ({ticker}) with BSE/NSE India under SEBI LODR Regulation 30 in the last 6 months.
+
+Include ANY of the following if found:
+- Mergers, acquisitions, amalgamations, demergers, joint ventures
+- Defaults on debt/interest/loan repayment obligations
+- Key management changes (CEO, CFO, MD, Whole-Time Director, Company Secretary, Auditor appointments/resignations)
+- Fund-raising (QIP, rights issue, preferential allotment, buyback)
+- Major litigation, arbitration, or regulatory penalties
+- Related party transactions requiring shareholder approval
+- Restructuring, winding up, or change in business scope
+- SEBI show-cause notices, investigation orders, or debarment
+
+For each event found, include: date, nature of event, brief summary.
+If no material filings found, say "No significant Regulation 30 filings found in the last 6 months."
+Be factual and cite sources."""
+
+            result = await asyncio.to_thread(
+                call_perplexity_api_fn,
+                [{"role": "user", "content": query}],
+                "sonar-pro", 0.1, 60
+            )
+            return result
+        except Exception as e:
+            print(f"FORENSIC_AGENT: SEBI Reg 30 fetch failed: {e}", file=sys.stderr)
+            return f"Error fetching SEBI Regulation 30 filings: {e}"
+    
+    # Run all four in parallel
     results = await asyncio.gather(
         get_analyst_recs(),
         get_negative_news(),
         get_forensic_docs(),
+        get_sebi_reg30_filings(),
         return_exceptions=True
     )
     
     analyst_recs = results[0] if not isinstance(results[0], Exception) else f"Error: {results[0]}"
     negative_news = results[1] if not isinstance(results[1], Exception) else f"Error: {results[1]}"
     forensic_docs = results[2] if not isinstance(results[2], Exception) else {'credit_ratings': [], 'annual_report': None}
+    sebi_filings = results[3] if not isinstance(results[3], Exception) else f"Error: {results[3]}"
     
-    return analyst_recs, negative_news, forensic_docs
+    return analyst_recs, negative_news, forensic_docs, sebi_filings
 
 
 def _build_gemini_context(ticker, company_name, fundamentals, key_metrics,
-                           mscore, zscore, signals, analyst_recs, negative_news, forensic_docs):
+                           mscore, zscore, signals, analyst_recs, negative_news, forensic_docs, sebi_filings):
     """Build the comprehensive data context string for the Gemini prompt."""
     
     sections = []
@@ -983,6 +1231,10 @@ def _build_gemini_context(ticker, company_name, fundamentals, key_metrics,
     # --- Negative News ---
     sections.append("\n### NEGATIVE NEWS SEARCH (from Perplexity)")
     sections.append(str(negative_news)[:5000] if negative_news else "No negative news data available")
+    
+    # --- SEBI Regulation 30 Material Disclosures ---
+    sections.append("\n### SEBI REGULATION 30 MATERIAL DISCLOSURES (from Perplexity)")
+    sections.append(str(sebi_filings)[:6000] if sebi_filings else "No material Regulation 30 disclosures available")
     
     # --- Credit Ratings ---
     sections.append("\n### CREDIT RATING REPORTS")

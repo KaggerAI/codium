@@ -918,7 +918,7 @@ def parse_chart_json(chart_json: dict) -> pd.DataFrame:
 
     return interpolated_df
 
-async def get_text_from_pdf_url_async(pdf_url: str, max_pages_to_process=75, max_chars_to_return=20000) -> str:
+async def get_text_from_pdf_url_async(pdf_url: str, max_pages_to_process=75, max_chars_to_return=20000, forensic_trim=False) -> str:
     """
     Downloads a PDF and extracts text. Uses pdfplumber first, then falls back to
     Gemini Vision for scanned PDFs (images instead of selectable text).
@@ -1035,23 +1035,38 @@ async def get_text_from_pdf_url_async(pdf_url: str, max_pages_to_process=75, max
             except Exception as e:
                 print(f"WARN: HTML parsing failed for {pdf_url}: {e}")
         
+        if forensic_trim:
+            print(f"INFO: Running forensic page trim on PDF from {pdf_url[:80]}", file=sys.stderr)
+            forensic_pages = _find_forensic_pages(pdf_content)
+            if forensic_pages:
+                pdf_content = _create_trimmed_pdf(pdf_content, forensic_pages)
+                # Since we trimmed the PDF to only the relevant pages, we want to extract all of them
+                max_pages_to_process = len(forensic_pages)
+
         pdf_file = BytesIO(pdf_content)
 
         def blocking_pdf_extraction():
             all_text = []
             with pdfplumber.open(pdf_file) as pdf:
-                search_limit = min(len(pdf.pages), 10)
-                start_page = 2 # Default
-                for i in range(search_limit):
-                    page_text = pdf.pages[i].extract_text() or ""
-                    if "moderator" in page_text.lower():
-                        start_page = i
-                        break
-                end_page = min(len(pdf.pages), start_page + max_pages_to_process)
-                for i in range(start_page, end_page):
-                    page = pdf.pages[i]
-                    text = page.extract_text()
-                    if text: all_text.append(text)
+                if forensic_trim:
+                    # For forensic trimmed report, read all pages of the trimmed PDF directly
+                    for page in pdf.pages:
+                        text = page.extract_text()
+                        if text:
+                            all_text.append(text)
+                else:
+                    search_limit = min(len(pdf.pages), 10)
+                    start_page = 2 # Default
+                    for i in range(search_limit):
+                        page_text = pdf.pages[i].extract_text() or ""
+                        if "moderator" in page_text.lower():
+                            start_page = i
+                            break
+                    end_page = min(len(pdf.pages), start_page + max_pages_to_process)
+                    for i in range(start_page, end_page):
+                        page = pdf.pages[i]
+                        text = page.extract_text()
+                        if text: all_text.append(text)
             full_summary = "\n".join(all_text)
             return full_summary[:max_chars_to_return]
 
@@ -1539,6 +1554,99 @@ async def fetch_concall_rec_url_async(ticker: str) -> dict:
         return {}
 
 
+def _find_forensic_pages(pdf_bytes: bytes, max_pages: int = 40) -> list[int]:
+    """
+    Quick scan of an Annual Report PDF to find pages containing forensic risk indicators,
+    auditor reports, related party transactions, contingent liabilities, and auditor fees.
+    Returns a list of page indices (0-based).
+    """
+    # High-confidence forensic keywords
+    high_keywords = [
+        "independent auditor's report", "independent auditors report", "auditor's report", "auditors report",
+        "qualified opinion", "basis for qualified opinion", "emphasis of matter", "basis for opinion",
+        "material uncertainty related to going concern", "going concern", "adverse opinion",
+        "disclaimer of opinion", "audit report", "accounting policies", "auditor remuneration",
+        "auditors remuneration", "auditor's remuneration", "payment to auditors", "payment to auditor",
+        "related party transactions", "related party disclosures", "transactions with related parties",
+        "contingent liabilities", "contingent liabilities and commitments", "contingent liability"
+    ]
+    
+    # Medium-confidence keywords
+    low_keywords = [
+        "corporate governance report", "audit committee", "directors' report", "directors report",
+        "management discussion", "md&a", "board of directors", "remuneration of directors",
+        "loans and advances", "subsidiaries", "holding company"
+    ]
+    
+    high_pages = set()
+    low_pages = set()
+    
+    try:
+        from pypdf import PdfReader
+        from io import BytesIO
+        
+        reader = PdfReader(BytesIO(pdf_bytes))
+        total_pages = len(reader.pages)
+        
+        # Scan page text
+        for i in range(total_pages):
+            try:
+                text = (reader.pages[i].extract_text() or '').lower()
+            except Exception:
+                text = ''
+                
+            if not text or len(text.strip()) < 50:
+                continue
+                
+            if any(kw in text for kw in high_keywords):
+                high_pages.add(i)
+            elif any(kw in text for kw in low_keywords):
+                low_pages.add(i)
+                
+        print(f"INFO: _find_forensic_pages scan: {len(high_pages)} high, {len(low_pages)} low hits out of {total_pages} pages")
+        
+        target_pages = set()
+        
+        # High-confidence pages get wide context (±2 pages)
+        for p in high_pages:
+            for j in range(max(0, p - 2), min(total_pages, p + 3)):
+                target_pages.add(j)
+                
+        # Low-confidence pages only get ±1 page, and only if near high pages
+        for p in low_pages:
+            if any(abs(p - hp) <= 15 for hp in high_pages):
+                for j in range(max(0, p - 1), min(total_pages, p + 2)):
+                    target_pages.add(j)
+                    
+        # Trim to max_pages
+        if len(target_pages) > max_pages:
+            # Score each page by proximity to high-confidence hits
+            page_scores = {}
+            for p in target_pages:
+                if high_pages:
+                    min_dist = min(abs(p - hp) for hp in high_pages)
+                else:
+                    min_dist = 0
+                page_scores[p] = min_dist
+            # Sort by proximity to high-confidence hits, take top max_pages
+            sorted_pages = sorted(target_pages, key=lambda p: page_scores[p])
+            target_pages = set(sorted_pages[:max_pages])
+            
+        # Fallback: if no pages found, take last 40% of the report (where financial notes are)
+        if not target_pages and total_pages > 40:
+            start = int(total_pages * 0.6)
+            for j in range(start, min(total_pages, start + max_pages)):
+                target_pages.add(j)
+            print(f"INFO: No forensic pages found. Using fallback range {start} to {min(total_pages, start + max_pages)}")
+            
+    except Exception as e:
+        print(f"WARN: _find_forensic_pages failed: {e}")
+        return []
+        
+    result = sorted(list(target_pages))[:max_pages]
+    print(f"INFO: _find_forensic_pages returning {len(result)} pages out of {total_pages} total")
+    return result
+
 
 # =====================================================================
 # Segment Revenue Extraction (On-Demand, AI-Powered)
@@ -1955,7 +2063,7 @@ async def fetch_forensic_documents_async(ticker: str) -> dict:
             
             info = {'label': label, 'link': href, 'text': ''}
             credit_infos.append(info)
-            credit_tasks.append(get_text_from_pdf_url_async(href, max_pages_to_process=20, max_chars_to_return=15000))
+            credit_tasks.append(get_text_from_pdf_url_async(href, max_pages_to_process=20, max_chars_to_return=30000))
         
         # --- Find Annual Report link (latest 1) ---
         annual_links = soup.select('a[class*="Annual+Report"]')
@@ -1968,8 +2076,8 @@ async def fetch_forensic_documents_async(ticker: str) -> dict:
             if href:
                 label_text = link.get_text(separator=' ', strip=True)
                 annual_info = {'label': label_text or 'Annual Report', 'link': href, 'text': ''}
-                # Annual reports can be large, limit extraction
-                annual_task = get_text_from_pdf_url_async(href, max_pages_to_process=30, max_chars_to_return=20000)
+                # Annual reports: use forensic_trim to extract only auditor/RPT/contingent liability pages
+                annual_task = get_text_from_pdf_url_async(href, max_pages_to_process=40, max_chars_to_return=40000, forensic_trim=True)
         
         # --- Run all PDF extractions in parallel ---
         all_tasks = credit_tasks.copy()
@@ -2175,10 +2283,10 @@ async def fetch_peer_comparison_from_screener_async(ticker: str, company_name: s
                 html = None
                 for url in [consolidated_url, standalone_url]:
                     try:
-                        await page.goto(url, wait_until='networkidle', timeout=30000)
+                        await page.goto(url, wait_until='domcontentloaded', timeout=30000)
                         # Wait for the peers section table
                         try:
-                            await page.wait_for_selector('#peers table', timeout=5000)
+                            await page.wait_for_selector('#peers table', timeout=10000)
                             log_progress(f"Populated peer table")
                             html = await page.content()
                             break  # Found table, stop trying
@@ -2227,7 +2335,8 @@ def _parse_peer_table(soup, ticker: str, company_name: str = None) -> dict:
         
         # Parse the table using pandas
         try:
-            df_list = pd.read_html(str(table))
+            import io
+            df_list = pd.read_html(io.StringIO(str(table)))
             if not df_list:
                 return {'company': {}, 'peers': []}
             df = df_list[0]

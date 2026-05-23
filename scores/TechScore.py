@@ -90,7 +90,7 @@ class TechScore(BaseScore):
         print("----------------------------------------------------------")
 
         self.df[self.scaled_score_col] = percentiles * 10
-        self.df[self.scaled_score_col].fillna(method='ffill', inplace=True)
+        self.df[self.scaled_score_col].ffill(inplace=True)
         self.df[self.scaled_score_col].fillna(0, inplace=True)
 
         # --- DEBUG 3: Check the final scaled score IN THIS FILE ---
