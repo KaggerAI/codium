@@ -16,6 +16,7 @@ RUN apt-get update && apt-get install -y \
     libffi-dev \
     libssl-dev \
     nodejs \
+    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 # 2. Compile and Install TA-Lib (The C-Library) from source

@@ -175,10 +175,14 @@ def _search_youtube_concall(company_name: str, ticker: str, quarter: str = '') -
     ydl_opts = {
         'quiet': True,
         'skip_download': True,
-        'extract_flat': False,
+        'extract_flat': True,
     }
     if proxy_url:
         ydl_opts['proxy'] = proxy_url
+    
+    cookie_path = _os.path.join(_os.path.dirname(_os.path.dirname(__file__)), 'youtube_cookies.txt')
+    if _os.path.exists(cookie_path):
+        ydl_opts['cookiefile'] = cookie_path
 
     # ── Helper functions ──
     def _parse_upload_date(vid):
@@ -590,7 +594,20 @@ async def _extract_youtube_transcript(url: str, max_chars: int = 80000) -> str:
         print(f"CONCALL_AGENT: Trying YouTube captions for {video_id}...", file=sys.stderr)
 
         def _fetch_captions():
-            ytt_api = YouTubeTranscriptApi()
+            proxy_url = _os.environ.get("RESIDENTIAL_PROXY_URL")
+            proxy_config = None
+            if proxy_url:
+                try:
+                    from youtube_transcript_api.proxies import GenericProxyConfig
+                    proxy_config = GenericProxyConfig(
+                        http_url=proxy_url,
+                        https_url=proxy_url,
+                    )
+                    print(f"CONCALL_AGENT: Using residential proxy for YouTube captions", file=sys.stderr)
+                except ImportError:
+                    print(f"CONCALL_AGENT: GenericProxyConfig not available, fetching captions without proxy", file=sys.stderr)
+
+            ytt_api = YouTubeTranscriptApi(proxy_config=proxy_config) if proxy_config else YouTubeTranscriptApi()
             transcript_list = ytt_api.fetch(video_id)
             # Join all caption snippets into a single transcript
             lines = []
@@ -637,6 +654,10 @@ async def _extract_youtube_transcript(url: str, max_chars: int = 80000) -> str:
                 }
                 if proxy_url:
                     ydl_opts['proxy'] = proxy_url
+
+                cookie_path = _os.path.join(_os.path.dirname(_os.path.dirname(__file__)), 'youtube_cookies.txt')
+                if _os.path.exists(cookie_path):
+                    ydl_opts['cookiefile'] = cookie_path
 
                 print(f"CONCALL_AGENT: Downloading YouTube audio via yt-dlp...", file=sys.stderr)
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
