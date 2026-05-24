@@ -4552,7 +4552,8 @@
             if (d.crystal_ball && d.crystal_ball.length) {
                 html += `<div class="cr-section-title">🔮 Crystal Ball Predictions</div>`;
                 d.crystal_ball.forEach(cb => {
-                    const confColor = (cb.confidence || '').includes('HIGH') ? '#34d399' : (cb.confidence || '').includes('MEDIUM') ? '#fbbf24' : '#94a3b8';
+                    const confRaw = (cb.confidence || '').toUpperCase();
+                    const confColor = confRaw.includes('HIGH') ? '#34d399' : confRaw.includes('MEDIUM') ? '#fbbf24' : confRaw.includes('LOW') ? '#f87171' : '#94a3b8';
                     html += `<div class="cr-insight-block" style="border-left:3px solid ${confColor};padding-left:12px;margin-bottom:10px;">`;
                     html += `<div class="cr-ititle" style="font-size:13px;">${_esc(cb.prediction)}</div>`;
                     html += `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:4px;font-size:10px;color:var(--text-muted);">`;
@@ -4606,6 +4607,11 @@
                     html += `<div class="cr-tdesc">${_esc(tc.prediction)}</div>`;
                     html += `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;">`;
                     if (tc.action) html += `<span class="cr-badge" style="background:${actionColor};color:#000;font-weight:600;">${_esc(tc.action)}</span>`;
+                    if (tc.conviction) {
+                        const cvRaw = (tc.conviction || '').toUpperCase();
+                        const cvColor = cvRaw.includes('HIGH') ? '#34d399' : cvRaw.includes('MEDIUM') ? '#fbbf24' : cvRaw.includes('LOW') ? '#f87171' : '#94a3b8';
+                        html += `<span class="cr-badge" style="background:${cvColor};color:#000;font-weight:600;">${_esc(tc.conviction)}</span>`;
+                    }
                     (tc.markets_affected || []).forEach(m => { html += `<span class="cr-badge neut">${_esc(m)}</span>`; });
                     html += `</div></div>`;
                 });

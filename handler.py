@@ -12637,7 +12637,8 @@ register_forecasting_routes(
 )
 
 # Register Cosmic Financial Analyst routes
-from agents.cosmic_agent import register_cosmic_routes
+from agents.cosmic_agent import register_cosmic_routes, _run_cosmic_analysis
+from agents.base import create_agent_job
 register_cosmic_routes(app, call_openai_api, call_perplexity_api, call_perplexity_search_api)
 
 # Register Financial Document Summarizer Agent routes
@@ -12745,18 +12746,40 @@ def api_watchlist_check(ticker):
 import threading
 import time
 
+def _cosmic_morning_warmup():
+    """Pre-cache the Cosmic Macro report at 8 AM IST so users get instant load."""
+    try:
+        print("COSMIC_SCHEDULER: Starting 8 AM morning warmup...", file=sys.stderr)
+        job_id = create_agent_job("cosmic", "GLOBAL")
+        _run_cosmic_analysis(
+            job_id=job_id,
+            region_focus="All Regions (Global + India)",
+            call_openai_api_fn=call_openai_api,
+            call_perplexity_api_fn=call_perplexity_api,
+            call_perplexity_search_api_fn=call_perplexity_search_api,
+        )
+        print("COSMIC_SCHEDULER: Morning warmup complete — result cached.", file=sys.stderr)
+    except Exception as e:
+        print(f"COSMIC_SCHEDULER: Morning warmup failed: {e}", file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
+
+
 def screener_daily_scheduler():
     from datetime import datetime, timedelta
     from calculations.screener_background import execute_daily_screener_scan
     from calculations.results_watcher import run_results_watch_cycle
-    
+
     print("Screener background daemon online. Checking IST schedule natively...")
     while True:
         try:
             # Shift UTC to IST rigidly mapping to Azure's clock
             now_ist = datetime.utcnow() + timedelta(hours=5, minutes=30)
             time_str = now_ist.strftime("%H:%M")
-            
+
+            # ── Cosmic Macro Report: 8:00 AM IST — pre-cache for instant user load ──
+            if time_str == "08:00":
+                threading.Thread(target=_cosmic_morning_warmup, daemon=True).start()
+
             # ── Quarterly Results Watcher: 8:00 AM and 5:00 PM IST ──
             if time_str in ["08:00", "17:00"]:
                 try:

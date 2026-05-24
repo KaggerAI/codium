@@ -37,7 +37,7 @@ from agents.prompts.cosmic_prompts import (
 # =====================================================================
 # CONSTANTS
 # =====================================================================
-COSMIC_CACHE_TTL_HOURS = 6  # Cache results for 6 hours
+COSMIC_CACHE_TTL_HOURS = 16  # Cache results for 16 hours
 COSMIC_CACHE_KEY = "GLOBAL"  # Non-ticker agent uses a fixed key
 
 
@@ -259,7 +259,7 @@ Now produce the complete Cosmic Macro Intelligence Report as a single JSON objec
             messages,
             model="gpt-5.5",
             temperature=1,
-            timeout=300,  # 5 minutes — this is a massive synthesis
+            timeout=420,  # 7 minutes — this is a massive synthesis
         )
 
         elapsed_total = int(time.time() - start_time)

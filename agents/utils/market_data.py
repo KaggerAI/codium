@@ -1,16 +1,84 @@
 import sys
+import re
+import json
 import traceback
 import datetime
+import pandas as pd
+import requests
 import yfinance as yf
 try:
     from tvDatafeed import TvDatafeed, Interval
 except ImportError:
     TvDatafeed = None
 
+_MCX_URL = "https://www.mcxindia.com/market-data/most-active-contracts"
+_MCX_HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+
+# MCX LTP units: GOLD=per 10g, SILVER=per kg, CRUDEOIL=per bbl, COPPER=per kg
+_MCX_SYMBOL_MAP = {
+    "Gold (MCX)":      ("GOLD",     "per 10g"),
+    "Silver (MCX)":    ("SILVER",   "per kg"),
+    "Crude Oil (MCX)": ("CRUDEOIL", "per bbl"),
+    "Copper (MCX)":    ("COPPER",   "per kg"),
+}
+
+
+def _fetch_mcx_prices():
+    """
+    Scrape live MCX LTPs from mcxindia.com/market-data/most-active-contracts.
+    Returns dict: {display_name: {"price": float, "unit": str, "expiry": str}}
+    The page embeds two JSON arrays (by-value and by-volume) in the HTML.
+    We use the first (by-value = highest liquidity) and pick the nearest expiry
+    FUTCOM contract for each target symbol.
+    """
+    try:
+        r = requests.get(_MCX_URL, headers=_MCX_HEADERS, timeout=15)
+        r.raise_for_status()
+        # Two var x = [...] blocks are embedded; block 0 = most active by value
+        json_blocks = re.findall(r'var\s+\w+\s*=\s*(\[.*?\]);', r.text, re.DOTALL)
+        if not json_blocks:
+            return {}
+        records = json.loads(json_blocks[0])
+    except Exception as e:
+        print(f"MCX_SCRAPE: fetch/parse error: {e}", file=sys.stderr)
+        return {}
+
+    # Build a lookup: EngSymbol -> first FUTCOM record (already sorted by value desc)
+    seen = {}
+    for rec in records:
+        sym = rec.get("EngSymbol", "")
+        if rec.get("InstrumentName") == "FUTCOM" and sym not in seen:
+            seen[sym] = rec
+
+    result = {}
+    for display_name, (mcx_sym, unit) in _MCX_SYMBOL_MAP.items():
+        rec = seen.get(mcx_sym)
+        if rec and rec.get("LTP"):
+            result[display_name] = {
+                "price":  float(rec["LTP"]),
+                "unit":   unit,
+                "expiry": rec.get("ExpiryDate", ""),
+            }
+    return result
+
+
+def _fetch_india_10y_yield_trading_economics():
+    """Scrape India 10Y government bond yield from Trading Economics."""
+    try:
+        tables = pd.read_html("https://tradingeconomics.com/india/government-bond-yield")
+        row = tables[0][tables[0]['Bonds'] == 'India 10Y'].iloc[0]
+        return float(row['Yield'])
+    except Exception:
+        return None
+
+
 def get_live_market_data():
     """
-    Fetches exact, live prices for critical macro indicators using yfinance (primary)
-    and tvDatafeed (fallback).
+    Fetches exact, live prices for critical macro indicators.
+    Sources:
+      - yfinance (primary) + tvDatafeed (fallback) for global indices/FX/bonds
+      - Trading Economics for India 10Y yield
+      - MCX India website for MCX commodity prices (Gold, Silver, Crude, Copper)
     """
     tickers = {
         # Global Indices
@@ -27,22 +95,27 @@ def get_live_market_data():
         # FX and Bonds
         "USD/INR": "INR=X",
         "US 10Y Yield": "^TNX",
-        "India 10Y Yield": "^IN10YT=RR"
     }
 
     import os
     from dotenv import load_dotenv
     load_dotenv()
-    
+
     tv = None
     if TvDatafeed:
         try:
+            _tv_token = os.environ.get('TV_SESSION_TOKEN', '').strip()
             _tv_user = os.environ.get('TV_USERNAME', '')
             _tv_pass = os.environ.get('TV_PASSWORD', '')
-            if _tv_user and _tv_pass:
+            if _tv_token:
+                tv = TvDatafeed(token=_tv_token)
+            elif _tv_user and _tv_pass:
                 tv = TvDatafeed(username=_tv_user, password=_tv_pass)
             else:
                 tv = TvDatafeed()
+            probe = tv.get_hist(symbol="NIFTY", exchange="NSE", interval=Interval.in_daily, n_bars=2)
+            if probe is None or probe.empty:
+                tv = None
         except Exception:
             tv = None
 
@@ -51,20 +124,18 @@ def get_live_market_data():
         "BSE Sensex": ("SENSEX", "BSE"),
         "USD/INR": ("USDINR", "FX_IDC"),
         "US 10Y Yield": ("US10Y", "TVC"),
-        "India 10Y Yield": ("IN10Y", "TVC")
     }
 
     results = []
     results.append("## LIVE MARKET PRICES (Deterministic Ground Truth)\n")
 
-    # First pass: gather global prices to use for MCX conversion
     global_prices = {}
-    usd_inr = 84.0 # default fallback
-    
+    usd_inr = 84.0
+
     for name, symbol in tickers.items():
         price = None
         change_pct = None
-        
+
         try:
             t = yf.Ticker(symbol)
             hist = t.history(period="5d")
@@ -92,54 +163,62 @@ def get_live_market_data():
             global_prices[name] = {"price": price, "change": change_pct}
             if name == "USD/INR":
                 usd_inr = price
-                
+
             if "Yield" in name:
                 results.append(f"- **{name}**: {price:.3f}% ({change_pct:+.2f}% daily change)")
             elif "USD/INR" in name:
                 results.append(f"- **{name}**: {price:.2f} ({change_pct:+.2f}%)")
-            elif "MCX" not in name:
+            else:
                 results.append(f"- **{name}**: {price:,.2f} ({change_pct:+.2f}%)")
         else:
-             if "MCX" not in name:
-                 results.append(f"- **{name}**: Data temporarily unavailable")
-                 
-    # Second pass: Calculate MCX India equivalents based on Global Prices and USD/INR
-    # 1 Troy Ounce = 31.103 grams
-    mcx_commodities = {
-        "Gold (MCX)": {"sym": "GOLD1!", "exc": "MCX", "global_key": "Gold (COMEX)", "unit": "per 10g", "math": lambda g, r: (g / 31.103) * 10 * r * 1.06},
-        "Silver (MCX)": {"sym": "SILVER1!", "exc": "MCX", "global_key": "Silver (COMEX)", "unit": "per 1kg", "math": lambda s, r: (s / 31.103) * 1000 * r * 1.06},
-        "Crude Oil (MCX)": {"sym": "CRUDEOIL1!", "exc": "MCX", "global_key": "Crude Oil (WTI)", "unit": "per bbl", "math": lambda c, r: c * r},
-        "Copper (MCX)": {"sym": "COPPER1!", "exc": "MCX", "global_key": "Copper", "unit": "per kg", "math": lambda cop, r: cop * 2.20462 * r * 1.05}
-    }
-    
-    for mcx_name, conf in mcx_commodities.items():
-        mcx_price = None
-        mcx_change = None
-        
-        # 1. Primary: Try tvDatafeed
+            results.append(f"- **{name}**: Data temporarily unavailable")
+
+    # India 10Y Yield — Trading Economics
+    india_10y = _fetch_india_10y_yield_trading_economics()
+    if india_10y is not None:
+        results.append(f"- **India 10Y Yield**: {india_10y:.3f}% (Trading Economics)")
+    else:
+        india_10y_tv = None
         if tv:
             try:
-                data = tv.get_hist(symbol=conf["sym"], exchange=conf["exc"], interval=Interval.in_daily, n_bars=3)
+                data = tv.get_hist(symbol="IN10Y", exchange="TVC", interval=Interval.in_daily, n_bars=3)
                 if data is not None and not data.empty:
-                    mcx_price = data['close'].iloc[-1]
-                    prev_mcx = data['close'].iloc[-2]
-                    mcx_change = ((mcx_price - prev_mcx) / prev_mcx) * 100
+                    india_10y_tv = data['close'].iloc[-1]
+                    prev = data['close'].iloc[-2]
+                    chg = ((india_10y_tv - prev) / prev) * 100
+                    results.append(f"- **India 10Y Yield**: {india_10y_tv:.3f}% ({chg:+.2f}% daily change)")
             except Exception:
                 pass
-                
-        # 2. Fallback: Math Calculation
-        if mcx_price is None:
+        if india_10y_tv is None:
+            results.append("- **India 10Y Yield**: Data temporarily unavailable")
+
+    # MCX India prices — scraped directly from mcxindia.com
+    mcx_prices = _fetch_mcx_prices()
+
+    # Math fallback config (only used if MCX scrape fails for a symbol)
+    mcx_math_fallback = {
+        "Gold (MCX)":      {"global_key": "Gold (COMEX)",    "unit": "per 10g",  "math": lambda g, r: (g / 31.103) * 10 * r * 1.06},
+        "Silver (MCX)":    {"global_key": "Silver (COMEX)",  "unit": "per kg",   "math": lambda s, r: (s / 31.103) * 1000 * r * 1.06},
+        "Crude Oil (MCX)": {"global_key": "Crude Oil (WTI)", "unit": "per bbl",  "math": lambda c, r: c * r},
+        "Copper (MCX)":    {"global_key": "Copper",          "unit": "per kg",   "math": lambda cop, r: cop * 2.20462 * r * 1.05},
+    }
+
+    for mcx_name in mcx_math_fallback:
+        if mcx_name in mcx_prices:
+            d = mcx_prices[mcx_name]
+            results.append(f"- **{mcx_name}**: Rs. {d['price']:,.2f} {d['unit']} (MCX, expiry {d['expiry']})")
+        else:
+            # Fallback to math calculation
+            conf = mcx_math_fallback[mcx_name]
             if conf["global_key"] in global_prices:
                 g_data = global_prices[conf["global_key"]]
                 mcx_price = conf["math"](g_data["price"], usd_inr)
-                mcx_change = g_data["change"] # use global change pct as proxy
-        
-        if mcx_price is not None:
-            results.append(f"- **{mcx_name}**: Rs. {mcx_price:,.2f} {conf['unit']} (approx {mcx_change:+.2f}%)")
-        else:
-            results.append(f"- **{mcx_name}**: Data temporarily unavailable")
-            
+                results.append(f"- **{mcx_name}**: Rs. {mcx_price:,.2f} {conf['unit']} (calc approx {g_data['change']:+.2f}%)")
+            else:
+                results.append(f"- **{mcx_name}**: Data temporarily unavailable")
+
     return "\n".join(results)
+
 
 if __name__ == "__main__":
     print(get_live_market_data())
