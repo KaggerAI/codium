@@ -872,9 +872,40 @@ def fetch_consolidated(ticker: str) -> tuple[dict[str, pd.DataFrame], str, dict,
     # --- Peer comparison extraction (free — reuses the already-downloaded soup) ---
     peer_data = {'company': {}, 'peers': []}
     try:
-        peer_data = _parse_peer_table(soup, ticker)
+        company_name = soup.find("h1").get_text(strip=True) if soup.find("h1") else None
+        peer_data = _parse_peer_table(soup, ticker, company_name)
         if peer_data and peer_data.get('peers'):
             log_progress(f"Extracted {len(peer_data['peers'])} peers for {ticker} from page (no extra request).")
+        else:
+            # Fallback Stage 2: Screener API fetch (Sync)
+            warehouse_id = None
+            wh_elem = soup.select_one("[data-warehouse-id]")
+            if wh_elem:
+                warehouse_id = wh_elem.get("data-warehouse-id")
+            
+            if not warehouse_id and text:
+                import re
+                wh_match = re.search(r'data-warehouse-id="(\d+)"', text)
+                if wh_match:
+                    warehouse_id = wh_match.group(1)
+            
+            if warehouse_id:
+                api_url = f"https://www.screener.in/api/company/{warehouse_id}/peers/"
+                log_progress(f"Sync peer extraction: Fetching from API: {api_url}")
+                try:
+                    api_text, api_final_url, api_status = _stealth_get_html(api_url, follow_redirects=True)
+                    if api_status == 200 and "<table" in api_text:
+                        api_soup = BeautifulSoup(api_text, 'html.parser')
+                        api_table = api_soup.select_one("table")
+                        if api_table:
+                            wrapper = soup.new_tag("section", id="peers")
+                            wrapper.append(api_table)
+                            wrapper_soup = BeautifulSoup(str(wrapper), 'html.parser')
+                            peer_data = _parse_peer_table(wrapper_soup, ticker, company_name)
+                            if peer_data and peer_data.get('peers'):
+                                log_progress(f"Extracted {len(peer_data['peers'])} peers for {ticker} via sync API.")
+                except Exception as api_err:
+                    log_progress(f"Sync API peer fetch failed for {ticker}: {api_err}")
     except Exception as e:
         log_progress(f"WARN: Peer extraction failed for {ticker}: {e}")
 
@@ -2410,19 +2441,21 @@ def fetch_peer_comparison_from_screener(ticker: str, company_name: str = None) -
 async def fetch_peer_comparison_from_screener_async(ticker: str, company_name: str = None) -> dict:
     """
     Async version of fetch_peer_comparison_from_screener.
-    Uses a two-stage approach:
-    STAGE 1: Fast HTTP fetch (stealth)
-    STAGE 2: Playwright browser fetch (fallback with proxy)
+    Uses a three-stage approach:
+    STAGE 1: Fast HTTP fetch - check if table is server-rendered in main page HTML
+    STAGE 2: API fetch - extract warehouseId, then call /api/company/{id}/peers/ directly
+    STAGE 3: Playwright browser fetch (last resort fallback)
     """
     standalone_url = f"https://www.screener.in/company/{ticker}/"
     consolidated_url = standalone_url + "consolidated/"
     
     try:
         # =====================================================
-        # STAGE 1: FAST HTTP FETCH
+        # STAGE 1: FAST HTTP FETCH (check if table is in HTML)
         # =====================================================
         log_progress(f"Attempting fast fetch for {ticker} peer comparison...")
-        soup = None
+        page_soup = None  # Keep soup from Stage 1 for warehouseId extraction
+        page_html = None
         
         for url in [consolidated_url, standalone_url]:
             try:
@@ -2430,57 +2463,118 @@ async def fetch_peer_comparison_from_screener_async(ticker: str, company_name: s
                 if status_code != 200:
                     print(f"WARN: Error status {status_code} fetching {url}")
                     continue
-                soup = BeautifulSoup(text, 'html.parser')
+                page_html = text
+                page_soup = BeautifulSoup(text, 'html.parser')
                 
-                # Check if peer section has a table (indicating content is loaded)
-                peers_section = soup.select_one("#peers")
+                # Check if peer section has a table (indicating content is server-rendered)
+                peers_section = page_soup.select_one("#peers")
                 if peers_section and peers_section.select_one("table"):
                     log_progress(f"Fast fetch found peer table at {url}")
-                    return _parse_peer_table(soup, ticker, company_name)
+                    if not company_name:
+                        h1_elem = page_soup.find("h1")
+                        if h1_elem:
+                            company_name = h1_elem.get_text(strip=True)
+                    return _parse_peer_table(page_soup, ticker, company_name)
+                
+                # Found page but no table - break to try API approach with this page's HTML
+                if page_html and status_code == 200:
+                    break
             except Exception as e:
                 print(f"WARN: Error fetching {url}: {e}")
                 continue
         
-        # =====================================================
-        # STAGE 2: PLAYWRIGHT BROWSER FETCH (JS-rendered content)
-        # =====================================================
-        log_progress(f"Fast fetch insufficient. Using browser for {ticker} peer comparison...")
+        # Extract company name from soup if not provided
+        if not company_name and page_soup:
+            h1_elem = page_soup.find("h1")
+            if h1_elem:
+                company_name = h1_elem.get_text(strip=True)
+                log_progress(f"Extracted company name: {company_name}")
         
-        proxy_url = os.environ.get("RESIDENTIAL_PROXY_URL")
-        launch_kwargs = {}
-        if proxy_url:
-            launch_kwargs["proxy"] = {"server": proxy_url}
+        # =====================================================
+        # STAGE 2: SCREENER API FETCH (using warehouseId)
+        # The peer table is loaded via JS: /api/company/{warehouseId}/peers/
+        # We extract warehouseId from the page and call the API directly.
+        # =====================================================
+        if page_soup:
+            warehouse_id = None
+            # Method 1: Look for data-warehouse-id attribute
+            wh_elem = page_soup.select_one("[data-warehouse-id]")
+            if wh_elem:
+                warehouse_id = wh_elem.get("data-warehouse-id")
             
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(**launch_kwargs)
-            page = await browser.new_page()
-            try:
-                # Try consolidated first, then standalone (consolidated has accurate data)
-                html = None
-                for url in [consolidated_url, standalone_url]:
-                    try:
-                        await page.goto(url, wait_until='domcontentloaded', timeout=30000)
-                        # Wait for the peers section table
-                        try:
-                            await page.wait_for_selector('#peers table', timeout=10000)
-                            log_progress(f"Populated peer table")
-                            html = await page.content()
-                            break  # Found table, stop trying
-                        except:
-                            log_progress(f"Peer table not found, trying next...")
-                            continue
-                    except Exception as e:
-                        print(f"WARN: Peer Table failed to load: {e}")
-                        continue
-                
-                if not html:
-                    # Last resort - get whatever we have
-                    html = await page.content()
-            finally:
-                await browser.close()
+            # Method 2: Regex fallback on raw HTML
+            if not warehouse_id and page_html:
+                import re
+                wh_match = re.search(r'data-warehouse-id="(\d+)"', page_html)
+                if wh_match:
+                    warehouse_id = wh_match.group(1)
+            
+            if warehouse_id:
+                api_url = f"https://www.screener.in/api/company/{warehouse_id}/peers/"
+                log_progress(f"Stage 2: Fetching peer table from API: {api_url}")
+                try:
+                    api_text, api_final_url, api_status = await _stealth_get_html_async(api_url, follow_redirects=True)
+                    if api_status == 200 and "<table" in api_text:
+                        api_soup = BeautifulSoup(api_text, 'html.parser')
+                        api_table = api_soup.select_one("table")
+                        if api_table:
+                            log_progress(f"Stage 2 API returned peer table for {ticker}")
+                            # Wrap the table in a #peers section div so _parse_peer_table can find it
+                            from bs4 import Tag
+                            wrapper = page_soup.new_tag("section", id="peers")
+                            wrapper.append(api_table)
+                            # Create a minimal soup with the peers section
+                            wrapper_soup = BeautifulSoup(str(wrapper), 'html.parser')
+                            return _parse_peer_table(wrapper_soup, ticker, company_name)
+                    else:
+                        log_progress(f"Stage 2 API returned status {api_status} for {ticker}")
+                except Exception as api_err:
+                    log_progress(f"Stage 2 API fetch failed for {ticker}: {api_err}")
+            else:
+                log_progress(f"Could not extract warehouseId for {ticker}, skipping API approach")
         
-        soup = BeautifulSoup(html, 'html.parser')
-        return _parse_peer_table(soup, ticker, company_name)
+        # =====================================================
+        # STAGE 3: PLAYWRIGHT BROWSER FETCH (last resort)
+        # Only used if both Stage 1 and Stage 2 fail
+        # =====================================================
+        log_progress(f"Stages 1 & 2 insufficient. Using browser for {ticker} peer comparison...")
+        
+        try:
+            proxy_url = os.environ.get("RESIDENTIAL_PROXY_URL")
+            launch_kwargs = {}
+            if proxy_url:
+                launch_kwargs["proxy"] = {"server": proxy_url}
+                
+            async with async_playwright() as p:
+                browser = await p.chromium.launch(**launch_kwargs)
+                page = await browser.new_page()
+                try:
+                    html = None
+                    for url in [consolidated_url, standalone_url]:
+                        try:
+                            await page.goto(url, wait_until='domcontentloaded', timeout=30000)
+                            try:
+                                await page.wait_for_selector('#peers table', timeout=10000)
+                                log_progress(f"Populated peer table via browser")
+                                html = await page.content()
+                                break
+                            except:
+                                log_progress(f"Peer table not found in browser, trying next...")
+                                continue
+                        except Exception as e:
+                            print(f"WARN: Browser peer table failed: {e}")
+                            continue
+                    
+                    if not html:
+                        html = await page.content()
+                finally:
+                    await browser.close()
+            
+            soup = BeautifulSoup(html, 'html.parser')
+            return _parse_peer_table(soup, ticker, company_name)
+        except Exception as pw_err:
+            log_progress(f"Stage 3 Playwright fallback also failed for {ticker}: {pw_err}")
+            return {'company': {}, 'peers': []}
         
     except Exception as e:
         print(f"ERROR: Async peer comparison fetch failed for {ticker}: {e}")
