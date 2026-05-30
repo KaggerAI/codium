@@ -986,7 +986,7 @@ def register_concall_routes(app, call_gemini_api_fn, fetch_documents_fn, get_pdf
                 'error': job['error'],
                 'auto_fetch_failed': job.get('auto_fetch_failed', False),
                 'quarter_mismatch': job.get('quarter_mismatch', False)
-            }), 500
+            })
 
         return jsonify({'error': 'Unknown job status'}), 500
 

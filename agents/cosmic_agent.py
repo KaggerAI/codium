@@ -416,7 +416,7 @@ def register_cosmic_routes(
         elif job["status"] == "complete":
             return jsonify({"status": "complete", "result": job["result"]})
         elif job["status"] == "error":
-            return jsonify({"status": "error", "error": job["error"]}), 500
+            return jsonify({"status": "error", "error": job["error"]})
 
         return jsonify({"error": "Unknown job status"}), 500
 

@@ -8,8 +8,8 @@ Workflow:
 1. Fetch upcoming concall schedules from IR Pulse Engine API
 2. Extract dial-in credentials from NSE/BSE PDF announcements
 3. Place Twilio outbound call with DTMF passcode injection
-4. Stream Twilio media audio via WebSocket → Deepgram for real-time transcription
-5. Broadcast transcript chunks to frontend via Flask-SocketIO
+4. Record the call; when recording is ready, transcribe via Gemini
+5. Broadcast transcript & summary to frontend via Flask-SocketIO
 6. Post-call: aggregate transcript and run Gemini analysis
 """
 
@@ -20,7 +20,6 @@ import time
 import asyncio
 import threading
 import traceback
-import base64
 import re
 from datetime import datetime, timedelta
 from io import BytesIO
@@ -51,6 +50,9 @@ SCHEDULE_CACHE_TTL = 1800  # 30 minutes
 
 # Active live sessions (keyed by session_id)
 _active_sessions: Dict[str, "LiveConcallSession"] = {}
+
+# Module-level reference to the Gemini API function (set during route registration)
+_call_gemini_api_fn = None
 
 
 # ---------------------------------------------------------------------------
@@ -189,8 +191,9 @@ async def extract_dialin_from_pdf(pdf_url: str) -> Dict[str, Any]:
 
         print(f"LIVE_CONCALL: Downloaded PDF ({len(pdf_bytes)} bytes)", file=sys.stderr)
 
-        # Step 2: Extract text via pdfplumber
+        # Step 2: Extract text AND hyperlink annotations via pdfplumber
         text = ""
+        hyperlink_urls: List[str] = []
         import tempfile
         with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
             tmp.write(pdf_bytes)
@@ -202,19 +205,69 @@ async def extract_dialin_from_pdf(pdf_url: str) -> Dict[str, Any]:
                     t = page.extract_text()
                     if t:
                         text += t + "\n"
+
+                    # Extract embedded hyperlinks from PDF annotations.
+                    # DiamondPass links are often "Click Here" buttons with a hidden URI.
+                    try:
+                        for annot in (page.annots or []):
+                            uri = (annot.get("uri") or annot.get("URI")
+                                   or annot.get("A", {}).get("URI", ""))
+                            if uri and uri.startswith("http"):
+                                hyperlink_urls.append(uri)
+                    except Exception:
+                        pass
+
+                    # pdfplumber >= 0.7 also exposes page.hyperlinks
+                    try:
+                        for link in (page.hyperlinks or []):
+                            uri = link.get("uri", "")
+                            if uri and uri.startswith("http"):
+                                hyperlink_urls.append(uri)
+                    except Exception:
+                        pass
+
         finally:
             try:
                 os.unlink(tmp_path)
             except Exception:
                 pass
 
+        # Deduplicate and look for DiamondPass URL immediately
+        seen = set()
+        unique_links: List[str] = []
+        for u in hyperlink_urls:
+            u_clean = u.strip().rstrip('/')
+            if u_clean not in seen:
+                seen.add(u_clean)
+                unique_links.append(u_clean)
+
+        diamondpass_url = next(
+            (u for u in unique_links if "diamondpass" in u.lower()),
+            None
+        )
+        if diamondpass_url:
+            print(f"LIVE_CONCALL: Found DiamondPass URL in PDF hyperlinks: {diamondpass_url}",
+                  file=sys.stderr)
+        elif unique_links:
+            print(f"LIVE_CONCALL: Found {len(unique_links)} hyperlink(s) in PDF: {unique_links[:3]}",
+                  file=sys.stderr)
+
         if len(text.strip()) < 50:
             print("LIVE_CONCALL: PDF text too short, trying Gemini Vision fallback",
                   file=sys.stderr)
-            return await _extract_dialin_gemini_vision(pdf_bytes, pdf_url)
+            result = await _extract_dialin_gemini_vision(pdf_bytes, pdf_url)
+            # Override webcast_url with DiamondPass if vision missed it
+            if diamondpass_url and not result.get("webcast_url"):
+                result["webcast_url"] = diamondpass_url
+            return result
 
-        # Step 3: Parse with Gemini
-        return await _parse_dialin_with_gemini(text, pdf_url)
+        # Step 3: Parse with Gemini (pass hyperlinks as additional context)
+        result = await _parse_dialin_with_gemini(text, pdf_url,
+                                                  hyperlink_urls=unique_links)
+        # Hard override: if DiamondPass URL found in annotations, always use it
+        if diamondpass_url and not result.get("webcast_url"):
+            result["webcast_url"] = diamondpass_url
+        return result
 
     except Exception as e:
         print(f"LIVE_CONCALL: PDF extraction error: {e}", file=sys.stderr)
@@ -222,36 +275,54 @@ async def extract_dialin_from_pdf(pdf_url: str) -> Dict[str, Any]:
         return empty_result
 
 
-async def _parse_dialin_with_gemini(text: str, source_url: str) -> Dict[str, Any]:
+async def _parse_dialin_with_gemini(text: str, source_url: str,
+                                    hyperlink_urls: List[str] = None) -> Dict[str, Any]:
     """Use Gemini to extract structured dial-in info from PDF text."""
     api_key = GOOGLE_API_KEY or os.getenv("GOOGLE_API_KEY")
     if not api_key:
         print("LIVE_CONCALL: No GOOGLE_API_KEY for Gemini extraction", file=sys.stderr)
         return _regex_fallback_extract(text, source_url)
 
-    extraction_prompt = f"""You are a financial parsing assistant. Extract the dial-in details for the earnings conference call from the text below.
+    # Build hyperlinks context block if we found any from PDF annotations
+    hyperlink_context = ""
+    if hyperlink_urls:
+        hyperlink_context = (
+            "\n\nEmbedded hyperlinks found in PDF annotations (these are clickable "
+            "links from the PDF that may not appear in the text above):\n"
+            + "\n".join(f"  - {u}" for u in hyperlink_urls[:20])
+            + "\nIf any of these is a webcast/DiamondPass link, use it as webcast_url."
+        )
 
-Provide the output in JSON format with the following fields:
-- phone_number: The dial-in phone number (preferably local India toll/toll-free number, cleaned of spaces, e.g. +912262801123)
-- passcode: The participant passcode or conference ID if required (null if not needed)
-- pin: The participant PIN if required (null if not needed)
-- date: The date of the call (format YYYY-MM-DD)
-- time: The time of the call (format HH:MM IST, e.g., 16:00 IST)
-- webcast_url: Any webcast or online meeting URL if mentioned (null if none)
-- extra_numbers: A list of alternative phone numbers if any
+    extraction_prompt = f"""You are an expert at extracting dial-in details from Indian corporate earnings conference call (concall) announcement PDFs.
 
-If the details cannot be found, set them to null.
+Extract ALL dial-in details from the text below and return them as JSON.
+
+Fields to extract:
+- phone_number: Primary Indian dial-in number (prefer toll-free or local India number; clean of spaces/dashes, e.g. "+912262801123"). Look for labels like "Dial-in Number", "India Toll", "India Toll Free", "Phone Number".
+- passcode: The participant passcode/access code needed to join. This is often labelled "Access Code", "Passcode", "Conference ID", "Conference Password", "Participant Passcode", "Participant Code", "Conference Code", "Entry Code". Extract only the DIGITS (and optional trailing #). Example: "12345678" or "12345678#".
+- pin: Separate participant PIN if present (labels: "PIN", "Participant PIN", "Participant Pass Code", "PIN Number"). Often a short 4–6 digit number. Set null if same as passcode or not present.
+- date: Date of the call in YYYY-MM-DD format.
+- time: Time of the call with timezone, e.g. "16:00 IST" or "4:30 PM IST".
+- webcast_url: The URL for joining the call online. This is commonly a DiamondPass link (domain: diamondpass.net), but could also be a Zoom, Teams, Webex, or other meeting URL. In the PDF text it may appear as "Click Here", "Join Webcast", "Webcast Link", or similar — check the embedded hyperlinks section below. Return the full URL.
+- extra_numbers: List of alternative dial-in numbers (international or other cities).
+
+IMPORTANT NOTES:
+- Indian concalls typically have an "Access Code" that is 8–12 digits. This is NOT the same as the phone number.
+- Look for patterns like: "Access Code: 12345678", "Conference ID: 98765432#", "Passcode: 55554321"
+- DiamondPass (diamondpass.net) is the most common webcast provider for Indian concalls. Its URLs look like: https://www.diamondpass.net/... or https://app.diamondpass.net/...
+- If the document only shows a phone number with no separate code, set passcode to null.
+- Return null for any field you cannot find — do NOT guess.
 
 Text:
 \"\"\"
-{text[:4000]}
-\"\"\"
+{text[:8000]}
+\"\"\"{hyperlink_context}
 """
 
     try:
         client = genai.Client(api_key=api_key)
         response = client.models.generate_content(
-            model="gemini-3-flash-preview",
+            model="gemini-3.1-flash-lite",
             contents=extraction_prompt,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
@@ -261,11 +332,18 @@ Text:
 
         if response.text:
             parsed = json.loads(response.text)
+            # Gemini occasionally wraps the object in an array; unwrap if needed
+            if isinstance(parsed, list):
+                parsed = parsed[0] if parsed else {}
+            if not isinstance(parsed, dict):
+                raise ValueError(f"Unexpected Gemini response type: {type(parsed)}")
             parsed["raw_text"] = text[:2000]
             parsed["source_url"] = source_url
             print(f"LIVE_CONCALL: Gemini extracted dial-in: "
                   f"phone={parsed.get('phone_number')}, "
-                  f"date={parsed.get('date')}, time={parsed.get('time')}",
+                  f"passcode={parsed.get('passcode')}, pin={parsed.get('pin')}, "
+                  f"date={parsed.get('date')}, time={parsed.get('time')}, "
+                  f"webcast={parsed.get('webcast_url')}",
                   file=sys.stderr)
             return parsed
     except Exception as e:
@@ -303,12 +381,21 @@ async def _extract_dialin_gemini_vision(pdf_bytes: bytes,
             uploaded = client.files.get(name=uploaded.name)
             wait += 1
 
-        prompt = """Extract the dial-in details for this earnings conference call PDF.
-Return JSON with: phone_number, passcode, pin, date (YYYY-MM-DD), time (HH:MM IST), webcast_url, extra_numbers.
-Set any missing fields to null."""
+        prompt = """Extract all dial-in details from this Indian corporate earnings conference call (concall) announcement PDF.
+
+Return JSON with these fields:
+- phone_number: Primary India dial-in number (e.g. "+912262801123")
+- passcode: Participant access/conference code (labels: "Access Code", "Conference ID", "Passcode", "Conference Password", "Participant Passcode"). Extract digits only + optional trailing #.
+- pin: Separate participant PIN if present (short 4-6 digit code, different from passcode). Null if not present.
+- date: Call date in YYYY-MM-DD format
+- time: Call time with timezone (e.g. "16:00 IST")
+- webcast_url: Any webcast/Teams/Zoom URL (null if none)
+- extra_numbers: List of alternative dial-in numbers
+
+Set any missing field to null. Do NOT guess."""
 
         response = client.models.generate_content(
-            model="gemini-3-flash-preview",
+            model="gemini-2.0-flash",
             contents=[types.Part.from_text(text=prompt), uploaded],
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
@@ -323,6 +410,10 @@ Set any missing fields to null."""
 
         if response.text:
             parsed = json.loads(response.text)
+            if isinstance(parsed, list):
+                parsed = parsed[0] if parsed else {}
+            if not isinstance(parsed, dict):
+                raise ValueError(f"Unexpected Gemini Vision response type: {type(parsed)}")
             parsed["source_url"] = source_url
             parsed["raw_text"] = ""
             return parsed
@@ -359,15 +450,30 @@ def _regex_fallback_extract(text: str, source_url: str) -> Dict[str, Any]:
                 result["phone_number"] = num
                 break
 
-    # Passcode/PIN
-    for label in ["passcode", "conference id", "participant code", "pin"]:
-        m = re.search(rf'{label}[\s:]+(\d[\d\s#*]+)', text, re.IGNORECASE)
+    # Passcode/PIN — covers common Indian concall PDF label variants
+    passcode_labels = [
+        "access code", "conference id", "conference password", "conference code",
+        "participant passcode", "participant code", "entry code", "passcode",
+    ]
+    pin_labels = ["participant pin", "pin number", "pin"]
+
+    for label in passcode_labels:
+        m = re.search(rf'{re.escape(label)}\s*[:#\-]?\s*(\d[\d\s#*]*)',
+                      text, re.IGNORECASE)
         if m:
-            val = m.group(1).strip()
-            if "pin" in label.lower():
-                result["pin"] = val
-            else:
+            val = re.sub(r'\s+', '', m.group(1)).rstrip('#') + '#'
+            if len(val) >= 5:  # must be at least 4 digits + #
                 result["passcode"] = val
+                break
+
+    for label in pin_labels:
+        m = re.search(rf'{re.escape(label)}\s*[:#\-]?\s*(\d[\d\s]*)',
+                      text, re.IGNORECASE)
+        if m:
+            val = re.sub(r'\s+', '', m.group(1))
+            if len(val) >= 4:
+                result["pin"] = val
+                break
 
     # Date
     date_patterns = [
@@ -469,6 +575,8 @@ def place_twilio_call(phone_number: str, passcode: str = "",
             _active_sessions[session_id].send_digits = send_digits
             _active_sessions[session_id].dial_number = clean_phone
 
+        recording_callback = f"{webhook_base_url}/api/live-concall/recording?session_id={session_id}"
+
         call = client.calls.create(
             url=twiml_url,
             to=clean_phone,
@@ -477,8 +585,9 @@ def place_twilio_call(phone_number: str, passcode: str = "",
             status_callback_event=["initiated", "ringing", "answered",
                                    "completed", "failed", "busy", "no-answer"],
             status_callback_method="POST",
-            record=True,  # Fallback recording
-            recording_status_callback=f"{webhook_base_url}/api/live-concall/recording?session_id={session_id}",
+            record=True,
+            recording_status_callback=recording_callback,
+            recording_status_callback_method="POST",
         )
 
         print(f"LIVE_CONCALL: Twilio call placed: SID={call.sid}, "
@@ -503,7 +612,6 @@ def inject_dtmf(call_sid: str, digits: str) -> Dict[str, Any]:
         client = _get_twilio_client()
         call = client.calls(call_sid)
 
-        # Use TwiML to play DTMF
         from twilio.twiml.voice_response import VoiceResponse
         twiml = VoiceResponse()
         twiml.play(digits=digits)
@@ -549,7 +657,7 @@ class LiveConcallSession:
     send_digits: str = ""
 
     # State
-    state: str = "created"  # created → dialing → connected → streaming → ended → summarizing → complete
+    state: str = "created"  # created → dialing → connected → recording → ended → summarizing → complete
     started_at: float = 0.0
     connected_at: float = 0.0
     ended_at: float = 0.0
@@ -559,8 +667,8 @@ class LiveConcallSession:
     full_transcript: str = ""
     chunk_count: int = 0
 
-    # Deepgram connection
-    deepgram_ws: Any = None
+    # Recording
+    recording_url: str = ""
 
     # Analysis
     analysis_result: str = ""
@@ -617,6 +725,7 @@ class LiveConcallSession:
             "duration": self.get_duration(),
             "transcript_length": len(self.full_transcript),
             "chunk_count": self.chunk_count,
+            "recording_url": self.recording_url,
         }
 
     def _emit(self, event: str, data: Dict):
@@ -629,106 +738,98 @@ class LiveConcallSession:
 
 
 # ---------------------------------------------------------------------------
-# 5. DEEPGRAM STREAMING TRANSCRIPTION
+# 5. POST-CALL TRANSCRIPTION (Twilio Recording → Gemini)
 # ---------------------------------------------------------------------------
 
-async def _start_deepgram_stream(session: LiveConcallSession):
+def _transcribe_recording_with_gemini(session: LiveConcallSession,
+                                       recording_url: str) -> str:
     """
-    Open a WebSocket connection to Deepgram for streaming transcription.
-    Runs in the background, receiving audio chunks from Twilio media stream.
-    """
-    dg_key = DEEPGRAM_API_KEY or os.getenv("DEEPGRAM_API_KEY")
-    if not dg_key:
-        print("LIVE_CONCALL: DEEPGRAM_API_KEY not set, "
-              "falling back to chunk-based Gemini transcription", file=sys.stderr)
-        return
-
-    try:
-        import websockets
-
-        dg_url = (
-            "wss://api.deepgram.com/v1/listen?"
-            "encoding=mulaw&sample_rate=8000&channels=1&"
-            "model=nova-2&language=en&punctuate=true&"
-            "interim_results=true&endpointing=200"
-        )
-
-        headers = {"Authorization": f"Token {dg_key}"}
-
-        async with websockets.connect(dg_url, extra_headers=headers) as ws:
-            session.deepgram_ws = ws
-            print(f"LIVE_CONCALL: Deepgram WebSocket connected for "
-                  f"session {session.session_id}", file=sys.stderr)
-
-            async for msg in ws:
-                try:
-                    data = json.loads(msg)
-                    channel = data.get("channel", {})
-                    alternatives = channel.get("alternatives", [{}])
-                    transcript = alternatives[0].get("transcript", "")
-                    is_final = data.get("is_final", False)
-
-                    if transcript.strip():
-                        session.add_transcript(transcript, is_final=is_final)
-                except json.JSONDecodeError:
-                    pass
-
-    except Exception as e:
-        print(f"LIVE_CONCALL: Deepgram stream error: {e}", file=sys.stderr)
-    finally:
-        session.deepgram_ws = None
-
-
-# ---------------------------------------------------------------------------
-# 6. GEMINI CHUNK-BASED TRANSCRIPTION FALLBACK
-# ---------------------------------------------------------------------------
-
-def _transcribe_audio_chunk_gemini(audio_data: bytes,
-                                    mime_type: str = "audio/x-mulaw") -> str:
-    """
-    Fallback: transcribe a single audio chunk using Gemini.
-    Used when Deepgram is not configured.
+    Download a Twilio recording and transcribe it with Gemini Files API.
+    Returns transcript text or empty string on failure.
     """
     api_key = GOOGLE_API_KEY or os.getenv("GOOGLE_API_KEY")
-    if not api_key or len(audio_data) < 500:
+    if not api_key:
+        print("LIVE_CONCALL: No GOOGLE_API_KEY for recording transcription",
+              file=sys.stderr)
         return ""
 
     try:
+        # Twilio recording URLs require auth credentials to download
+        sid = TWILIO_ACCOUNT_SID or os.getenv("TWILIO_ACCOUNT_SID")
+        token = TWILIO_AUTH_TOKEN or os.getenv("TWILIO_AUTH_TOKEN")
+
+        # Ensure URL ends with .mp3 for easy download
+        dl_url = recording_url
+        if not any(dl_url.endswith(ext) for ext in ['.mp3', '.wav']):
+            dl_url = dl_url + '.mp3'
+
+        print(f"LIVE_CONCALL: Downloading recording from {dl_url}", file=sys.stderr)
+
+        import requests as _requests
+        resp = _requests.get(dl_url, auth=(sid, token), timeout=120)
+        if resp.status_code != 200:
+            print(f"LIVE_CONCALL: Recording download failed: HTTP {resp.status_code}",
+                  file=sys.stderr)
+            return ""
+
+        audio_bytes = resp.content
+        file_size_mb = len(audio_bytes) / (1024 * 1024)
+        print(f"LIVE_CONCALL: Downloaded recording ({file_size_mb:.1f} MB)",
+              file=sys.stderr)
+
+        if len(audio_bytes) < 10000:
+            print("LIVE_CONCALL: Recording too small, likely no audio captured",
+                  file=sys.stderr)
+            return ""
+
+        # Upload to Gemini and transcribe
         client = genai.Client(api_key=api_key)
-        response = client.models.generate_content(
-            model="gemini-3-flash-preview",
-            contents=[
-                types.Part.from_bytes(data=audio_data, mime_type=mime_type),
-                types.Part.from_text(
-                    text="Transcribe this audio verbatim. "
-                         "This is from an Indian corporate earnings conference call. "
-                         "Output ONLY the transcription. "
-                         "If silent or unclear, respond with [SILENCE]."
-                )
-            ],
-            config=types.GenerateContentConfig(
-                temperature=0.0,
-                max_output_tokens=1500
+        uploaded = client.files.upload(
+            file=BytesIO(audio_bytes),
+            config=types.UploadFileConfig(
+                display_name=f"concall_recording_{session.session_id}.mp3",
+                mime_type="audio/mpeg"
             )
         )
 
-        if response.text:
-            text = response.text.strip()
-            refusals = ["I am sorry", "I cannot", "unable to",
-                        "cannot process", "Please provide"]
-            if any(r.lower() in text.lower() for r in refusals):
-                return ""
-            return text
+        # Wait for processing
+        wait = 0
+        while uploaded.state and str(uploaded.state) == "PROCESSING" and wait < 60:
+            time.sleep(2)
+            uploaded = client.files.get(name=uploaded.name)
+            wait += 1
+
+        prompt = """You are a financial transcription specialist. This audio is from an earnings conference call (concall) for a publicly traded Indian company.
+
+Transcribe ALL spoken words accurately. Preserve speaker attributions where possible (e.g., "Management:", "Analyst:", "Moderator:"). Capture all financial figures, percentages, and guidance numbers precisely.
+
+DO NOT summarize — transcribe only.
+Return ONLY the transcript text."""
+
+        response = client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=[types.Part.from_text(text=prompt), uploaded]
+        )
+
+        try:
+            client.files.delete(name=uploaded.name)
+        except Exception:
+            pass
+
+        transcript = response.text.strip() if response.text else ""
+        if transcript:
+            print(f"LIVE_CONCALL: Transcribed {len(transcript)} chars from recording",
+                  file=sys.stderr)
+        return transcript
 
     except Exception as e:
-        print(f"LIVE_CONCALL: Gemini chunk transcription error: {e}",
-              file=sys.stderr)
-
-    return ""
+        print(f"LIVE_CONCALL: Recording transcription failed: {e}", file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
+        return ""
 
 
 # ---------------------------------------------------------------------------
-# 7. POST-CALL SUMMARIZATION
+# 6. POST-CALL SUMMARIZATION
 # ---------------------------------------------------------------------------
 
 def _generate_post_call_summary(session: LiveConcallSession,
@@ -751,7 +852,7 @@ def _generate_post_call_summary(session: LiveConcallSession,
         messages = [{"role": "user", "content": prompt}]
         result = call_gemini_api_fn(
             messages,
-            model="gemini-3-flash-preview",
+            model="gemini-2.5-flash-preview-05-20",
             temperature=1,
             thinking_level="HIGH"
         )
@@ -761,13 +862,78 @@ def _generate_post_call_summary(session: LiveConcallSession,
         return ""
 
 
+def _run_post_call_pipeline(session: LiveConcallSession,
+                              call_gemini_api_fn,
+                              recording_url: str = ""):
+    """
+    Full post-call pipeline: transcribe recording (if needed) → summarize.
+    Runs in a background thread.
+    """
+    session_id = session.session_id
+
+    # Step 1: Transcribe recording if we don't have enough transcript text
+    if recording_url and len(session.full_transcript.strip()) < 200:
+        session._emit("live_concall_state", {
+            "session_id": session_id,
+            "state": "transcribing",
+            "company": session.company_name,
+            "ticker": session.ticker,
+            "call_sid": session.call_sid,
+        })
+        transcript = _transcribe_recording_with_gemini(session, recording_url)
+        if transcript:
+            session.full_transcript = transcript
+            session.add_transcript(transcript, is_final=True)
+
+    # Step 2: Summarize
+    if not session.full_transcript or len(session.full_transcript.strip()) < 200:
+        session.update_state("complete")
+        session._emit("live_concall_summary", {
+            "session_id": session_id,
+            "analysis": "",
+            "error": "Transcript too short for analysis. "
+                     "The call may have failed to connect or had no audio.",
+            "duration": session.get_duration(),
+            "transcript_length": len(session.full_transcript),
+        })
+        return
+
+    session.update_state("summarizing")
+    result = _generate_post_call_summary(session, call_gemini_api_fn)
+    session.analysis_result = result
+    session.update_state("complete")
+
+    # Persist result for standard concall agent retrieval
+    try:
+        from agents.base import store_latest_result
+        store_latest_result('concall', session.ticker, {
+            'analysis': result,
+            'ticker': session.ticker,
+            'concall_label': f"Live Concall — {session.company_name}",
+            'concall_link': session.recording_url or '',
+            'transcript_text': session.full_transcript,
+            'analyzed_at': time.time(),
+            'source': 'live_concall',
+            'duration_seconds': session.get_duration(),
+        })
+    except Exception as e:
+        print(f"LIVE_CONCALL: Failed to store result: {e}", file=sys.stderr)
+
+    session._emit("live_concall_summary", {
+        "session_id": session_id,
+        "analysis": result,
+        "duration": session.get_duration(),
+        "transcript_length": len(session.full_transcript),
+    })
+
+
 # ---------------------------------------------------------------------------
-# 8. FLASK ROUTE REGISTRATION
+# 7. FLASK ROUTE REGISTRATION
 # ---------------------------------------------------------------------------
 
 def register_live_concall_routes(app, socketio, call_gemini_api_fn):
     """
-    Register all Live Concall REST and WebSocket endpoints.
+    Register all Live Concall REST endpoints.
 
     Endpoints:
       GET  /api/live-concall/schedule       — Get upcoming concall schedule
@@ -779,8 +945,9 @@ def register_live_concall_routes(app, socketio, call_gemini_api_fn):
       POST /api/live-concall/twiml          — TwiML webhook (Twilio)
       POST /api/live-concall/call-status    — Call status webhook (Twilio)
       POST /api/live-concall/recording      — Recording webhook (Twilio)
-      WS   /api/live-concall/media-stream   — Twilio media stream WebSocket
     """
+    global _call_gemini_api_fn
+    _call_gemini_api_fn = call_gemini_api_fn
 
     # --- Schedule ---
     @app.route('/api/live-concall/schedule', methods=['GET'])
@@ -788,10 +955,13 @@ def register_live_concall_routes(app, socketio, call_gemini_api_fn):
         """Return upcoming concall schedule."""
         try:
             days = int(request.args.get('days', 30))
+            include_past = request.args.get('include_past', 'false').lower() == 'true'
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             try:
-                calls = loop.run_until_complete(fetch_concall_schedule(days))
+                calls = loop.run_until_complete(
+                    fetch_concall_schedule(days, include_past=include_past)
+                )
             finally:
                 loop.close()
 
@@ -814,6 +984,13 @@ def register_live_concall_routes(app, socketio, call_gemini_api_fn):
             try:
                 result = loop.run_until_complete(extract_dialin_from_pdf(pdf_url))
             finally:
+                # Drain any pending tasks (e.g. genai.Client's internal aclose)
+                # before closing the loop to prevent RuntimeWarning noise.
+                pending = asyncio.all_tasks(loop)
+                if pending:
+                    loop.run_until_complete(
+                        asyncio.gather(*pending, return_exceptions=True)
+                    )
                 loop.close()
 
             return jsonify({"status": "ok", "dialin": result})
@@ -835,6 +1012,14 @@ def register_live_concall_routes(app, socketio, call_gemini_api_fn):
             if not phone_number:
                 return jsonify({"error": "phone_number is required"}), 400
 
+            # Check Twilio credentials before starting
+            if not (TWILIO_ACCOUNT_SID or os.getenv("TWILIO_ACCOUNT_SID")):
+                return jsonify({"error": "Twilio not configured. "
+                                         "TWILIO_ACCOUNT_SID is missing."}), 503
+            if not (TWILIO_PHONE_NUMBER or os.getenv("TWILIO_PHONE_NUMBER")):
+                return jsonify({"error": "Twilio not configured. "
+                                         "TWILIO_PHONE_NUMBER is missing."}), 503
+
             # Create session
             session_id = f"lc_{int(time.time())}_{ticker or 'UNKNOWN'}"
             session = LiveConcallSession(
@@ -843,11 +1028,11 @@ def register_live_concall_routes(app, socketio, call_gemini_api_fn):
                 ticker=ticker,
                 started_at=time.time(),
             )
-            session._emit_fn = lambda evt, data: socketio.emit(evt, data)
+            session._emit_fn = lambda evt, d: socketio.emit(evt, d)
             _active_sessions[session_id] = session
 
             # Determine webhook base URL
-            webhook_base = data.get('webhook_base_url', '')
+            webhook_base = data.get('webhook_base_url', '').strip()
             if not webhook_base:
                 webhook_base = request.host_url.rstrip('/')
 
@@ -918,55 +1103,24 @@ def register_live_concall_routes(app, socketio, call_gemini_api_fn):
             if session.call_sid:
                 end_twilio_call(session.call_sid)
 
-            session.update_state("summarizing")
-
-            # Generate summary in background
-            def _summarize():
-                try:
-                    result = _generate_post_call_summary(session, call_gemini_api_fn)
-                    session.analysis_result = result
-                    session.update_state("complete")
-
-                    # Store in agent results for persistence
-                    from agents.base import store_latest_result
-                    store_latest_result('concall', session.ticker, {
-                        'analysis': result,
-                        'ticker': session.ticker,
-                        'concall_label': f"Live Concall — {session.company_name}",
-                        'concall_link': '',
-                        'transcript_text': session.full_transcript,
-                        'analyzed_at': time.time(),
-                        'source': 'live_concall',
-                        'duration_seconds': session.get_duration(),
-                    })
-
-                    session._emit("live_concall_summary", {
-                        "session_id": session_id,
-                        "analysis": result,
-                        "duration": session.get_duration(),
-                        "transcript_length": len(session.full_transcript),
-                    })
-                except Exception as e:
-                    print(f"LIVE_CONCALL: Summary generation failed: {e}",
-                          file=sys.stderr)
-                    session.update_state("error")
-
-            if session.full_transcript and len(session.full_transcript.strip()) > 200:
-                thread = threading.Thread(target=_summarize, daemon=True)
+            # If we already have a recording URL, kick off the full pipeline now.
+            # If not, the recording webhook will trigger it when Twilio delivers the file.
+            if session.recording_url:
+                thread = threading.Thread(
+                    target=_run_post_call_pipeline,
+                    args=(session, call_gemini_api_fn, session.recording_url),
+                    daemon=True
+                )
                 thread.start()
             else:
-                session.update_state("complete")
-                session._emit("live_concall_summary", {
-                    "session_id": session_id,
-                    "analysis": "",
-                    "error": "Transcript too short for analysis "
-                             f"({len(session.full_transcript)} chars)",
-                })
+                # Mark as ended; recording webhook will continue the pipeline
+                session.update_state("ended")
 
             return jsonify({
                 "status": "ok",
                 "session_id": session_id,
                 "duration": session.get_duration(),
+                "message": "Call ended. Transcript will be generated when recording is ready."
             })
 
         except Exception as e:
@@ -981,32 +1135,35 @@ def register_live_concall_routes(app, socketio, call_gemini_api_fn):
             return jsonify({"error": "Session not found"}), 404
         return jsonify(session.get_state_dict())
 
+    # --- List Active Sessions ---
+    @app.route('/api/live-concall/sessions', methods=['GET'])
+    def live_concall_sessions():
+        """List all active sessions."""
+        return jsonify({
+            "sessions": [s.get_state_dict() for s in _active_sessions.values()]
+        })
+
     # --- TwiML Webhook ---
     @app.route('/api/live-concall/twiml', methods=['POST', 'GET'])
     def live_concall_twiml():
         """
         Return TwiML instructions for Twilio call.
-        Configures: <Connect><Stream> for media streaming + <Number sendDigits>.
+        1. Play DTMF digits to enter the conference passcode.
+        2. Pause for up to 2 hours to keep the call alive (recording runs
+           in parallel via the record=True flag set at call creation time).
         """
         session_id = request.args.get('session_id', '')
         session = _active_sessions.get(session_id)
 
-        from twilio.twiml.voice_response import VoiceResponse, Connect
-
+        from twilio.twiml.voice_response import VoiceResponse
         resp = VoiceResponse()
 
-        if session:
-            # Connect media stream for live transcription
-            stream_url = request.host_url.rstrip('/').replace('http://', 'wss://').replace('https://', 'wss://')
-            stream_url += f'/api/live-concall/media-stream?session_id={session_id}'
+        if session and session.send_digits:
+            # Send passcode digits with preceding pauses
+            resp.play(digits=session.send_digits)
 
-            connect = Connect()
-            connect.stream(url=stream_url)
-            resp.append(connect)
-
-            # Also send DTMF digits if we have them
-            if session.send_digits:
-                resp.play(digits=session.send_digits)
+        # Keep the call alive for up to 2 hours
+        resp.pause(length=7200)
 
         return Response(str(resp), mimetype='text/xml')
 
@@ -1024,18 +1181,24 @@ def register_live_concall_routes(app, socketio, call_gemini_api_fn):
               f"(SID: {call_sid}, session: {session_id})", file=sys.stderr)
 
         if session:
+            if not session.call_sid and call_sid:
+                session.call_sid = call_sid
+
             if call_status == 'in-progress':
                 session.connected_at = time.time()
-                session.update_state("connected")
+                session.update_state("recording")
             elif call_status == 'completed':
                 session.ended_at = time.time()
-                if session.state not in ('summarizing', 'complete'):
+                if session.state not in ('summarizing', 'transcribing',
+                                          'complete', 'ended'):
+                    # Recording webhook will trigger the pipeline
                     session.update_state("ended")
             elif call_status in ('failed', 'busy', 'no-answer'):
                 session.update_state("error")
                 session._emit("live_concall_error", {
                     "session_id": session_id,
-                    "error": f"Call {call_status}",
+                    "error": f"Call {call_status}. "
+                             "Please check the dial-in number and passcode.",
                 })
 
         return Response("OK", status=200)
@@ -1043,89 +1206,42 @@ def register_live_concall_routes(app, socketio, call_gemini_api_fn):
     # --- Recording Webhook ---
     @app.route('/api/live-concall/recording', methods=['POST'])
     def live_concall_recording():
-        """Handle Twilio recording status callbacks (fallback)."""
+        """
+        Handle Twilio recording status callbacks.
+        When the recording is ready, auto-trigger transcription + summarization.
+        """
         session_id = request.args.get('session_id', '')
         recording_url = request.form.get('RecordingUrl', '')
+        recording_status = request.form.get('RecordingStatus', '')
+        recording_duration = request.form.get('RecordingDuration', '0')
 
-        print(f"LIVE_CONCALL: Recording available: {recording_url} "
+        print(f"LIVE_CONCALL: Recording callback: status={recording_status}, "
+              f"duration={recording_duration}s, url={recording_url} "
               f"(session: {session_id})", file=sys.stderr)
 
         session = _active_sessions.get(session_id)
-        if session:
-            session._emit("live_concall_recording", {
-                "session_id": session_id,
-                "recording_url": recording_url,
-            })
+        if not session:
+            return Response("OK", status=200)
+
+        if recording_status != 'completed' or not recording_url:
+            return Response("OK", status=200)
+
+        session.recording_url = recording_url
+        session._emit("live_concall_recording", {
+            "session_id": session_id,
+            "recording_url": recording_url,
+            "duration_seconds": int(recording_duration or 0),
+        })
+
+        # Only run the pipeline if not already running/complete
+        if session.state not in ('summarizing', 'transcribing', 'complete'):
+            thread = threading.Thread(
+                target=_run_post_call_pipeline,
+                args=(session, call_gemini_api_fn, recording_url),
+                daemon=True
+            )
+            thread.start()
 
         return Response("OK", status=200)
-
-    # --- Media Stream WebSocket ---
-    @socketio.on('connect', namespace='/live-concall-media')
-    def handle_media_connect():
-        print("LIVE_CONCALL: Media stream WebSocket connected", file=sys.stderr)
-
-    @socketio.on('media', namespace='/live-concall-media')
-    def handle_media_message(data):
-        """
-        Handle incoming Twilio media stream messages.
-        Forwards audio chunks to Deepgram or Gemini for transcription.
-        """
-        event = data.get('event', '')
-        session_id = data.get('session_id', '')
-
-        if event == 'media':
-            payload = data.get('media', {})
-            audio_b64 = payload.get('payload', '')
-
-            if not audio_b64:
-                return
-
-            audio_bytes = base64.b64decode(audio_b64)
-            session = _active_sessions.get(session_id)
-
-            if not session:
-                return
-
-            if session.state != "streaming":
-                session.update_state("streaming")
-
-            # Forward to Deepgram if connected
-            if session.deepgram_ws:
-                try:
-                    asyncio.run(session.deepgram_ws.send(audio_bytes))
-                except Exception:
-                    pass
-            else:
-                # Fallback: accumulate and periodically transcribe with Gemini
-                # (Buffer ~5 seconds of audio before transcribing)
-                if not hasattr(session, '_audio_buffer'):
-                    session._audio_buffer = bytearray()
-                    session._last_chunk_time = time.time()
-
-                session._audio_buffer.extend(audio_bytes)
-
-                # 8kHz µ-law mono = 8000 bytes/sec, transcribe every 5 seconds
-                if len(session._audio_buffer) >= 40000:
-                    chunk = bytes(session._audio_buffer)
-                    session._audio_buffer = bytearray()
-
-                    def _transcribe():
-                        text = _transcribe_audio_chunk_gemini(chunk)
-                        if text:
-                            session.add_transcript(text, is_final=True)
-
-                    threading.Thread(target=_transcribe, daemon=True).start()
-
-        elif event == 'start':
-            stream_sid = data.get('start', {}).get('streamSid', '')
-            print(f"LIVE_CONCALL: Media stream started (SID: {stream_sid})",
-                  file=sys.stderr)
-
-        elif event == 'stop':
-            print(f"LIVE_CONCALL: Media stream stopped", file=sys.stderr)
-
-    @socketio.on('disconnect', namespace='/live-concall-media')
-    def handle_media_disconnect():
-        print("LIVE_CONCALL: Media stream WebSocket disconnected", file=sys.stderr)
 
     print("LIVE_CONCALL: ✓ Live Concall routes registered", file=sys.stderr)

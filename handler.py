@@ -163,13 +163,19 @@ Compress(app)
 # FLASK-SOCKETIO FOR REAL-TIME BUDGET TRANSCRIPTION
 # =====================================================================
 from flask_socketio import SocketIO, emit
+# transports=['polling']: Werkzeug 3.x crashes when python-engineio tries to take
+# over the raw TCP socket for WebSocket upgrades (simple-websocket incompatibility).
+# Polling is sufficient for all real-time events. Passed via dict to avoid IDE false
+# positive — 'transports' IS a documented kwarg in Flask-SocketIO 5.x.
+_socketio_extra = {'transports': ['polling']}
 socketio = SocketIO(
-    app, 
-    cors_allowed_origins="*", 
+    app,
+    cors_allowed_origins="*",
     async_mode='threading',  # Changed from eventlet to threading for compatibility with httpx/asyncio
     ping_timeout=60,       # Increase to 60s to handle long Gemini processing
     ping_interval=25,      # Ping every 25s
-    max_http_buffer_size=10000000 # 10MB to accommodate large audio chunks
+    max_http_buffer_size=10000000, # 10MB to accommodate large audio chunks
+    **_socketio_extra
 )
 
 # =====================================================================
@@ -3587,7 +3593,7 @@ def _gather_stock_data_for_brief(holding, brief_type='post'):
 
         news_result = call_gemini_api(
             messages=[{"role": "user", "content": news_query}],
-            model="gemini-2.0-flash",
+            model="gemini-3-flash-preview",
             temperature=0.3,
             use_google_search=True
         )
@@ -9433,15 +9439,28 @@ async def get_analysis_for_ticker_async(tick, skip_ai_summary=False):
             traceback.print_exc()
             return None
 
+    # 1. Fetch Screener tables sequentially first to get HTML and avoid rate limits
+    log_progress(f"Fetching Screener financials sequentially first for {tick}...")
+    screener_html = None  # Default to None so document fetcher does its own fetch on failure
+    try:
+        tables_res = await fetch_consolidated_async(tick, return_html=True)
+        screener_tables_result = tables_res[:4]
+        raw_html = tables_res[4] if len(tables_res) > 4 else ""
+        # Only pass HTML to document fetcher if it's non-empty (meaningful content)
+        screener_html = raw_html if raw_html and len(raw_html) > 500 else None
+    except Exception as e:
+        print(f"ERROR: fetch_consolidated_async failed for {tick}: {e}", file=sys.stderr)
+        screener_tables_result = e
+        screener_html = None  # Let document fetcher do its own independent fetch
+
     # Define all tasks that can run without dependencies on each other
     print("=" * 50)
-    print("DEBUG: Creating parallel tasks including futures_volume")
+    print(f"DEBUG: Creating parallel tasks (screener_html={'shared' if screener_html else 'independent fetch'})")
     print("=" * 50)
     tasks = {
         "yfinance_name": asyncio.to_thread(get_yfinance_data, tick),
         "tech_data": asyncio.to_thread(evaluate_ticker_signal, tick),
-        "screener_tables": fetch_consolidated_async(tick),
-        "documents": fetch_latest_documents_async(tick),
+        "documents": fetch_latest_documents_async(tick, html_content=screener_html),
         "futures_volume": asyncio.to_thread(get_futures_volume, tick),  # NEW: Fetch futures volume
         "analyst_reports": fetch_analyst_reports_async(tick),  # NEW: Fetch Trendlyne analyst reports
     }
@@ -9449,6 +9468,7 @@ async def get_analysis_for_ticker_async(tick, skip_ai_summary=False):
     # Run them all in parallel and wait for all to complete
     results = await asyncio.gather(*tasks.values(), return_exceptions=True)
     results_dict = dict(zip(tasks.keys(), results))
+    results_dict["screener_tables"] = screener_tables_result
 
     # --- Check for critical failures from Stage 1 ---
     # Note: futures_volume is optional (not all stocks have F&O), so skip it in critical check
@@ -9462,6 +9482,11 @@ async def get_analysis_for_ticker_async(tick, skip_ai_summary=False):
     res = results_dict["tech_data"]
     tables_from_screener, company_description, top_ratios, is_consolidated = results_dict["screener_tables"]
     latest_documents = results_dict["documents"]
+
+    # VALIDATION: Check if screener tables are empty or missing Quarterly Results
+    if not tables_from_screener or "Quarterly Results" not in tables_from_screener:
+        log_progress(f"Critical error: Screener financial tables are empty or missing for {tick}.")
+        return ({'error': f'Failed to fetch critical data: Screener tables are empty or missing.'}, 500)
     
     # Futures volume is optional - not all stocks have F&O contracts
     futures_volume_df = None
@@ -9801,6 +9826,10 @@ def get_analysis_for_ticker(tick, skip_ai_summary=False):
     print(f"DEBUG: Running full analysis for {tick} via get_analysis_for_ticker (skip_ai_summary={skip_ai_summary})", file=sys.stderr)
     result_for_frontend, analysis_for_cache = asyncio.run(get_analysis_for_ticker_async(tick, skip_ai_summary=skip_ai_summary))
     
+    if isinstance(analysis_for_cache, int) or (isinstance(result_for_frontend, dict) and 'error' in result_for_frontend):
+        print(f"WARN: Skipping cache write in get_analysis_for_ticker because analysis failed for {tick}", file=sys.stderr)
+        return result_for_frontend, analysis_for_cache
+
     # SAVE TO CACHE (Match behavior in /analyze)
     try:
         # Save to local memory cache (primary source for Forensic Agent)
@@ -9867,35 +9896,40 @@ def analyze():
                     else:
                         cached_result = cached_blob
                     
-                    # --- NEW: Check for Quarterly Updates ---
-                    try:
-                        # 1. Get current latest quarter from cache
-                        cached_fund = cached_result.get('fundamentals', {})
-                        # Also check if the cached analysis was Consolidated
-                        cached_is_consolidated = cached_result.get('is_consolidated', False)
-                        
-                        q_results_json = cached_fund.get('Quarterly Results')
-                        if q_results_json:
-                            # Parse JSON (stored with orient='split' and transposed)
-                            q_data = json.loads(q_results_json)
-                            q_headers = [str(h).strip() for h in q_data.get('index', []) if h and str(h).strip()]
-                            if q_headers:
-                                cached_latest_q = q_headers[-1]
-                                
-                                # 2. Fetch latest quarter from Screener.in live (matching consolidation status)
-                                log_progress(f"Checking for new quarterly results for {tick} (Consolidated: {cached_is_consolidated})...")
-                                live_latest_q = asyncio.run(fetch_latest_quarter_header_async(tick, consolidated=cached_is_consolidated))
-                                
-                                print(f"DEBUG: Smart Refresh Check for {tick}: Cached='{cached_latest_q}' vs Live='{live_latest_q}' (Consolidated={cached_is_consolidated})")
-                                
-                                if live_latest_q and live_latest_q != cached_latest_q:
-                                    print(f"INFO: NEW RESULTS FOUND: {cached_latest_q} -> {live_latest_q}. Forcing refresh for {tick}.")
-                                    log_progress(f"New quarterly results ({live_latest_q}) found. Refreshing analysis...")
-                                    force_refresh = True
-                                else:
-                                    print(f"INFO: No new results for {tick} (Latest: {cached_latest_q}).")
-                    except Exception as check_err:
-                        print(f"WARN: Smart refresh check failed for {tick}: {check_err}")
+                    # --- NEW: Check for Poisoned / Empty Cache ---
+                    cached_fund = cached_result.get('fundamentals', {})
+                    if not cached_fund or 'Quarterly Results' not in cached_fund:
+                        print(f"INFO: Cached data for {tick} is poisoned/empty. Forcing refresh.", file=sys.stderr)
+                        force_refresh = True
+                    
+                    if not force_refresh:
+                        # --- NEW: Check for Quarterly Updates ---
+                        try:
+                            # Also check if the cached analysis was Consolidated
+                            cached_is_consolidated = cached_result.get('is_consolidated', False)
+                            
+                            q_results_json = cached_fund.get('Quarterly Results')
+                            if q_results_json:
+                                # Parse JSON (stored with orient='split' and transposed)
+                                q_data = json.loads(q_results_json)
+                                q_headers = [str(h).strip() for h in q_data.get('index', []) if h and str(h).strip()]
+                                if q_headers:
+                                    cached_latest_q = q_headers[-1]
+                                    
+                                    # 2. Fetch latest quarter from Screener.in live (matching consolidation status)
+                                    log_progress(f"Checking for new quarterly results for {tick} (Consolidated: {cached_is_consolidated})...")
+                                    live_latest_q = asyncio.run(fetch_latest_quarter_header_async(tick, consolidated=cached_is_consolidated))
+                                    
+                                    print(f"DEBUG: Smart Refresh Check for {tick}: Cached='{cached_latest_q}' vs Live='{live_latest_q}' (Consolidated={cached_is_consolidated})")
+                                    
+                                    if live_latest_q and live_latest_q != cached_latest_q:
+                                        print(f"INFO: NEW RESULTS FOUND: {cached_latest_q} -> {live_latest_q}. Forcing refresh for {tick}.")
+                                        log_progress(f"New quarterly results ({live_latest_q}) found. Refreshing analysis...")
+                                        force_refresh = True
+                                    else:
+                                        print(f"INFO: No new results for {tick} (Latest: {cached_latest_q}).")
+                        except Exception as check_err:
+                            print(f"WARN: Smart refresh check failed for {tick}: {check_err}")
                     
                     # Check if this is a LIGHT CACHE (only Screener.in + AI Summary)
                     is_light_cache = cached_result.get('light_cache', False)
@@ -9982,7 +10016,6 @@ def analyze():
                                 print(f"INFO: Fetched {len(analyst_reports)} analyst reports for {tick}")
                             except Exception as e:
                                 print(f"WARN: Failed to fetch analyst reports for {tick}: {e}")
-                                import traceback
                                 traceback.print_exc()
                                 analyst_reports = []
                             
@@ -10128,7 +10161,6 @@ def analyze():
                                 print(f"INFO: Fetched peer comparison from Screener.in with {len(peer_comparison_data)} peers for {tick}")
                             except Exception as e:
                                 print(f"WARN: Failed to fetch peer comparison from Screener.in: {e}")
-                                import traceback
                                 traceback.print_exc()
                                 # Fallback to yfinance only
                                 peer_comparison = {
@@ -10680,7 +10712,6 @@ def analyze():
         # --- END OF NEW LOGIC ---
 
     except Exception as e:
-        import traceback
         data = request.get_json(force=True) if request.is_json else {}
         log_progress(f"ERROR in /analyze wrapper for {data.get('ticker', 'N/A')}: {e}")
         traceback.print_exc()
@@ -12619,6 +12650,10 @@ from agents.concall_agent import register_concall_routes
 from fetchers.screener_fetcher import fetch_latest_documents_async, get_text_from_pdf_url_async, fetch_forensic_documents_async
 register_concall_routes(app, call_gemini_api, fetch_latest_documents_async, get_text_from_pdf_url_async)
 
+# Register Live Concall routes
+from agents.live_concall import register_live_concall_routes
+register_live_concall_routes(app, socketio, call_gemini_api)
+
 # Register Forensic Agent routes
 from agents.forensic_agent import register_forensic_routes
 register_forensic_routes(app, call_gemini_api, call_perplexity_api, get_any_cache, fetch_forensic_documents_async, get_analysis_for_ticker)
@@ -12645,7 +12680,7 @@ register_cosmic_routes(app, call_openai_api, call_perplexity_api, call_perplexit
 from agents.document_summarizer_agent import register_doc_summarizer_routes
 register_doc_summarizer_routes(app, call_openai_api)
 
-print("INFO: Agent Marketplace routes registered (Concall Agent, Forensic Agent, Analyst Agent, Forecasting Agent, Cosmic Agent, Doc Summarizer Agent)", file=sys.stderr)
+print("INFO: Agent Marketplace routes registered (Concall Agent, Live Concall Agent, Forensic Agent, Analyst Agent, Forecasting Agent, Cosmic Agent, Doc Summarizer Agent)", file=sys.stderr)
 
 # =====================================================================
 # END: Agent Marketplace
@@ -12809,6 +12844,68 @@ def screener_daily_scheduler():
 
 # Fire daemon on process birth natively mapping alongside gunicorn worker
 threading.Thread(target=screener_daily_scheduler, daemon=True).start()
+
+# -----------------------------------------------------------------------
+# Live Concall Notification Watcher
+# Checks the concall schedule every 60s and emits concall_starting_soon
+# events for calls that are ~10 minutes away.
+# -----------------------------------------------------------------------
+def _live_concall_notification_watcher():
+    """
+    Background thread: emit 'concall_starting_soon' SocketIO events for
+    calls within the 9-11 minute window so the frontend can show toasts.
+    Tracks which (session_key) calls have already been notified to avoid
+    duplicate emissions.
+    """
+    from agents.live_concall import fetch_concall_schedule
+    notified = set()
+
+    while True:
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                calls = loop.run_until_complete(fetch_concall_schedule(days=3))
+            finally:
+                loop.close()
+
+            now = datetime.now()
+            for call in calls:
+                parsed_dt_str = call.get('parsed_datetime')
+                if not parsed_dt_str:
+                    continue
+                try:
+                    parsed_dt = datetime.fromisoformat(parsed_dt_str)
+                    delta = (parsed_dt - now).total_seconds()
+                    # Emit once when the call is between 9 and 11 minutes away
+                    notify_key = f"{call.get('company_name','')}_{parsed_dt_str}"
+                    if 540 <= delta <= 660 and notify_key not in notified:
+                        notified.add(notify_key)
+                        socketio.emit('concall_starting_soon', {
+                            'company_name': call.get('company_name', ''),
+                            'call_time': call.get('call_time', ''),
+                            'call_date': call.get('call_date', ''),
+                            'announcement_url': call.get('announcement_url', ''),
+                            'minutes_away': round(delta / 60, 1),
+                        })
+                        print(
+                            f"LIVE_CONCALL: Notification — "
+                            f"{call.get('company_name')} starting in ~{delta/60:.0f} min",
+                            file=sys.stderr
+                        )
+                except Exception:
+                    pass
+
+            # Prune old notification keys (keep last 200)
+            if len(notified) > 200:
+                notified = set(list(notified)[-100:])
+
+        except Exception as e:
+            print(f"LIVE_CONCALL: Notification watcher error: {e}", file=sys.stderr)
+
+        time.sleep(60)
+
+threading.Thread(target=_live_concall_notification_watcher, daemon=True).start()
 
 if __name__ == '__main__':
     # Use socketio.run for WebSocket support

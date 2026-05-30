@@ -14,6 +14,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <style>
         :root {
             --bg-primary: #0a0a0f;
@@ -2343,6 +2344,386 @@
                 grid-template-columns: repeat(2, 1fr);
             }
         }
+
+        /* ============================================================
+         * LIVE CONCALL — UI STYLES
+         * ============================================================ */
+        .live-mode-toggle-row {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-top: 1.25rem;
+            padding-top: 1.25rem;
+            border-top: 1px solid var(--border-color);
+        }
+        .live-mode-btn {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1.1rem;
+            border-radius: 0.5rem;
+            font-size: 0.82rem;
+            font-weight: 600;
+            cursor: pointer;
+            border: 1px solid #ef4444;
+            background: transparent;
+            color: #ef4444;
+            transition: all 0.2s;
+            letter-spacing: 0.01em;
+        }
+        .live-mode-btn:hover, .live-mode-btn.active {
+            background: rgba(239,68,68,0.12);
+        }
+        .live-pulse {
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            background: #ef4444;
+            animation: livepulse 1.3s infinite;
+            flex-shrink: 0;
+        }
+        @keyframes livepulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(1.5); }
+        }
+        .live-badge {
+            display: inline-flex; align-items: center; gap: 4px;
+            padding: 2px 8px; border-radius: 999px;
+            font-size: 0.65rem; font-weight: 700; letter-spacing: 0.05em;
+            background: rgba(239,68,68,0.15); color: #ef4444;
+            border: 1px solid rgba(239,68,68,0.3);
+            text-transform: uppercase;
+        }
+        /* Schedule panel */
+        .live-panel {
+            display: none;
+        }
+        .live-panel.show {
+            display: block;
+        }
+        .live-schedule-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 1rem;
+            padding: 1.5rem;
+            margin-top: 1.25rem;
+        }
+        .live-schedule-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 1.25rem;
+        }
+        .live-schedule-header h3 {
+            font-size: 1rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            display: flex; align-items: center; gap: 0.5rem;
+        }
+        .live-schedule-refresh {
+            font-size: 0.75rem;
+            padding: 0.35rem 0.75rem;
+            border-radius: 0.4rem;
+            border: 1px solid var(--border-color);
+            background: transparent;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .live-schedule-refresh:hover { color: var(--text-primary); border-color: var(--border-glow); }
+        .live-call-list { display: flex; flex-direction: column; gap: 0.6rem; }
+        .live-call-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.85rem 1rem;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 0.65rem;
+            transition: border-color 0.2s;
+        }
+        .live-call-item:hover { border-color: rgba(124,58,237,0.4); }
+        .live-call-item.starting-soon {
+            border-color: rgba(239,68,68,0.4);
+            background: rgba(239,68,68,0.04);
+        }
+        .live-call-company {
+            font-size: 0.88rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+        .live-call-time {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            margin-top: 0.15rem;
+        }
+        .live-call-actions { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+        .live-pdf-link {
+            font-size: 0.72rem;
+            font-weight: 600;
+            padding: 0.35rem 0.7rem;
+            border-radius: 0.4rem;
+            background: transparent;
+            color: var(--text-secondary);
+            border: 1px solid var(--border-color);
+            cursor: pointer;
+            text-decoration: none;
+            transition: all 0.2s;
+            display: inline-flex; align-items: center; gap: 0.3rem;
+        }
+        .live-pdf-link:hover { color: var(--text-primary); border-color: #6366f1; }
+        .live-webcast-chip {
+            font-size: 0.72rem;
+            font-weight: 600;
+            padding: 0.35rem 0.7rem;
+            border-radius: 0.4rem;
+            background: rgba(99,102,241,0.12);
+            color: #818cf8;
+            border: 1px solid rgba(99,102,241,0.3);
+            cursor: pointer;
+            text-decoration: none;
+            transition: all 0.2s;
+            display: inline-flex; align-items: center; gap: 0.3rem;
+        }
+        .live-webcast-chip:hover { background: rgba(99,102,241,0.22); }
+        .live-join-btn {
+            font-size: 0.75rem;
+            font-weight: 600;
+            padding: 0.4rem 0.85rem;
+            border-radius: 0.4rem;
+            background: rgba(239,68,68,0.15);
+            color: #ef4444;
+            border: 1px solid rgba(239,68,68,0.3);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .live-join-btn:hover { background: rgba(239,68,68,0.28); }
+        .live-join-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .live-join-btn.loading { opacity: 0.7; }
+        .live-call-time-tbd { color: #6366f1; font-style: italic; }
+        .live-empty-state {
+            text-align: center;
+            padding: 2rem;
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+        }
+        /* Pre-call modal */
+        .live-modal-backdrop {
+            display: none;
+            position: fixed; inset: 0;
+            background: rgba(0,0,0,0.75);
+            z-index: 1000;
+            align-items: center; justify-content: center;
+        }
+        .live-modal-backdrop.show { display: flex; }
+        .live-modal {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 1.25rem;
+            padding: 2rem;
+            width: min(520px, 94vw);
+            max-height: 90vh;
+            overflow-y: auto;
+            position: relative;
+        }
+        .live-modal-title {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 0.25rem;
+        }
+        .live-modal-subtitle {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            margin-bottom: 1.5rem;
+        }
+        .live-modal-field { margin-bottom: 1rem; }
+        .live-modal-label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            margin-bottom: 0.35rem;
+        }
+        .live-modal-input {
+            width: 100%;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 0.5rem;
+            padding: 0.6rem 0.85rem;
+            font-size: 0.9rem;
+            color: var(--text-primary);
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        .live-modal-input:focus { border-color: var(--border-glow); }
+        .live-modal-actions {
+            display: flex; gap: 0.75rem; margin-top: 1.5rem;
+            flex-wrap: wrap;
+        }
+        .live-dial-btn {
+            flex: 1; min-width: 120px;
+            padding: 0.7rem 1.25rem;
+            border-radius: 0.6rem;
+            font-size: 0.9rem; font-weight: 700;
+            background: #ef4444; color: #fff;
+            border: none; cursor: pointer;
+            transition: opacity 0.2s;
+        }
+        .live-dial-btn:hover { opacity: 0.88; }
+        .live-dial-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .live-webcast-btn {
+            flex: 1; min-width: 120px;
+            padding: 0.7rem 1.25rem;
+            border-radius: 0.6rem;
+            font-size: 0.9rem; font-weight: 600;
+            background: transparent;
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+            cursor: pointer;
+            transition: all 0.2s;
+            text-decoration: none;
+            text-align: center;
+        }
+        .live-webcast-btn:hover { border-color: var(--border-glow); }
+        .live-modal-close {
+            position: absolute; top: 1rem; right: 1rem;
+            background: none; border: none;
+            color: var(--text-secondary);
+            font-size: 1.25rem; cursor: pointer;
+            line-height: 1;
+        }
+        .live-modal-close:hover { color: var(--text-primary); }
+        /* Active session stream view */
+        .live-stream-card {
+            background: var(--bg-card);
+            border: 1px solid rgba(239,68,68,0.35);
+            border-radius: 1rem;
+            padding: 1.5rem;
+            margin-top: 1.25rem;
+        }
+        .live-stream-header {
+            display: flex; align-items: center;
+            justify-content: space-between;
+            margin-bottom: 1.25rem;
+            flex-wrap: wrap; gap: 0.75rem;
+        }
+        .live-stream-status {
+            display: flex; align-items: center; gap: 0.5rem;
+        }
+        .live-stream-status-text {
+            font-size: 0.88rem; font-weight: 600;
+            color: var(--text-primary);
+        }
+        .live-stream-duration {
+            font-size: 0.78rem;
+            color: var(--text-secondary);
+            font-variant-numeric: tabular-nums;
+        }
+        .live-stream-controls {
+            display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;
+        }
+        .live-dtmf-btn {
+            font-size: 0.75rem; font-weight: 600;
+            padding: 0.4rem 0.85rem;
+            border-radius: 0.4rem;
+            background: var(--bg-secondary);
+            color: var(--text-secondary);
+            border: 1px solid var(--border-color);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .live-dtmf-btn:hover { color: var(--text-primary); border-color: var(--border-glow); }
+        .live-end-btn {
+            font-size: 0.8rem; font-weight: 700;
+            padding: 0.45rem 1rem;
+            border-radius: 0.4rem;
+            background: #ef4444; color: #fff;
+            border: none; cursor: pointer;
+            transition: opacity 0.2s;
+        }
+        .live-end-btn:hover { opacity: 0.85; }
+        .live-end-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .live-transcript-box {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 0.65rem;
+            padding: 1rem 1.2rem;
+            min-height: 200px;
+            max-height: 380px;
+            overflow-y: auto;
+            font-size: 0.85rem;
+            line-height: 1.7;
+            color: var(--text-primary);
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        .live-transcript-label {
+            font-size: 0.72rem; font-weight: 700;
+            color: var(--text-secondary);
+            text-transform: uppercase; letter-spacing: 0.05em;
+            margin-bottom: 0.5rem;
+        }
+        .live-transcript-empty {
+            color: var(--text-secondary);
+            font-style: italic;
+            font-size: 0.82rem;
+        }
+        .live-status-pill {
+            font-size: 0.7rem; font-weight: 700;
+            padding: 3px 10px; border-radius: 999px;
+            text-transform: uppercase; letter-spacing: 0.05em;
+        }
+        .live-status-pill.dialing  { background: rgba(251,191,36,0.15); color: #fbbf24; border: 1px solid rgba(251,191,36,0.3); }
+        .live-status-pill.recording { background: rgba(239,68,68,0.15); color: #ef4444; border: 1px solid rgba(239,68,68,0.3); }
+        .live-status-pill.ended    { background: rgba(99,102,241,0.15); color: #818cf8; border: 1px solid rgba(99,102,241,0.3); }
+        .live-status-pill.transcribing { background: rgba(59,130,246,0.15); color: #60a5fa; border: 1px solid rgba(59,130,246,0.3); }
+        .live-status-pill.summarizing { background: rgba(168,85,247,0.15); color: #c084fc; border: 1px solid rgba(168,85,247,0.3); }
+        .live-status-pill.complete  { background: rgba(34,197,94,0.15); color: #4ade80; border: 1px solid rgba(34,197,94,0.3); }
+        .live-status-pill.error    { background: rgba(239,68,68,0.12); color: #f87171; border: 1px solid rgba(239,68,68,0.25); }
+        /* Toast notifications */
+        #liveToastContainer {
+            position: fixed; bottom: 1.5rem; right: 1.5rem;
+            z-index: 2000;
+            display: flex; flex-direction: column; gap: 0.6rem;
+            pointer-events: none;
+        }
+        .live-toast {
+            background: var(--bg-card);
+            border: 1px solid rgba(239,68,68,0.4);
+            border-radius: 0.75rem;
+            padding: 0.85rem 1.1rem;
+            max-width: 340px;
+            pointer-events: all;
+            display: flex; gap: 0.75rem; align-items: flex-start;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+            animation: toastIn 0.3s ease;
+        }
+        @keyframes toastIn {
+            from { opacity: 0; transform: translateY(12px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        .live-toast-icon { font-size: 1.3rem; flex-shrink: 0; }
+        .live-toast-body { flex: 1; min-width: 0; }
+        .live-toast-title {
+            font-size: 0.82rem; font-weight: 700;
+            color: var(--text-primary); margin-bottom: 0.15rem;
+        }
+        .live-toast-msg { font-size: 0.76rem; color: var(--text-secondary); }
+        .live-toast-join {
+            font-size: 0.72rem; font-weight: 700;
+            padding: 3px 10px; border-radius: 0.35rem;
+            background: rgba(239,68,68,0.18); color: #ef4444;
+            border: 1px solid rgba(239,68,68,0.3);
+            cursor: pointer; margin-top: 0.35rem;
+            display: inline-block;
+        }
+        .live-toast-close {
+            background: none; border: none;
+            color: var(--text-secondary); font-size: 1rem;
+            cursor: pointer; flex-shrink: 0; line-height: 1;
+            padding: 0;
+        }
     </style>
     <script src="scale_ui.js"></script>
 </head>
@@ -2523,6 +2904,16 @@
                 <div id="concallHistoryPanel" class="kagger-history-panel">
                     <ul id="concallHistoryList" class="kagger-history-list"></ul>
                 </div>
+                <!-- Live Mode Toggle -->
+                <div class="live-mode-toggle-row">
+                    <button class="live-mode-btn" id="liveModeToggleBtn" onclick="toggleLiveMode()">
+                        <span class="live-pulse"></span>
+                        Live Concall Mode
+                    </button>
+                    <span style="font-size:0.78rem;color:var(--text-secondary);">
+                        Join, record &amp; analyse earnings calls in real time
+                    </span>
+                </div>
             </div>
 
             <!-- Error -->
@@ -2602,7 +2993,105 @@
                         onclick="sendConcallChatMessage()">Send</button>
                 </div>
             </div>
+
+            <!-- ============================================ -->
+            <!-- LIVE CONCALL: SCHEDULE DASHBOARD             -->
+            <!-- ============================================ -->
+            <div class="live-panel" id="liveSchedulePanel">
+                <div class="live-schedule-card">
+                    <div class="live-schedule-header">
+                        <h3>
+                            <span class="live-badge"><span class="live-pulse" style="width:6px;height:6px;"></span>Live</span>
+                            Upcoming Conference Calls
+                        </h3>
+                        <button class="live-schedule-refresh" onclick="loadLiveSchedule(true)">🔄 Refresh</button>
+                    </div>
+                    <div id="liveCallList" class="live-call-list">
+                        <div class="live-empty-state">Loading schedule...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ============================================ -->
+            <!-- LIVE CONCALL: ACTIVE STREAM VIEW             -->
+            <!-- ============================================ -->
+            <div class="live-panel" id="liveStreamPanel">
+                <div class="live-stream-card">
+                    <div class="live-stream-header">
+                        <div class="live-stream-status">
+                            <span class="live-pulse"></span>
+                            <span class="live-stream-status-text" id="liveStreamCompany">Connecting...</span>
+                            <span class="live-status-pill dialing" id="liveStatusPill">Dialing</span>
+                        </div>
+                        <div class="live-stream-controls">
+                            <span class="live-stream-duration" id="liveStreamDuration">00:00</span>
+                            <button class="live-dtmf-btn" id="liveDtmfBtn"
+                                onclick="sendLiveDtmf()" title="Re-send passcode digits">
+                                🔢 Re-send Digits
+                            </button>
+                            <button class="live-end-btn" id="liveEndBtn"
+                                onclick="endLiveCall()">
+                                ⏹ End &amp; Summarise
+                            </button>
+                        </div>
+                    </div>
+                    <div class="live-transcript-label">Live Transcript</div>
+                    <div class="live-transcript-box" id="liveTranscriptBox">
+                        <span class="live-transcript-empty">Transcript will appear here once connected and audio is received...</span>
+                    </div>
+                </div>
+            </div>
+
         </div>
+
+        <!-- ============================================ -->
+        <!-- LIVE CONCALL: PRE-CALL MODAL (Global)        -->
+        <!-- ============================================ -->
+        <div class="live-modal-backdrop" id="liveDialModal">
+            <div class="live-modal">
+                <button class="live-modal-close" onclick="closeLiveModal()">✕</button>
+                <div class="live-modal-title" id="liveModalTitle">Join Live Concall</div>
+                <div class="live-modal-subtitle" id="liveModalSubtitle">Verify dial-in details before connecting</div>
+
+                <div id="liveModalExtractStatus" style="display:none;margin-bottom:1rem;">
+                    <div style="display:flex;align-items:center;gap:0.5rem;font-size:0.8rem;color:var(--text-secondary);">
+                        <div class="progress-dot"></div>
+                        <span id="liveModalExtractText">Extracting dial-in details from announcement PDF...</span>
+                    </div>
+                </div>
+
+                <div id="liveModalFields">
+                    <div class="live-modal-field">
+                        <div class="live-modal-label">Dial-in Number</div>
+                        <input class="live-modal-input" id="liveModalPhone" type="tel"
+                            placeholder="+912262801123" autocomplete="off" />
+                    </div>
+                    <div class="live-modal-field">
+                        <div class="live-modal-label">Passcode / Conference ID</div>
+                        <input class="live-modal-input" id="liveModalPasscode" type="text"
+                            placeholder="e.g. 123456#" autocomplete="off" />
+                    </div>
+                    <div class="live-modal-field">
+                        <div class="live-modal-label">PIN (if separate)</div>
+                        <input class="live-modal-input" id="liveModalPin" type="text"
+                            placeholder="Leave blank if not required" autocomplete="off" />
+                    </div>
+                    <div class="live-modal-actions">
+                        <button class="live-dial-btn" id="liveDialNowBtn"
+                            onclick="startLiveCall()">
+                            📞 Dial Now
+                        </button>
+                        <a class="live-webcast-btn" id="liveWebcastBtn" href="#" target="_blank"
+                            style="display:none;">
+                            🌐 Join Webcast
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Toast Notification Container -->
+        <div id="liveToastContainer"></div>
 
         <!-- =============================== -->
         <!-- FORENSIC AGENT WORKSPACE         -->
@@ -3503,6 +3992,538 @@
                     concallChatLoading = false;
                     document.getElementById('concallChatSendBtn').disabled = false;
                 });
+        }
+
+        // =====================================================
+        // LIVE CONCALL AGENT
+        // =====================================================
+
+        // ── State ────────────────────────────────────────────
+        let liveModeActive = false;
+        let liveSchedule = [];
+        let liveScheduleLoaded = false;
+        let liveSessionId = null;
+        let liveDurationInterval = null;
+        let liveConnectedAt = null;
+        let liveCurrentCall = null;   // the schedule item pending dial-in
+        let liveExtractedDialin = {}; // extracted from PDF
+        const liveDialinCache = {};   // keyed by announcement_url; avoids re-extracting
+
+        // ── Socket.IO ────────────────────────────────────────
+        let lcSocket = null;
+
+        function ensureLcSocket() {
+            if (lcSocket) return;
+            try {
+                lcSocket = io({ transports: ['websocket', 'polling'] });
+
+                lcSocket.on('live_concall_state', (data) => {
+                    if (data.session_id !== liveSessionId) return;
+                    onLiveSessionState(data.state, data);
+                });
+
+                lcSocket.on('live_concall_transcript', (data) => {
+                    if (data.session_id !== liveSessionId) return;
+                    appendLiveTranscript(data.text);
+                });
+
+                lcSocket.on('live_concall_summary', (data) => {
+                    if (data.session_id !== liveSessionId) return;
+                    onLiveSummaryReceived(data);
+                });
+
+                lcSocket.on('live_concall_error', (data) => {
+                    if (data.session_id !== liveSessionId) return;
+                    showLiveError(data.error || 'An unknown error occurred.');
+                });
+
+                lcSocket.on('live_concall_recording', (data) => {
+                    if (data.session_id !== liveSessionId) return;
+                    updateLiveStatusPill('transcribing');
+                    appendLiveTranscript('\n[Recording received — transcribing via AI...]\n');
+                });
+
+                lcSocket.on('concall_starting_soon', (data) => {
+                    showConcallToast(data);
+                });
+            } catch (e) {
+                console.warn('LIVE_CONCALL: Socket.IO init failed', e);
+            }
+        }
+
+        // ── Toggle live mode ─────────────────────────────────
+        function toggleLiveMode() {
+            liveModeActive = !liveModeActive;
+            const btn = document.getElementById('liveModeToggleBtn');
+            const schedPanel = document.getElementById('liveSchedulePanel');
+
+            if (liveModeActive) {
+                btn.classList.add('active');
+                schedPanel.classList.add('show');
+                ensureLcSocket();
+                if (!liveScheduleLoaded) loadLiveSchedule();
+                // Hide existing analysis panels to reduce clutter
+                hideEl('concallError');
+                if (!liveSessionId) hideEl('liveStreamPanel');
+            } else {
+                btn.classList.remove('active');
+                schedPanel.classList.remove('show');
+                if (!liveSessionId) hideEl('liveStreamPanel');
+            }
+        }
+
+        // ── Schedule ──────────────────────────────────────────
+        async function loadLiveSchedule(forceRefresh = false) {
+            if (forceRefresh) liveScheduleLoaded = false;
+            const listEl = document.getElementById('liveCallList');
+            listEl.innerHTML = '<div class="live-empty-state">Loading schedule...</div>';
+
+            try {
+                const resp = await fetch('/api/live-concall/schedule?days=7');
+                const data = await resp.json();
+                liveSchedule = data.calls || [];
+                liveScheduleLoaded = true;
+                renderLiveSchedule();
+            } catch (e) {
+                listEl.innerHTML = `<div class="live-empty-state">Failed to load schedule: ${escapeHtml(e.message)}</div>`;
+            }
+        }
+
+        function renderLiveSchedule() {
+            const listEl = document.getElementById('liveCallList');
+
+            // Filter to upcoming + starting_soon only
+            const visible = liveSchedule.filter(c =>
+                c.status === 'upcoming' || c.status === 'starting_soon'
+            );
+
+            if (!visible.length) {
+                listEl.innerHTML = '<div class="live-empty-state">No upcoming conference calls in the next 7 days.</div>';
+                return;
+            }
+
+            listEl.innerHTML = visible.map(call => {
+                const isSoon = call.status === 'starting_soon';
+                const hasPdf = !!call.announcement_url;
+                const callSafe = JSON.stringify(call).replace(/'/g, "&#39;");
+
+                // Time display: show "Time TBD" when missing
+                const timeStr = call.call_time
+                    ? `${call.call_date || ''} · ${call.call_time}`.replace(/^\s*·\s*/, '')
+                    : call.call_date || '';
+                const timeSuffix = call.call_time ? '' : ' · <span class="live-call-time-tbd">Time TBD</span>';
+
+                // Build action buttons
+                const pdfBtn = hasPdf
+                    ? `<a class="live-pdf-link" href="${escapeHtml(call.announcement_url)}" target="_blank" rel="noopener">📄 PDF</a>`
+                    : '';
+
+                // "Webcast" chip — directly opens webcast URL (extracts from PDF if needed)
+                const webcastBtn = hasPdf
+                    ? `<button class="live-webcast-chip" onclick='handleWebcastClick(this, ${callSafe})' title="Open webcast link">🌐 Webcast</button>`
+                    : '';
+
+                const dialBtn = `<button class="live-join-btn" onclick='openLiveDialModal(${callSafe}, false)'>📞 Dial In</button>`;
+
+                return `
+                <div class="live-call-item ${isSoon ? 'starting-soon' : ''}">
+                    <div>
+                        <div class="live-call-company">
+                            ${isSoon ? '<span class="live-badge" style="margin-right:6px;"><span class="live-pulse" style="width:5px;height:5px;"></span>Soon</span>' : ''}
+                            ${escapeHtml(call.company_name || 'Unknown Company')}
+                        </div>
+                        <div class="live-call-time">${escapeHtml(timeStr)}${timeSuffix}</div>
+                    </div>
+                    <div class="live-call-actions">
+                        ${pdfBtn}
+                        ${webcastBtn}
+                        ${dialBtn}
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        // ── Webcast direct-open (bypasses modal) ─────────────
+        async function handleWebcastClick(btn, call) {
+            if (!call.announcement_url) return;
+
+            // Serve from cache if already extracted
+            const cached = liveDialinCache[call.announcement_url];
+            if (cached) {
+                if (cached.webcast_url) {
+                    window.open(cached.webcast_url, '_blank', 'noopener');
+                } else {
+                    const orig = btn.textContent;
+                    btn.textContent = '⚠ No webcast URL';
+                    btn.disabled = true;
+                    setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 3000);
+                }
+                return;
+            }
+
+            // Show loading state
+            const origText = btn.textContent;
+            btn.textContent = 'Loading...';
+            btn.disabled = true;
+
+            try {
+                const resp = await fetch('/api/live-concall/extract-dialin', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ pdf_url: call.announcement_url })
+                });
+                const data = await resp.json();
+                const dialin = data.dialin || {};
+                liveDialinCache[call.announcement_url] = dialin;
+
+                if (dialin.webcast_url) {
+                    window.open(dialin.webcast_url, '_blank', 'noopener');
+                    btn.textContent = origText;
+                    btn.disabled = false;
+                } else {
+                    btn.textContent = '⚠ No webcast URL';
+                    setTimeout(() => { btn.textContent = origText; btn.disabled = false; }, 3000);
+                }
+            } catch (e) {
+                btn.textContent = '⚠ Error';
+                setTimeout(() => { btn.textContent = origText; btn.disabled = false; }, 3000);
+            }
+        }
+
+        // ── Pre-call modal ────────────────────────────────────
+        async function openLiveDialModal(call, focusWebcast = false) {
+            liveCurrentCall = call;
+            liveExtractedDialin = {};
+
+            document.getElementById('liveModalTitle').textContent =
+                `Join — ${call.company_name || 'Conference Call'}`;
+            const timeStr = call.call_time
+                ? `${call.call_date || ''} · ${call.call_time}`.replace(/^\s*·\s*/, '')
+                : call.call_date || 'Date TBD';
+            document.getElementById('liveModalSubtitle').textContent = timeStr;
+
+            // Clear fields
+            document.getElementById('liveModalPhone').value = '';
+            document.getElementById('liveModalPasscode').value = '';
+            document.getElementById('liveModalPin').value = '';
+            document.getElementById('liveWebcastBtn').style.display = 'none';
+            document.getElementById('liveWebcastBtn').href = '#';
+            document.getElementById('liveDialNowBtn').disabled = false;
+
+            // Show modal
+            document.getElementById('liveDialModal').classList.add('show');
+
+            // If PDF available, extract dial-in details (use cache if available)
+            if (call.announcement_url) {
+                const extractStatus = document.getElementById('liveModalExtractStatus');
+
+                const applyDialin = (dialin) => {
+                    liveExtractedDialin = dialin;
+                    if (dialin.phone_number) document.getElementById('liveModalPhone').value = dialin.phone_number;
+                    if (dialin.passcode)     document.getElementById('liveModalPasscode').value = dialin.passcode;
+                    if (dialin.pin)          document.getElementById('liveModalPin').value = dialin.pin;
+                    if (dialin.webcast_url) {
+                        const wbBtn = document.getElementById('liveWebcastBtn');
+                        wbBtn.href = dialin.webcast_url;
+                        wbBtn.style.display = 'inline-flex';
+                    }
+                    extractStatus.style.display = 'none';
+                };
+
+                const cached = liveDialinCache[call.announcement_url];
+                if (cached) {
+                    applyDialin(cached);
+                    return;
+                }
+
+                extractStatus.style.display = 'block';
+                document.getElementById('liveModalExtractText').textContent =
+                    'Extracting dial-in details from announcement PDF...';
+
+                try {
+                    const resp = await fetch('/api/live-concall/extract-dialin', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ pdf_url: call.announcement_url })
+                    });
+                    const data = await resp.json();
+                    if (data.dialin) {
+                        liveDialinCache[call.announcement_url] = data.dialin;
+                        applyDialin(data.dialin);
+                        if (!data.dialin.webcast_url && !data.dialin.phone_number) {
+                            document.getElementById('liveModalExtractText').textContent =
+                                'Could not auto-extract details. Please fill in manually.';
+                            extractStatus.style.display = 'block';
+                            setTimeout(() => { extractStatus.style.display = 'none'; }, 4000);
+                        }
+                    } else {
+                        document.getElementById('liveModalExtractText').textContent =
+                            'Could not auto-extract details. Please fill in manually.';
+                        setTimeout(() => { extractStatus.style.display = 'none'; }, 4000);
+                    }
+                } catch (e) {
+                    document.getElementById('liveModalExtractText').textContent =
+                        'Extraction failed. Please fill in manually.';
+                    setTimeout(() => { extractStatus.style.display = 'none'; }, 4000);
+                }
+            }
+        }
+
+        function closeLiveModal() {
+            document.getElementById('liveDialModal').classList.remove('show');
+            document.getElementById('liveModalExtractStatus').style.display = 'none';
+        }
+
+        // ── Start call ────────────────────────────────────────
+        async function startLiveCall() {
+            const phone = document.getElementById('liveModalPhone').value.trim();
+            if (!phone) {
+                document.getElementById('liveModalPhone').focus();
+                return;
+            }
+
+            const passcode = document.getElementById('liveModalPasscode').value.trim();
+            const pin = document.getElementById('liveModalPin').value.trim();
+            const companyName = liveCurrentCall?.company_name || '';
+            const ticker = liveCurrentCall?.ticker || '';
+
+            document.getElementById('liveDialNowBtn').disabled = true;
+            document.getElementById('liveDialNowBtn').textContent = 'Dialing...';
+
+            try {
+                ensureLcSocket();
+                const resp = await fetch('/api/live-concall/start', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ phone_number: phone, passcode, pin, company_name: companyName, ticker })
+                });
+                const data = await resp.json();
+
+                if (data.error) {
+                    alert('Failed to start call: ' + data.error);
+                    document.getElementById('liveDialNowBtn').disabled = false;
+                    document.getElementById('liveDialNowBtn').textContent = '📞 Dial Now';
+                    return;
+                }
+
+                liveSessionId = data.session_id;
+                closeLiveModal();
+                showLiveStreamView(companyName);
+
+            } catch (e) {
+                alert('Network error: ' + e.message);
+                document.getElementById('liveDialNowBtn').disabled = false;
+                document.getElementById('liveDialNowBtn').textContent = '📞 Dial Now';
+            }
+        }
+
+        // ── Live stream view ──────────────────────────────────
+        function showLiveStreamView(companyName) {
+            document.getElementById('liveStreamPanel').classList.add('show');
+            document.getElementById('liveStreamCompany').textContent = companyName || 'Conference Call';
+            document.getElementById('liveTranscriptBox').innerHTML =
+                '<span class="live-transcript-empty">Connecting to conference bridge...</span>';
+            document.getElementById('liveEndBtn').disabled = false;
+            updateLiveStatusPill('dialing');
+            liveConnectedAt = null;
+            if (liveDurationInterval) clearInterval(liveDurationInterval);
+            liveDurationInterval = setInterval(updateLiveDuration, 1000);
+        }
+
+        function updateLiveDuration() {
+            if (!liveConnectedAt) {
+                document.getElementById('liveStreamDuration').textContent = '—';
+                return;
+            }
+            const secs = Math.floor((Date.now() - liveConnectedAt) / 1000);
+            const mm = String(Math.floor(secs / 60)).padStart(2, '0');
+            const ss = String(secs % 60).padStart(2, '0');
+            document.getElementById('liveStreamDuration').textContent = `${mm}:${ss}`;
+        }
+
+        function appendLiveTranscript(text) {
+            const box = document.getElementById('liveTranscriptBox');
+            // Remove empty placeholder
+            const placeholder = box.querySelector('.live-transcript-empty');
+            if (placeholder) placeholder.remove();
+            const span = document.createElement('span');
+            span.textContent = text + ' ';
+            box.appendChild(span);
+            box.scrollTop = box.scrollHeight;
+        }
+
+        function updateLiveStatusPill(state) {
+            const pill = document.getElementById('liveStatusPill');
+            const labels = {
+                dialing: 'Dialing', connected: 'Connected', recording: 'Recording',
+                ended: 'Ended', transcribing: 'Transcribing',
+                summarizing: 'Summarising', complete: 'Complete', error: 'Error'
+            };
+            pill.textContent = labels[state] || state;
+            pill.className = `live-status-pill ${state}`;
+        }
+
+        function onLiveSessionState(state, data) {
+            updateLiveStatusPill(state);
+            if (state === 'recording') {
+                if (!liveConnectedAt) liveConnectedAt = Date.now();
+                const box = document.getElementById('liveTranscriptBox');
+                const placeholder = box.querySelector('.live-transcript-empty');
+                if (placeholder) {
+                    placeholder.textContent =
+                        'Connected. Awaiting audio transcription... (recording in progress)';
+                }
+            }
+            if (state === 'error') {
+                document.getElementById('liveEndBtn').disabled = false;
+            }
+        }
+
+        function showLiveError(msg) {
+            updateLiveStatusPill('error');
+            appendLiveTranscript(`\n⚠️ Error: ${msg}`);
+            document.getElementById('liveEndBtn').disabled = false;
+        }
+
+        // ── DTMF re-send ──────────────────────────────────────
+        async function sendLiveDtmf() {
+            if (!liveSessionId) return;
+            const passcode = document.getElementById('liveModalPasscode')?.value?.trim()
+                || liveExtractedDialin?.passcode || '';
+            const pin = document.getElementById('liveModalPin')?.value?.trim()
+                || liveExtractedDialin?.pin || '';
+
+            if (!passcode && !pin) {
+                alert('No passcode stored. Dial in manually if needed.');
+                return;
+            }
+            let digits = passcode ? `wwwwww${passcode}` : '';
+            if (!digits.endsWith('#') && digits) digits += '#';
+            if (pin) digits += `wwww${pin}#`;
+
+            try {
+                const resp = await fetch('/api/live-concall/inject-dtmf', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ session_id: liveSessionId, digits })
+                });
+                const data = await resp.json();
+                if (data.error) alert('DTMF error: ' + data.error);
+            } catch (e) {
+                alert('Network error: ' + e.message);
+            }
+        }
+
+        // ── End call ──────────────────────────────────────────
+        async function endLiveCall() {
+            if (!liveSessionId) return;
+            const btn = document.getElementById('liveEndBtn');
+            btn.disabled = true;
+            btn.textContent = 'Ending...';
+
+            if (liveDurationInterval) clearInterval(liveDurationInterval);
+
+            try {
+                const resp = await fetch('/api/live-concall/end', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ session_id: liveSessionId })
+                });
+                const data = await resp.json();
+                updateLiveStatusPill('ended');
+                appendLiveTranscript('\n\n[Call ended — generating transcript and summary...]\n');
+            } catch (e) {
+                btn.disabled = false;
+                btn.textContent = '⏹ End & Summarise';
+                alert('Network error: ' + e.message);
+            }
+        }
+
+        // ── Summary received ──────────────────────────────────
+        function onLiveSummaryReceived(data) {
+            updateLiveStatusPill('complete');
+            if (liveDurationInterval) clearInterval(liveDurationInterval);
+
+            if (data.error) {
+                appendLiveTranscript(`\n\n⚠️ ${data.error}`);
+                return;
+            }
+
+            if (!data.analysis) return;
+
+            // Populate the standard concall analysis card with the live result
+            const ticker = liveCurrentCall?.ticker || '';
+            const companyName = liveCurrentCall?.company_name || '';
+
+            document.getElementById('concallAnalysisTitle').textContent =
+                `Concall Analysis — ${ticker || companyName}`;
+            document.getElementById('concallAnalysisMeta').textContent =
+                `Live Concall · Duration: ${Math.floor((data.duration || 0) / 60)}m ${(data.duration || 0) % 60}s · ${data.transcript_length || 0} chars`;
+
+            const sourceLink = document.getElementById('concallSourceLink');
+            sourceLink.style.display = 'none';
+
+            document.getElementById('concallAnalysisBody').innerHTML =
+                marked.parse(data.analysis);
+
+            // Persist for chat
+            currentConcallData = {
+                ticker: ticker,
+                analysis: data.analysis,
+                transcript_text: document.getElementById('liveTranscriptBox').textContent,
+                concall_label: 'Live Concall'
+            };
+
+            // Reset chat
+            document.getElementById('concallChatMessages').innerHTML = `
+              <div class="chat-message assistant">
+                <div class="chat-bubble">
+                  I've analysed the <strong>${escapeHtml(ticker || companyName)}</strong> live concall.
+                  Ask me anything about it.
+                </div>
+              </div>`;
+
+            showEl('concallAnalysis');
+            showEl('concallChat');
+            hideEl('concallMismatchNotice');
+
+            // Scroll into view
+            document.getElementById('concallAnalysis').scrollIntoView({ behavior: 'smooth' });
+
+            // Reset for next session
+            liveSessionId = null;
+        }
+
+        // ── Toast notifications ───────────────────────────────
+        function showConcallToast(data) {
+            const container = document.getElementById('liveToastContainer');
+            const id = 'toast_' + Date.now();
+            const toast = document.createElement('div');
+            toast.className = 'live-toast';
+            toast.id = id;
+            toast.innerHTML = `
+              <div class="live-toast-icon">📞</div>
+              <div class="live-toast-body">
+                <div class="live-toast-title">${escapeHtml(data.company_name || 'Concall')} — Starting Soon</div>
+                <div class="live-toast-msg">${escapeHtml(data.call_date || '')} ${escapeHtml(data.call_time || '')} · ~${Math.round(data.minutes_away || 10)} min away</div>
+                <button class="live-toast-join" onclick="toastJoinLive(${JSON.stringify(data).replace(/"/g, '&quot;')})">Join Live</button>
+              </div>
+              <button class="live-toast-close" onclick="document.getElementById('${id}').remove()">✕</button>
+            `;
+            container.appendChild(toast);
+            // Auto-dismiss after 30s
+            setTimeout(() => { if (toast.parentNode) toast.remove(); }, 30000);
+        }
+
+        function toastJoinLive(toastData) {
+            // Switch to concall tab and open live mode
+            switchAgent('concall');
+            if (!liveModeActive) toggleLiveMode();
+            // Find matching call in schedule and open modal
+            const match = liveSchedule.find(c => c.company_name === toastData.company_name);
+            if (match) {
+                openLiveDialModal(match);
+            }
         }
 
         // =====================================================

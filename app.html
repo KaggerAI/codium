@@ -7490,17 +7490,18 @@
           }).join('');
 
           // Check if we have cache info to show page refresh option - now displayed ABOVE the section
-          const cacheRefreshBar = window.cacheInfo ? `
+          const cachedTimeText = window.cacheInfo ? `<span class="text-xs text-slate-400">Cached: ${window.cacheInfo.cachedAt}</span>` : '';
+          const cacheRefreshBar = `
             <div class="flex items-center justify-end gap-2 mb-2">
-              <span class="text-xs text-slate-400">Cached: ${window.cacheInfo.cachedAt}</span>
-              <button onclick="runCompanyAnalysis(true)" class="text-slate-400 hover:text-green-600 hover:bg-green-50 p-1.5 rounded-lg transition-all flex items-center gap-1" title="Refresh all data">
+              ${cachedTimeText}
+              <button onclick="runCompanyAnalysis(true)" class="text-slate-400 hover:text-green-600 hover:bg-green-50 p-1.5 rounded-lg transition-all flex items-center gap-1 font-semibold cursor-pointer" title="Force a fresh analysis from scratch, ignoring cached data">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
                 </svg>
-                <span class="text-xs">Refresh All</span>
+                <span class="text-xs font-semibold">Force Refresh (Ignore Cache)</span>
               </button>
             </div>
-          ` : '';
+          `;
 
           // Section refresh button for Key Metrics only
           const sectionRefreshBtn = `
@@ -9088,7 +9089,22 @@
       } catch (err) {
         if (sseConnection) sseConnection.close();
         document.getElementById('progress-container')?.classList.remove('visible');
-        resultsContainer.innerHTML = `<div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg shadow-md" role="alert"><strong class="font-bold">Error:</strong><span class="block sm:inline">${err.message}</span></div>`;
+        resultsContainer.innerHTML = `
+          <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg shadow-md flex flex-col gap-3" role="alert">
+            <div>
+              <strong class="font-bold">Error:</strong>
+              <span class="block sm:inline">${err.message}</span>
+            </div>
+            <div>
+              <button onclick="runCompanyAnalysis(true)" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded transition-colors flex items-center gap-2 text-sm cursor-pointer shadow-sm">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                </svg>
+                Force Refresh (Ignore Cache)
+              </button>
+            </div>
+          </div>
+        `;
         console.error('Analysis error:', err);
       }
     }

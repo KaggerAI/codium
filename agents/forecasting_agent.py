@@ -1008,7 +1008,7 @@ def register_forecasting_routes(app, call_gemini_api_fn, call_perplexity_api_fn,
             return jsonify({
                 'status': 'error',
                 'error': job['error']
-            }), 500
+            })
 
         return jsonify({'error': 'Unknown job status'}), 500
 

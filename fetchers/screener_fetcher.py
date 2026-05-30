@@ -284,7 +284,7 @@ async def _inject_schedules_async(tables: dict, soup: BeautifulSoup, cid: str):
             pass
 
 
-async def fetch_consolidated_async(ticker: str) -> tuple[dict[str, pd.DataFrame], str, dict, bool]:
+async def fetch_consolidated_async(ticker: str, return_html: bool = False) -> tuple[dict[str, pd.DataFrame], str, dict, bool] | tuple[dict[str, pd.DataFrame], str, dict, bool, str]:
     """
     Fetches financial tables using a robust, two-stage hybrid approach.
     
@@ -527,6 +527,8 @@ async def fetch_consolidated_async(ticker: str) -> tuple[dict[str, pd.DataFrame]
         cid = cid_elem.get('data-company-id')
         await _inject_schedules_async(tables, soup, cid)
 
+    if return_html:
+        return tables, description, top_ratios, is_consolidated, text
     return tables, description, top_ratios, is_consolidated
 
 async def fetch_latest_quarter_header_async(ticker: str, consolidated: bool = False) -> str:
@@ -1423,16 +1425,22 @@ async def fetch_latest_document_dates_async(ticker: str) -> dict:
         return result
 
 
-async def fetch_latest_documents_async(ticker: str) -> list[dict]:
+async def fetch_latest_documents_async(ticker: str, html_content: str = None) -> list[dict]:
     try:
-        url = BASE_URL.format(ticker=ticker)
-        print(f"CONCALL_AGENT: fetch_latest_documents_async — fetching {url}", file=sys.stderr)
-        async with httpx.AsyncClient(follow_redirects=True) as client:
-            response = await client.get(url, headers=HEADERS, timeout=45.0)
-            response.raise_for_status()
+        if html_content is not None and len(html_content) > 500:
+            text = html_content
+            response_status_code = "Passed from fetch_consolidated_async"
+        else:
+            url = BASE_URL.format(ticker=ticker)
+            print(f"CONCALL_AGENT: fetch_latest_documents_async — fetching {url}", file=sys.stderr)
+            async with httpx.AsyncClient(follow_redirects=True) as client:
+                response = await client.get(url, headers=HEADERS, timeout=45.0)
+                response.raise_for_status()
+            text = response.text
+            response_status_code = response.status_code
         
-        print(f"CONCALL_AGENT: Screener page fetched OK ({response.status_code}, {len(response.text)} chars)", file=sys.stderr)
-        soup = BeautifulSoup(response.text, 'html.parser')
+        print(f"CONCALL_AGENT: Screener page fetched OK ({response_status_code}, {len(text)} chars)", file=sys.stderr)
+        soup = BeautifulSoup(text, 'html.parser')
         concalls_section = soup.find('div', class_='concalls')
         if not concalls_section:
             print(f"CONCALL_AGENT: ⚠️ No 'concalls' section found on Screener page for {ticker}", file=sys.stderr)
