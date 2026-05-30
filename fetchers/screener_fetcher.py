@@ -176,10 +176,14 @@ def _inject_schedules_sync(tables: dict, soup: BeautifulSoup, cid: str):
             
             api_url = f"https://www.screener.in/api/company/{cid}/schedules/?parent={urllib.parse.quote(parent_name)}&section={section_id}"
             
-            resp = requests.get(api_url, headers=HEADERS, timeout=10)
-            if resp.status_code != 200: continue
+            text, final_url, status_code = _stealth_get_html(api_url)
+            if status_code != 200: continue
             
-            schedule_data = resp.json()
+            import json
+            try:
+                schedule_data = json.loads(text)
+            except Exception:
+                continue
             if not schedule_data: continue
             
             parent_idx_list = df.index[df[first_col_name].astype(str).str.contains(parent_name, regex=False, na=False)].tolist()
@@ -240,10 +244,10 @@ async def _inject_schedules_async(tables: dict, soup: BeautifulSoup, cid: str):
     async def fetch_one(parent_name, section_id, table_label):
         try:
             api_url = f"https://www.screener.in/api/company/{cid}/schedules/?parent={urllib.parse.quote(parent_name)}&section={section_id}"
-            async with httpx.AsyncClient() as client:
-                resp = await client.get(api_url, headers=HEADERS, timeout=10.0)
-                if resp.status_code != 200: return None
-                return (parent_name, table_label, resp.json())
+            text, final_url, status_code = await _stealth_get_html_async(api_url)
+            if status_code != 200: return None
+            import json
+            return (parent_name, table_label, json.loads(text))
         except:
             return None
             
@@ -284,6 +288,94 @@ async def _inject_schedules_async(tables: dict, soup: BeautifulSoup, cid: str):
             pass
 
 
+async def _stealth_get_html_async(url: str, follow_redirects: bool = True) -> tuple[str, str, int]:
+    """
+    Attempts to fetch a URL using httpx first. If it encounters a 403, 429, or timeout
+    (often caused by Cloudflare blocking Azure IPs), it falls back to curl_cffi with 
+    a residential proxy.
+    Returns (html_content, final_url, status_code)
+    """
+    import os
+    
+    # Attempt 1: Fast direct fetch via httpx
+    try:
+        async with httpx.AsyncClient(follow_redirects=follow_redirects) as client:
+            response = await client.get(url, headers=HEADERS, timeout=30.0)
+            if response.status_code not in (403, 429):
+                response.raise_for_status()
+                return response.text, str(response.url), response.status_code
+            else:
+                log_progress(f"httpx got {response.status_code} for {url}. Cloudflare block suspected. Falling back to proxy...")
+    except Exception as e:
+        log_progress(f"httpx direct fetch failed for {url}: {e}. Falling back to proxy...")
+
+    # Attempt 2: Stealth fetch via curl_cffi + residential proxy
+    try:
+        def _cffi_fetch(target_url):
+            from curl_cffi import requests
+            proxy_url = os.environ.get("RESIDENTIAL_PROXY_URL")
+            proxies = {"http": proxy_url, "https": proxy_url} if proxy_url else None
+            
+            session = requests.Session(impersonate="chrome110", proxies=proxies)
+            r = session.get(
+                target_url,
+                headers={"Referer": "https://www.screener.in/"},
+                allow_redirects=follow_redirects,
+                timeout=45
+            )
+            return r.text, r.url, r.status_code
+
+        text, final_url, status_code = await asyncio.to_thread(_cffi_fetch, url)
+        if status_code == 200:
+            log_progress(f"Successfully fetched {url} via proxy.")
+        else:
+            log_progress(f"Proxy fetch for {url} returned {status_code}.")
+        return text, final_url, status_code
+    except Exception as e:
+        log_progress(f"Proxy fetch failed for {url}: {e}")
+        raise Exception(f"Proxy fetch failed: {e}")
+
+
+def _stealth_get_html(url: str, follow_redirects: bool = True) -> tuple[str, str, int]:
+    """
+    Synchronous version of _stealth_get_html_async.
+    Attempts direct fetch with requests first, then falls back to curl_cffi + proxy.
+    Returns (html_content, final_url, status_code)
+    """
+    import os
+    # Attempt 1: Fast direct requests
+    try:
+        response = requests.get(url, headers=HEADERS, allow_redirects=follow_redirects, timeout=30.0)
+        if response.status_code not in (403, 429):
+            return response.text, response.url, response.status_code
+        else:
+            log_progress(f"requests got {response.status_code} for {url}. Cloudflare block suspected. Falling back to proxy...")
+    except Exception as e:
+        log_progress(f"requests direct fetch failed for {url}: {e}. Falling back to proxy...")
+
+    # Attempt 2: Stealth fetch via curl_cffi + residential proxy
+    try:
+        from curl_cffi import requests as cffi_requests
+        proxy_url = os.environ.get("RESIDENTIAL_PROXY_URL")
+        proxies = {"http": proxy_url, "https": proxy_url} if proxy_url else None
+        
+        session = cffi_requests.Session(impersonate="chrome110", proxies=proxies)
+        r = session.get(
+            url,
+            headers={"Referer": "https://www.screener.in/"},
+            allow_redirects=follow_redirects,
+            timeout=45
+        )
+        if r.status_code == 200:
+            log_progress(f"Successfully fetched {url} via proxy (sync).")
+        else:
+            log_progress(f"Proxy fetch for {url} returned {r.status_code} (sync).")
+        return r.text, r.url, r.status_code
+    except Exception as e:
+        log_progress(f"Proxy fetch failed for {url} (sync): {e}")
+        raise Exception(f"Proxy fetch failed: {e}")
+
+
 async def fetch_consolidated_async(ticker: str, return_html: bool = False) -> tuple[dict[str, pd.DataFrame], str, dict, bool] | tuple[dict[str, pd.DataFrame], str, dict, bool, str]:
     """
     Fetches financial tables using a robust, two-stage hybrid approach.
@@ -309,35 +401,25 @@ async def fetch_consolidated_async(ticker: str, return_html: bool = False) -> tu
     
     # --- STAGE 1: FAST FETCH ---
     log_progress(f"Attempting fast fetch for {ticker} (Checking Consolidated vs Standalone)...")
-    # Use follow_redirects=True to handle cases like E2E where /consolidated/ might redirect
-    async with httpx.AsyncClient(follow_redirects=True) as client:
-        try:
-            response = await client.get(consolidated_url, headers=HEADERS, timeout=30.0)
-            response.raise_for_status()
-            text = response.text
-            final_url = str(response.url)
+    
+    try:
+        text, final_url, status_code = await _stealth_get_html_async(consolidated_url, follow_redirects=True)
+        
+        # 1. URL-based detection: If we wanted /consolidated/ but ended up somewhere else
+        if "/consolidated/" in final_url:
+            is_consolidated = True
+        else:
+            is_consolidated = False
+            log_progress(f"Redirected from consolidated to standalone for {ticker}")
             
-            # 1. URL-based detection: If we wanted /consolidated/ but ended up somewhere else
-            if "/consolidated/" in final_url:
-                is_consolidated = True
-            else:
-                is_consolidated = False
-                log_progress(f"Redirected from consolidated to standalone for {ticker}")
-
-        except httpx.HTTPStatusError:
-            log_progress(f"Consolidated URL not found (404) for {ticker}. Fetching standalone...")
-            # Fallback to standalone if consolidated 404s
-            try:
-                response = await client.get(standalone_url, headers=HEADERS, timeout=30.0)
-                response.raise_for_status()
-                text = response.text
-                is_consolidated = False
-                final_url = str(response.url)
-            except Exception as e:
-                log_progress(f"Error fetching standalone for {ticker}: {e}")
-                text = ""
-        except Exception as e:
-            log_progress(f"Error during fast fetch for {ticker}: {e}")
+    except Exception as e:
+        log_progress(f"Consolidated URL fetch failed for {ticker}. Fetching standalone...")
+        # Fallback to standalone if consolidated fails entirely
+        try:
+            text, final_url, status_code = await _stealth_get_html_async(standalone_url, follow_redirects=True)
+            is_consolidated = False
+        except Exception as standalone_e:
+            log_progress(f"Error fetching standalone for {ticker}: {standalone_e}")
             text = ""
 
     soup = BeautifulSoup(text, 'html.parser')
@@ -371,19 +453,18 @@ async def fetch_consolidated_async(ticker: str, return_html: bool = False) -> tu
             consol_latest_q = _extract_latest_quarter_from_soup(soup)
             if consol_latest_q:
                 # Quick-fetch standalone page to check its latest quarter
-                async with httpx.AsyncClient(follow_redirects=True) as client2:
-                    sa_resp = await client2.get(standalone_url, headers=HEADERS, timeout=15.0)
-                    if sa_resp.status_code == 200:
-                        sa_soup = BeautifulSoup(sa_resp.text, 'html.parser')
-                        sa_latest_q = _extract_latest_quarter_from_soup(sa_soup)
-                        if sa_latest_q and _compare_quarter_strings(sa_latest_q, consol_latest_q) > 0:
-                            log_progress(f"FRESHNESS: Standalone ({sa_latest_q}) is newer than Consolidated ({consol_latest_q}) for {ticker}. Switching to standalone.")
-                            text = sa_resp.text
-                            soup = sa_soup
-                            is_consolidated = False
-                            final_url = str(sa_resp.url)
-                        else:
-                            log_progress(f"FRESHNESS: Consolidated ({consol_latest_q}) is current for {ticker}. Keeping consolidated.")
+                sa_text, sa_final_url, sa_status_code = await _stealth_get_html_async(standalone_url, follow_redirects=True)
+                if sa_status_code == 200:
+                    sa_soup = BeautifulSoup(sa_text, 'html.parser')
+                    sa_latest_q = _extract_latest_quarter_from_soup(sa_soup)
+                    if sa_latest_q and _compare_quarter_strings(sa_latest_q, consol_latest_q) > 0:
+                        log_progress(f"FRESHNESS: Standalone ({sa_latest_q}) is newer than Consolidated ({consol_latest_q}) for {ticker}. Switching to standalone.")
+                        text = sa_text
+                        soup = sa_soup
+                        is_consolidated = False
+                        final_url = sa_final_url
+                    else:
+                        log_progress(f"FRESHNESS: Consolidated ({consol_latest_q}) is current for {ticker}. Keeping consolidated.")
         except Exception as freshness_err:
             log_progress(f"FRESHNESS: Check failed for {ticker} (non-fatal): {freshness_err}")
 
@@ -396,11 +477,10 @@ async def fetch_consolidated_async(ticker: str, return_html: bool = False) -> tu
     if not is_consolidated and "/consolidated/" in final_url:
         log_progress(f"Correcting source: Detected standalone for {ticker} but on consolidated URL. Fetching standalone URL for data...")
         try:
-            async with httpx.AsyncClient(follow_redirects=True) as client:
-                response = await client.get(standalone_url, headers=HEADERS, timeout=30.0)
-                response.raise_for_status()
-                text = response.text
-                final_url = str(response.url)
+            sa_text, sa_final_url, sa_status_code = await _stealth_get_html_async(standalone_url, follow_redirects=True)
+            if sa_status_code == 200:
+                text = sa_text
+                final_url = sa_final_url
                 soup = BeautifulSoup(text, 'html.parser') # Re-parse with new content
         except Exception as e:
              log_progress(f"Error re-fetching standalone for {ticker}: {e}")
@@ -411,8 +491,13 @@ async def fetch_consolidated_async(ticker: str, return_html: bool = False) -> tu
     if not soup.select_one("#quarters .data-table"):
         log_progress(f"Tables not found for {ticker} via fast method. Escalating to browser fetch...")
         
+        proxy_url = os.environ.get("RESIDENTIAL_PROXY_URL")
+        launch_kwargs = {}
+        if proxy_url:
+            launch_kwargs["proxy"] = {"server": proxy_url}
+            
         async with async_playwright() as p:
-            browser = await p.chromium.launch()
+            browser = await p.chromium.launch(**launch_kwargs)
             page = await browser.new_page()
             try:
                 # Use standalone_url as the safest root
@@ -542,16 +627,14 @@ async def fetch_latest_quarter_header_async(ticker: str, consolidated: bool = Fa
     else:
         target_url = f"https://www.screener.in/company/{ticker}/"
         
-    async with httpx.AsyncClient(follow_redirects=True) as client:
-        try:
-            response = await client.get(target_url, headers=HEADERS, timeout=15.0)
-            if response.status_code != 200:
-                print(f"DEBUG: fetch_latest_quarter failed for {ticker} (Consolidated: {consolidated}) - Status: {response.status_code}")
-                return ""
-            text = response.text
-        except Exception as e:
-            print(f"DEBUG: fetch_latest_quarter exception for {ticker}: {e}")
+    try:
+        text, final_url, status_code = await _stealth_get_html_async(target_url, follow_redirects=True)
+        if status_code != 200:
+            print(f"DEBUG: fetch_latest_quarter failed for {ticker} (Consolidated: {consolidated}) - Status: {status_code}")
             return ""
+    except Exception as e:
+        print(f"DEBUG: fetch_latest_quarter exception for {ticker}: {e}")
+        return ""
 
     soup = BeautifulSoup(text, 'html.parser')
     quarters_section = soup.select_one("#quarters")
@@ -642,23 +725,21 @@ def fetch_consolidated(ticker: str) -> tuple[dict[str, pd.DataFrame], str, dict,
     
     log_progress(f"Attempting sync fetch for {ticker} (Checking Consolidated vs Standalone)...")
     try:
-        response = requests.get(consolidated_url, headers=HEADERS, allow_redirects=True, timeout=30.0)
-        response.raise_for_status()
-        text = response.text
-        final_url = response.url
-        
-        if "/consolidated/" in final_url:
-            is_consolidated = True
+        text, final_url, status_code = _stealth_get_html(consolidated_url, follow_redirects=True)
+        if status_code == 200:
+            if "/consolidated/" in final_url:
+                is_consolidated = True
+            else:
+                is_consolidated = False
         else:
-            is_consolidated = False
+            raise Exception(f"Consolidated fetch returned status {status_code}")
     except Exception as e:
         log_progress(f"Error fetching consolidated URL for {ticker}: {e}. Trying standalone...")
         try:
-            response = requests.get(standalone_url, headers=HEADERS, timeout=30.0)
-            response.raise_for_status()
-            text = response.text
+            text, final_url, status_code = _stealth_get_html(standalone_url, follow_redirects=True)
+            if status_code != 200:
+                raise Exception(f"Standalone fetch returned status {status_code}")
             is_consolidated = False
-            final_url = str(response.url)
         except Exception as e2:
             log_progress(f"Error fetching standalone for {ticker}: {e2}")
             raise e2
@@ -683,16 +764,16 @@ def fetch_consolidated(ticker: str) -> tuple[dict[str, pd.DataFrame], str, dict,
         try:
             consol_latest_q = _extract_latest_quarter_from_soup(soup)
             if consol_latest_q:
-                sa_resp = requests.get(standalone_url, headers=HEADERS, timeout=15.0)
-                if sa_resp.status_code == 200:
-                    sa_soup = BeautifulSoup(sa_resp.text, 'html.parser')
+                sa_text, sa_final_url, sa_status_code = _stealth_get_html(standalone_url, follow_redirects=True)
+                if sa_status_code == 200:
+                    sa_soup = BeautifulSoup(sa_text, 'html.parser')
                     sa_latest_q = _extract_latest_quarter_from_soup(sa_soup)
                     if sa_latest_q and _compare_quarter_strings(sa_latest_q, consol_latest_q) > 0:
                         log_progress(f"FRESHNESS: Standalone ({sa_latest_q}) is newer than Consolidated ({consol_latest_q}) for {ticker}. Switching to standalone.")
-                        text = sa_resp.text
+                        text = sa_text
                         soup = sa_soup
                         is_consolidated = False
-                        final_url = str(sa_resp.url)
+                        final_url = sa_final_url
                     else:
                         log_progress(f"FRESHNESS: Consolidated ({consol_latest_q}) is current for {ticker}. Keeping consolidated.")
         except Exception as freshness_err:
@@ -703,11 +784,10 @@ def fetch_consolidated(ticker: str) -> tuple[dict[str, pd.DataFrame], str, dict,
         log_progress(f"Correcting source (sync): Detected standalone for {ticker} but on consolidated URL. Fetching standalone URL...")
         try:
             # Re-fetch using standalone URL to ensure we get the full tables
-            response = requests.get(standalone_url, headers=HEADERS, timeout=30.0)
-            response.raise_for_status()
-            text = response.text
-            # Re-parse soup
-            soup = BeautifulSoup(text, 'html.parser')
+            sa_text, sa_final_url, sa_status_code = _stealth_get_html(standalone_url, follow_redirects=True)
+            if sa_status_code == 200:
+                text = sa_text
+                soup = BeautifulSoup(text, 'html.parser')
         except Exception as e:
              log_progress(f"Error re-fetching standalone for {ticker}: {e}")
              # Proceed with what we have
@@ -801,60 +881,90 @@ def fetch_consolidated(ticker: str) -> tuple[dict[str, pd.DataFrame], str, dict,
     return tables, description, top_ratios, is_consolidated, peer_data
 
 async def get_company_id_async(ticker: str) -> int:
+    import urllib.parse
+    import json
     url = "https://www.screener.in/api/company/search/"
-    async with httpx.AsyncClient() as client:
-        resp = await client.get(url, params={"q": ticker}, timeout=30.0)
-        resp.raise_for_status()
-        data = resp.json()
-        
-        if not data and '-' in ticker:
-            resp = await client.get(url, params={"q": ticker.replace('-', ' ')}, timeout=30.0)
-            resp.raise_for_status()
-            data = resp.json()
-            if not data:
-                resp = await client.get(url, params={"q": ticker.replace('-', '')}, timeout=30.0)
-                resp.raise_for_status()
-                data = resp.json()
-                
+    
+    async def _search(q):
+        encoded_params = urllib.parse.urlencode({"q": q})
+        full_url = f"{url}?{encoded_params}"
+        text, final_url, status_code = await _stealth_get_html_async(full_url)
+        if status_code == 200 and text:
+            try:
+                return json.loads(text)
+            except Exception:
+                pass
+        return []
+
+    data = await _search(ticker)
+    if not data and '-' in ticker:
+        data = await _search(ticker.replace('-', ' '))
+        if not data:
+            data = await _search(ticker.replace('-', ''))
+            
     if not data: raise ValueError(f"No company found for ticker '{ticker}'")
     return data[0]["id"]
 
 def get_company_id(ticker: str) -> int:
+    import urllib.parse
+    import json
     url = "https://www.screener.in/api/company/search/"
-    resp = requests.get(url, params={"q": ticker})
-    resp.raise_for_status()
-    data = resp.json()
     
+    def _search(q):
+        encoded_params = urllib.parse.urlencode({"q": q})
+        full_url = f"{url}?{encoded_params}"
+        text, final_url, status_code = _stealth_get_html(full_url)
+        if status_code == 200 and text:
+            try:
+                return json.loads(text)
+            except Exception:
+                pass
+        return []
+
+    data = _search(ticker)
     if not data and '-' in ticker:
-        resp = requests.get(url, params={"q": ticker.replace('-', ' ')})
-        resp.raise_for_status()
-        data = resp.json()
+        data = _search(ticker.replace('-', ' '))
         if not data:
-            resp = requests.get(url, params={"q": ticker.replace('-', '')})
-            resp.raise_for_status()
-            data = resp.json()
+            data = _search(ticker.replace('-', ''))
             
-    if not data:
-        raise ValueError(f"No company found for ticker '{ticker}'")
+    if not data: raise ValueError(f"No company found for ticker '{ticker}'")
     return data[0]["id"]
 
 async def fetch_chart_data_async(client: httpx.AsyncClient, company_id: int, query: str, days: int = 10000, consolidated: bool = False) -> dict:
     url = f"https://www.screener.in/api/company/{company_id}/chart/"
+    import urllib.parse
+    import json
     params = {"q": query, "days": days}
     if consolidated:
         params["consolidated"] = 1
-    resp = await client.get(url, params=params, timeout=30.0)
-    resp.raise_for_status()
-    return resp.json()
+    encoded_params = urllib.parse.urlencode(params)
+    full_url = f"{url}?{encoded_params}"
+    
+    text, final_url, status_code = await _stealth_get_html_async(full_url)
+    if status_code == 200 and text:
+        try:
+            return json.loads(text)
+        except Exception as e:
+            raise Exception(f"Failed to parse chart JSON: {e}")
+    raise Exception(f"Failed to fetch chart data. Status: {status_code}")
 
 def fetch_chart_data(company_id: int, query: str, days: int = 10000, consolidated: bool = False) -> dict:
     url = f"https://www.screener.in/api/company/{company_id}/chart/"
+    import urllib.parse
+    import json
     params = {"q": query, "days": days}
     if consolidated:
         params["consolidated"] = 1
-    resp = requests.get(url, params=params)
-    resp.raise_for_status()
-    return resp.json()
+    encoded_params = urllib.parse.urlencode(params)
+    full_url = f"{url}?{encoded_params}"
+    
+    text, final_url, status_code = _stealth_get_html(full_url)
+    if status_code == 200 and text:
+        try:
+            return json.loads(text)
+        except Exception as e:
+            raise Exception(f"Failed to parse chart JSON: {e}")
+    raise Exception(f"Failed to fetch chart data. Status: {status_code}")
 
 # def parse_chart_json(chart_json: dict) -> pd.DataFrame:
 #     datasets = chart_json.get("datasets", [])
@@ -920,85 +1030,150 @@ def parse_chart_json(chart_json: dict) -> pd.DataFrame:
 
     return interpolated_df
 
+async def _stealth_download_pdf_async(pdf_url: str) -> tuple[bytes | None, str, int]:
+    """
+    Downloads a PDF using httpx first, then falls back to curl_cffi direct, then
+    curl_cffi with residential proxy.
+    Returns (pdf_content, content_type, status_code)
+    """
+    pdf_content = None
+    content_type = ""
+    status_code = 0
+    
+    # ── STAGE 1: Try httpx download ──
+    try:
+        async with httpx.AsyncClient(follow_redirects=True, verify=False) as client:
+            response = await client.get(pdf_url, headers=HEADERS, timeout=45.0)
+            if response.status_code not in (403, 429):
+                response.raise_for_status()
+                print(f"CONCALL_AGENT: PDF downloaded via httpx ({len(response.content)} bytes) from {pdf_url[:80]}", file=sys.stderr)
+                return response.content, response.headers.get('content-type', ''), response.status_code
+            else:
+                status_code = response.status_code
+    except Exception as httpx_err:
+        print(f"CONCALL_AGENT: httpx download failed for {pdf_url}: {httpx_err}", file=sys.stderr)
+        
+    # ── STAGE 2: Try curl_cffi (Chrome TLS impersonation) / proxy ──
+    try:
+        def _curl_cffi_download(url, use_proxy=False):
+            from curl_cffi import requests as cffi_requests
+            proxies = None
+            if use_proxy:
+                proxy_url = os.environ.get("RESIDENTIAL_PROXY_URL")
+                if proxy_url:
+                    proxies = {"http": proxy_url, "https": proxy_url}
+                    print(f"CONCALL_AGENT: Retrying with curl_cffi + residential proxy for {url}", file=sys.stderr)
+                else:
+                    return None, '', 0
+            else:
+                print(f"CONCALL_AGENT: Retrying with curl_cffi (Chrome TLS impersonation, direct) for {url}", file=sys.stderr)
+            
+            session = cffi_requests.Session(impersonate="chrome110", proxies=proxies)
+            r = session.get(
+                url,
+                headers={
+                    "Referer": url.rsplit('/', 1)[0] + "/",
+                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,application/pdf,*/*;q=0.8",
+                },
+                allow_redirects=True,
+                timeout=45
+            )
+            if r.status_code == 200 and r.content:
+                print(f"CONCALL_AGENT: ✓ curl_cffi downloaded {len(r.content)} bytes", file=sys.stderr)
+                return r.content, r.headers.get('content-type', ''), r.status_code
+            return None, '', r.status_code
+
+        # Attempt 1: Direct curl_cffi
+        content, ct, sc = await asyncio.to_thread(_curl_cffi_download, pdf_url, False)
+        if content:
+            return content, ct, sc
+            
+        # Attempt 2: Proxy curl_cffi
+        content, ct, sc = await asyncio.to_thread(_curl_cffi_download, pdf_url, True)
+        if content:
+            return content, ct, sc
+            
+        return None, ct, sc
+    except Exception as e:
+        print(f"CONCALL_AGENT: Proxy download helper exception: {e}", file=sys.stderr)
+        return None, "", 500
+
+def _stealth_download_pdf(pdf_url: str) -> tuple[bytes | None, str, int]:
+    """
+    Synchronous version of _stealth_download_pdf_async.
+    Downloads a PDF using requests first, then falls back to curl_cffi direct, then
+    curl_cffi with residential proxy.
+    Returns (pdf_content, content_type, status_code)
+    """
+    pdf_content = None
+    content_type = ""
+    status_code = 0
+    
+    # ── STAGE 1: Try requests download ──
+    try:
+        response = requests.get(pdf_url, headers=HEADERS, timeout=45.0)
+        if response.status_code not in (403, 429):
+            response.raise_for_status()
+            print(f"CONCALL_AGENT: PDF downloaded via requests ({len(response.content)} bytes) from {pdf_url[:80]}", file=sys.stderr)
+            return response.content, response.headers.get('content-type', ''), response.status_code
+        else:
+            status_code = response.status_code
+    except Exception as err:
+        print(f"CONCALL_AGENT: requests download failed for {pdf_url}: {err}", file=sys.stderr)
+        
+    # ── STAGE 2: Try curl_cffi (Chrome TLS impersonation) / proxy ──
+    try:
+        def _curl_cffi_download(url, use_proxy=False):
+            from curl_cffi import requests as cffi_requests
+            proxies = None
+            if use_proxy:
+                proxy_url = os.environ.get("RESIDENTIAL_PROXY_URL")
+                if proxy_url:
+                    proxies = {"http": proxy_url, "https": proxy_url}
+                    print(f"CONCALL_AGENT: Retrying with curl_cffi + residential proxy for {url} (sync)", file=sys.stderr)
+                else:
+                    return None, '', 0
+            else:
+                print(f"CONCALL_AGENT: Retrying with curl_cffi (Chrome TLS impersonation, direct) for {url} (sync)", file=sys.stderr)
+            
+            session = cffi_requests.Session(impersonate="chrome110", proxies=proxies)
+            r = session.get(
+                url,
+                headers={
+                    "Referer": url.rsplit('/', 1)[0] + "/",
+                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,application/pdf,*/*;q=0.8",
+                },
+                allow_redirects=True,
+                timeout=45
+            )
+            if r.status_code == 200 and r.content:
+                print(f"CONCALL_AGENT: ✓ curl_cffi downloaded {len(r.content)} bytes (sync)", file=sys.stderr)
+                return r.content, r.headers.get('content-type', ''), r.status_code
+            return None, '', r.status_code
+
+        # Attempt 1: Direct curl_cffi
+        content, ct, sc = _curl_cffi_download(pdf_url, False)
+        if content:
+            return content, ct, sc
+            
+        # Attempt 2: Proxy curl_cffi
+        content, ct, sc = _curl_cffi_download(pdf_url, True)
+        if content:
+            return content, ct, sc
+            
+        return None, ct, sc
+    except Exception as e:
+        print(f"CONCALL_AGENT: Proxy download helper exception: {e}", file=sys.stderr)
+        return None, "", 500
+
 async def get_text_from_pdf_url_async(pdf_url: str, max_pages_to_process=75, max_chars_to_return=20000, forensic_trim=False) -> str:
     """
     Downloads a PDF and extracts text. Uses pdfplumber first, then falls back to
     Gemini Vision for scanned PDFs (images instead of selectable text).
-    If httpx download fails (403), retries with curl_cffi Chrome TLS impersonation.
     """
     MIN_TEXT_THRESHOLD = 500  # If less than this, assume scanned PDF
     
-    pdf_content = None
-    response = None
-    
-    # ── STAGE 1: Try httpx download ──
-    try:
-        # NOTE: verify=False for corporate IR sites with SSL cert issues
-        async with httpx.AsyncClient(follow_redirects=True, verify=False) as client:
-            response = await client.get(pdf_url, headers=HEADERS, timeout=45.0)
-            response.raise_for_status()
-        pdf_content = response.content
-        print(f"CONCALL_AGENT: PDF downloaded via httpx ({len(pdf_content)} bytes) from {pdf_url[:80]}", file=sys.stderr)
-    except Exception as httpx_err:
-        print(f"CONCALL_AGENT: httpx download failed for {pdf_url}: {httpx_err}", file=sys.stderr)
-    
-    # ── STAGE 2: If httpx failed, retry with curl_cffi (Chrome TLS impersonation) ──
-    # Try direct first (TLS impersonation alone often bypasses 403), then with proxy
-    if not pdf_content:
-        try:
-            def _curl_cffi_download(url, use_proxy=False):
-                from curl_cffi import requests as cffi_requests
-                proxies = None
-                if use_proxy:
-                    proxy_url = os.environ.get("RESIDENTIAL_PROXY_URL")
-                    if proxy_url:
-                        proxies = {"http": proxy_url, "https": proxy_url}
-                        print(f"CONCALL_AGENT: Retrying with curl_cffi + residential proxy for {url}", file=sys.stderr)
-                    else:
-                        return None, '', 0  # No proxy configured
-                else:
-                    print(f"CONCALL_AGENT: Retrying with curl_cffi (Chrome TLS impersonation, direct) for {url}", file=sys.stderr)
-                
-                session = cffi_requests.Session(impersonate="chrome110", proxies=proxies)
-                r = session.get(
-                    url,
-                    headers={
-                        "Referer": url.rsplit('/', 1)[0] + "/",
-                        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,application/pdf,*/*;q=0.8",
-                    },
-                    allow_redirects=True,
-                    timeout=45
-                )
-                if r.status_code == 200 and r.content:
-                    print(f"CONCALL_AGENT: ✓ curl_cffi downloaded {len(r.content)} bytes", file=sys.stderr)
-                    return r.content, r.headers.get('content-type', ''), r.status_code
-                else:
-                    print(f"CONCALL_AGENT: curl_cffi returned status {r.status_code}", file=sys.stderr)
-                    return None, '', r.status_code
-            
-            # Attempt 1: Direct (no proxy) — TLS impersonation alone
-            result = await asyncio.to_thread(_curl_cffi_download, pdf_url, False)
-            if result[0]:
-                pdf_content = result[0]
-            else:
-                # Attempt 2: With residential proxy
-                print(f"CONCALL_AGENT: Direct curl_cffi failed, trying with proxy...", file=sys.stderr)
-                result = await asyncio.to_thread(_curl_cffi_download, pdf_url, True)
-                if result[0]:
-                    pdf_content = result[0]
-            
-            if pdf_content:
-                class _MockResponse:
-                    def __init__(self, content, ct):
-                        self.content = content
-                        self.text = content.decode('utf-8', errors='replace') if content else ''
-                        self.headers = {'content-type': ct}
-                response = _MockResponse(pdf_content, result[1])
-        except ImportError:
-            print(f"CONCALL_AGENT: curl_cffi not installed, cannot retry PDF download", file=sys.stderr)
-        except Exception as cffi_err:
-            print(f"CONCALL_AGENT: curl_cffi fallback also failed for {pdf_url}: {cffi_err}", file=sys.stderr)
-    
+    pdf_content, content_type, response_status_code = await _stealth_download_pdf_async(pdf_url)
     if not pdf_content:
         print(f"CONCALL_AGENT: ❌ All download methods failed for {pdf_url}", file=sys.stderr)
         return None
@@ -1006,15 +1181,14 @@ async def get_text_from_pdf_url_async(pdf_url: str, max_pages_to_process=75, max
     try:
         # --- FIX: Check if it's actually HTML (CRISIL often returns HTML pages for ratings) ---
         # 1. Check Content-Type header
-        content_type = response.headers.get('content-type', '').lower() if response else ''
         # 2. Check Magic Bytes (%PDF)
         is_pdf_signature = pdf_content.strip().startswith(b'%PDF')
         
-        if 'html' in content_type or not is_pdf_signature:
+        if 'html' in content_type.lower() or not is_pdf_signature:
             # It's likely an HTML page, not a PDF
             print(f"INFO: URL {pdf_url} appears to be HTML (Type: {content_type}). Parsing with BeautifulSoup...")
             try:
-                html_text = pdf_content.decode('utf-8', errors='replace') if isinstance(pdf_content, bytes) else response.text
+                html_text = pdf_content.decode('utf-8', errors='replace')
                 soup = BeautifulSoup(html_text, 'html.parser')
                 
                 # --- SPECIAL CASE: ICRA Wrapper Page ---
@@ -1165,10 +1339,12 @@ def get_text_from_pdf_url(pdf_url: str, max_pages_to_process=75, max_chars_to_re
     and extracts text from that point onwards for a few pages.
     """
     try:
-        response = requests.get(pdf_url, headers=HEADERS, timeout=15)
-        response.raise_for_status()
+        pdf_content, content_type, status_code = _stealth_download_pdf(pdf_url)
+        if not pdf_content:
+            print(f"ERROR: Failed to download PDF from {pdf_url}")
+            return None
         
-        pdf_file = BytesIO(response.content)
+        pdf_file = BytesIO(pdf_content)
         
         all_text = []
         start_page = 0
@@ -1211,14 +1387,11 @@ async def summarize_presentation_with_gemini_async(pdf_url: str) -> str:
         return "Error: Google API Key is not configured."
 
     try:
-        # Step 1: Download the PDF content asynchronously (this part is fast and safe)
-        # NOTE: verify=False bypasses SSL cert verification for corporate IR websites
-        # (e.g., pfcindia.co.in) that may have cert chain issues on Windows
-        async with httpx.AsyncClient(follow_redirects=True, verify=False) as client:
-            print(f"Downloading presentation from {pdf_url} for Gemini analysis...")
-            response = await client.get(pdf_url, headers=HEADERS, timeout=60.0)
-            response.raise_for_status()
-            pdf_content = response.content
+        # Step 1: Download the PDF content asynchronously via proxy/stealth backup
+        print(f"Downloading presentation from {pdf_url} for Gemini analysis...")
+        pdf_content, content_type, status_code = await _stealth_download_pdf_async(pdf_url)
+        if not pdf_content:
+            return f"Error: Failed to download presentation from {pdf_url}."
 
         # Step 2: Define a synchronous function that handles ALL Gemini operations.
         def blocking_gemini_tasks(content):
@@ -1308,9 +1481,9 @@ def summarize_presentation_with_gemini(pdf_url: str) -> str:
 
     try:
         print(f"Downloading presentation from {pdf_url} for Gemini analysis...")
-        response = requests.get(pdf_url, headers=HEADERS, timeout=30)
-        response.raise_for_status()
-        pdf_content = response.content
+        pdf_content, content_type, status_code = _stealth_download_pdf(pdf_url)
+        if not pdf_content:
+            return f"Error: Failed to download presentation from {pdf_url}."
         
         log_progress("Uploading PDF to Google AI File Service...")
         mime_type = mimetypes.guess_type(pdf_url)[0] or 'application/pdf'
@@ -1392,12 +1565,11 @@ async def fetch_latest_document_dates_async(ticker: str) -> dict:
     result = {"concall_date": "", "presentation_date": ""}
     try:
         url = BASE_URL.format(ticker=ticker)
-        async with httpx.AsyncClient(follow_redirects=True) as client:
-            response = await client.get(url, headers=HEADERS, timeout=15.0)
-            if response.status_code != 200:
-                return result
+        text, final_url, status_code = await _stealth_get_html_async(url, follow_redirects=True)
+        if status_code != 200:
+            return result
 
-        soup = BeautifulSoup(response.text, 'html.parser')
+        soup = BeautifulSoup(text, 'html.parser')
         concalls_section = soup.find('div', class_='concalls')
         if not concalls_section:
             return result
@@ -1433,11 +1605,7 @@ async def fetch_latest_documents_async(ticker: str, html_content: str = None) ->
         else:
             url = BASE_URL.format(ticker=ticker)
             print(f"CONCALL_AGENT: fetch_latest_documents_async — fetching {url}", file=sys.stderr)
-            async with httpx.AsyncClient(follow_redirects=True) as client:
-                response = await client.get(url, headers=HEADERS, timeout=45.0)
-                response.raise_for_status()
-            text = response.text
-            response_status_code = response.status_code
+            text, final_url, response_status_code = await _stealth_get_html_async(url, follow_redirects=True)
         
         print(f"CONCALL_AGENT: Screener page fetched OK ({response_status_code}, {len(text)} chars)", file=sys.stderr)
         soup = BeautifulSoup(text, 'html.parser')
@@ -1539,11 +1707,11 @@ async def fetch_concall_rec_url_async(ticker: str) -> dict:
     """
     try:
         url = BASE_URL.format(ticker=ticker)
-        async with httpx.AsyncClient(follow_redirects=True) as client:
-            response = await client.get(url, headers=HEADERS, timeout=45.0)
-            response.raise_for_status()
+        text, final_url, status_code = await _stealth_get_html_async(url, follow_redirects=True)
+        if status_code != 200:
+            return {}
         
-        soup = BeautifulSoup(response.text, 'html.parser')
+        soup = BeautifulSoup(text, 'html.parser')
         concalls_section = soup.find('div', class_='concalls')
         if not concalls_section: return {}
 
@@ -2044,11 +2212,12 @@ async def fetch_forensic_documents_async(ticker: str) -> dict:
     
     try:
         url = BASE_URL.format(ticker=ticker)
-        async with httpx.AsyncClient(follow_redirects=True) as client:
-            response = await client.get(url, headers=HEADERS, timeout=45.0)
-            response.raise_for_status()
+        text, final_url, status_code = await _stealth_get_html_async(url, follow_redirects=True)
+        if status_code != 200:
+            print(f"FORENSIC_DOCS ERROR: Could not fetch forensic page for {ticker}. Status: {status_code}")
+            return result
         
-        soup = BeautifulSoup(response.text, 'html.parser')
+        soup = BeautifulSoup(text, 'html.parser')
         
         # --- Find Credit Rating links (latest 2) ---
         credit_links = soup.select('a[class*="Credit+Rating"]')
@@ -2139,9 +2308,11 @@ def fetch_latest_documents(ticker: str) -> list[dict]:
     found_types = set()
     try:
         url = BASE_URL.format(ticker=ticker)
-        response = requests.get(url, headers=HEADERS, timeout=15)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.text, 'html.parser')
+        text, final_url, status_code = _stealth_get_html(url, follow_redirects=True)
+        if status_code != 200:
+            print(f"WARN: Could not fetch documents for {ticker}. Status: {status_code}")
+            return []
+        soup = BeautifulSoup(text, 'html.parser')
 
         concalls_section = soup.find('div', class_='concalls')
         if not concalls_section:
@@ -2240,15 +2411,9 @@ async def fetch_peer_comparison_from_screener_async(ticker: str, company_name: s
     """
     Async version of fetch_peer_comparison_from_screener.
     Uses a two-stage approach:
-    STAGE 1: Fast httpx fetch
-    STAGE 2: Playwright browser fetch (fallback for JS-rendered content)
-    
-    Args:
-        ticker: Stock ticker (e.g., 'NARAYANAHRU')
-        company_name: Optional company name from yfinance for fuzzy matching
+    STAGE 1: Fast HTTP fetch (stealth)
+    STAGE 2: Playwright browser fetch (fallback with proxy)
     """
-    from playwright.async_api import async_playwright
-    
     standalone_url = f"https://www.screener.in/company/{ticker}/"
     consolidated_url = standalone_url + "consolidated/"
     
@@ -2259,32 +2424,35 @@ async def fetch_peer_comparison_from_screener_async(ticker: str, company_name: s
         log_progress(f"Attempting fast fetch for {ticker} peer comparison...")
         soup = None
         
-        async with httpx.AsyncClient() as client:
-            for url in [consolidated_url, standalone_url]:
-                try:
-                    response = await client.get(url, headers=HEADERS, timeout=30.0)
-                    response.raise_for_status()
-                    soup = BeautifulSoup(response.text, 'html.parser')
-                    
-                    # Check if peer section has a table (indicating content is loaded)
-                    peers_section = soup.select_one("#peers")
-                    if peers_section and peers_section.select_one("table"):
-                        log_progress(f"Fast fetch found peer table at {url}")
-                        return _parse_peer_table(soup, ticker, company_name)
-                except httpx.HTTPStatusError as e:
-                    print(f"WARN: HTTP error fetching {url}: {e}")
+        for url in [consolidated_url, standalone_url]:
+            try:
+                text, final_url, status_code = await _stealth_get_html_async(url, follow_redirects=True)
+                if status_code != 200:
+                    print(f"WARN: Error status {status_code} fetching {url}")
                     continue
-                except Exception as e:
-                    print(f"WARN: Error fetching {url}: {e}")
-                    continue
+                soup = BeautifulSoup(text, 'html.parser')
+                
+                # Check if peer section has a table (indicating content is loaded)
+                peers_section = soup.select_one("#peers")
+                if peers_section and peers_section.select_one("table"):
+                    log_progress(f"Fast fetch found peer table at {url}")
+                    return _parse_peer_table(soup, ticker, company_name)
+            except Exception as e:
+                print(f"WARN: Error fetching {url}: {e}")
+                continue
         
         # =====================================================
         # STAGE 2: PLAYWRIGHT BROWSER FETCH (JS-rendered content)
         # =====================================================
         log_progress(f"Fast fetch insufficient. Using browser for {ticker} peer comparison...")
         
+        proxy_url = os.environ.get("RESIDENTIAL_PROXY_URL")
+        launch_kwargs = {}
+        if proxy_url:
+            launch_kwargs["proxy"] = {"server": proxy_url}
+            
         async with async_playwright() as p:
-            browser = await p.chromium.launch()
+            browser = await p.chromium.launch(**launch_kwargs)
             page = await browser.new_page()
             try:
                 # Try consolidated first, then standalone (consolidated has accurate data)
