@@ -255,11 +255,15 @@ Now produce the complete Cosmic Macro Intelligence Report as a single JSON objec
         ]
 
         # Call GPT-5.5 for synthesis (temperature 1 for bold crystal ball predictions)
+        # use_streaming=True keeps the connection active so Azure's SNAT ~4-min idle
+        # timeout doesn't silently drop this long-running call (it otherwise hangs
+        # forever on Azure while working fine on localhost).
         analysis_result = call_openai_api_fn(
             messages,
             model="gpt-5.5",
             temperature=1,
             timeout=420,  # 7 minutes — this is a massive synthesis
+            use_streaming=True,
         )
 
         elapsed_total = int(time.time() - start_time)

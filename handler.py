@@ -5196,30 +5196,35 @@ def convert_to_gemini_format(messages):
             gemini_messages.append({'role': role, 'parts': [msg["content"]]})
     return gemini_messages
 
-def call_openai_api(messages, model="gpt-5.4-mini", expect_json_format_flag=False, temperature=1, timeout=180, max_tokens=None):
+def call_openai_api(messages, model="gpt-5.4-mini", expect_json_format_flag=False, temperature=1, timeout=180, max_tokens=None, use_streaming=False):
     """
     Call OpenAI API with configurable timeout.
     Default timeout is 180 seconds (3 minutes) for slower models like gpt-5.4-mini.
+
+    use_streaming=True streams the completion and concatenates the deltas. This keeps
+    the outbound TCP connection active so it isn't killed by Azure's SNAT ~4-minute
+    idle timeout during long generations (e.g. the Cosmic GPT-5.5 synthesis). The
+    return value is identical to the non-streaming path, so callers are unaffected.
     """
     if not openai.api_key:
         raise ValueError("OpenAI API key is not configured.")
-    
+
     completion_params = {
         "model": model,
         "messages": messages,
         "temperature": temperature,
         "timeout": timeout,  # Explicit timeout in seconds
     }
-    
+
     # Use OpenAI's JSON mode for reliable structured output
     if expect_json_format_flag and ("-turbo" in model or "-o" in model):
         completion_params["response_format"] = {"type": "json_object"}
 
     # Determine if this model requires max_completion_tokens instead of max_tokens
     is_reasoning_model = (
-        model.startswith("o1-") or 
-        model.startswith("o3-") or 
-        model.startswith("o4-") or 
+        model.startswith("o1-") or
+        model.startswith("o3-") or
+        model.startswith("o4-") or
         "gpt-5" in model
     )
 
@@ -5228,6 +5233,33 @@ def call_openai_api(messages, model="gpt-5.4-mini", expect_json_format_flag=Fals
             completion_params["max_completion_tokens"] = max_tokens
         else:
             completion_params["max_tokens"] = max_tokens
+
+    # ── Streaming path: prevents Azure SNAT TCP idle timeout on long generations ──
+    if use_streaming:
+        completion_params["stream"] = True
+        try:
+            stream = openai.chat.completions.create(**completion_params)
+            parts = []
+            chunk_count = 0
+            for chunk in stream:
+                chunk_count += 1
+                if not chunk.choices:
+                    continue  # e.g. usage-only chunk
+                delta = chunk.choices[0].delta
+                content = getattr(delta, "content", None) if delta else None
+                if content:
+                    parts.append(content)
+                if chunk_count % 200 == 0:
+                    print(f"API_DEBUG: OpenAI stream progress (model={model}) — {chunk_count} chunks, {sum(len(p) for p in parts)} chars", file=sys.stderr)
+                    sys.stderr.flush()
+            result = "".join(parts)
+            print(f"API_DEBUG: OpenAI streaming complete (model={model}) — {chunk_count} chunks, {len(result)} chars", file=sys.stderr)
+            sys.stderr.flush()
+            return result
+        except Exception as e:
+            print(f"ERROR in call_openai_api (streaming, model={model}): {e}", file=sys.stderr)
+            sys.stderr.flush()
+            raise
 
     try:
         response = openai.chat.completions.create(**completion_params)
