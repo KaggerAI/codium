@@ -178,15 +178,92 @@
         }
 
         /* === AGENT TABS === */
+        .agent-tabs-container {
+            position: relative;
+            margin-bottom: 2rem;
+            width: 100%;
+            display: flex;
+            align-items: center;
+        }
+
+        .scroll-arrow {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 2.5rem;
+            height: 2.5rem;
+            border-radius: 50%;
+            background: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            z-index: 10;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .scroll-arrow.visible {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .scroll-arrow:hover {
+            background: rgba(124, 58, 237, 0.2);
+            border-color: rgba(124, 58, 237, 0.4);
+            box-shadow: 0 0 15px rgba(124, 58, 237, 0.4);
+            color: #fff;
+            transform: translateY(-50%) scale(1.05);
+        }
+
+        .scroll-arrow:active {
+            transform: translateY(-50%) scale(0.95);
+        }
+
+        .scroll-arrow.scroll-left {
+            left: -1rem;
+        }
+
+        .scroll-arrow.scroll-right {
+            right: -1rem;
+        }
+
+        .scroll-arrow svg {
+            width: 1.25rem;
+            height: 1.25rem;
+            fill: currentColor;
+            transition: transform 0.2s ease;
+        }
+
+        .scroll-arrow.scroll-left:hover svg {
+            transform: translateX(-2px);
+        }
+
+        .scroll-arrow.scroll-right:hover svg {
+            transform: translateX(2px);
+        }
+
         .agent-tabs {
             display: flex;
             gap: 0.5rem;
-            margin-bottom: 2rem;
+            margin-bottom: 0;
             padding: 0.375rem;
             background: var(--bg-secondary);
             border-radius: 0.75rem;
             border: 1px solid var(--border-color);
             overflow-x: auto;
+            scroll-behavior: smooth;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: none; /* Firefox */
+        }
+        
+        .agent-tabs::-webkit-scrollbar {
+            display: none; /* Chrome, Safari */
         }
 
         .agent-tab {
@@ -1029,8 +1106,17 @@
                 font-size: 1.5rem;
             }
 
+            .scroll-arrow {
+                display: none !important;
+            }
+
+            .agent-tabs-container {
+                margin-bottom: 2rem;
+            }
+
             .agent-tabs {
                 flex-direction: column;
+                overflow-x: visible;
             }
 
             .agent-tab {
@@ -2356,6 +2442,7 @@
             padding-top: 1.25rem;
             border-top: 1px solid var(--border-color);
         }
+
         .live-mode-btn {
             display: flex;
             align-items: center;
@@ -2371,35 +2458,59 @@
             transition: all 0.2s;
             letter-spacing: 0.01em;
         }
-        .live-mode-btn:hover, .live-mode-btn.active {
-            background: rgba(239,68,68,0.12);
+
+        .live-mode-btn:hover,
+        .live-mode-btn.active {
+            background: rgba(239, 68, 68, 0.12);
         }
+
         .live-pulse {
-            width: 8px; height: 8px;
+            width: 8px;
+            height: 8px;
             border-radius: 50%;
             background: #ef4444;
             animation: livepulse 1.3s infinite;
             flex-shrink: 0;
         }
+
         @keyframes livepulse {
-            0%, 100% { opacity: 1; transform: scale(1); }
-            50% { opacity: 0.5; transform: scale(1.5); }
+
+            0%,
+            100% {
+                opacity: 1;
+                transform: scale(1);
+            }
+
+            50% {
+                opacity: 0.5;
+                transform: scale(1.5);
+            }
         }
+
         .live-badge {
-            display: inline-flex; align-items: center; gap: 4px;
-            padding: 2px 8px; border-radius: 999px;
-            font-size: 0.65rem; font-weight: 700; letter-spacing: 0.05em;
-            background: rgba(239,68,68,0.15); color: #ef4444;
-            border: 1px solid rgba(239,68,68,0.3);
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 2px 8px;
+            border-radius: 999px;
+            font-size: 0.65rem;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            background: rgba(239, 68, 68, 0.15);
+            color: #ef4444;
+            border: 1px solid rgba(239, 68, 68, 0.3);
             text-transform: uppercase;
         }
+
         /* Schedule panel */
         .live-panel {
             display: none;
         }
+
         .live-panel.show {
             display: block;
         }
+
         .live-schedule-card {
             background: var(--bg-card);
             border: 1px solid var(--border-color);
@@ -2407,18 +2518,23 @@
             padding: 1.5rem;
             margin-top: 1.25rem;
         }
+
         .live-schedule-header {
             display: flex;
             align-items: center;
             justify-content: space-between;
             margin-bottom: 1.25rem;
         }
+
         .live-schedule-header h3 {
             font-size: 1rem;
             font-weight: 700;
             color: var(--text-primary);
-            display: flex; align-items: center; gap: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
         }
+
         .live-schedule-refresh {
             font-size: 0.75rem;
             padding: 0.35rem 0.75rem;
@@ -2429,8 +2545,18 @@
             cursor: pointer;
             transition: all 0.2s;
         }
-        .live-schedule-refresh:hover { color: var(--text-primary); border-color: var(--border-glow); }
-        .live-call-list { display: flex; flex-direction: column; gap: 0.6rem; }
+
+        .live-schedule-refresh:hover {
+            color: var(--text-primary);
+            border-color: var(--border-glow);
+        }
+
+        .live-call-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.6rem;
+        }
+
         .live-call-item {
             display: flex;
             align-items: center;
@@ -2441,22 +2567,36 @@
             border-radius: 0.65rem;
             transition: border-color 0.2s;
         }
-        .live-call-item:hover { border-color: rgba(124,58,237,0.4); }
-        .live-call-item.starting-soon {
-            border-color: rgba(239,68,68,0.4);
-            background: rgba(239,68,68,0.04);
+
+        .live-call-item:hover {
+            border-color: rgba(124, 58, 237, 0.4);
         }
+
+        .live-call-item.starting-soon {
+            border-color: rgba(239, 68, 68, 0.4);
+            background: rgba(239, 68, 68, 0.04);
+        }
+
         .live-call-company {
             font-size: 0.88rem;
             font-weight: 600;
             color: var(--text-primary);
         }
+
         .live-call-time {
             font-size: 0.75rem;
             color: var(--text-secondary);
             margin-top: 0.15rem;
         }
-        .live-call-actions { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+
+        .live-call-actions {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+        }
+
         .live-pdf-link {
             font-size: 0.72rem;
             font-weight: 600;
@@ -2468,53 +2608,88 @@
             cursor: pointer;
             text-decoration: none;
             transition: all 0.2s;
-            display: inline-flex; align-items: center; gap: 0.3rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
         }
-        .live-pdf-link:hover { color: var(--text-primary); border-color: #6366f1; }
+
+        .live-pdf-link:hover {
+            color: var(--text-primary);
+            border-color: #6366f1;
+        }
+
         .live-webcast-chip {
             font-size: 0.72rem;
             font-weight: 600;
             padding: 0.35rem 0.7rem;
             border-radius: 0.4rem;
-            background: rgba(99,102,241,0.12);
+            background: rgba(99, 102, 241, 0.12);
             color: #818cf8;
-            border: 1px solid rgba(99,102,241,0.3);
+            border: 1px solid rgba(99, 102, 241, 0.3);
             cursor: pointer;
             text-decoration: none;
             transition: all 0.2s;
-            display: inline-flex; align-items: center; gap: 0.3rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
         }
-        .live-webcast-chip:hover { background: rgba(99,102,241,0.22); }
+
+        .live-webcast-chip:hover {
+            background: rgba(99, 102, 241, 0.22);
+        }
+
         .live-join-btn {
             font-size: 0.75rem;
             font-weight: 600;
             padding: 0.4rem 0.85rem;
             border-radius: 0.4rem;
-            background: rgba(239,68,68,0.15);
+            background: rgba(239, 68, 68, 0.15);
             color: #ef4444;
-            border: 1px solid rgba(239,68,68,0.3);
+            border: 1px solid rgba(239, 68, 68, 0.3);
             cursor: pointer;
             transition: all 0.2s;
         }
-        .live-join-btn:hover { background: rgba(239,68,68,0.28); }
-        .live-join-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-        .live-join-btn.loading { opacity: 0.7; }
-        .live-call-time-tbd { color: #6366f1; font-style: italic; }
+
+        .live-join-btn:hover {
+            background: rgba(239, 68, 68, 0.28);
+        }
+
+        .live-join-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .live-join-btn.loading {
+            opacity: 0.7;
+        }
+
+        .live-call-time-tbd {
+            color: #6366f1;
+            font-style: italic;
+        }
+
         .live-empty-state {
             text-align: center;
             padding: 2rem;
             color: var(--text-secondary);
             font-size: 0.85rem;
         }
+
         /* Pre-call modal */
         .live-modal-backdrop {
             display: none;
-            position: fixed; inset: 0;
-            background: rgba(0,0,0,0.75);
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.75);
             z-index: 1000;
-            align-items: center; justify-content: center;
+            align-items: center;
+            justify-content: center;
         }
-        .live-modal-backdrop.show { display: flex; }
+
+        .live-modal-backdrop.show {
+            display: flex;
+        }
+
         .live-modal {
             background: var(--bg-card);
             border: 1px solid var(--border-color);
@@ -2525,18 +2700,24 @@
             overflow-y: auto;
             position: relative;
         }
+
         .live-modal-title {
             font-size: 1.1rem;
             font-weight: 700;
             color: var(--text-primary);
             margin-bottom: 0.25rem;
         }
+
         .live-modal-subtitle {
             font-size: 0.8rem;
             color: var(--text-secondary);
             margin-bottom: 1.5rem;
         }
-        .live-modal-field { margin-bottom: 1rem; }
+
+        .live-modal-field {
+            margin-bottom: 1rem;
+        }
+
         .live-modal-label {
             font-size: 0.75rem;
             font-weight: 600;
@@ -2545,6 +2726,7 @@
             letter-spacing: 0.04em;
             margin-bottom: 0.35rem;
         }
+
         .live-modal-input {
             width: 100%;
             background: var(--bg-secondary);
@@ -2556,27 +2738,48 @@
             outline: none;
             transition: border-color 0.2s;
         }
-        .live-modal-input:focus { border-color: var(--border-glow); }
+
+        .live-modal-input:focus {
+            border-color: var(--border-glow);
+        }
+
         .live-modal-actions {
-            display: flex; gap: 0.75rem; margin-top: 1.5rem;
+            display: flex;
+            gap: 0.75rem;
+            margin-top: 1.5rem;
             flex-wrap: wrap;
         }
+
         .live-dial-btn {
-            flex: 1; min-width: 120px;
+            flex: 1;
+            min-width: 120px;
             padding: 0.7rem 1.25rem;
             border-radius: 0.6rem;
-            font-size: 0.9rem; font-weight: 700;
-            background: #ef4444; color: #fff;
-            border: none; cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 700;
+            background: #ef4444;
+            color: #fff;
+            border: none;
+            cursor: pointer;
             transition: opacity 0.2s;
         }
-        .live-dial-btn:hover { opacity: 0.88; }
-        .live-dial-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .live-dial-btn:hover {
+            opacity: 0.88;
+        }
+
+        .live-dial-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
         .live-webcast-btn {
-            flex: 1; min-width: 120px;
+            flex: 1;
+            min-width: 120px;
             padding: 0.7rem 1.25rem;
             border-radius: 0.6rem;
-            font-size: 0.9rem; font-weight: 600;
+            font-size: 0.9rem;
+            font-weight: 600;
             background: transparent;
             color: var(--text-primary);
             border: 1px solid var(--border-color);
@@ -2585,46 +2788,73 @@
             text-decoration: none;
             text-align: center;
         }
-        .live-webcast-btn:hover { border-color: var(--border-glow); }
+
+        .live-webcast-btn:hover {
+            border-color: var(--border-glow);
+        }
+
         .live-modal-close {
-            position: absolute; top: 1rem; right: 1rem;
-            background: none; border: none;
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            background: none;
+            border: none;
             color: var(--text-secondary);
-            font-size: 1.25rem; cursor: pointer;
+            font-size: 1.25rem;
+            cursor: pointer;
             line-height: 1;
         }
-        .live-modal-close:hover { color: var(--text-primary); }
+
+        .live-modal-close:hover {
+            color: var(--text-primary);
+        }
+
         /* Active session stream view */
         .live-stream-card {
             background: var(--bg-card);
-            border: 1px solid rgba(239,68,68,0.35);
+            border: 1px solid rgba(239, 68, 68, 0.35);
             border-radius: 1rem;
             padding: 1.5rem;
             margin-top: 1.25rem;
         }
+
         .live-stream-header {
-            display: flex; align-items: center;
+            display: flex;
+            align-items: center;
             justify-content: space-between;
             margin-bottom: 1.25rem;
-            flex-wrap: wrap; gap: 0.75rem;
+            flex-wrap: wrap;
+            gap: 0.75rem;
         }
+
         .live-stream-status {
-            display: flex; align-items: center; gap: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
         }
+
         .live-stream-status-text {
-            font-size: 0.88rem; font-weight: 600;
+            font-size: 0.88rem;
+            font-weight: 600;
             color: var(--text-primary);
         }
+
         .live-stream-duration {
             font-size: 0.78rem;
             color: var(--text-secondary);
             font-variant-numeric: tabular-nums;
         }
+
         .live-stream-controls {
-            display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+            flex-wrap: wrap;
         }
+
         .live-dtmf-btn {
-            font-size: 0.75rem; font-weight: 600;
+            font-size: 0.75rem;
+            font-weight: 600;
             padding: 0.4rem 0.85rem;
             border-radius: 0.4rem;
             background: var(--bg-secondary);
@@ -2633,17 +2863,33 @@
             cursor: pointer;
             transition: all 0.2s;
         }
-        .live-dtmf-btn:hover { color: var(--text-primary); border-color: var(--border-glow); }
+
+        .live-dtmf-btn:hover {
+            color: var(--text-primary);
+            border-color: var(--border-glow);
+        }
+
         .live-end-btn {
-            font-size: 0.8rem; font-weight: 700;
+            font-size: 0.8rem;
+            font-weight: 700;
             padding: 0.45rem 1rem;
             border-radius: 0.4rem;
-            background: #ef4444; color: #fff;
-            border: none; cursor: pointer;
+            background: #ef4444;
+            color: #fff;
+            border: none;
+            cursor: pointer;
             transition: opacity 0.2s;
         }
-        .live-end-btn:hover { opacity: 0.85; }
-        .live-end-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .live-end-btn:hover {
+            opacity: 0.85;
+        }
+
+        .live-end-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
         .live-transcript-box {
             background: var(--bg-secondary);
             border: 1px solid var(--border-color);
@@ -2658,70 +2904,154 @@
             white-space: pre-wrap;
             word-break: break-word;
         }
+
         .live-transcript-label {
-            font-size: 0.72rem; font-weight: 700;
+            font-size: 0.72rem;
+            font-weight: 700;
             color: var(--text-secondary);
-            text-transform: uppercase; letter-spacing: 0.05em;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
             margin-bottom: 0.5rem;
         }
+
         .live-transcript-empty {
             color: var(--text-secondary);
             font-style: italic;
             font-size: 0.82rem;
         }
+
         .live-status-pill {
-            font-size: 0.7rem; font-weight: 700;
-            padding: 3px 10px; border-radius: 999px;
-            text-transform: uppercase; letter-spacing: 0.05em;
+            font-size: 0.7rem;
+            font-weight: 700;
+            padding: 3px 10px;
+            border-radius: 999px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
         }
-        .live-status-pill.dialing  { background: rgba(251,191,36,0.15); color: #fbbf24; border: 1px solid rgba(251,191,36,0.3); }
-        .live-status-pill.recording { background: rgba(239,68,68,0.15); color: #ef4444; border: 1px solid rgba(239,68,68,0.3); }
-        .live-status-pill.ended    { background: rgba(99,102,241,0.15); color: #818cf8; border: 1px solid rgba(99,102,241,0.3); }
-        .live-status-pill.transcribing { background: rgba(59,130,246,0.15); color: #60a5fa; border: 1px solid rgba(59,130,246,0.3); }
-        .live-status-pill.summarizing { background: rgba(168,85,247,0.15); color: #c084fc; border: 1px solid rgba(168,85,247,0.3); }
-        .live-status-pill.complete  { background: rgba(34,197,94,0.15); color: #4ade80; border: 1px solid rgba(34,197,94,0.3); }
-        .live-status-pill.error    { background: rgba(239,68,68,0.12); color: #f87171; border: 1px solid rgba(239,68,68,0.25); }
+
+        .live-status-pill.dialing {
+            background: rgba(251, 191, 36, 0.15);
+            color: #fbbf24;
+            border: 1px solid rgba(251, 191, 36, 0.3);
+        }
+
+        .live-status-pill.recording {
+            background: rgba(239, 68, 68, 0.15);
+            color: #ef4444;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
+        .live-status-pill.ended {
+            background: rgba(99, 102, 241, 0.15);
+            color: #818cf8;
+            border: 1px solid rgba(99, 102, 241, 0.3);
+        }
+
+        .live-status-pill.transcribing {
+            background: rgba(59, 130, 246, 0.15);
+            color: #60a5fa;
+            border: 1px solid rgba(59, 130, 246, 0.3);
+        }
+
+        .live-status-pill.summarizing {
+            background: rgba(168, 85, 247, 0.15);
+            color: #c084fc;
+            border: 1px solid rgba(168, 85, 247, 0.3);
+        }
+
+        .live-status-pill.complete {
+            background: rgba(34, 197, 94, 0.15);
+            color: #4ade80;
+            border: 1px solid rgba(34, 197, 94, 0.3);
+        }
+
+        .live-status-pill.error {
+            background: rgba(239, 68, 68, 0.12);
+            color: #f87171;
+            border: 1px solid rgba(239, 68, 68, 0.25);
+        }
+
         /* Toast notifications */
         #liveToastContainer {
-            position: fixed; bottom: 1.5rem; right: 1.5rem;
+            position: fixed;
+            bottom: 1.5rem;
+            right: 1.5rem;
             z-index: 2000;
-            display: flex; flex-direction: column; gap: 0.6rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.6rem;
             pointer-events: none;
         }
+
         .live-toast {
             background: var(--bg-card);
-            border: 1px solid rgba(239,68,68,0.4);
+            border: 1px solid rgba(239, 68, 68, 0.4);
             border-radius: 0.75rem;
             padding: 0.85rem 1.1rem;
             max-width: 340px;
             pointer-events: all;
-            display: flex; gap: 0.75rem; align-items: flex-start;
-            box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+            display: flex;
+            gap: 0.75rem;
+            align-items: flex-start;
+            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
             animation: toastIn 0.3s ease;
         }
+
         @keyframes toastIn {
-            from { opacity: 0; transform: translateY(12px); }
-            to   { opacity: 1; transform: translateY(0); }
+            from {
+                opacity: 0;
+                transform: translateY(12px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
-        .live-toast-icon { font-size: 1.3rem; flex-shrink: 0; }
-        .live-toast-body { flex: 1; min-width: 0; }
+
+        .live-toast-icon {
+            font-size: 1.3rem;
+            flex-shrink: 0;
+        }
+
+        .live-toast-body {
+            flex: 1;
+            min-width: 0;
+        }
+
         .live-toast-title {
-            font-size: 0.82rem; font-weight: 700;
-            color: var(--text-primary); margin-bottom: 0.15rem;
+            font-size: 0.82rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 0.15rem;
         }
-        .live-toast-msg { font-size: 0.76rem; color: var(--text-secondary); }
+
+        .live-toast-msg {
+            font-size: 0.76rem;
+            color: var(--text-secondary);
+        }
+
         .live-toast-join {
-            font-size: 0.72rem; font-weight: 700;
-            padding: 3px 10px; border-radius: 0.35rem;
-            background: rgba(239,68,68,0.18); color: #ef4444;
-            border: 1px solid rgba(239,68,68,0.3);
-            cursor: pointer; margin-top: 0.35rem;
+            font-size: 0.72rem;
+            font-weight: 700;
+            padding: 3px 10px;
+            border-radius: 0.35rem;
+            background: rgba(239, 68, 68, 0.18);
+            color: #ef4444;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            cursor: pointer;
+            margin-top: 0.35rem;
             display: inline-block;
         }
+
         .live-toast-close {
-            background: none; border: none;
-            color: var(--text-secondary); font-size: 1rem;
-            cursor: pointer; flex-shrink: 0; line-height: 1;
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 1rem;
+            cursor: pointer;
+            flex-shrink: 0;
+            line-height: 1;
             padding: 0;
         }
     </style>
@@ -2825,7 +3155,11 @@
         </div>
 
         <!-- Agent Tabs -->
-        <div class="agent-tabs" role="tablist">
+        <div class="agent-tabs-container">
+            <button class="scroll-arrow scroll-left" id="scrollArrowLeft" onclick="scrollAgentTabs(-1)" aria-label="Scroll left">
+                <svg viewBox="0 0 24 24"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+            </button>
+            <div class="agent-tabs" role="tablist" id="agentTabsContainer">
             <button class="agent-tab active" onclick="switchAgent('concall')" role="tab" aria-selected="true"
                 id="tab-concall">
                 <span class="agent-tab-icon">📞</span>
@@ -2847,7 +3181,7 @@
                 <span class="agent-tab-icon">📄</span>
                 <div class="agent-tab-info">
                     <div class="agent-tab-name">Analyst Agent</div>
-                    <div class="agent-tab-desc">Domestic & global brokerage research</div>
+                    <div class="agent-tab-desc">Domestic & global research</div>
                 </div>
             </button>
             <button class="agent-tab" onclick="switchAgent('forecasting')" role="tab" aria-selected="false"
@@ -2855,7 +3189,7 @@
                 <span class="agent-tab-icon">📊</span>
                 <div class="agent-tab-info">
                     <div class="agent-tab-name">Forecasting Agent (beta)</div>
-                    <div class="agent-tab-desc">Multi-method valuation & price targets</div>
+                    <div class="agent-tab-desc">Multi-method valuation</div>
                 </div>
             </button>
             <button class="agent-tab" onclick="switchAgent('cosmic')" role="tab" aria-selected="false" id="tab-cosmic">
@@ -2865,12 +3199,24 @@
                     <div class="agent-tab-desc">Astro-geopolitical market intelligence</div>
                 </div>
             </button>
+            <button class="agent-tab" onclick="switchAgent('cosmic_micro')" role="tab" aria-selected="false"
+                id="tab-cosmic_micro">
+                <span class="agent-tab-icon">🔮</span>
+                <div class="agent-tab-info">
+                    <div class="agent-tab-name">Cosmic Micro Agent</div>
+                    <div class="agent-tab-desc">Astro-fundamental stock/industry oracle</div>
+                </div>
+            </button>
             <button class="agent-tab" onclick="switchAgent('docsum')" role="tab" aria-selected="false" id="tab-docsum">
                 <span class="agent-tab-icon">📑</span>
                 <div class="agent-tab-info">
                     <div class="agent-tab-name">Doc Summarizer</div>
-                    <div class="agent-tab-desc">Summarize PDF/Word financial documents</div>
+                    <div class="agent-tab-desc">Summarize financial documents</div>
                 </div>
+            </button>
+            </div>
+            <button class="scroll-arrow scroll-right" id="scrollArrowRight" onclick="scrollAgentTabs(1)" aria-label="Scroll right">
+                <svg viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
             </button>
         </div>
 
@@ -2961,8 +3307,7 @@
                     </div>
                     <div style="display:flex;align-items:center;gap:0.75rem;">
                         <button class="analyze-btn" id="concallRefreshBtn"
-                            style="padding:0.5rem 1rem;font-size:0.75rem;"
-                            onclick="startConcallAnalysis(true)">
+                            style="padding:0.5rem 1rem;font-size:0.75rem;" onclick="startConcallAnalysis(true)">
                             🔄 Refresh
                         </button>
                         <a href="#" class="analysis-source-link" id="concallSourceLink" target="_blank">View Transcript
@@ -3001,7 +3346,8 @@
                 <div class="live-schedule-card">
                     <div class="live-schedule-header">
                         <h3>
-                            <span class="live-badge"><span class="live-pulse" style="width:6px;height:6px;"></span>Live</span>
+                            <span class="live-badge"><span class="live-pulse"
+                                    style="width:6px;height:6px;"></span>Live</span>
                             Upcoming Conference Calls
                         </h3>
                         <button class="live-schedule-refresh" onclick="loadLiveSchedule(true)">🔄 Refresh</button>
@@ -3025,19 +3371,19 @@
                         </div>
                         <div class="live-stream-controls">
                             <span class="live-stream-duration" id="liveStreamDuration">00:00</span>
-                            <button class="live-dtmf-btn" id="liveDtmfBtn"
-                                onclick="sendLiveDtmf()" title="Re-send passcode digits">
+                            <button class="live-dtmf-btn" id="liveDtmfBtn" onclick="sendLiveDtmf()"
+                                title="Re-send passcode digits">
                                 🔢 Re-send Digits
                             </button>
-                            <button class="live-end-btn" id="liveEndBtn"
-                                onclick="endLiveCall()">
+                            <button class="live-end-btn" id="liveEndBtn" onclick="endLiveCall()">
                                 ⏹ End &amp; Summarise
                             </button>
                         </div>
                     </div>
                     <div class="live-transcript-label">Live Transcript</div>
                     <div class="live-transcript-box" id="liveTranscriptBox">
-                        <span class="live-transcript-empty">Transcript will appear here once connected and audio is received...</span>
+                        <span class="live-transcript-empty">Transcript will appear here once connected and audio is
+                            received...</span>
                     </div>
                 </div>
             </div>
@@ -3054,7 +3400,8 @@
                 <div class="live-modal-subtitle" id="liveModalSubtitle">Verify dial-in details before connecting</div>
 
                 <div id="liveModalExtractStatus" style="display:none;margin-bottom:1rem;">
-                    <div style="display:flex;align-items:center;gap:0.5rem;font-size:0.8rem;color:var(--text-secondary);">
+                    <div
+                        style="display:flex;align-items:center;gap:0.5rem;font-size:0.8rem;color:var(--text-secondary);">
                         <div class="progress-dot"></div>
                         <span id="liveModalExtractText">Extracting dial-in details from announcement PDF...</span>
                     </div>
@@ -3063,13 +3410,13 @@
                 <div id="liveModalFields">
                     <div class="live-modal-field">
                         <div class="live-modal-label">Dial-in Number</div>
-                        <input class="live-modal-input" id="liveModalPhone" type="tel"
-                            placeholder="+912262801123" autocomplete="off" />
+                        <input class="live-modal-input" id="liveModalPhone" type="tel" placeholder="+912262801123"
+                            autocomplete="off" />
                     </div>
                     <div class="live-modal-field">
                         <div class="live-modal-label">Passcode / Conference ID</div>
-                        <input class="live-modal-input" id="liveModalPasscode" type="text"
-                            placeholder="e.g. 123456#" autocomplete="off" />
+                        <input class="live-modal-input" id="liveModalPasscode" type="text" placeholder="e.g. 123456#"
+                            autocomplete="off" />
                     </div>
                     <div class="live-modal-field">
                         <div class="live-modal-label">PIN (if separate)</div>
@@ -3077,12 +3424,10 @@
                             placeholder="Leave blank if not required" autocomplete="off" />
                     </div>
                     <div class="live-modal-actions">
-                        <button class="live-dial-btn" id="liveDialNowBtn"
-                            onclick="startLiveCall()">
+                        <button class="live-dial-btn" id="liveDialNowBtn" onclick="startLiveCall()">
                             📞 Dial Now
                         </button>
-                        <a class="live-webcast-btn" id="liveWebcastBtn" href="#" target="_blank"
-                            style="display:none;">
+                        <a class="live-webcast-btn" id="liveWebcastBtn" href="#" target="_blank" style="display:none;">
                             🌐 Join Webcast
                         </a>
                     </div>
@@ -3405,17 +3750,126 @@
         </div>
 
         <!-- =============================== -->
+        <!-- COSMIC MICRO AGENT WORKSPACE    -->
+        <!-- =============================== -->
+        <div class="agent-workspace" id="workspace-cosmic_micro">
+
+            <!-- Input Card -->
+            <div class="ticker-card">
+                <h2>🔮 Cosmic Micro Agent</h2>
+                <p class="subtitle">Fuses planetary transits, corporate fundamentals, and the Vedic rulebook to predict
+                    stock or industry momentum</p>
+
+                <div style="display:flex; flex-direction:column; gap:1rem; margin-top:1.25rem;">
+                    <!-- Choice selection: Stock or Industry -->
+                    <div style="display:flex; align-items:center; gap:1.5rem;">
+                        <label
+                            style="font-size:0.875rem; color:var(--text-secondary); display:flex; align-items:center; gap:0.35rem; cursor:pointer;">
+                            <input type="radio" name="cosmicMicroType" value="ticker" checked
+                                onclick="toggleCosmicMicroInput('ticker')" style="cursor:pointer;" />
+                            Analyze Stock Ticker
+                        </label>
+                        <label
+                            style="font-size:0.875rem; color:var(--text-secondary); display:flex; align-items:center; gap:0.35rem; cursor:pointer;">
+                            <input type="radio" name="cosmicMicroType" value="industry"
+                                onclick="toggleCosmicMicroInput('industry')" style="cursor:pointer;" />
+                            Analyze Industry
+                        </label>
+                    </div>
+
+                    <div class="ticker-input-row" style="margin-top:0.25rem;">
+                        <!-- Stock Input Container -->
+                        <div id="cosmicMicroTickerContainer" class="ticker-input-wrapper" style="flex:1;">
+                            <input type="text" class="ticker-input" id="cosmicMicroTickerInput"
+                                placeholder="Type a stock name or ticker... (e.g. TCS, Reliance, INFY)"
+                                autocomplete="off" />
+                            <div class="ticker-dropdown" id="cosmicMicroTickerDropdown"></div>
+                        </div>
+
+                        <!-- Industry Input Container (Hidden by default) -->
+                        <div id="cosmicMicroIndustryContainer" class="ticker-input-wrapper"
+                            style="flex:1; display:none;">
+                            <select id="cosmicMicroIndustrySelect" class="ticker-input"
+                                style="cursor:pointer; background: var(--bg-secondary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 0.5rem; padding: 0.75rem 1rem; width: 100%;">
+                                <option value="" disabled selected>Select an industry...</option>
+                            </select>
+                        </div>
+
+                        <button class="analyze-btn" id="cosmicMicroAnalyzeBtn" onclick="startCosmicMicroAnalysis()">
+                            <span id="cosmicMicroBtnText">🔮 Generate Oracle Report</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Error -->
+            <div class="error-card" id="cosmicMicroError">
+                <h4>⚠️ Analysis Error</h4>
+                <p id="cosmicMicroErrorText"></p>
+            </div>
+
+            <!-- Progress -->
+            <div class="progress-card" id="cosmicMicroProgress">
+                <div class="progress-status">
+                    <div class="progress-dot"></div>
+                    <span id="cosmicMicroProgressText">Starting cosmic micro analysis...</span>
+                </div>
+                <div class="progress-timer" id="cosmicMicroProgressTimer">Elapsed: 0s</div>
+                <div class="progress-bar-container">
+                    <div class="progress-bar"></div>
+                </div>
+            </div>
+
+            <!-- Structured Report Container -->
+            <div class="analysis-card" id="cosmicMicroAnalysis">
+                <div class="analysis-header">
+                    <div class="analysis-header-left">
+                        <span style="font-size:1.25rem;">🔮</span>
+                        <div>
+                            <h3 id="cosmicMicroReportTitleText">Cosmic Micro Intelligence Report</h3>
+                            <span class="analysis-meta" id="cosmicMicroAnalysisMeta"></span>
+                        </div>
+                    </div>
+                    <button class="analyze-btn" style="padding:0.5rem 1rem;font-size:0.75rem;"
+                        onclick="startCosmicMicroAnalysis(true)">
+                        🔄 Refresh
+                    </button>
+                </div>
+                <div id="cosmicMicroReportContainer" style="padding:0 1.5rem 1.5rem;"></div>
+            </div>
+
+            <!-- Chat -->
+            <div class="chat-card" id="cosmicMicroChat">
+                <div class="chat-header">
+                    <h3>💬 Ask about this report</h3>
+                </div>
+                <div class="chat-messages" id="cosmicMicroChatMessages"></div>
+                <div style="padding:0.75rem 1.5rem;border-top:1px solid var(--border-color);display:flex;gap:0.5rem;">
+                    <input type="text" class="ticker-input" id="cosmicMicroChatInput"
+                        placeholder="Ask a follow-up question about this stock or industry..."
+                        onkeydown="if(event.key==='Enter'){sendCosmicMicroChat();event.preventDefault();}" />
+                    <button class="analyze-btn" style="padding:0.75rem 1.25rem;" onclick="sendCosmicMicroChat()">
+                        Send
+                    </button>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- =============================== -->
         <!-- FINANCIAL DOC SUMMARIZER WORKSPACE -->
         <!-- =============================== -->
         <div class="agent-workspace" id="workspace-docsum">
             <div class="ticker-card">
                 <h2>📑 Financial Document Summarizer</h2>
-                <p class="subtitle">Upload a PDF or Word document (investor presentation, analyst report, etc.) to get
+                <p class="subtitle">Upload a PDF or Word document (research report, concall transcript, investor
+                    presentation, analyst report, etc.) to get
                     an AI summary.</p>
                 <div class="ticker-input-row" style="flex-direction: column; align-items: flex-start; gap: 1rem;">
                     <input type="file" id="docsumFileInput" accept=".pdf,.doc,.docx" class="ticker-input"
                         style="width: 100%; max-width: 400px; padding: 0.5rem; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 0.625rem; color: var(--text-primary);" />
-                    <textarea id="docsumUserPrompt" placeholder="Optional: Ask a specific question or give an instruction (e.g. 'What are the key risks?' or 'Summarize the revenue trends')"
+                    <textarea id="docsumUserPrompt"
+                        placeholder="Optional: Ask a specific question or give an instruction (e.g. 'What are the key risks?' or 'Summarize the revenue trends')"
                         style="width: 100%; max-width: 600px; min-height: 80px; padding: 0.625rem; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 0.625rem; color: var(--text-primary); font-size: 0.875rem; resize: vertical; font-family: inherit;"></textarea>
                     <button class="analyze-btn" id="docsumAnalyzeBtn" onclick="startDocsumAnalysis()">
                         <span id="docsumBtnText">Summarize Document</span>
@@ -3621,12 +4075,23 @@
                 t.classList.remove('active');
                 t.setAttribute('aria-selected', 'false');
             });
-            document.getElementById(`tab-${agentId}`).classList.add('active');
-            document.getElementById(`tab-${agentId}`).setAttribute('aria-selected', 'true');
+            const activeTab = document.getElementById(`tab-${agentId}`);
+            if (activeTab) {
+                activeTab.classList.add('active');
+                activeTab.setAttribute('aria-selected', 'true');
+            }
+
+            // Scroll tab into view if available
+            if (window.centerActiveTab) {
+                window.centerActiveTab();
+            }
 
             // Switch workspace (all workspaces persist their DOM state)
             document.querySelectorAll('.agent-workspace').forEach(w => w.classList.remove('active'));
-            document.getElementById(`workspace-${agentId}`).classList.add('active');
+            const activeWorkspace = document.getElementById(`workspace-${agentId}`);
+            if (activeWorkspace) {
+                activeWorkspace.classList.add('active');
+            }
         }
 
         // =====================================================
@@ -4220,8 +4685,8 @@
                 const applyDialin = (dialin) => {
                     liveExtractedDialin = dialin;
                     if (dialin.phone_number) document.getElementById('liveModalPhone').value = dialin.phone_number;
-                    if (dialin.passcode)     document.getElementById('liveModalPasscode').value = dialin.passcode;
-                    if (dialin.pin)          document.getElementById('liveModalPin').value = dialin.pin;
+                    if (dialin.passcode) document.getElementById('liveModalPasscode').value = dialin.passcode;
+                    if (dialin.pin) document.getElementById('liveModalPin').value = dialin.pin;
                     if (dialin.webcast_url) {
                         const wbBtn = document.getElementById('liveWebcastBtn');
                         wbBtn.href = dialin.webcast_url;
@@ -5348,12 +5813,63 @@
             });
         }
 
+        // Horizontal scroll utility for agent tabs
+        function initAgentTabsScroll() {
+            const container = document.getElementById('agentTabsContainer');
+            const arrowLeft = document.getElementById('scrollArrowLeft');
+            const arrowRight = document.getElementById('scrollArrowRight');
+            if (!container || !arrowLeft || !arrowRight) return;
+
+            function updateArrows() {
+                const hasOverflow = container.scrollWidth > container.clientWidth;
+                if (!hasOverflow) {
+                    arrowLeft.classList.remove('visible');
+                    arrowRight.classList.remove('visible');
+                    return;
+                }
+
+                if (container.scrollLeft > 5) {
+                    arrowLeft.classList.add('visible');
+                } else {
+                    arrowLeft.classList.remove('visible');
+                }
+
+                const maxScrollLeft = container.scrollWidth - container.clientWidth;
+                if (container.scrollLeft < maxScrollLeft - 5) {
+                    arrowRight.classList.add('visible');
+                } else {
+                    arrowRight.classList.remove('visible');
+                }
+            }
+
+            window.scrollAgentTabs = function(direction) {
+                const scrollAmount = container.clientWidth * 0.5;
+                container.scrollBy({ left: direction * scrollAmount, behavior: 'smooth' });
+            };
+
+            container.addEventListener('scroll', updateArrows);
+            window.addEventListener('resize', updateArrows);
+
+            window.centerActiveTab = function() {
+                const activeTab = container.querySelector('.agent-tab.active');
+                if (activeTab && activeTab.scrollIntoView) {
+                    activeTab.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+                }
+            };
+
+            setTimeout(() => {
+                updateArrows();
+                window.centerActiveTab();
+            }, 100);
+        }
+
         // Auto-render on page load
         document.addEventListener('DOMContentLoaded', () => {
             renderConcallHistory();
             renderForensicHistory();
             renderAnalystHistory();
             renderForecastingHistory();
+            initAgentTabsScroll();
         });
     </script>
 
@@ -5800,6 +6316,700 @@
                 }
             })
             .catch(() => { });
+
+        // ===================================================================================
+        // COSMIC MICRO AGENT JS ENGINE
+        // ===================================================================================
+        let cosmicMicroSelectedTicker = '';
+        let cosmicMicroSelectedName = '';
+        let cosmicMicroJobId = null;
+        let cosmicMicroPollTimer = null;
+        let cosmicMicroStartTime = null;
+        let cosmicMicroTimerInterval = null;
+        let currentCosmicMicroData = null;
+
+        function loadCosmicMicroIndustries() {
+            const selectEl = document.getElementById('cosmicMicroIndustrySelect');
+            if (!selectEl) return;
+            fetch('/api/cosmic_micro/industries')
+                .then(r => r.json())
+                .then(industries => {
+                    if (industries && Array.isArray(industries)) {
+                        selectEl.innerHTML = '<option value="" disabled selected>Select an industry...</option>';
+                        industries.forEach(ind => {
+                            const opt = document.createElement('option');
+                            opt.value = ind;
+                            opt.textContent = ind;
+                            selectEl.appendChild(opt);
+                        });
+                    }
+                })
+                .catch(err => console.error('Failed to load cosmic micro industries:', err));
+        }
+
+        // Initialize autocompletion for Cosmic Micro Tickers
+        (function initCosmicMicroAutocomplete() {
+            const input = document.getElementById('cosmicMicroTickerInput');
+            const dropdown = document.getElementById('cosmicMicroTickerDropdown');
+            if (!input || !dropdown) return;
+
+            input.addEventListener('input', () => {
+                const val = input.value.trim();
+                if (val.length < 1) { dropdown.classList.remove('show'); return; }
+                const matches = filterAgentStocks(val);
+                if (!matches.length) { dropdown.classList.remove('show'); return; }
+                agentSelectedIndex = -1;
+                dropdown.innerHTML = matches.map((s, i) => `
+                    <div class="ticker-option ${i === agentSelectedIndex ? 'highlighted' : ''}"
+                         data-ticker="${s.ticker}" data-name="${s.name}"
+                         onclick="selectCosmicMicroTicker('${s.ticker}', '${s.name.replace(/'/g, "\\'")}')">
+                      <span class="ticker-option-name">${s.name}</span>
+                      <span class="ticker-option-ticker">${s.ticker}</span>
+                    </div>
+                `).join('');
+                dropdown.classList.add('show');
+            });
+
+            input.addEventListener('keydown', (e) => {
+                const items = dropdown.querySelectorAll('.ticker-option');
+                if (!items.length) {
+                    if (e.key === 'Enter') { e.preventDefault(); startCosmicMicroAnalysis(); }
+                    return;
+                }
+                if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    agentSelectedIndex = Math.min(agentSelectedIndex + 1, items.length - 1);
+                    items.forEach((el, i) => el.classList.toggle('highlighted', i === agentSelectedIndex));
+                } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    agentSelectedIndex = Math.max(agentSelectedIndex - 1, 0);
+                    items.forEach((el, i) => el.classList.toggle('highlighted', i === agentSelectedIndex));
+                } else if (e.key === 'Enter') {
+                    e.preventDefault();
+                    if (agentSelectedIndex >= 0 && items[agentSelectedIndex]) {
+                        items[agentSelectedIndex].click();
+                    } else {
+                        startCosmicMicroAnalysis();
+                    }
+                } else if (e.key === 'Escape') {
+                    dropdown.classList.remove('show');
+                }
+            });
+
+            document.addEventListener('click', (e) => {
+                if (!e.target.closest('#cosmicMicroTickerContainer')) {
+                    dropdown.classList.remove('show');
+                }
+            });
+
+            // Call industries loader
+            loadCosmicMicroIndustries();
+        })();
+
+        function selectCosmicMicroTicker(ticker, name) {
+            cosmicMicroSelectedTicker = ticker;
+            cosmicMicroSelectedName = name;
+            const input = document.getElementById('cosmicMicroTickerInput');
+            if (input) input.value = `${name} (${ticker})`;
+            const dropdown = document.getElementById('cosmicMicroTickerDropdown');
+            if (dropdown) dropdown.classList.remove('show');
+        }
+
+        function toggleCosmicMicroInput(type) {
+            if (type === 'ticker') {
+                document.getElementById('cosmicMicroTickerContainer').style.display = 'block';
+                document.getElementById('cosmicMicroIndustryContainer').style.display = 'none';
+            } else {
+                document.getElementById('cosmicMicroTickerContainer').style.display = 'none';
+                document.getElementById('cosmicMicroIndustryContainer').style.display = 'block';
+            }
+        }
+
+        function startCosmicMicroAnalysis(forceRefresh = false) {
+            const type = document.querySelector('input[name="cosmicMicroType"]:checked').value;
+            let ticker = '';
+            let industry = '';
+
+            if (type === 'ticker') {
+                const input = document.getElementById('cosmicMicroTickerInput');
+                ticker = cosmicMicroSelectedTicker || input.value.replace(/\s*\(.*\)\s*$/, '').trim().toUpperCase();
+                if (!ticker) return;
+            } else {
+                const selectEl = document.getElementById('cosmicMicroIndustrySelect');
+                industry = selectEl.value;
+                if (!industry) return;
+            }
+
+            hideEl('cosmicMicroError');
+            hideEl('cosmicMicroAnalysis');
+            hideEl('cosmicMicroChat');
+            showEl('cosmicMicroProgress');
+            document.getElementById('cosmicMicroProgressText').textContent = 'Initializing Cosmic Oracle...';
+            document.getElementById('cosmicMicroBtnText').textContent = '🔮 Running...';
+            document.getElementById('cosmicMicroAnalyzeBtn').disabled = true;
+
+            cosmicMicroStartTime = Date.now();
+            if (cosmicMicroTimerInterval) clearInterval(cosmicMicroTimerInterval);
+            cosmicMicroTimerInterval = setInterval(() => {
+                const elapsed = Math.floor((Date.now() - cosmicMicroStartTime) / 1000);
+                document.getElementById('cosmicMicroProgressTimer').textContent = `Elapsed: ${elapsed}s`;
+            }, 1000);
+
+            fetch('/agent/cosmic_micro/analyze', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ticker, industry, force_refresh: forceRefresh })
+            })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.status === 'complete') {
+                        onCosmicMicroComplete(data.result, data.cached);
+                    } else if (data.job_id) {
+                        cosmicMicroJobId = data.job_id;
+                        pollCosmicMicroStatus();
+                    } else if (data.error) {
+                        onCosmicMicroError(data.error);
+                    }
+                })
+                .catch(err => onCosmicMicroError(`Network error: ${err.message}`));
+        }
+
+        function pollCosmicMicroStatus() {
+            if (!cosmicMicroJobId) return;
+            fetch(`/agent/cosmic_micro/${cosmicMicroJobId}/status`)
+                .then(r => r.json())
+                .then(data => {
+                    if (data.status === 'processing') {
+                        document.getElementById('cosmicMicroProgressText').textContent = data.progress || 'Analyzing...';
+                        cosmicMicroPollTimer = setTimeout(pollCosmicMicroStatus, 3000);
+                    } else if (data.status === 'complete') {
+                        onCosmicMicroComplete(data.result);
+                    } else if (data.status === 'error') {
+                        onCosmicMicroError(data.error);
+                    }
+                })
+                .catch(err => onCosmicMicroError(`Polling error: ${err.message}`));
+        }
+
+        function onCosmicMicroComplete(result, cached) {
+            if (cosmicMicroTimerInterval) clearInterval(cosmicMicroTimerInterval);
+            if (cosmicMicroPollTimer) clearTimeout(cosmicMicroPollTimer);
+
+            document.getElementById('cosmicMicroBtnText').textContent = '🔮 Generate Oracle Report';
+            document.getElementById('cosmicMicroAnalyzeBtn').disabled = false;
+            hideEl('cosmicMicroProgress');
+
+            if (!result || result.error) {
+                onCosmicMicroError(result ? result.error : 'Invalid result structure');
+                return;
+            }
+
+            currentCosmicMicroData = result;
+
+            const container = document.getElementById('cosmicMicroReportContainer');
+            renderCosmicMicroReport(container, result);
+            showEl('cosmicMicroAnalysis');
+
+            const meta = document.getElementById('cosmicMicroAnalysisMeta');
+            const cachedStr = cached ? ' (Loaded from Cache)' : '';
+            const type = result.ticker && result.ticker !== 'INDUSTRY' ? 'Ticker' : 'Industry';
+            meta.textContent = `${type} Analysis${cachedStr}`;
+
+            const chatMsgs = document.getElementById('cosmicMicroChatMessages');
+            chatMsgs.innerHTML = `
+                <div class="chat-message assistant">
+                    <div class="chat-bubble">
+                        I've completed the Cosmic Micro analysis for <strong>${_esc(result.company_name || result.industry)}</strong>. Ask me anything — drill into specific transits, pada alignments, upcoming earnings, or risk factors.
+                    </div>
+                </div>`;
+            showEl('cosmicMicroChat');
+        }
+
+        function onCosmicMicroError(errorMsg) {
+            if (cosmicMicroTimerInterval) clearInterval(cosmicMicroTimerInterval);
+            if (cosmicMicroPollTimer) clearTimeout(cosmicMicroPollTimer);
+
+            document.getElementById('cosmicMicroBtnText').textContent = '🔮 Generate Oracle Report';
+            document.getElementById('cosmicMicroAnalyzeBtn').disabled = false;
+            hideEl('cosmicMicroProgress');
+
+            document.getElementById('cosmicMicroErrorText').textContent = errorMsg || 'An unknown error occurred during cosmic micro analysis.';
+            showEl('cosmicMicroError');
+        }
+
+        function sendCosmicMicroChat() {
+            const input = document.getElementById('cosmicMicroChatInput');
+            const question = input.value.trim();
+            if (!question || !currentCosmicMicroData) return;
+
+            const chatMsgs = document.getElementById('cosmicMicroChatMessages');
+            chatMsgs.innerHTML += `
+                <div class="chat-message user">
+                    <div class="chat-bubble">${_esc(question)}</div>
+                </div>`;
+            input.value = '';
+
+            const loadingId = 'cosmic-micro-loading-' + Date.now();
+            chatMsgs.innerHTML += `
+                <div class="chat-message assistant" id="${loadingId}">
+                    <div class="chat-bubble">Thinking...</div>
+                </div>`;
+            chatMsgs.scrollTop = chatMsgs.scrollHeight;
+
+            fetch('/agent/cosmic_micro/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    question: question,
+                    ticker: currentCosmicMicroData.ticker !== 'INDUSTRY' ? currentCosmicMicroData.ticker : '',
+                    industry: currentCosmicMicroData.ticker === 'INDUSTRY' ? currentCosmicMicroData.industry : '',
+                    analysis_context: JSON.stringify(currentCosmicMicroData)
+                })
+            })
+                .then(r => r.json())
+                .then(data => {
+                    const loadingEl = document.getElementById(loadingId);
+                    if (loadingEl) loadingEl.remove();
+
+                    if (data.error) {
+                        chatMsgs.innerHTML += `
+                        <div class="chat-message assistant">
+                            <div class="chat-bubble" style="color:var(--text-error);">⚠️ Error: ${_esc(data.error)}</div>
+                        </div>`;
+                    } else {
+                        const answerHtml = (typeof marked !== 'undefined' && marked.parse) ? marked.parse(data.answer) : `<p>${_esc(data.answer)}</p>`;
+                        chatMsgs.innerHTML += `
+                        <div class="chat-message assistant">
+                            <div class="chat-bubble">${answerHtml}</div>
+                        </div>`;
+                    }
+                    chatMsgs.scrollTop = chatMsgs.scrollHeight;
+                })
+                .catch(err => {
+                    const loadingEl = document.getElementById(loadingId);
+                    if (loadingEl) loadingEl.remove();
+                    chatMsgs.innerHTML += `
+                    <div class="chat-message assistant">
+                        <div class="chat-bubble" style="color:var(--text-error);">⚠️ Connection error: ${_esc(err.message)}</div>
+                    </div>`;
+                    chatMsgs.scrollTop = chatMsgs.scrollHeight;
+                });
+        }
+
+        function renderCosmicMicroReport(container, d) {
+            if (!d) {
+                container.innerHTML = `<div class="text-center py-6 text-slate-400">No report data.</div>`;
+                return;
+            }
+
+            let html = "";
+
+            html += `
+            <div style="margin-bottom: 1.5rem; border-bottom: 1px solid var(--border-color); padding-bottom: 1rem;">
+                <div style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap; margin-bottom: 0.5rem;">
+                    <span style="font-size: 1.3rem; font-weight:800; background:rgba(99,102,241,0.15); color:#818cf8; padding: 0.35rem 0.75rem; border-radius: 0.5rem;">${_esc(d.ticker || 'N/A')}</span>
+                    <h2 style="margin:0; font-size:1.4rem; font-weight:700; color:var(--text-primary);">${_esc(d.company_name || 'N/A')}</h2>
+                </div>
+                <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+                    <span style="font-size:0.75rem; background:rgba(255,255,255,0.05); color:var(--text-secondary); border: 1px solid var(--border-color); padding: 0.25rem 0.6rem; border-radius: 999px;">🏭 Industry: ${_esc(d.industry || 'N/A')}</span>
+                    <span style="font-size:0.75rem; background:rgba(255,255,255,0.05); color:var(--text-secondary); border: 1px solid var(--border-color); padding: 0.25rem 0.6rem; border-radius: 999px;">📦 Sector: ${_esc(d.sector || 'N/A')}</span>
+                </div>
+            </div>`;
+
+            const direction = (d.cosmic_verdict?.direction || 'NEUTRAL').toUpperCase();
+            let verdictBg = 'rgba(239, 68, 68, 0.15)';
+            let verdictBorder = 'rgba(239, 68, 68, 0.3)';
+            let verdictColor = '#f87171';
+            let verdictIcon = '🔴';
+            let verdictGlow = 'rgba(239, 68, 68, 0.2)';
+
+            if (direction === 'BULLISH') {
+                verdictBg = 'rgba(16, 185, 129, 0.08)';
+                verdictBorder = 'rgba(16, 185, 129, 0.4)';
+                verdictColor = '#10b981';
+                verdictIcon = '🟢';
+                verdictGlow = 'rgba(16, 185, 129, 0.25)';
+            } else if (direction === 'NEUTRAL') {
+                verdictBg = 'rgba(234, 179, 8, 0.08)';
+                verdictBorder = 'rgba(234, 179, 8, 0.4)';
+                verdictColor = '#fbbf24';
+                verdictIcon = '🟡';
+                verdictGlow = 'rgba(234, 179, 8, 0.25)';
+            } else if (direction === 'BEARISH') {
+                verdictBg = 'rgba(239, 68, 68, 0.08)';
+                verdictBorder = 'rgba(239, 68, 68, 0.4)';
+                verdictColor = '#f87171';
+                verdictIcon = '🔴';
+                verdictGlow = 'rgba(239, 68, 68, 0.25)';
+            }
+
+            html += `
+            <div class="relative overflow-hidden rounded-xl border p-5 mb-6 backdrop-blur-md transition-all duration-300 hover:shadow-[0_0_20px_var(--tw-shadow-color)]"
+                 style="background: ${verdictBg}; border-color: ${verdictBorder}; --tw-shadow-color: ${verdictGlow}; box-shadow: 0 4px 30px rgba(0, 0, 0, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.05); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1.25rem;">
+                <div class="absolute -right-10 -bottom-10 w-24 h-24 rounded-full blur-2xl opacity-20 pointer-events-none" style="background: ${verdictColor};"></div>
+                
+                <div>
+                    <div style="font-size:0.68rem; font-weight:800; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.12em; margin-bottom: 0.35rem; display: flex; align-items: center; gap: 0.35rem;">
+                        <span class="inline-block w-1.5 h-1.5 rounded-full animate-pulse" style="background: ${verdictColor};"></span>
+                        Cosmic Oracle Verdict
+                    </div>
+                    <div style="font-size:2rem; font-weight:900; color:${verdictColor}; display:flex; align-items:center; gap:0.5rem; letter-spacing:-0.5px;">
+                        <span>${verdictIcon} ${direction}</span>
+                    </div>
+                </div>
+                
+                <div class="bg-black/30 border border-white/5 rounded-lg px-4 py-2.5 text-right backdrop-blur-sm">
+                    <div style="font-size:0.68rem; font-weight:700; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.08em;">Conviction & Probability</div>
+                    <div style="font-size:1.15rem; font-weight:800; color:var(--text-primary); margin-top:0.15rem; display: flex; align-items: center; gap: 0.5rem; justify-content: flex-end;">
+                        <span class="text-white">${_esc(d.cosmic_verdict?.conviction || 'N/A')}</span>
+                        <span style="color:${verdictColor};" class="font-black">(${_esc(d.cosmic_verdict?.probability || '0%')})</span>
+                    </div>
+                </div>
+            </div>`;
+
+            html += `
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                <!-- Target Card -->
+                <div class="bg-[#16161f] border border-[#2a2a3a] rounded-xl p-4.5 transition-all duration-300 hover:border-[#6366f1]/40 hover:shadow-[0_4px_20px_rgba(99,102,241,0.08)] flex items-center gap-4">
+                    <div class="w-12 h-12 rounded-lg bg-[#6366f1]/10 border border-[#6366f1]/20 flex items-center justify-center text-xl flex-shrink-0">🎯</div>
+                    <div>
+                        <div style="font-size:0.68rem; font-weight:700; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:0.15rem;">Price Target Range</div>
+                        <div style="font-size:1.35rem; font-weight:850; color:#818cf8; letter-spacing:-0.5px;">${_esc(d.cosmic_verdict?.price_target_range || 'N/A')}</div>
+                        <div style="font-size:0.75rem; color:var(--text-muted); margin-top: 0.15rem; font-weight: 500;">
+                            vs Current: <span class="text-emerald-400 font-semibold">${_esc(d.cosmic_verdict?.current_price_vs_target || 'N/A')}</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Timeframe Card -->
+                <div class="bg-[#16161f] border border-[#2a2a3a] rounded-xl p-4.5 transition-all duration-300 hover:border-[#8b5cf6]/40 hover:shadow-[0_4px_20px_rgba(139,92,246,0.08)] flex items-center gap-4">
+                    <div class="w-12 h-12 rounded-lg bg-[#8b5cf6]/10 border border-[#8b5cf6]/20 flex items-center justify-center text-xl flex-shrink-0">📅</div>
+                    <div>
+                        <div style="font-size:0.68rem; font-weight:700; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:0.15rem;">Forecast Timeframe</div>
+                        <div style="font-size:1.35rem; font-weight:850; color:var(--text-primary); letter-spacing:-0.5px;">${_esc(d.cosmic_verdict?.timeframe || 'N/A')}</div>
+                        <div style="font-size:0.75rem; color:var(--text-muted); margin-top: 0.15rem; font-weight: 500;">
+                            Target Window Activation
+                        </div>
+                    </div>
+                </div>
+            </div>`;
+
+            if (d.cosmic_verdict?.pipeline_summary) {
+                html += `
+                <div style="background:var(--bg-secondary); border-left: 4px solid #6366f1; border-radius: 0.35rem; padding: 1rem; margin-bottom: 1.5rem; font-size:0.88rem; line-height:1.6; color:var(--text-primary);">
+                    <strong>Oracle Synthesis:</strong> ${_esc(d.cosmic_verdict.pipeline_summary)}
+                </div>`;
+            }
+
+            let rotationHtml = '';
+            if (d.astro_identity?.rotation_imminent) {
+                rotationHtml = `
+                <div class="mt-3 bg-red-950/20 border border-red-500/25 rounded-lg p-2.5 text-red-400 flex items-start gap-2 animate-pulse">
+                    <span class="text-xs mt-0.5">⚠️</span>
+                    <div style="font-size: 0.76rem; line-height: 1.35;">
+                        <strong class="uppercase text-[9px] tracking-wider block mb-0.5">Rotation Imminent</strong>
+                        <span>${_esc(d.astro_identity.rotation_detail || 'Planet near pada/decanate boundary!')}</span>
+                    </div>
+                </div>`;
+            }
+
+            html += `
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-6">
+                <!-- Celestial Rulership -->
+                <div class="bg-gradient-to-br from-[#16161f] to-[#12121a] border border-[#2a2a3a] rounded-xl p-5 relative overflow-hidden transition-all duration-300 hover:border-indigo-500/30">
+                    <h4 class="m-0 mb-4 text-[#818cf8] font-bold text-sm flex items-center gap-2 border-b border-[#2a2a3a]/40 pb-3 uppercase tracking-wider">
+                        <span>🌌</span> Astrological Rulership
+                    </h4>
+                    <div class="flex flex-col gap-3 font-medium text-xs">
+                        <div class="flex justify-between items-center border-b border-[#2a2a3a]/30 pb-2">
+                            <span class="text-[#a0a0b8]">Ruling Planet:</span>
+                            <span class="text-white font-bold text-right">${_esc(d.astro_identity?.ruling_planet || 'N/A')}</span>
+                        </div>
+                        <div class="flex justify-between items-center border-b border-[#2a2a3a]/30 pb-2">
+                            <span class="text-[#a0a0b8]">Position:</span>
+                            <span class="text-indigo-300 font-semibold text-right">${_esc(d.astro_identity?.ruling_planet_position || 'N/A')}</span>
+                        </div>
+                        <div class="flex justify-between items-center border-b border-[#2a2a3a]/30 pb-2">
+                            <span class="text-[#a0a0b8]">Active Pada:</span>
+                            <span class="text-white font-semibold text-right">${_esc(d.astro_identity?.active_pada || 'N/A')}</span>
+                        </div>
+                        <div class="flex flex-col gap-1 mt-1 bg-white/[0.02] border border-white/5 rounded-lg p-2.5">
+                            <span class="text-[9px] text-[#a0a0b8] font-bold uppercase tracking-wider">Activated Sub-sector</span>
+                            <span class="text-[#f0f0f5] text-[11px] leading-relaxed">${_esc(d.astro_identity?.sub_sector_activated || 'N/A')}</span>
+                        </div>
+                        ${rotationHtml}
+                    </div>
+                </div>
+
+                <!-- Financial Fundamentals -->
+                <div class="bg-gradient-to-br from-[#16161f] to-[#12121a] border border-[#2a2a3a] rounded-xl p-5 transition-all duration-300 hover:border-white/10">
+                    <h4 class="m-0 mb-4 text-white font-bold text-sm flex items-center gap-2 border-b border-[#2a2a3a]/40 pb-3 uppercase tracking-wider">
+                        <span>📊</span> Financial Fundamentals
+                    </h4>
+                    <div class="grid grid-cols-2 gap-3.5 mb-3">
+                        <div class="bg-black/35 border border-[#2a2a3a]/60 rounded-lg p-2.5 flex flex-col transition-all duration-300 hover:border-[#6366f1]/30">
+                            <span class="text-[9px] text-[#a0a0b8] font-bold uppercase tracking-wider mb-1 block">Market Cap</span>
+                            <span class="text-white font-extrabold text-xs truncate" title="${_esc(d.fundamental_snapshot?.market_cap || 'N/A')}">${_esc(d.fundamental_snapshot?.market_cap || 'N/A')}</span>
+                        </div>
+                        <div class="bg-black/35 border border-[#2a2a3a]/60 rounded-lg p-2.5 flex flex-col transition-all duration-300 hover:border-[#6366f1]/30">
+                            <span class="text-[9px] text-[#a0a0b8] font-bold uppercase tracking-wider mb-1 block">Current Price</span>
+                            <span class="text-[#10b981] font-extrabold text-xs truncate">${_esc(d.fundamental_snapshot?.current_price || 'N/A')}</span>
+                        </div>
+                        <div class="bg-black/35 border border-[#2a2a3a]/60 rounded-lg p-2.5 flex flex-col transition-all duration-300 hover:border-[#6366f1]/30">
+                            <span class="text-[9px] text-[#a0a0b8] font-bold uppercase tracking-wider mb-1 block">P/E Ratio</span>
+                            <span class="text-white font-extrabold text-xs truncate">${_esc(d.fundamental_snapshot?.pe_ratio || 'N/A')}</span>
+                        </div>
+                        <div class="bg-black/35 border border-[#2a2a3a]/60 rounded-lg p-2.5 flex flex-col transition-all duration-300 hover:border-[#6366f1]/30">
+                            <span class="text-[9px] text-[#a0a0b8] font-bold uppercase tracking-wider mb-1 block">ROE / ROCE</span>
+                            <span class="text-white font-extrabold text-xs truncate" title="${_esc(d.fundamental_snapshot?.roe || 'N/A')} / ${_esc(d.fundamental_snapshot?.roce || 'N/A')}">${_esc(d.fundamental_snapshot?.roe || 'N/A')} / ${_esc(d.fundamental_snapshot?.roce || 'N/A')}</span>
+                        </div>
+                    </div>
+                    <div class="flex flex-col gap-1 bg-white/[0.02] border border-white/5 rounded-lg p-2.5">
+                        <span class="text-[9px] text-[#a0a0b8] font-bold uppercase tracking-wider">Quarterly Momentum</span>
+                        <span class="text-[#f0f0f5] text-[11px] leading-relaxed">${_esc(d.fundamental_snapshot?.quarterly_momentum || 'N/A')}</span>
+                    </div>
+                </div>
+            </div>`;
+
+            if (d.earnings_forecast) {
+                const earnDir = (d.earnings_forecast.earnings_direction || 'MEET').toUpperCase();
+                let earnColor = '#fbbf24';
+                let earnBg = 'rgba(234, 179, 8, 0.1)';
+                let earnBorder = 'rgba(234, 179, 8, 0.3)';
+                let earnIndicator = '🟡';
+                if (earnDir === 'BEAT') { earnColor = '#10b981'; earnBg = 'rgba(16, 185, 129, 0.1)'; earnBorder = 'rgba(16, 185, 129, 0.3)'; earnIndicator = '🟢'; }
+                else if (earnDir === 'MISS') { earnColor = '#f87171'; earnBg = 'rgba(239, 68, 68, 0.1)'; earnBorder = 'rgba(239, 68, 68, 0.3)'; earnIndicator = '🔴'; }
+
+                html += `
+                <div class="bg-gradient-to-br from-[#16161f] to-[#12121a] border border-[#2a2a3a] rounded-xl p-5 mb-6 transition-all duration-300 hover:border-purple-500/20">
+                    <h4 class="m-0 mb-4 text-[#a78bfa] font-bold text-sm flex items-center gap-2 border-b border-[#2a2a3a]/40 pb-3 uppercase tracking-wider">
+                        <span>📅</span> Earnings Season Forecast
+                    </h4>
+                    
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+                        <div class="bg-[#1a1a24] border border-[#2a2a3a]/50 rounded-lg p-3">
+                            <span class="text-[9px] text-[#a0a0b8] font-bold uppercase tracking-wider block mb-1">Expected Earnings</span>
+                            <strong class="text-white text-sm font-black">${_esc(d.earnings_forecast.estimated_next_earnings || 'N/A')}</strong>
+                        </div>
+                        <div class="border rounded-lg p-3 transition-all duration-300" style="background:${earnBg}; border-color:${earnBorder};">
+                            <span class="text-[9px] text-[#a0a0b8] font-bold uppercase tracking-wider block mb-1">Projected Direction</span>
+                            <strong class="text-sm font-black flex items-center gap-1.5" style="color:${earnColor};">
+                                <span>${earnIndicator}</span>
+                                <span>${earnDir} Expectations</span>
+                            </strong>
+                        </div>
+                        <div class="bg-[#1a1a24] border border-[#2a2a3a]/50 rounded-lg p-3">
+                            <span class="text-[9px] text-[#a0a0b8] font-bold uppercase tracking-wider block mb-1">Forecast Conviction</span>
+                            <strong class="text-white text-sm font-black uppercase tracking-wider">${_esc(d.earnings_forecast.earnings_conviction || 'N/A')}</strong>
+                        </div>
+                    </div>
+                    
+                    <div class="flex flex-col gap-2 font-medium">
+                        <div class="text-xs bg-black/30 border border-white/5 p-3 rounded-lg text-[#a0a0b8] leading-relaxed">
+                            <strong class="text-[#8b5cf6] font-bold text-[10px] uppercase tracking-wider block mb-1">Planetary Weather during Earnings</strong>
+                            ${_esc(d.earnings_forecast.planetary_weather_during_earnings || 'N/A')}
+                        </div>
+                        <div class="text-xs bg-black/15 border border-[#2a2a3a]/40 p-3 rounded-lg text-[#f0f0f5] leading-relaxed">
+                            <strong class="text-white font-bold text-[10px] uppercase tracking-wider block mb-1">Earnings Rationale</strong>
+                            ${_esc(d.earnings_forecast.reasoning || 'N/A')}
+                        </div>
+                    </div>
+                </div>`;
+            }
+
+            if (d.pipeline_trace) {
+                const getStepClass = (val) => {
+                    if (!val) return 'border-[#2a2a3a] bg-[#16161f] text-slate-500';
+                    const u = val.toUpperCase();
+                    if (u.includes('PASS') || u.includes('CONFIRM') || u.includes('STABLE')) return 'border-emerald-500 bg-emerald-950/20 text-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.3)]';
+                    if (u.includes('FAIL') || u.includes('REJECT')) return 'border-red-500 bg-red-950/20 text-red-400 shadow-[0_0_8px_rgba(239,68,68,0.3)]';
+                    if (u.includes('AMPLIFY') || u.includes('HIGH')) return 'border-indigo-500 bg-indigo-950/20 text-indigo-400 shadow-[0_0_8px_rgba(99,102,241,0.3)]';
+                    return 'border-purple-500 bg-purple-950/20 text-purple-400 shadow-[0_0_8px_rgba(139,92,246,0.3)]';
+                };
+
+                html += `
+                <div class="bg-[#16161f] border border-[#2a2a3a] rounded-xl p-5 mb-6 transition-all duration-300">
+                    <h4 class="m-0 mb-5 text-white font-bold text-sm flex items-center gap-2 border-b border-[#2a2a3a]/40 pb-3 uppercase tracking-wider">
+                        <span>⚙️</span> V2 Signal Arbitration Pipeline Trace
+                    </h4>
+                    
+                    <div class="relative pl-5 border-l border-indigo-500/20 ml-2.5 flex flex-col gap-5">
+                        
+                        <!-- Step 0 -->
+                        <div class="relative">
+                            <div class="absolute -left-[29px] top-0.5 w-4 h-4 rounded-full border-2 flex items-center justify-center ${getStepClass(d.pipeline_trace.dasha_gate)}">
+                                <span class="w-1.5 h-1.5 rounded-full bg-current"></span>
+                            </div>
+                            <div>
+                                <span class="text-[9px] text-[#a0a0b8] font-bold uppercase tracking-wider block mb-0.5">Stage 0 — Dasha Gate</span>
+                                <span class="text-white text-xs font-semibold block mb-0.5">${_esc(d.pipeline_trace.dasha_gate || 'N/A')}</span>
+                            </div>
+                        </div>
+                        
+                        <!-- Step 1 -->
+                        <div class="relative">
+                            <div class="absolute -left-[29px] top-0.5 w-4 h-4 rounded-full border-2 flex items-center justify-center ${getStepClass(d.pipeline_trace.tier_primacy)}">
+                                <span class="w-1.5 h-1.5 rounded-full bg-current"></span>
+                            </div>
+                            <div>
+                                <span class="text-[9px] text-[#a0a0b8] font-bold uppercase tracking-wider block mb-0.5">Stage 1 — Tier Primacy</span>
+                                <span class="text-white text-xs font-semibold block mb-0.5">${_esc(d.pipeline_trace.tier_primacy || 'N/A')}</span>
+                            </div>
+                        </div>
+                        
+                        <!-- Step 2 -->
+                        <div class="relative">
+                            <div class="absolute -left-[29px] top-0.5 w-4 h-4 rounded-full border-2 flex items-center justify-center ${getStepClass(d.pipeline_trace.precision_overlay)}">
+                                <span class="w-1.5 h-1.5 rounded-full bg-current"></span>
+                            </div>
+                            <div>
+                                <span class="text-[9px] text-[#a0a0b8] font-bold uppercase tracking-wider block mb-0.5">Stage 3 — Pada Overlay</span>
+                                <span class="text-white text-xs font-semibold block mb-0.5">${_esc(d.pipeline_trace.precision_overlay || 'N/A')}</span>
+                            </div>
+                        </div>
+                        
+                        <!-- Step 3 -->
+                        <div class="relative">
+                            <div class="absolute -left-[29px] top-0.5 w-4 h-4 rounded-full border-2 flex items-center justify-center ${getStepClass(d.pipeline_trace.divisional_check)}">
+                                <span class="w-1.5 h-1.5 rounded-full bg-current"></span>
+                            </div>
+                            <div>
+                                <span class="text-[9px] text-[#a0a0b8] font-bold uppercase tracking-wider block mb-0.5">Stage 4 — Divisional Check</span>
+                                <span class="text-white text-xs font-semibold block mb-0.5">${_esc(d.pipeline_trace.divisional_check || 'N/A')}</span>
+                            </div>
+                        </div>
+                        
+                        <!-- Step 4 -->
+                        <div class="relative">
+                            <div class="absolute -left-[29px] top-0.5 w-4 h-4 rounded-full border-2 flex items-center justify-center ${getStepClass(d.pipeline_trace.yoga_modulation)}">
+                                <span class="w-1.5 h-1.5 rounded-full bg-current"></span>
+                            </div>
+                            <div>
+                                <span class="text-[9px] text-[#a0a0b8] font-bold uppercase tracking-wider block mb-0.5">Stage 5 — Yoga Modulation</span>
+                                <span class="text-white text-xs font-semibold block mb-0.5">${_esc(d.pipeline_trace.yoga_modulation || 'N/A')}</span>
+                            </div>
+                        </div>
+                        
+                        <!-- Final Result Step -->
+                        <div class="relative">
+                            <div class="absolute -left-[29px] top-0.5 w-4 h-4 rounded-full border-2 border-emerald-500 bg-emerald-950/20 text-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.4)] flex items-center justify-center">
+                                <span class="w-1.5 h-1.5 rounded-full bg-current"></span>
+                            </div>
+                            <div>
+                                <span class="text-[9px] text-[#a0a0b8] font-bold uppercase tracking-wider block mb-0.5">Net Arbitration Engine Output</span>
+                                <strong class="text-emerald-400 text-sm font-black">${_esc(d.pipeline_trace.net_conviction_after_pipeline || 'N/A')} Conviction Value</strong>
+                            </div>
+                        </div>
+                        
+                    </div>
+                </div>`;
+            }
+
+            if (d.key_transits && d.key_transits.length > 0) {
+                html += `
+                <div class="bg-[#16161f] border border-[#2a2a3a] rounded-xl p-5 mb-6 transition-all duration-300 hover:border-indigo-500/20">
+                    <h4 class="m-0 mb-4 text-[#818cf8] font-bold text-sm flex items-center gap-2 border-b border-[#2a2a3a]/40 pb-3 uppercase tracking-wider">
+                        <span>📅</span> Upcoming Cosmic Key Transits Timeline
+                    </h4>
+                    <div class="relative border-l border-[#2a2a3a] ml-2.5 pl-5 flex flex-col gap-4.5 mt-2">
+                        ${d.key_transits.map(t => {
+                    const act = (t.action || 'WATCH').toUpperCase();
+                    let actBg = 'rgba(255,255,255,0.05)';
+                    let actColor = 'var(--text-secondary)';
+                    let actBorder = 'rgba(255,255,255,0.1)';
+                    if (act === 'BUY') { actBg = 'rgba(16, 185, 129, 0.1)'; actColor = '#10b981'; actBorder = 'rgba(16, 185, 129, 0.25)'; }
+                    else if (act === 'SELL') { actBg = 'rgba(239, 68, 68, 0.1)'; actColor = '#f87171'; actBorder = 'rgba(239, 68, 68, 0.25)'; }
+                    else if (act === 'HOLD') { actBg = 'rgba(234, 179, 8, 0.1)'; actColor = '#fbbf24'; actBorder = 'rgba(234, 179, 8, 0.25)'; }
+
+                    return `
+                            <div class="relative">
+                                <div class="absolute -left-[27px] top-1 w-2.5 h-2.5 rounded-full bg-[#16161f] border-2 border-indigo-400"></div>
+                                
+                                <div class="flex justify-between items-start flex-wrap gap-2.5">
+                                    <div class="flex-1 min-w-[200px]">
+                                        <div class="font-bold text-xs text-white leading-tight">${_esc(t.event || 'Transit')}</div>
+                                        <div class="text-[11px] text-[#a0a0b8] mt-1.5 leading-relaxed bg-black/15 p-2 rounded border border-[#2a2a3a]/40">${_esc(t.impact_on_stock || '')}</div>
+                                    </div>
+                                    <div class="flex items-center gap-2 flex-shrink-0">
+                                        <span class="text-[10px] font-mono text-indigo-300 bg-indigo-950/20 border border-indigo-500/25 px-2 py-0.5 rounded font-bold">${_esc(t.date || '')}</span>
+                                        <span class="text-[9px] font-black border px-2 py-0.5 rounded tracking-wider transition-all duration-300" style="background:${actBg}; color:${actColor}; border-color:${actBorder};">${act}</span>
+                                    </div>
+                                </div>
+                            </div>`;
+                }).join('')}
+                    </div>
+                </div>`;
+            }
+
+            if (d.sector_peers_affected && d.sector_peers_affected.length > 0) {
+                html += `
+                <div class="bg-[#16161f] border border-[#2a2a3a] rounded-xl p-5 mb-6 transition-all duration-300 hover:border-purple-500/20">
+                    <h4 class="m-0 mb-4 text-white font-bold text-sm flex items-center gap-2 border-b border-[#2a2a3a]/40 pb-3 uppercase tracking-wider">
+                        <span>👥</span> Sector Component / Peer Stocks Impact
+                    </h4>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                        ${d.sector_peers_affected.map(p => {
+                    const peerDir = (p.direction || 'NEUTRAL').toUpperCase();
+                    let peerColor = '#fbbf24';
+                    let peerBg = 'rgba(234, 179, 8, 0.08)';
+                    let peerBorder = 'rgba(234, 179, 8, 0.25)';
+                    if (peerDir === 'BULLISH') { peerColor = '#10b981'; peerBg = 'rgba(16, 185, 129, 0.08)'; peerBorder = 'rgba(16, 185, 129, 0.25)'; }
+                    else if (peerDir === 'BEARISH') { peerColor = '#f87171'; peerBg = 'rgba(239, 68, 68, 0.08)'; peerBorder = 'rgba(239, 68, 68, 0.25)'; }
+
+                    return `
+                            <div class="bg-[#12121a]/60 border border-[#2a2a3a]/60 rounded-lg p-3.5 flex flex-col gap-2 transition-all duration-300 hover:border-[#7c3aed]/30 hover:-translate-y-0.5">
+                                <div class="flex justify-between items-center">
+                                    <strong class="text-white text-xs font-black tracking-wider bg-white/5 border border-white/5 rounded px-2 py-0.5">${_esc(p.ticker || '')}</strong>
+                                    <span class="text-[9px] font-black border px-2 py-0.5 rounded tracking-widest uppercase" style="color:${peerColor}; background:${peerBg}; border-color:${peerBorder};">${peerDir}</span>
+                                </div>
+                                <div class="text-[11px] text-[#a0a0b8] line-height-relaxed">${_esc(p.note || '')}</div>
+                            </div>`;
+                }).join('')}
+                    </div>
+                </div>`;
+            }
+
+            if ((d.risk_factors && d.risk_factors.length > 0) || (d.invalidation_conditions && d.invalidation_conditions.length > 0)) {
+                html += `
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-5 mb-4">
+                    `;
+
+                if (d.risk_factors && d.risk_factors.length > 0) {
+                    html += `
+                    <div class="bg-[#1c1214] border border-[#ef4444]/20 rounded-xl p-5 transition-all duration-300 hover:border-[#ef4444]/45 shadow-[0_4px_20px_rgba(239,68,68,0.02)]">
+                        <h4 class="m-0 mb-3.5 text-[#f87171] font-bold text-sm flex items-center gap-2 border-b border-[#ef4444]/15 pb-2.5 uppercase tracking-wider">
+                            <span>⚠️</span> Key Risks
+                        </h4>
+                        <ul class="m-0 pl-4.5 text-[11px] text-[#a0a0b8] flex flex-col gap-2.5 list-disc leading-relaxed">
+                            ${d.risk_factors.map(r => `
+                                <li>
+                                    <strong class="text-white">${_esc(r.risk || '')}:</strong> ${_esc(r.trigger || '')}
+                                </li>
+                            `).join('')}
+                        </ul>
+                    </div>`;
+                }
+
+                if (d.invalidation_conditions && d.invalidation_conditions.length > 0) {
+                    html += `
+                    <div class="bg-[#1c1812] border border-[#eab308]/20 rounded-xl p-5 transition-all duration-300 hover:border-[#eab308]/45 shadow-[0_4px_20px_rgba(234,179,8,0.02)]">
+                        <h4 class="m-0 mb-3.5 text-[#fbbf24] font-bold text-sm flex items-center gap-2 border-b border-[#eab308]/15 pb-2.5 uppercase tracking-wider">
+                            <span>🛑</span> Invalidation Conditions
+                        </h4>
+                        <ul class="m-0 pl-4.5 text-[11px] text-[#a0a0b8] flex flex-col gap-2.5 list-disc leading-relaxed">
+                            ${d.invalidation_conditions.map(c => `
+                                <li>${_esc(c)}</li>
+                            `).join('')}
+                        </ul>
+                    </div>`;
+                }
+
+                html += `
+                </div>`;
+            }
+
+            container.innerHTML = html;
+        }
     </script>
 
     <!-- =============================== -->

@@ -78,6 +78,106 @@ def _get_current_expected_quarter() -> str:
     elif m in (8, 9, 10):     return f"Q2 FY{str(y+1)[-2:]}"     # Sep quarter
     else:                     return f"Q3 FY{str(y+1)[-2:]}"     # Dec quarter
 
+def _parse_iso_duration(duration_str: str) -> int:
+    """Parse ISO 8601 duration (e.g. PT48M39S) to seconds."""
+    import re as _re
+    if not duration_str:
+        return 0
+    m = _re.match(r'PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?', duration_str)
+    if not m:
+        return 0
+    return int(m.group(1) or 0) * 3600 + int(m.group(2) or 0) * 60 + int(m.group(3) or 0)
+
+
+def _youtube_data_api_search(query: str, api_key: str, max_results: int = 5) -> list:
+    """
+    Search YouTube using the Data API v3.
+    Returns list of dicts: {url, title, channel, published_at, duration_secs}
+    Falls back to empty list on any error.
+    """
+    try:
+        search_resp = httpx.get(
+            "https://www.googleapis.com/youtube/v3/search",
+            params={
+                "q": query, "type": "video", "part": "snippet",
+                "maxResults": max_results, "key": api_key, "order": "relevance",
+            },
+            timeout=10,
+        )
+        search_resp.raise_for_status()
+        items = search_resp.json().get("items", [])
+        if not items:
+            return []
+
+        video_ids = [it["id"]["videoId"] for it in items if it.get("id", {}).get("videoId")]
+
+        # Fetch durations in one call
+        durations = {}
+        if video_ids:
+            dur_resp = httpx.get(
+                "https://www.googleapis.com/youtube/v3/videos",
+                params={"id": ",".join(video_ids), "part": "contentDetails", "key": api_key},
+                timeout=10,
+            )
+            if dur_resp.status_code == 200:
+                for vi in dur_resp.json().get("items", []):
+                    durations[vi["id"]] = _parse_iso_duration(
+                        vi.get("contentDetails", {}).get("duration", "")
+                    )
+
+        results = []
+        for it in items:
+            vid_id = it.get("id", {}).get("videoId", "")
+            if not vid_id:
+                continue
+            snippet = it.get("snippet", {})
+            results.append({
+                "url": f"https://www.youtube.com/watch?v={vid_id}",
+                "title": snippet.get("title", ""),
+                "channel": snippet.get("channelTitle", ""),
+                "published_at": snippet.get("publishedAt", ""),   # ISO 8601 e.g. "2026-05-11T10:30:00Z"
+                "duration_secs": durations.get(vid_id, 0),
+            })
+        return results
+
+    except Exception as e:
+        print(f"CONCALL_AGENT: YouTube Data API search failed for '{query}': {e}", file=sys.stderr)
+        return []
+
+
+def _resolve_youtube_upload_date(video_url: str):
+    """
+    Fetch a YouTube video page to get upload date when yt-dlp returns unknown.
+    Returns (datetime | None, relative_text str) e.g. (datetime(2026,5,11), "20 hours ago")
+    """
+    import re as _re
+    from datetime import datetime as _datetime
+    try:
+        resp = httpx.get(
+            video_url,
+            headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+                "Accept-Language": "en-US,en;q=0.9",
+            },
+            timeout=8,
+            follow_redirects=True,
+        )
+        text = resp.text
+        # ISO date embedded in page JSON or meta tags
+        m = (_re.search(r'"datePublished"\s*:\s*"(\d{4}-\d{2}-\d{2})', text)
+             or _re.search(r'"publishDate"\s*:\s*"(\d{4}-\d{2}-\d{2})', text)
+             or _re.search(r'itemprop="datePublished"\s+content="(\d{4}-\d{2}-\d{2})', text))
+        # Relative text e.g. "20 hours ago" or "3 days ago"
+        r = _re.search(r'"dateText"\s*:\s*\{"simpleText"\s*:\s*"([^"]+)"', text)
+        relative_text = r.group(1) if r else ""
+        if m:
+            dt = _datetime.strptime(m.group(1), "%Y-%m-%d")
+            return dt, relative_text
+    except Exception as e:
+        print(f"CONCALL_AGENT: _resolve_youtube_upload_date failed for {video_url}: {e}", file=sys.stderr)
+    return None, ""
+
+
 def _search_youtube_concall(company_name: str, ticker: str, quarter: str = '') -> str:
     """
     Search YouTube for the latest earnings call video using yt-dlp ytsearch.
@@ -90,6 +190,7 @@ def _search_youtube_concall(company_name: str, ticker: str, quarter: str = '') -
     from datetime import datetime, timedelta
 
     recency_cutoff = datetime.now() - timedelta(days=10)
+    YOUTUBE_API_KEY = _os.environ.get("YOUTUBE_API_KEY", "")
 
     # ── Determine the SINGLE target quarter ──
     q_fy = _get_q_fy_from_quarter(quarter) if quarter else ""
@@ -225,93 +326,240 @@ def _search_youtube_concall(company_name: str, ticker: str, quarter: str = '') -
         ])
 
     def _is_preferred_channel(channel):
-        """Check if channel is 'Trendlyne', 'AlphaStreet India', or 'Concall'."""
+        """Check if channel is a known preferred concall aggregator."""
         if not channel:
             return False
         chan_lower = channel.lower()
-        return "trendlyne" in chan_lower or "alphastreet" in chan_lower or "concall" in chan_lower
+        return ("trendlyne" in chan_lower or "alphastreet" in chan_lower
+                or "concall" in chan_lower or "alfafinder" in chan_lower)
+
+    def _company_core_tokens():
+        """Distinctive lowercased tokens of the target company name.
+        "Premier Explosives Ltd" -> ["premier", "explosives"]
+        """
+        stop = {
+            'ltd', 'limited', 'inc', 'incorporated', 'corp', 'corporation',
+            'company', 'co', 'holdings', 'holding', 'india', 'indian',
+            'industries', 'industrial', 'enterprises', 'enterprise',
+            'services', 'service', 'the', 'and', 'pvt', 'private', 'group',
+        }
+        raw = re.split(r'[^a-z0-9]+', (company_name or '').lower())
+        return [t for t in raw if len(t) > 1 and t not in stop]
+
+    def _title_matches_company(title_lower):
+        """STRICT check that the title refers to the TARGET company. True if
+        EITHER the normalized ticker appears, OR every distinctive core token
+        appears as a whole word. Rejects confusable siblings (e.g. "Premier
+        Energies" when the target is "Premier Explosives"). False negatives are
+        cheap here (fall back to PDF transcript); false positives are catastrophic.
+        """
+        # Branch 1: ticker rescue (length-gated; handles abbreviated titles).
+        t_raw = (ticker or '').lower()
+        t_norm = t_raw.replace('-', '')
+        for cand in (t_raw, t_norm):
+            if len(cand) >= 4 and cand in title_lower:
+                return True
+        # Branch 2: ALL distinctive core tokens present as whole words.
+        core = _company_core_tokens()
+        if core and all(
+            re.search(r'\b' + re.escape(tok) + r'\b', title_lower) for tok in core
+        ):
+            return True
+        return False
 
     # ── Collect candidates across all queries ──
     all_candidates = []       # list of dicts with metadata
     seen_urls = set()
 
     for query in unique_queries:
-        search_query = f"ytsearch5:{query}"
         print(f"CONCALL_AGENT: YouTube search: '{query}'", file=sys.stderr)
 
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            try:
-                results = ydl.extract_info(search_query, download=False)
-                videos = results.get('entries', [])
+        # ── Primary: YouTube Data API v3 ──
+        api_results = []
+        if YOUTUBE_API_KEY:
+            api_results = _youtube_data_api_search(query, YOUTUBE_API_KEY, max_results=5)
 
-                if not videos:
-                    continue
+        # ── Fallback: yt-dlp (if API returned nothing) ──
+        ytdlp_entries = []
+        if not api_results:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                try:
+                    results = ydl.extract_info(f"ytsearch5:{query}", download=False)
+                    ytdlp_entries = results.get('entries', []) or []
+                except Exception as e:
+                    print(f"CONCALL_AGENT yt-dlp fallback error for '{query}': {e}", file=sys.stderr)
 
-                for vid in videos:
-                    if not vid:
-                        continue
-                    url = vid.get('webpage_url', vid.get('url', ''))
-                    if not url or url in seen_urls:
-                        continue
-
-                    duration = vid.get('duration', 0)
-                    if duration and duration < 1200:      # must be > 20 min
-                        continue
-
-                    seen_urls.add(url)
-
-                    title = vid.get('title', '')
-                    title_lower = title.lower()
-                    upload_dt = _parse_upload_date(vid)
-                    is_recent = (upload_dt >= recency_cutoff) if upload_dt else None
-                    matches_quarter = _title_matches_quarter(title_lower)
-                    is_concall = _is_concall_video(title_lower)
-                    
-                    channel = vid.get('channel', vid.get('uploader', 'unknown'))
-                    is_preferred = _is_preferred_channel(channel)
-
-                    # ── Immediate win: recent + title matches target quarter + is concall + preferred channel ──
-                    if is_recent and matches_quarter and is_concall and is_preferred:
-                        print(f"CONCALL_AGENT: ✓ Perfect match (preferred channel): {url}  (title: {title})", file=sys.stderr)
-                        return url
-
-                    all_candidates.append({
-                        'url': url,
-                        'title': title,
-                        'upload_date': vid.get('upload_date', 'unknown'),
-                        'duration_mins': round(duration / 60, 1) if duration else 'unknown',
-                        'channel': channel,
-                        'is_recent': is_recent,
-                        'matches_quarter': matches_quarter,
-                        'is_concall': is_concall,
-                        'is_preferred': is_preferred,
-                    })
-
-            except Exception as e:
-                print(f"CONCALL_AGENT YouTube search error for '{query}': {e}", file=sys.stderr)
+        # ── Process YouTube Data API results ──
+        for item in api_results:
+            url = item['url']
+            if not url or url in seen_urls:
                 continue
+            duration = item['duration_secs']
+            if duration and duration < 1200:
+                continue
+            seen_urls.add(url)
+
+            title = item['title']
+            title_lower = title.lower()
+            channel = item['channel']
+
+            upload_dt = None
+            published_at = item.get('published_at', '')
+            if published_at:
+                try:
+                    upload_dt = datetime.strptime(published_at[:10], "%Y-%m-%d")
+                except Exception:
+                    pass
+
+            is_recent = (upload_dt >= recency_cutoff) if upload_dt else None
+            matches_quarter = _title_matches_quarter(title_lower)
+            is_concall = _is_concall_video(title_lower)
+            is_preferred = _is_preferred_channel(channel)
+            matches_company = _title_matches_company(title_lower)
+
+            if is_recent and matches_quarter and is_concall and is_preferred and matches_company:
+                print(f"CONCALL_AGENT: ✓ Perfect match (YouTube API, preferred): {url}  (title: {title})", file=sys.stderr)
+                return url
+
+            all_candidates.append({
+                'url': url,
+                'title': title,
+                'upload_date': upload_dt.strftime('%Y%m%d') if upload_dt else 'unknown',
+                'relative_text': '',
+                'duration_mins': round(duration / 60, 1) if duration else 'unknown',
+                'channel': channel,
+                'is_recent': is_recent,
+                'matches_quarter': matches_quarter,
+                'is_concall': is_concall,
+                'is_preferred': is_preferred,
+                'matches_company': matches_company,
+            })
+
+        # ── Process yt-dlp fallback results ──
+        for vid in ytdlp_entries:
+            if not vid:
+                continue
+            url = vid.get('webpage_url', vid.get('url', ''))
+            if not url or url in seen_urls:
+                continue
+            duration = vid.get('duration', 0)
+            if duration and duration < 1200:
+                continue
+            seen_urls.add(url)
+
+            title = vid.get('title', '')
+            title_lower = title.lower()
+            upload_dt = _parse_upload_date(vid)
+            is_recent = (upload_dt >= recency_cutoff) if upload_dt else None
+            matches_quarter = _title_matches_quarter(title_lower)
+            is_concall = _is_concall_video(title_lower)
+            channel = vid.get('channel', vid.get('uploader', 'unknown'))
+            is_preferred = _is_preferred_channel(channel)
+            matches_company = _title_matches_company(title_lower)
+
+            if is_recent and matches_quarter and is_concall and is_preferred and matches_company:
+                print(f"CONCALL_AGENT: ✓ Perfect match (yt-dlp, preferred): {url}  (title: {title})", file=sys.stderr)
+                return url
+
+            all_candidates.append({
+                'url': url,
+                'title': title,
+                'upload_date': vid.get('upload_date', 'unknown'),
+                'relative_text': '',
+                'duration_mins': round(duration / 60, 1) if duration else 'unknown',
+                'channel': channel,
+                'is_recent': is_recent,
+                'matches_quarter': matches_quarter,
+                'is_concall': is_concall,
+                'is_preferred': is_preferred,
+                'matches_company': matches_company,
+            })
+
+    # ── Resolve missing upload dates via video page fetch ──
+    for c in all_candidates:
+        if c['is_recent'] is None:
+            resolved_dt, relative_text = _resolve_youtube_upload_date(c['url'])
+            if resolved_dt:
+                c['upload_date'] = resolved_dt.strftime('%Y%m%d')
+                c['relative_text'] = relative_text
+                c['is_recent'] = resolved_dt >= recency_cutoff
+                print(
+                    f"CONCALL_AGENT: Resolved date for {c['url']}: "
+                    f"{resolved_dt.date()} ({relative_text})", file=sys.stderr
+                )
 
     # ── No perfect match — ask Gemini to disambiguate ──
     if not all_candidates:
         print("CONCALL_AGENT: No suitable YouTube video found across all queries", file=sys.stderr)
         return ""
 
+    # ── Pre-filter candidates before sending to Gemini (enforced in code, not by prompt) ──
+
+    # Rule 0: Drop candidates whose TITLE does not refer to the target company.
+    #         Prevents wrong-company videos (e.g. "Premier Energies" when searching
+    #         "Premier Explosives") from ever reaching Gemini. Runs before Rule A/B.
+    company_matched = [c for c in all_candidates if c.get('matches_company')]
+    if not company_matched:
+        print(
+            f"CONCALL_AGENT: No candidate title matches company "
+            f"'{company_name}' ({ticker}) — falling back to PDF transcript",
+            file=sys.stderr
+        )
+        return ""
+    if len(company_matched) != len(all_candidates):
+        print(
+            f"CONCALL_AGENT: Rule 0 dropped "
+            f"{len(all_candidates) - len(company_matched)} wrong-company candidate(s)",
+            file=sys.stderr
+        )
+    all_candidates = company_matched
+
+    # Rule A: If any non-ALFAFINDER candidate is a concall, exclude ALFAFINDER entirely.
+    #         ALFAFINDER is last resort — only considered when nothing else is available.
+    non_alfa = [c for c in all_candidates if "alfafinder" not in (c['channel'] or '').lower()]
+    if non_alfa and any(c['is_concall'] for c in non_alfa):
+        print("CONCALL_AGENT: Non-ALFAFINDER concall candidate exists — excluding ALFAFINDER", file=sys.stderr)
+        all_candidates = non_alfa
+
+    # Rule B: If any candidate matches the target quarter, only send those to Gemini.
+    #         Prevents wrong-quarter videos from being selected when the correct quarter exists.
+    quarter_matched = [c for c in all_candidates if c['matches_quarter']]
+    if quarter_matched:
+        print(f"CONCALL_AGENT: Pre-filtered to {len(quarter_matched)} quarter-matching candidate(s)", file=sys.stderr)
+        all_candidates = quarter_matched
+
     print(
-        f"CONCALL_AGENT: No perfect match. {len(all_candidates)} candidate(s) found, "
-        "asking Gemini to pick...", file=sys.stderr
+        f"CONCALL_AGENT: {len(all_candidates)} candidate(s) going to Gemini for final selection...",
+        file=sys.stderr
     )
 
     candidates_text = ""
     for i, c in enumerate(all_candidates, 1):
-        pref_suffix = " [Preferred Channel: Trendlyne / AlphaStreet India / Concall]" if c['is_preferred'] else ""
+        chan_lower = c['channel'].lower() if c['channel'] else ""
+        if "trendlyne" in chan_lower or "alphastreet" in chan_lower or "concall" in chan_lower:
+            pref_label = " [Preferred: Trendlyne/AlphaStreet/Concall]"
+        elif "alfafinder" in chan_lower:
+            pref_label = " [ALFAFINDER]"
+        else:
+            pref_label = ""
+
+        date_display = c.get('relative_text') or c['upload_date']
+        recency_note = ""
+        if c['is_recent'] is True:
+            recency_note = " ✓ within last 10 days"
+        elif c['is_recent'] is False:
+            recency_note = " (older than 10 days)"
+
         candidates_text += (
             f"Video {i}:\n"
             f"  Title: {c['title']}\n"
-            f"  Upload Date: {c['upload_date']}\n"
+            f"  Upload: {date_display}{recency_note}\n"
             f"  Duration: {c['duration_mins']} minutes\n"
-            f"  Channel: {c['channel']}{pref_suffix}\n"
+            f"  Channel: {c['channel']}{pref_label}\n"
             f"  URL: {c['url']}\n\n"
         )
+
+    print(f"CONCALL_AGENT: Candidates Text:\n{candidates_text}", file=sys.stderr)
 
     gemini_prompt = (
         "You are helping identify the correct earnings conference call (concall) "
@@ -325,10 +573,18 @@ def _search_youtube_concall(company_name: str, ticker: str, quarter: str = '') -
         "1. The video MUST be an earnings call / concall / conference call / analyst "
         "meet — NOT a news clip, analysis, or commentary.\n"
         f"2. It should match the target quarter ({target_quarter}) as closely as possible.\n"
-        "3. Prefer videos from preferred financial channels: 'Trendlyne' (@trendlyne), 'AlphaStreet India' (@AlphaStreetIndia) "
-        "and 'Concall' (@concall_in), or the company's official channel.\n"
-        '4. If none of the videos are a plausible match for the target quarter\'s '
-        'concall, respond with "NONE".\n\n'
+        "3. Prefer videos from known financial channels: Trendlyne (@trendlyne), "
+        "AlphaStreet India (@AlphaStreetIndia), Concall (@concall_in), or the "
+        "company's official channel.\n"
+        "4. The video title MUST refer to the SAME company. It may use the full "
+        "company name even though only the ticker is given here, but you MUST "
+        "REJECT a video for a DIFFERENT company that merely shares a word or prefix. "
+        "E.g. for 'Premier Explosives Ltd', REJECT a 'Premier Energies' video — "
+        "these are different companies. If unsure, respond 'NONE'.\n"
+        "5. When multiple videos are equally plausible, prefer the most recently "
+        "uploaded one (marked '✓ within last 10 days').\n"
+        "6. Only respond 'NONE' if no video could plausibly be an earnings call for "
+        "this company.\n\n"
         'Respond with ONLY the video number (e.g., "1") or "NONE".  '
         "No explanation needed."
     )
@@ -1204,7 +1460,7 @@ def _run_concall_analysis(job_id, ticker, call_gemini_api_fn, fetch_documents_fn
                 if rec_info and rec_info.get("url"):
                     rec_date = rec_info.get("date", "")
                     rec_quarter = _date_to_quarter(rec_date)
-                    if not results_quarter or not rec_quarter or (rec_quarter == results_quarter) or (not concall_quarter) or (rec_date != concall_raw_date):
+                    if rec_quarter and results_quarter and rec_quarter == results_quarter:
                         new_audio_url = rec_info.get("url")
                         new_source = "screener_rec"
                         print(f"CONCALL_AGENT: Found REC link on Screener: {new_audio_url}", file=sys.stderr)

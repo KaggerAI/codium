@@ -1435,7 +1435,7 @@
       top: 0;
       bottom: 0;
       width: 30px;
-      background: linear-gradient(to left, rgba(255,255,255,0.9), transparent);
+      background: linear-gradient(to left, rgba(255, 255, 255, 0.9), transparent);
       pointer-events: none;
     }
 
@@ -1550,11 +1550,24 @@
       font-size: 0.95rem;
     }
 
-    .upstream .stage-header { background: linear-gradient(135deg, #fef3c7, #fde68a); color: #92400e; }
-    .midstream .stage-header { background: linear-gradient(135deg, #dbeafe, #bfdbfe); color: #1e40af; }
-    .downstream .stage-header { background: linear-gradient(135deg, #d1fae5, #a7f3d0); color: #065f46; }
+    .upstream .stage-header {
+      background: linear-gradient(135deg, #fef3c7, #fde68a);
+      color: #92400e;
+    }
 
-    .stage-header .stage-icon { font-size: 1.25rem; }
+    .midstream .stage-header {
+      background: linear-gradient(135deg, #dbeafe, #bfdbfe);
+      color: #1e40af;
+    }
+
+    .downstream .stage-header {
+      background: linear-gradient(135deg, #d1fae5, #a7f3d0);
+      color: #065f46;
+    }
+
+    .stage-header .stage-icon {
+      font-size: 1.25rem;
+    }
 
     .stage-body {
       padding: 0.75rem 1rem;
@@ -1579,9 +1592,17 @@
       gap: 0.3rem;
     }
 
-    .upstream .stage-detail-label { color: #92400e; }
-    .midstream .stage-detail-label { color: #1e40af; }
-    .downstream .stage-detail-label { color: #065f46; }
+    .upstream .stage-detail-label {
+      color: #92400e;
+    }
+
+    .midstream .stage-detail-label {
+      color: #1e40af;
+    }
+
+    .downstream .stage-detail-label {
+      color: #065f46;
+    }
 
     .stage-detail-content {
       font-size: 0.78rem;
@@ -1608,9 +1629,17 @@
       font-weight: 700;
     }
 
-    .upstream .stage-detail-content li::before { color: #b45309; }
-    .midstream .stage-detail-content li::before { color: #2563eb; }
-    .downstream .stage-detail-content li::before { color: #059669; }
+    .upstream .stage-detail-content li::before {
+      color: #b45309;
+    }
+
+    .midstream .stage-detail-content li::before {
+      color: #2563eb;
+    }
+
+    .downstream .stage-detail-content li::before {
+      color: #059669;
+    }
 
     .company-tag {
       display: inline-block;
@@ -1621,9 +1650,23 @@
       margin: 0.1rem 0.15rem 0.1rem 0;
     }
 
-    .upstream .company-tag { background: #fef3c7; color: #78350f; border: 1px solid #f59e0b; }
-    .midstream .company-tag { background: #dbeafe; color: #1e3a8a; border: 1px solid #60a5fa; }
-    .downstream .company-tag { background: #d1fae5; color: #064e3b; border: 1px solid #34d399; }
+    .upstream .company-tag {
+      background: #fef3c7;
+      color: #78350f;
+      border: 1px solid #f59e0b;
+    }
+
+    .midstream .company-tag {
+      background: #dbeafe;
+      color: #1e3a8a;
+      border: 1px solid #60a5fa;
+    }
+
+    .downstream .company-tag {
+      background: #d1fae5;
+      color: #064e3b;
+      border: 1px solid #34d399;
+    }
 
     .margin-badge {
       display: inline-block;
@@ -1633,10 +1676,25 @@
       border-radius: 1rem;
     }
 
-    .margin-badge.high { background: #d1fae5; color: #065f46; }
-    .margin-badge.medium { background: #fef3c7; color: #92400e; }
-    .margin-badge.low { background: #fee2e2; color: #991b1b; }
-    .margin-badge.volatile { background: #e0e7ff; color: #3730a3; }
+    .margin-badge.high {
+      background: #d1fae5;
+      color: #065f46;
+    }
+
+    .margin-badge.medium {
+      background: #fef3c7;
+      color: #92400e;
+    }
+
+    .margin-badge.low {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+
+    .margin-badge.volatile {
+      background: #e0e7ff;
+      color: #3730a3;
+    }
 
     .stage-footer {
       padding: 0.5rem 1rem;
@@ -1645,9 +1703,23 @@
       border-top: 1px dashed;
     }
 
-    .upstream .stage-footer { border-color: #f59e0b; color: #92400e; background: #fef9e7; }
-    .midstream .stage-footer { border-color: #60a5fa; color: #1e40af; background: #f0f5ff; }
-    .downstream .stage-footer { border-color: #34d399; color: #065f46; background: #f0fdf8; }
+    .upstream .stage-footer {
+      border-color: #f59e0b;
+      color: #92400e;
+      background: #fef9e7;
+    }
+
+    .midstream .stage-footer {
+      border-color: #60a5fa;
+      color: #1e40af;
+      background: #f0f5ff;
+    }
+
+    .downstream .stage-footer {
+      border-color: #34d399;
+      color: #065f46;
+      background: #f0fdf8;
+    }
 
     .value-chain-arrow {
       display: flex;
@@ -1695,7 +1767,9 @@
     }
 
     /* === FACT/ASSUMPTION/OPINION BADGES === */
-    .tag-fact, .tag-assumption, .tag-opinion {
+    .tag-fact,
+    .tag-assumption,
+    .tag-opinion {
       display: inline-block;
       font-size: 0.65rem;
       font-weight: 700;
@@ -1707,9 +1781,20 @@
       vertical-align: middle;
     }
 
-    .tag-fact { background: #d1fae5; color: #065f46; }
-    .tag-assumption { background: #fef3c7; color: #92400e; }
-    .tag-opinion { background: #e0e7ff; color: #3730a3; }
+    .tag-fact {
+      background: #d1fae5;
+      color: #065f46;
+    }
+
+    .tag-assumption {
+      background: #fef3c7;
+      color: #92400e;
+    }
+
+    .tag-opinion {
+      background: #e0e7ff;
+      color: #3730a3;
+    }
 
     /* === INTERACTIVE CHART CONTAINERS === */
     .industry-chart {
@@ -1718,9 +1803,10 @@
       border-radius: 0.75rem;
       padding: 1rem;
       margin: 1.5rem 0;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
       min-height: 350px;
     }
+
     .industry-chart .chart-title {
       font-size: 0.95rem;
       font-weight: 600;
@@ -1735,8 +1821,9 @@
       border-radius: 0.75rem;
       overflow: hidden;
       margin: 1.5rem 0;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
     }
+
     .table-collapse-header {
       display: flex;
       align-items: center;
@@ -1748,19 +1835,23 @@
       user-select: none;
       transition: background 0.2s ease;
     }
+
     .table-collapse-header:hover {
       background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
     }
+
     .table-collapse-header .table-caption {
       font-size: 0.85rem;
       font-weight: 600;
       color: #334155;
     }
+
     .table-collapse-header .table-meta {
       display: flex;
       align-items: center;
       gap: 0.5rem;
     }
+
     .table-collapse-header .row-badge {
       background: #dbeafe;
       color: #1e40af;
@@ -1769,28 +1860,34 @@
       padding: 0.15rem 0.5rem;
       border-radius: 9999px;
     }
+
     .table-collapse-header .collapse-icon {
       font-size: 0.75rem;
       color: #64748b;
       transition: transform 0.3s ease;
     }
+
     .table-collapse-header.collapsed .collapse-icon {
       transform: rotate(-90deg);
     }
+
     .table-collapse-body {
       max-height: 2000px;
       overflow: hidden;
       transition: max-height 0.4s ease-in-out;
     }
+
     .table-collapse-body.collapsed {
       max-height: 0;
     }
+
     /* Table search/filter */
     .table-filter-bar {
       padding: 0.375rem 0.75rem;
       background: #f8fafc;
       border-bottom: 1px solid #e2e8f0;
     }
+
     .table-filter-input {
       width: 100%;
       padding: 0.35rem 0.75rem;
@@ -1800,10 +1897,12 @@
       outline: none;
       transition: border-color 0.2s;
     }
+
     .table-filter-input:focus {
       border-color: #3b82f6;
-      box-shadow: 0 0 0 2px rgba(59,130,246,0.1);
+      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
     }
+
     /* Sortable columns */
     .industry-report .table-collapse-wrapper th {
       cursor: pointer;
@@ -1811,9 +1910,11 @@
       padding-right: 1.25rem;
       white-space: normal;
     }
+
     .industry-report .table-collapse-wrapper th:hover {
       background: #e2e8f0;
     }
+
     .sort-icon {
       position: absolute;
       right: 0.35rem;
@@ -1822,7 +1923,11 @@
       font-size: 0.6rem;
       color: #94a3b8;
     }
-    .sort-icon.active { color: #1e40af; }
+
+    .sort-icon.active {
+      color: #1e40af;
+    }
+
     /* Numerical cell styling */
     .cell-number {
       text-align: right;
@@ -1830,8 +1935,14 @@
       font-family: 'SF Mono', 'Consolas', monospace;
       font-size: 0.825rem;
     }
-    .cell-positive { color: #059669; }
-    .cell-negative { color: #dc2626; }
+
+    .cell-positive {
+      color: #059669;
+    }
+
+    .cell-negative {
+      color: #dc2626;
+    }
 
     /* === KPI CARDS (Executive Summary) === */
     .kpi-grid {
@@ -1840,29 +1951,34 @@
       gap: 0.75rem;
       margin: 1.25rem 0 1.75rem 0;
     }
+
     .kpi-card {
       background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
       border: 1px solid #e2e8f0;
       border-radius: 0.75rem;
       padding: 1rem;
       text-align: center;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
       transition: transform 0.2s ease, box-shadow 0.2s ease;
     }
+
     .kpi-card:hover {
       transform: translateY(-2px);
-      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
     }
+
     .kpi-card .kpi-icon {
       font-size: 1.5rem;
       margin-bottom: 0.25rem;
     }
+
     .kpi-card .kpi-value {
       font-size: 1.25rem;
       font-weight: 700;
       color: #1e3a8a;
       line-height: 1.2;
     }
+
     .kpi-card .kpi-label {
       font-size: 0.7rem;
       font-weight: 500;
@@ -1882,9 +1998,11 @@
       margin: 0;
       transition: color 0.2s ease;
     }
+
     .section-collapse-header:hover {
       color: #2563eb;
     }
+
     .section-chevron {
       display: inline-block;
       margin-right: 0.5rem;
@@ -1893,25 +2011,30 @@
       color: #64748b;
       flex-shrink: 0;
     }
+
     .section-chevron.collapsed {
       transform: rotate(-90deg);
     }
+
     .section-body {
       overflow: hidden;
       max-height: 50000px;
       transition: max-height 0.5s ease-in-out, opacity 0.3s ease;
       opacity: 1;
     }
+
     .section-body.collapsed {
       max-height: 0;
       opacity: 0;
     }
+
     /* Collapse/Expand All buttons */
     .section-controls {
       display: flex;
       gap: 0.5rem;
       margin-bottom: 1rem;
     }
+
     .section-controls button {
       padding: 0.3rem 0.75rem;
       font-size: 0.75rem;
@@ -1923,6 +2046,7 @@
       cursor: pointer;
       transition: all 0.2s;
     }
+
     .section-controls button:hover {
       background: #eff6ff;
       border-color: #3b82f6;
@@ -1939,28 +2063,34 @@
       font-size: 0.75rem;
       font-weight: 600;
     }
+
     .quality-badge.grade-a {
       background: #d1fae5;
       color: #065f46;
     }
+
     .quality-badge.grade-b {
       background: #dbeafe;
       color: #1e40af;
     }
+
     .quality-badge.grade-c {
       background: #fef3c7;
       color: #92400e;
     }
+
     .quality-stats {
       display: flex;
       flex-wrap: wrap;
       gap: 0.75rem;
       margin-top: 0.5rem;
     }
+
     .quality-stat {
       font-size: 0.75rem;
       color: #64748b;
     }
+
     .quality-stat strong {
       color: #334155;
     }
@@ -4241,8 +4371,16 @@
                 class="flex items-center gap-3 px-4 py-3 hover:bg-emerald-50 transition-colors no-underline"><span
                   class="text-xl w-8 text-center flex-shrink-0">🌌</span>
                 <div>
-                  <div class="font-semibold text-sm text-slate-800">Astro Agent</div>
+                  <div class="font-semibold text-sm text-slate-800">Cosmic Macro Agent</div>
                   <div class="text-xs text-slate-500">Astrology-based market insights</div>
+                </div>
+              </a>
+              <a href="/agents?tab=cosmic_micro" onclick="saveAppState()"
+                class="flex items-center gap-3 px-4 py-3 hover:bg-emerald-50 transition-colors no-underline"><span
+                  class="text-xl w-8 text-center flex-shrink-0">🔮</span>
+                <div>
+                  <div class="font-semibold text-sm text-slate-800">Cosmic Micro Agent</div>
+                  <div class="text-xs text-slate-500">Astro-fundamental single stock/industry oracle</div>
                 </div>
               </a>
               <a href="/agents?tab=docsum" onclick="saveAppState()"
@@ -6050,7 +6188,7 @@
     function renderIndustryCharts(chartData) {
       if (!chartData || !chartData.length) return;
 
-      const colors = ['#3b82f6','#8b5cf6','#06b6d4','#10b981','#f59e0b','#ef4444','#ec4899','#6366f1','#14b8a6','#f97316'];
+      const colors = ['#3b82f6', '#8b5cf6', '#06b6d4', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#6366f1', '#14b8a6', '#f97316'];
 
       chartData.forEach(chart => {
         const el = document.getElementById(chart.id);
@@ -6126,7 +6264,7 @@
       // Get all text content and search for chart patterns
       const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null, false);
       const chartPattern = /chart-(line|pie|bar)\s*\n([\s\S]*?)(?=```|chart-(line|pie|bar)|$)/g;
-      
+
       // Approach: find elements containing chart-line/chart-pie/chart-bar text
       const allElements = container.querySelectorAll('code, pre, p');
       allElements.forEach(el => {
@@ -6155,18 +6293,18 @@
         // Only proceed if we got meaningful data
         if (parsed.title || parsed.labels || parsed.x) {
           rescued.push(parsed);
-          
+
           // Find the parent element to replace (could be pre > code, or just p)
           let replaceTarget = el;
           if (el.tagName === 'CODE' && el.parentElement && el.parentElement.tagName === 'PRE') {
             replaceTarget = el.parentElement;
           }
           // Also check if wrapped in a <p> tag
-          if (replaceTarget.parentElement && replaceTarget.parentElement.tagName === 'P' && 
-              replaceTarget.parentElement.children.length <= 2) {
+          if (replaceTarget.parentElement && replaceTarget.parentElement.tagName === 'P' &&
+            replaceTarget.parentElement.children.length <= 2) {
             replaceTarget = replaceTarget.parentElement;
           }
-          
+
           const chartDiv = document.createElement('div');
           chartDiv.className = 'industry-chart';
           chartDiv.id = chartId;
@@ -6182,11 +6320,11 @@
         // Match patterns like: chart-bar<br>title: ...<br>labels: ...<br>values: ...<br>ylabel: ...
         const rawMatch = html.match(/chart-(line|pie|bar)(?:<br\s*\/?>)([\s\S]*?)(?:<\/|$)/);
         if (!rawMatch) return;
-        
+
         const chartType = rawMatch[1];
         const chartId = 'rescued-chart-' + rescued.length;
         const parsed = { type: chartType, id: chartId };
-        
+
         const bodyText = rawMatch[2].replace(/<br\s*\/?>/g, '\n').replace(/<[^>]+>/g, '');
         bodyText.split('\n').forEach(line => {
           const kv = line.match(/^(\w+):\s*(.+)$/);
@@ -6304,7 +6442,7 @@
             rowsArr.forEach(r => tbody.appendChild(r));
             ascending = !ascending;
             // Update sort icons
-            ths.forEach(t => { const icon = t.querySelector('.sort-icon'); if(icon) icon.classList.remove('active'); });
+            ths.forEach(t => { const icon = t.querySelector('.sort-icon'); if (icon) icon.classList.remove('active'); });
             const icon = th.querySelector('.sort-icon');
             if (icon) { icon.classList.add('active'); icon.textContent = ascending ? '▲▼' : (ascending ? '▲' : '▼'); }
           });
@@ -6405,7 +6543,7 @@
       const stageBlocks = { upstream: '', midstream: '', downstream: '' };
       const stageSplit = sec7Text.split(/(?=\n### (?:Upstream|Midstream|Downstream)\b)/i);
       stageSplit.forEach(block => {
-        if (/^[\s\S]*### Upstream\b/i.test(block))   stageBlocks.upstream  = block;
+        if (/^[\s\S]*### Upstream\b/i.test(block)) stageBlocks.upstream = block;
         else if (/^[\s\S]*### Midstream\b/i.test(block)) stageBlocks.midstream = block;
         else if (/^[\s\S]*### Downstream\b/i.test(block)) stageBlocks.downstream = block;
       });
@@ -6443,9 +6581,9 @@
 
       // Parse company names from field value — filter generic abbreviations & phrases
       const ACRONYM_BLOCKLIST = new Set([
-        'EV','OEM','BMS','PLI','GST','BIS','FAME','FDI','FX','EPC','LED','PCB',
-        'USD','INR','GDP','EBITDA','CAGR','ROCE','ROIC','IPO','QIP','NSE','BSE',
-        'AND','THE','FOR','LTD','INC','PVT','PLC','LLP',
+        'EV', 'OEM', 'BMS', 'PLI', 'GST', 'BIS', 'FAME', 'FDI', 'FX', 'EPC', 'LED', 'PCB',
+        'USD', 'INR', 'GDP', 'EBITDA', 'CAGR', 'ROCE', 'ROIC', 'IPO', 'QIP', 'NSE', 'BSE',
+        'AND', 'THE', 'FOR', 'LTD', 'INC', 'PVT', 'PLC', 'LLP',
       ]);
       function parseCompanies(fieldValue) {
         if (!fieldValue) return [];
@@ -6537,8 +6675,8 @@
       }
 
       const defaultActivities = {
-        upstream:   ['Input sourcing & procurement', 'Primary processing & refining', 'Component / ingredient supply'],
-        midstream:  ['Core manufacturing / production', 'Value-add processing & assembly', 'Quality control & compliance'],
+        upstream: ['Input sourcing & procurement', 'Primary processing & refining', 'Component / ingredient supply'],
+        midstream: ['Core manufacturing / production', 'Value-add processing & assembly', 'Quality control & compliance'],
         downstream: ['Distribution & channel management', 'End-customer sales & service', 'After-market & maintenance'],
       };
 
@@ -6562,34 +6700,34 @@
         }
 
         // Fallback: parse from regex markdown string
-        const text       = stageBlocks[key];
+        const text = stageBlocks[key];
         const activField = mdField(text, 'Key activities');
-        const playField  = mdField(text, 'Key players');
-        const marginFld  = mdField(text, 'Margin profile');
-        const importFld  = mdField(text, 'Import dependency');
-        const constFld   = mdField(text, 'Key constraint');
-        const bargFld    = mdField(text, 'Bargaining power');
+        const playField = mdField(text, 'Key players');
+        const marginFld = mdField(text, 'Margin profile');
+        const importFld = mdField(text, 'Import dependency');
+        const constFld = mdField(text, 'Key constraint');
+        const bargFld = mdField(text, 'Bargaining power');
         const activities = parseActivities(activField, defaultActivities[key]);
-        const marginVal  = parseMargin(marginFld, text) || 'Varies';
+        const marginVal = parseMargin(marginFld, text) || 'Varies';
         return {
           css: cssClass, icon, title,
           subtitle: parseSubtitle(text, stageName, fallbackSubtitle),
           activities,
-          companies:   parseCompanies(playField),
-          margin:      marginVal,
+          companies: parseCompanies(playField),
+          margin: marginVal,
           marginClass: marginClass(marginVal),
-          trade:       parseTrade(importFld, text),
+          trade: parseTrade(importFld, text),
           constraints: parseConstraints(constFld, text),
-          bargaining:  parseBargaining(bargFld, text),
-          regulatory:  parseRegulatory(text),
-          footer:      fallbackFooter,
+          bargaining: parseBargaining(bargFld, text),
+          regulatory: parseRegulatory(text),
+          footer: fallbackFooter,
         };
       }
 
       const stages = [
-        buildStage('upstream',   'upstream',   '⛏️',  'Upstream',   'Upstream',   'Raw Materials & Components',   '⚠️ Supply chain and input cost risk'),
-        buildStage('midstream',  'midstream',  '🏭',  'Midstream',  'Midstream',  'Manufacturing & Processing',    '🔑 Core value-add — execution and capex risk'),
-        buildStage('downstream', 'downstream', '🛒',  'Downstream', 'Downstream', 'Distribution & End Markets',    '📈 Largest demand pool — consumer-facing returns'),
+        buildStage('upstream', 'upstream', '⛏️', 'Upstream', 'Upstream', 'Raw Materials & Components', '⚠️ Supply chain and input cost risk'),
+        buildStage('midstream', 'midstream', '🏭', 'Midstream', 'Midstream', 'Manufacturing & Processing', '🔑 Core value-add — execution and capex risk'),
+        buildStage('downstream', 'downstream', '🛒', 'Downstream', 'Downstream', 'Distribution & End Markets', '📈 Largest demand pool — consumer-facing returns'),
       ];
 
       // Build the HTML
@@ -7121,7 +7259,7 @@
                     ${quality.quality_grade ? `
                     <div class="quality-stats mt-2">
                       <span class="quality-badge ${gradeClass}">${gradeLabel}</span>
-                      ${quality.word_count ? `<span class="quality-stat"><strong>${(quality.word_count/1000).toFixed(1)}k</strong> words</span>` : ''}
+                      ${quality.word_count ? `<span class="quality-stat"><strong>${(quality.word_count / 1000).toFixed(1)}k</strong> words</span>` : ''}
                       ${quality.section_count ? `<span class="quality-stat"><strong>${quality.section_count}</strong> sections</span>` : ''}
                       ${quality.table_count ? `<span class="quality-stat"><strong>${quality.table_count}</strong> tables</span>` : ''}
                       ${quality.chart_count ? `<span class="quality-stat"><strong>${quality.chart_count}</strong> charts</span>` : ''}
@@ -9505,14 +9643,14 @@
       `).join('');
     }
 
-    window.removeSidebarMention = function(ticker) {
+    window.removeSidebarMention = function (ticker) {
       window.sidebarSelectedCompanies = window.sidebarSelectedCompanies.filter(c => c.ticker !== ticker);
       renderSidebarSelectedCompanies();
     };
 
     // Listen for @mentions in sidebar input (only in industry mode)
     if (chatInput) {
-      chatInput.addEventListener('input', function() {
+      chatInput.addEventListener('input', function () {
         if (typeof currentMode === 'undefined' || currentMode !== 'industry') {
           if (sidebarMentionDropdown) sidebarMentionDropdown.classList.add('hidden');
           return;
@@ -11764,7 +11902,7 @@
                   chartData.layout[k].zeroline = false;
                 }
               });
-              
+
 
             }
 

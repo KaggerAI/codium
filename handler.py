@@ -12676,11 +12676,15 @@ from agents.cosmic_agent import register_cosmic_routes, _run_cosmic_analysis
 from agents.base import create_agent_job
 register_cosmic_routes(app, call_openai_api, call_perplexity_api, call_perplexity_search_api)
 
+# Register Cosmic Micro Agent routes
+from agents.cosmic_micro_agent import register_cosmic_micro_routes
+register_cosmic_micro_routes(app, call_openai_api, get_any_cache, get_analysis_for_ticker)
+
 # Register Financial Document Summarizer Agent routes
 from agents.document_summarizer_agent import register_doc_summarizer_routes
 register_doc_summarizer_routes(app, call_openai_api)
 
-print("INFO: Agent Marketplace routes registered (Concall Agent, Live Concall Agent, Forensic Agent, Analyst Agent, Forecasting Agent, Cosmic Agent, Doc Summarizer Agent)", file=sys.stderr)
+print("INFO: Agent Marketplace routes registered (Concall Agent, Live Concall Agent, Forensic Agent, Analyst Agent, Forecasting Agent, Cosmic Agent, Cosmic Micro Agent, Doc Summarizer Agent)", file=sys.stderr)
 
 # =====================================================================
 # END: Agent Marketplace
