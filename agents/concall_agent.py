@@ -633,6 +633,96 @@ def _search_youtube_concall(company_name: str, ticker: str, quarter: str = '') -
         return ""
 
 
+async def _fetch_ir_website_audio(ticker: str, company_name: str = '',
+                                  results_quarter: str = '', seed_url: str = None) -> str:
+    """
+    Best-effort: find a downloadable earnings-call audio file on the company's
+    Investor Relations website. Starts from `seed_url` (e.g. an IR page link
+    pulled from an NSE filing — the most reliable seed) or, failing that,
+    discovers the company website via Screener. Shallow-crawls a few investor
+    pages (same domain only) and returns a direct audio/video media URL, or ''
+    when none is exposed (e.g. streaming-only webcasts). Company-correct by
+    construction — it never leaves the company's own domain.
+    """
+    from urllib.parse import urljoin, urlparse
+
+    start_url = seed_url or ""
+    if not start_url:
+        try:
+            from fetchers.screener_fetcher import fetch_company_website_async
+            start_url = await fetch_company_website_async(ticker)
+        except Exception as e:
+            print(f"CONCALL_AGENT: IR website discovery failed: {e}", file=sys.stderr)
+            start_url = ""
+    if not start_url:
+        return ""
+
+    from fetchers.screener_fetcher import _stealth_get_html_async
+
+    # Quarter tokens for ranking candidates (best-effort).
+    q_tokens = []
+    try:
+        q_fy = _get_q_fy_from_quarter(results_quarter) if results_quarter else ""
+        m = re.search(r'Q([1-4])\s*FY(\d{2})', q_fy or "", re.IGNORECASE)
+        if m:
+            qn, yy = m.group(1), int(m.group(2))
+            q_tokens = [f"q{qn}", f"q{qn}fy{yy}", f"fy{yy}", f"fy20{yy}",
+                        f"20{yy-1}-{yy}", f"20{yy-1}-20{yy}"]
+    except Exception:
+        pass
+
+    base_netloc = urlparse(start_url).netloc
+    seen = set()
+    audio_found = []
+
+    async def _scan(url, depth):
+        if not url or url in seen or len(seen) >= 6 or depth > 2:
+            return
+        seen.add(url)
+        try:
+            text, final_url, status = await _stealth_get_html_async(url, follow_redirects=True)
+            if status != 200 or not text:
+                return
+        except Exception:
+            return
+        soup = BeautifulSoup(text, 'html.parser')
+        follow = []
+        for a in soup.find_all('a', href=True):
+            href = urljoin(final_url or url, a['href'].strip())
+            label = ((a.get_text() or '') + ' ' + href).lower()
+            kind = _get_url_type(href)
+            if kind in ('audio', 'video'):
+                audio_found.append(href)
+            elif (urlparse(href).netloc == base_netloc and any(
+                    k in label for k in ('investor', 'financial', 'earnings call',
+                                         'concall', 'audio', 'recording'))):
+                follow.append(href)
+        for f in follow[:3]:
+            await _scan(f, depth + 1)
+
+    try:
+        await _scan(start_url, 0)
+    except Exception as e:
+        print(f"CONCALL_AGENT: IR crawl error: {e}", file=sys.stderr)
+
+    if not audio_found:
+        return ""
+
+    def _score(u):
+        ul = u.lower()
+        s = 0
+        if q_tokens and any(t in ul for t in q_tokens):
+            s += 10
+        if any(k in ul for k in ('earning', 'concall', 'conference', 'investor', 'audio', 'recording')):
+            s += 1
+        return s
+
+    audio_found.sort(key=_score, reverse=True)
+    best = audio_found[0]
+    print(f"CONCALL_AGENT: IR website audio found: {best}", file=sys.stderr)
+    return best
+
+
 # =====================================================================
 # QUARTER MAPPING HELPERS
 # =====================================================================
@@ -1482,10 +1572,12 @@ def _run_concall_analysis(job_id, ticker, call_gemini_api_fn, fetch_documents_fn
                             print(f"CONCALL_AGENT: Transcription of REC url failed entirely: {e}", file=sys.stderr)
                             new_audio_url = "" # Reset to allow fallback
 
+                # Resolve company name once for all remaining auto-fetch sources.
+                company_name = _get_company_name_from_ticker(ticker)
+
                 # 2b. If no valid REC link or transcription failed, search YouTube
                 if not new_audio_url:
                     update_agent_job(job_id, {'progress': 'Searching YouTube for latest earnings call...'})
-                    company_name = _get_company_name_from_ticker(ticker)
                     
                     search_q = results_quarter if results_quarter else ""
                     yt_audio_url = _search_youtube_concall(company_name, ticker, search_q)
@@ -1503,13 +1595,66 @@ def _run_concall_analysis(job_id, ticker, call_gemini_api_fn, fetch_documents_fn
                                 quarter_mismatch = False
                                 auto_fetch_source = new_source
                                 new_audio_url = yt_audio_url
-                            else:
-                                auto_fetch_failed = True
                         except Exception as e:
                             print(f"CONCALL_AGENT: Transcription of YT url failed: {e}", file=sys.stderr)
-                            auto_fetch_failed = True
-                    else:
-                        auto_fetch_failed = True
+
+                # 2c. Exchange filing (NSE): the company's own filed earnings-call audio
+                #     recording. Company-correct by construction (keyed by NSE symbol). The
+                #     filing yields either a direct audio file or the official IR-page URL.
+                ir_seed_url = ""
+                if not new_audio_url:
+                    update_agent_job(job_id, {'progress': 'Searching exchange filings for concall audio...'})
+                    try:
+                        from fetchers.nse_fetcher import fetch_nse_concall_recording_async
+                        rec = loop3.run_until_complete(
+                            fetch_nse_concall_recording_async(ticker, results_quarter))
+                    except Exception as e:
+                        print(f"CONCALL_AGENT: NSE filing fetch failed: {e}", file=sys.stderr)
+                        rec = {}
+                    ir_seed_url = rec.get('ir_url') or ""
+                    nse_audio_url = rec.get('audio_url') or ""
+                    if nse_audio_url:
+                        new_source = "nse_filing"
+                        print(f"CONCALL_AGENT: Found NSE filing audio: {nse_audio_url}", file=sys.stderr)
+                        try:
+                            transcribed_text = loop3.run_until_complete(_try_transcribe(nse_audio_url))
+                            if transcribed_text and not transcribed_text.startswith("Error"):
+                                concall_text = transcribed_text
+                                concall_link = nse_audio_url
+                                concall_label = "Auto-Fetched Exchange Filing Audio"
+                                concall_quarter = rec.get('quarter') or results_quarter or "Latest"
+                                quarter_mismatch = False
+                                auto_fetch_source = new_source
+                                new_audio_url = nse_audio_url
+                        except Exception as e:
+                            print(f"CONCALL_AGENT: Transcription of NSE filing audio failed: {e}", file=sys.stderr)
+
+                # 2d. Company IR website — seeded from the NSE filing's IR link when available,
+                #     else discovered via Screener. Scrapes for a downloadable audio file.
+                if not new_audio_url:
+                    update_agent_job(job_id, {'progress': 'Searching company IR page for concall audio...'})
+                    try:
+                        ir_audio_url = loop3.run_until_complete(
+                            _fetch_ir_website_audio(ticker, company_name, results_quarter,
+                                                    seed_url=ir_seed_url or None))
+                    except Exception as e:
+                        print(f"CONCALL_AGENT: IR website audio fetch failed: {e}", file=sys.stderr)
+                        ir_audio_url = ""
+                    if ir_audio_url:
+                        new_source = "ir_website"
+                        print(f"CONCALL_AGENT: Found IR website audio: {ir_audio_url}", file=sys.stderr)
+                        try:
+                            transcribed_text = loop3.run_until_complete(_try_transcribe(ir_audio_url))
+                            if transcribed_text and not transcribed_text.startswith("Error"):
+                                concall_text = transcribed_text
+                                concall_link = ir_audio_url
+                                concall_label = "Auto-Fetched IR Website Audio"
+                                concall_quarter = results_quarter if results_quarter else "Latest"
+                                quarter_mismatch = False
+                                auto_fetch_source = new_source
+                                new_audio_url = ir_audio_url
+                        except Exception as e:
+                            print(f"CONCALL_AGENT: Transcription of IR website audio failed: {e}", file=sys.stderr)
 
             finally:
                 loop3.close()

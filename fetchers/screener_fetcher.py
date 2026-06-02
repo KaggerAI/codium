@@ -1761,6 +1761,38 @@ async def fetch_concall_rec_url_async(ticker: str) -> dict:
         return {}
 
 
+async def fetch_company_website_async(ticker: str) -> str:
+    """
+    Fetch the company's official website URL from its Screener.in page.
+    Screener shows it as the first link in the <div class="company-links">
+    block (alongside BSE/NSE quote links). Returns the URL or '' if not found.
+    """
+    try:
+        url = BASE_URL.format(ticker=ticker)
+        text, final_url, status_code = await _stealth_get_html_async(url, follow_redirects=True)
+        if status_code != 200:
+            return ""
+
+        soup = BeautifulSoup(text, 'html.parser')
+        links_div = soup.find('div', class_='company-links')
+        if links_div:
+            for a in links_div.find_all('a', href=True):
+                href = a['href'].strip()
+                low = href.lower()
+                if (href.startswith('http') and 'bseindia.com' not in low
+                        and 'nseindia.com' not in low and 'screener.in' not in low):
+                    return href
+
+        # Fallback: an anchor explicitly labelled 'Website'.
+        wa = soup.find('a', string=lambda s: s and s.strip().lower() == 'website')
+        if wa and wa.get('href', '').startswith('http'):
+            return wa['href'].strip()
+        return ""
+    except Exception as e:
+        print(f"Error fetching company website for {ticker}: {e}")
+        return ""
+
+
 def _find_forensic_pages(pdf_bytes: bytes, max_pages: int = 40) -> list[int]:
     """
     Quick scan of an Annual Report PDF to find pages containing forensic risk indicators,
