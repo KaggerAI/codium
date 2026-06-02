@@ -1628,6 +1628,98 @@ async def fetch_latest_document_dates_async(ticker: str) -> dict:
         return result
 
 
+async def fetch_upcoming_concalls_screener_async(lookahead_days: int = 10, max_pages: int = 4) -> list[dict]:
+    """
+    Scrape the GLOBAL upcoming-concalls calendar from Screener.in
+    (https://www.screener.in/concalls/upcoming/). This is the site-wide list of
+    announced upcoming concalls — NOT a per-company page.
+
+    Returns a list of normalized dicts:
+        {company_name, ticker, call_date "YYYY-MM-DD", call_time "HH:MM" or "",
+         announcement_url, source: "screener"}
+
+    Rows are date-ascending, so we page only until dates pass `lookahead_days`
+    beyond today (or `max_pages` is reached). Best-effort: returns [] on error so
+    it can never break the aggregated schedule.
+    """
+    from datetime import datetime, timedelta
+    results: list[dict] = []
+    try:
+        horizon = datetime.now().date() + timedelta(days=lookahead_days)
+
+        def _parse_date(s: str):
+            s = (s or "").strip()
+            for fmt in ("%d %B %Y", "%d %b %Y"):
+                try:
+                    return datetime.strptime(s, fmt).date()
+                except ValueError:
+                    continue
+            return None
+
+        def _parse_time(s: str) -> str:
+            s = (s or "").strip()
+            # Screener uses "12:00:00 AM" (midnight) as a "time not specified" placeholder.
+            if not s or s.upper().startswith("12:00:00 AM"):
+                return ""
+            for fmt in ("%I:%M:%S %p", "%I:%M %p", "%H:%M:%S", "%H:%M"):
+                try:
+                    return datetime.strptime(s, fmt).strftime("%H:%M")
+                except ValueError:
+                    continue
+            return ""
+
+        for page in range(1, max_pages + 1):
+            url = f"https://www.screener.in/concalls/upcoming/?p={page}"
+            try:
+                text, _final_url, status_code = await _stealth_get_html_async(url, follow_redirects=True)
+            except Exception as e:
+                print(f"SCREENER_UPCOMING: page {page} fetch failed: {e}", file=sys.stderr)
+                break
+            if status_code != 200 or not text:
+                break
+
+            table = BeautifulSoup(text, "html.parser").find("table")
+            if not table:
+                break
+
+            page_rows = 0
+            max_date_on_page = None
+            for tr in table.find_all("tr"):
+                # Company is a <th scope="row"> with the BSE/NSE PDF link; date/time are <td>.
+                cells = tr.find_all(["td", "th"], recursive=False)
+                if len(cells) < 3:
+                    continue
+                link = cells[0].find("a", href=True)
+                # Data rows carry an external announcement link in the company cell;
+                # this naturally skips the header row (whose first cell has no http link).
+                if not link or not link["href"].startswith("http"):
+                    continue
+                call_date = _parse_date(cells[1].get_text())
+                if not call_date:
+                    continue
+                results.append({
+                    "company_name": cells[0].get_text(strip=True),
+                    "ticker": "",
+                    "call_date": call_date.strftime("%Y-%m-%d"),
+                    "call_time": _parse_time(cells[2].get_text()),
+                    "announcement_url": link["href"],
+                    "source": "screener",
+                })
+                page_rows += 1
+                if max_date_on_page is None or call_date > max_date_on_page:
+                    max_date_on_page = call_date
+
+            if page_rows == 0:
+                break
+            if max_date_on_page and max_date_on_page > horizon:
+                break
+
+        print(f"SCREENER_UPCOMING: fetched {len(results)} upcoming concalls", file=sys.stderr)
+    except Exception as e:
+        print(f"SCREENER_UPCOMING: fetch failed: {e}", file=sys.stderr)
+    return results
+
+
 async def fetch_latest_documents_async(ticker: str, html_content: str = None) -> list[dict]:
     try:
         if html_content is not None and len(html_content) > 500:

@@ -4544,7 +4544,7 @@
             listEl.innerHTML = '<div class="live-empty-state">Loading schedule...</div>';
 
             try {
-                const resp = await fetch('/api/live-concall/schedule?days=7');
+                const resp = await fetch('/api/live-concall/schedule?days=5');
                 const data = await resp.json();
                 liveSchedule = data.calls || [];
                 liveScheduleLoaded = true;
@@ -4563,7 +4563,7 @@
             );
 
             if (!visible.length) {
-                listEl.innerHTML = '<div class="live-empty-state">No upcoming conference calls in the next 7 days.</div>';
+                listEl.innerHTML = '<div class="live-empty-state">No upcoming conference calls in the next 5 days.</div>';
                 return;
             }
 
@@ -5913,6 +5913,8 @@
         let cosmicStartTime = null;
         let cosmicTimerInterval = null;
         let currentCosmicData = null;
+        let cosmicPollErrors = 0;                 // consecutive transient poll failures
+        const COSMIC_MAX_POLL_ERRORS = 5;         // tolerate ~15s of blips before giving up
 
         // =====================================================
         // COSMIC AGENT: API + POLLING
@@ -5930,6 +5932,7 @@
             document.getElementById('cosmicBtnText').innerHTML = '<span class="spinner"></span> Analyzing...';
 
             cosmicStartTime = Date.now();
+            cosmicPollErrors = 0;
             if (cosmicTimerInterval) clearInterval(cosmicTimerInterval);
             cosmicTimerInterval = setInterval(() => {
                 const elapsed = Math.floor((Date.now() - cosmicStartTime) / 1000);
@@ -5954,16 +5957,44 @@
 
         function pollCosmicStatus() {
             if (!cosmicJobId) return;
+            // Read the raw body first, then parse defensively. A transient empty /
+            // non-JSON / non-OK poll response (proxy 502/504, single worker briefly
+            // busy or recycled during the ~7-min synthesis) must NOT abort the run —
+            // the background job is still alive — so we retry a bounded number of times.
             fetch(`/agent/cosmic/${cosmicJobId}/status`)
-                .then(r => r.json())
-                .then(data => {
+                .then(r => r.text().then(text => ({ ok: r.ok, httpStatus: r.status, text })))
+                .then(({ ok, httpStatus, text }) => {
+                    let data = null;
+                    if (text) { try { data = JSON.parse(text); } catch (e) { data = null; } }
+
+                    if (!ok || !data) {
+                        cosmicPollErrors++;
+                        if (cosmicPollErrors <= COSMIC_MAX_POLL_ERRORS) {
+                            cosmicPollTimer = setTimeout(pollCosmicStatus, 3000);
+                            return;
+                        }
+                        onCosmicError(`Polling error: server returned ${ok ? 'an unreadable' : 'HTTP ' + httpStatus} response`);
+                        return;
+                    }
+
+                    cosmicPollErrors = 0;  // healthy response — reset the transient counter
+
                     if (data.status === 'processing') {
                         document.getElementById('cosmicProgressText').textContent = data.progress || 'Analyzing...';
                         cosmicPollTimer = setTimeout(pollCosmicStatus, 3000);
                     } else if (data.status === 'complete') { onCosmicComplete(data.result); }
                     else if (data.status === 'error') { onCosmicError(data.error); }
+                    else { onCosmicError(data.error || 'Polling error: unexpected status response'); }
                 })
-                .catch(err => onCosmicError(`Polling error: ${err.message}`));
+                .catch(err => {
+                    // Genuine network failure (offline, DNS, reset) — retry bounded too.
+                    cosmicPollErrors++;
+                    if (cosmicPollErrors <= COSMIC_MAX_POLL_ERRORS) {
+                        cosmicPollTimer = setTimeout(pollCosmicStatus, 3000);
+                        return;
+                    }
+                    onCosmicError(`Polling error: ${err.message}`);
+                });
         }
 
         function onCosmicComplete(result, cached) {

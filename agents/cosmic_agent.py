@@ -403,22 +403,29 @@ def register_cosmic_routes(
     @app.route("/agent/cosmic/<job_id>/status", methods=["GET"])
     def agent_cosmic_status(job_id):
         """Poll endpoint for Cosmic Agent job status."""
-        job = get_agent_job(job_id)
-        if not job:
-            return jsonify({"error": "Job not found or expired"}), 404
+        try:
+            job = get_agent_job(job_id)
+            if not job:
+                # Include a `status` field so the client can act on it rather than stall.
+                return jsonify({"status": "error", "error": "Job not found or expired"}), 404
 
-        if job["status"] == "processing":
-            return jsonify({
-                "status": "processing",
-                "progress": job["progress"],
-                "elapsed_seconds": int(time.time() - job["started_at"]),
-            })
-        elif job["status"] == "complete":
-            return jsonify({"status": "complete", "result": job["result"]})
-        elif job["status"] == "error":
-            return jsonify({"status": "error", "error": job["error"]})
+            if job["status"] == "processing":
+                return jsonify({
+                    "status": "processing",
+                    "progress": job.get("progress", "Analyzing..."),
+                    "elapsed_seconds": int(time.time() - job["started_at"]),
+                })
+            elif job["status"] == "complete":
+                return jsonify({"status": "complete", "result": job["result"]})
+            elif job["status"] == "error":
+                return jsonify({"status": "error", "error": job["error"]})
 
-        return jsonify({"error": "Unknown job status"}), 500
+            return jsonify({"status": "error", "error": "Unknown job status"}), 500
+        except Exception as e:
+            # Never let the poll endpoint emit an empty/HTML body — always valid JSON.
+            print(f"COSMIC_AGENT_STATUS ERROR: {e}", file=sys.stderr)
+            traceback.print_exc(file=sys.stderr)
+            return jsonify({"status": "error", "error": f"Status check failed: {str(e)}"}), 500
 
     # =================================================================
     # POST /agent/cosmic/chat

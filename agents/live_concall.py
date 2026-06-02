@@ -44,9 +44,14 @@ DEEPGRAM_API_KEY = os.getenv("DEEPGRAM_API_KEY")
 
 IR_PULSE_API = "https://ir-pulse-engine-production.up.railway.app/api/calls"
 
-# Cache for schedule data (refreshed every 30 min)
-_schedule_cache: Dict[str, Any] = {"calls": [], "fetched_at": 0}
-SCHEDULE_CACHE_TTL = 1800  # 30 minutes
+# Persisted daily schedule snapshot: scraped ONCE per day (8 AM IST) and served
+# all day from disk, so opening the Live Concall section never re-scrapes.
+# Stored at repo root alongside the other cached_*_results.json files.
+SCHEDULE_CACHE_FILE = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "cached_concall_schedule.json",
+)
+_schedule_mem: Dict[str, Any] = {"calls": [], "generated_at": None}  # in-memory mirror
 
 # Active live sessions (keyed by session_id)
 _active_sessions: Dict[str, "LiveConcallSession"] = {}
@@ -59,80 +64,226 @@ _call_gemini_api_fn = None
 # 1. SCHEDULE FETCHING (IR Pulse Engine API)
 # ---------------------------------------------------------------------------
 
-async def fetch_concall_schedule(days: int = 30, include_past: bool = False) -> List[Dict]:
-    """
-    Fetch upcoming concall schedule from IR Pulse Engine.
-    Returns list of call dicts with company_name, call_date, call_time, announcement_url.
-    Uses an in-memory cache with 30-minute TTL.
-    """
-    global _schedule_cache
+_DATE_FORMATS = ["%Y-%m-%d %H:%M", "%Y-%m-%d %I:%M %p", "%d-%m-%Y %H:%M", "%Y-%m-%d"]
 
-    now = time.time()
-    if _schedule_cache["calls"] and (now - _schedule_cache["fetched_at"]) < SCHEDULE_CACHE_TTL:
-        print("LIVE_CONCALL: Returning cached schedule", file=sys.stderr)
-        return _schedule_cache["calls"]
 
+def _norm_company_name(name: str) -> str:
+    """Normalize a company name for cross-source dedup (lowercase, alnum-only,
+    drop a trailing 'limited'/'ltd')."""
+    s = re.sub(r"[^a-z0-9]", "", (name or "").lower())
+    for suf in ("limited", "ltd"):
+        if s.endswith(suf):
+            s = s[: -len(suf)]
+    return s
+
+
+def _parse_call_dt(call_date: str, call_time: str):
+    """Parse call_date (+ optional call_time) into a datetime, or None."""
+    dt_str = f"{call_date or ''} {call_time or ''}".strip()
+    for fmt in _DATE_FORMATS:
+        try:
+            return datetime.strptime(dt_str, fmt)
+        except ValueError:
+            continue
+    return None
+
+
+async def _fetch_ir_pulse(days: int = 7, include_past: bool = False) -> List[Dict]:
+    """Fetch raw calls from the IR Pulse Engine API; tag source='ir_pulse'.
+    Returns [] on any failure (never raises) so it can't break the aggregation."""
+    out: List[Dict] = []
     try:
         url = f"{IR_PULSE_API}?include_past={'true' if include_past else 'false'}&days={days}"
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                           "AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36"
         }
-
         async with httpx.AsyncClient(follow_redirects=True) as client:
             resp = await client.get(url, headers=headers, timeout=15.0)
             resp.raise_for_status()
-
-        data = resp.json()
-        calls = data.get("calls", [])
-
-        # Enrich each call with parsed datetime and status
-        enriched = []
-        for call in calls:
-            try:
-                call_date = call.get("call_date", "")
-                call_time = call.get("call_time", "")
-                dt_str = f"{call_date} {call_time}".strip()
-
-                parsed_dt = None
-                for fmt in ["%Y-%m-%d %H:%M", "%Y-%m-%d %I:%M %p",
-                            "%d-%m-%Y %H:%M", "%Y-%m-%d"]:
-                    try:
-                        parsed_dt = datetime.strptime(dt_str, fmt)
-                        break
-                    except ValueError:
-                        continue
-
-                now_dt = datetime.now()
-                status = "upcoming"
-                if parsed_dt:
-                    delta = parsed_dt - now_dt
-                    if delta.total_seconds() < 0:
-                        status = "past"
-                    elif delta.total_seconds() < 900:  # 15 minutes
-                        status = "starting_soon"
-
-                enriched.append({
-                    **call,
-                    "parsed_datetime": parsed_dt.isoformat() if parsed_dt else None,
-                    "status": status,
-                })
-            except Exception:
-                enriched.append({**call, "parsed_datetime": None, "status": "unknown"})
-
-        # Sort by date (soonest first)
-        enriched.sort(
-            key=lambda c: c.get("parsed_datetime") or "9999",
-        )
-
-        _schedule_cache = {"calls": enriched, "fetched_at": now}
-        print(f"LIVE_CONCALL: Fetched {len(enriched)} calls from IR Pulse Engine",
-              file=sys.stderr)
-        return enriched
-
+        for call in resp.json().get("calls", []):
+            out.append({
+                **call,
+                "call_time": call.get("call_time") or "",
+                "announcement_url": call.get("announcement_url") or "",
+                "source": "ir_pulse",
+            })
     except Exception as e:
-        print(f"LIVE_CONCALL: Schedule fetch failed: {e}", file=sys.stderr)
-        return _schedule_cache.get("calls", [])
+        print(f"LIVE_CONCALL: IR Pulse fetch failed: {e}", file=sys.stderr)
+    return out
+
+
+def _merge_calls(calls: List[Dict]) -> List[Dict]:
+    """Dedup by (normalized company name, call_date) with a field-union merge:
+    prefer a real call_time, an announcement_url, and a ticker from whichever
+    source has them. `calls` should be ordered best-source-first (ScanX has exact
+    times, so pass it first)."""
+    merged: Dict[Any, Dict] = {}
+    for c in calls:
+        norm = _norm_company_name(c.get("company_name", ""))
+        date = c.get("call_date", "")
+        if not norm or not date:
+            continue  # unusable entry
+        key = (norm, date)
+        if key not in merged:
+            entry = dict(c)
+            entry["sources"] = [c.get("source", "")] if c.get("source") else []
+            merged[key] = entry
+            continue
+        existing = merged[key]
+        for fld in ("call_time", "announcement_url", "ticker", "scanx_status", "company_name"):
+            if not existing.get(fld) and c.get(fld):
+                existing[fld] = c[fld]
+        src = c.get("source", "")
+        if src and src not in existing["sources"]:
+            existing["sources"].append(src)
+    return list(merged.values())
+
+
+async def refresh_concall_schedule_cache() -> List[Dict]:
+    """
+    Scrape ALL sources (IR Pulse + Screener + ScanX) concurrently, merge + dedup,
+    persist to cached_concall_schedule.json, and update the in-memory mirror.
+
+    This is the heavy network step — it runs ONCE per day (8 AM IST, wired in
+    handler.py) plus a startup-prime if the snapshot is missing/stale. Returns the
+    merged calls (raw, un-windowed; status is computed at read time).
+    """
+    global _schedule_mem
+    from fetchers.screener_fetcher import fetch_upcoming_concalls_screener_async
+    from fetchers.scanx_fetcher import fetch_upcoming_concalls_scanx_async
+
+    results = await asyncio.gather(
+        _fetch_ir_pulse(days=7, include_past=False),
+        fetch_upcoming_concalls_screener_async(),
+        fetch_upcoming_concalls_scanx_async(),
+        return_exceptions=True,
+    )
+    names = ("ir_pulse", "screener", "scanx")
+    src = {}
+    for name, res in zip(names, results):
+        if isinstance(res, Exception):
+            print(f"LIVE_CONCALL: source '{name}' failed: {res}", file=sys.stderr)
+            src[name] = []
+        else:
+            src[name] = res or []
+
+    # ScanX first (it carries exact times), then Screener, then IR Pulse.
+    merged = _merge_calls(src["scanx"] + src["screener"] + src["ir_pulse"])
+    for c in merged:
+        dt = _parse_call_dt(c.get("call_date", ""), c.get("call_time", ""))
+        c["parsed_datetime"] = dt.isoformat() if dt else None
+    merged.sort(key=lambda c: c.get("parsed_datetime") or "9999")
+
+    payload = {"generated_at": datetime.now().isoformat(), "calls": merged}
+    try:
+        tmp = SCHEDULE_CACHE_FILE + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(payload, f, ensure_ascii=False)
+        os.replace(tmp, SCHEDULE_CACHE_FILE)
+    except Exception as e:
+        print(f"LIVE_CONCALL: failed to persist schedule snapshot: {e}", file=sys.stderr)
+    _schedule_mem = payload
+
+    print(
+        f"LIVE_CONCALL: refreshed schedule - ir_pulse={len(src['ir_pulse'])} "
+        f"screener={len(src['screener'])} scanx={len(src['scanx'])} merged={len(merged)}",
+        file=sys.stderr,
+    )
+    return merged
+
+
+def _run_coro_sync(coro):
+    """Run an async coroutine from a synchronous context, whether or not an event
+    loop is already running in this thread."""
+    try:
+        running = asyncio.get_running_loop()
+    except RuntimeError:
+        running = None
+    if running is not None:
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+            return ex.submit(lambda: asyncio.run(coro)).result()
+    return asyncio.run(coro)
+
+
+def load_concall_schedule(days: int = 5) -> List[Dict]:
+    """
+    Cheap read used by the route + notification watcher. Loads the persisted daily
+    snapshot (NO network scrape), recomputes time-relative `status` against now,
+    filters to today..+`days`, and sorts soonest-first.
+
+    Falls back to an inline one-shot refresh only if no snapshot exists yet
+    (e.g. a fresh deploy before the first 8 AM run).
+    """
+    global _schedule_mem
+
+    data = _schedule_mem if _schedule_mem.get("calls") else None
+    if data is None:
+        try:
+            if os.path.exists(SCHEDULE_CACHE_FILE):
+                with open(SCHEDULE_CACHE_FILE, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    _schedule_mem = data
+        except Exception as e:
+            print(f"LIVE_CONCALL: failed to read schedule snapshot: {e}", file=sys.stderr)
+
+    calls = (data or {}).get("calls", [])
+    if not calls:
+        # First run / missing snapshot — populate once inline.
+        print("LIVE_CONCALL: no snapshot yet, doing inline refresh", file=sys.stderr)
+        try:
+            calls = _run_coro_sync(refresh_concall_schedule_cache())
+        except Exception as e:
+            print(f"LIVE_CONCALL: inline refresh failed: {e}", file=sys.stderr)
+            calls = []
+
+    today = datetime.now().date()
+    horizon = today + timedelta(days=days)
+    now_dt = datetime.now()
+
+    out: List[Dict] = []
+    for call in calls:
+        call_date = call.get("call_date", "")
+        call_time = call.get("call_time", "") or ""
+        try:
+            d = datetime.strptime(call_date, "%Y-%m-%d").date()
+        except (ValueError, TypeError):
+            d = None
+
+        # Window filter: keep today..+days (entries with an unparseable date are dropped).
+        if d is None or not (today <= d <= horizon):
+            continue
+
+        parsed_dt = _parse_call_dt(call_date, call_time)
+        if call_time and parsed_dt is not None:
+            delta = (parsed_dt - now_dt).total_seconds()
+            if delta < 0:
+                status = "past"
+            elif delta < 900:  # 15 minutes
+                status = "starting_soon"
+            else:
+                status = "upcoming"
+        else:
+            # Date-only / time-TBD: upcoming if the date is today or later
+            # (do NOT mark today's TBD entries 'past' just because midnight elapsed).
+            status = "upcoming" if d >= today else "past"
+
+        out.append({
+            **call,
+            "parsed_datetime": parsed_dt.isoformat() if parsed_dt else None,
+            "status": status,
+        })
+
+    out.sort(key=lambda c: c.get("parsed_datetime") or "9999")
+    return out
+
+
+async def fetch_concall_schedule(days: int = 5, include_past: bool = False) -> List[Dict]:
+    """Backward-compatible async shim. Serves the persisted snapshot filtered to
+    `days` — it does NOT scrape (scraping happens once daily via
+    refresh_concall_schedule_cache)."""
+    return load_concall_schedule(days=days)
 
 
 # ---------------------------------------------------------------------------
@@ -952,19 +1103,11 @@ def register_live_concall_routes(app, socketio, call_gemini_api_fn):
     # --- Schedule ---
     @app.route('/api/live-concall/schedule', methods=['GET'])
     def live_concall_schedule():
-        """Return upcoming concall schedule."""
+        """Return the upcoming concall schedule for the next `days` days.
+        Serves the persisted daily snapshot (no scrape on open)."""
         try:
-            days = int(request.args.get('days', 30))
-            include_past = request.args.get('include_past', 'false').lower() == 'true'
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                calls = loop.run_until_complete(
-                    fetch_concall_schedule(days, include_past=include_past)
-                )
-            finally:
-                loop.close()
-
+            days = int(request.args.get('days', 5))
+            calls = load_concall_schedule(days=days)
             return jsonify({"status": "ok", "calls": calls, "count": len(calls)})
         except Exception as e:
             return jsonify({"error": str(e)}), 500

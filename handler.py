@@ -12803,6 +12803,24 @@ def _cosmic_morning_warmup():
         traceback.print_exc(file=sys.stderr)
 
 
+def _concall_morning_refresh():
+    """Scrape + persist the upcoming-concall schedule once per day (8 AM IST) so
+    the Live Concall section serves a stable snapshot all day (no per-open scrape)."""
+    try:
+        print("CONCALL_SCHEDULER: Starting daily concall schedule refresh...", file=sys.stderr)
+        from agents.live_concall import refresh_concall_schedule_cache
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            calls = loop.run_until_complete(refresh_concall_schedule_cache())
+        finally:
+            loop.close()
+        print(f"CONCALL_SCHEDULER: Daily refresh complete - {len(calls)} calls cached.", file=sys.stderr)
+    except Exception as e:
+        print(f"CONCALL_SCHEDULER: Daily refresh failed: {e}", file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
+
+
 def screener_daily_scheduler():
     from datetime import datetime, timedelta
     from calculations.screener_background import execute_daily_screener_scan
@@ -12818,6 +12836,8 @@ def screener_daily_scheduler():
             # ── Cosmic Macro Report: 8:00 AM IST — pre-cache for instant user load ──
             if time_str == "08:00":
                 threading.Thread(target=_cosmic_morning_warmup, daemon=True).start()
+                # ── Live Concall schedule: 8:00 AM IST — scrape once, serve all day ──
+                threading.Thread(target=_concall_morning_refresh, daemon=True).start()
 
             # ── Quarterly Results Watcher: 8:00 AM and 5:00 PM IST ──
             if time_str in ["08:00", "17:00"]:
@@ -12861,17 +12881,14 @@ def _live_concall_notification_watcher():
     Tracks which (session_key) calls have already been notified to avoid
     duplicate emissions.
     """
-    from agents.live_concall import fetch_concall_schedule
+    from agents.live_concall import load_concall_schedule
     notified = set()
 
     while True:
         try:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                calls = loop.run_until_complete(fetch_concall_schedule(days=3))
-            finally:
-                loop.close()
+            # Read the persisted daily snapshot (no scrape); status is recomputed
+            # against "now" on each read so 'starting_soon' detection stays accurate.
+            calls = load_concall_schedule(days=3)
 
             now = datetime.now()
             for call in calls:
@@ -12910,6 +12927,40 @@ def _live_concall_notification_watcher():
         time.sleep(60)
 
 threading.Thread(target=_live_concall_notification_watcher, daemon=True).start()
+
+
+def _prime_concall_schedule_on_startup():
+    """If the concall snapshot is missing or stale (>24h), scrape once on startup so
+    a freshly-deployed process isn't empty until the next 8 AM IST scheduled refresh."""
+    try:
+        from agents.live_concall import SCHEDULE_CACHE_FILE
+        stale = True
+        if os.path.exists(SCHEDULE_CACHE_FILE):
+            stale = (time.time() - os.path.getmtime(SCHEDULE_CACHE_FILE)) > 86400  # 24h
+        if stale:
+            print("CONCALL_SCHEDULER: snapshot missing/stale - priming on startup...", file=sys.stderr)
+            _concall_morning_refresh()
+        else:
+            print("CONCALL_SCHEDULER: fresh snapshot present - skipping startup prime.", file=sys.stderr)
+    except Exception as e:
+        print(f"CONCALL_SCHEDULER: startup prime failed: {e}", file=sys.stderr)
+
+threading.Thread(target=_prime_concall_schedule_on_startup, daemon=True).start()
+
+
+@app.route('/api/admin/live-concall/force_refresh', methods=['POST'])
+@admin_required
+def force_refresh_live_concall():
+    """Admin-only: manually re-scrape + persist the upcoming-concall schedule
+    (bypasses the once-daily 8 AM IST cadence). Useful for testing/verification."""
+    try:
+        threading.Thread(target=_concall_morning_refresh, daemon=True).start()
+        return jsonify({'success': True, 'message': 'Concall schedule refresh dispatched.'})
+    except Exception as e:
+        print(f"ERROR dispatching concall refresh: {e}")
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
 
 if __name__ == '__main__':
     # Use socketio.run for WebSocket support

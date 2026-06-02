@@ -880,3 +880,146 @@ async def scrape_scanx_company_async(slug: str) -> Dict[str, Any]:
     # Fallback to the corrected HTML parser
     parser = FinalScanXParser(soup)
     return parser.parse_all_data()
+
+
+# ---------------------------------------------------------------------------
+# Upcoming Concalls (site-wide events calendar)
+# ---------------------------------------------------------------------------
+
+async def _scanx_stealth_get_html_async(url: str, follow_redirects: bool = True) -> tuple:
+    """
+    Fetch a ScanX URL. Tries httpx first; on 403/429 (Cloudflare blocking Azure
+    datacenter IPs) falls back to curl_cffi with a residential proxy — mirrors
+    screener_fetcher._stealth_get_html_async but with ScanX HEADERS/Referer.
+    Returns (html_content, final_url, status_code).
+    """
+    import os, sys
+
+    # Attempt 1: fast direct fetch via httpx
+    try:
+        async with httpx.AsyncClient(follow_redirects=follow_redirects) as client:
+            response = await client.get(url, headers=HEADERS, timeout=30.0)
+            if response.status_code not in (403, 429):
+                response.raise_for_status()
+                return response.text, str(response.url), response.status_code
+            print(f"SCANX: httpx got {response.status_code} for {url}; trying proxy...", file=sys.stderr)
+    except Exception as e:
+        print(f"SCANX: httpx direct fetch failed for {url}: {e}; trying proxy...", file=sys.stderr)
+
+    # Attempt 2: stealth fetch via curl_cffi + residential proxy
+    def _cffi_fetch(target_url):
+        from curl_cffi import requests as cffi_requests
+        proxy_url = os.environ.get("RESIDENTIAL_PROXY_URL")
+        proxies = {"http": proxy_url, "https": proxy_url} if proxy_url else None
+        session = cffi_requests.Session(impersonate="chrome110", proxies=proxies)
+        r = session.get(target_url, headers=HEADERS, allow_redirects=follow_redirects, timeout=45)
+        return r.text, r.url, r.status_code
+
+    text, final_url, status_code = await asyncio.to_thread(_cffi_fetch, url)
+    return text, final_url, status_code
+
+
+async def fetch_upcoming_concalls_scanx_async() -> List[Dict[str, Any]]:
+    """
+    Scrape the site-wide upcoming-concalls calendar from ScanX
+    (https://scanx.trade/insight/events/upcoming-concalls).
+
+    The events page is server-rendered HTML (Angular SSR) — a single <table>
+    with date-group rows ("Tue 02 Jun, 2026") followed by data rows
+    [time, company, status, action]. This does NOT use the company-page
+    __NEXT_DATA__ path (which ScanX removed in its Angular migration).
+
+    Returns normalized dicts:
+        {company_name, ticker, call_date "YYYY-MM-DD", call_time "HH:MM" or "",
+         announcement_url, scanx_status, source: "scanx"}
+    Best-effort: returns [] on error so it can never break the aggregated schedule.
+    """
+    import sys
+    from datetime import datetime
+
+    url = "https://scanx.trade/insight/events/upcoming-concalls"
+    date_re = re.compile(r"(\d{1,2})\s+([A-Za-z]{3,9}),?\s+(\d{4})")
+    results: List[Dict[str, Any]] = []
+
+    def _parse_date(s: str):
+        m = date_re.search(s or "")
+        if not m:
+            return None
+        for fmt in ("%d %b %Y", "%d %B %Y"):
+            try:
+                return datetime.strptime(f"{m.group(1)} {m.group(2)} {m.group(3)}", fmt).date()
+            except ValueError:
+                continue
+        return None
+
+    def _parse_time(s: str) -> str:
+        s = (s or "").strip()
+        for fmt in ("%I:%M %p", "%I:%M%p", "%H:%M"):
+            try:
+                return datetime.strptime(s, fmt).strftime("%H:%M")
+            except ValueError:
+                continue
+        return ""
+
+    try:
+        text, _final_url, status_code = await _scanx_stealth_get_html_async(url, follow_redirects=True)
+        if status_code != 200 or not text:
+            print(f"SCANX_UPCOMING: non-200 ({status_code}); returning []", file=sys.stderr)
+            return results
+
+        table = BeautifulSoup(text, "html.parser").find("table")
+        if not table:
+            print("SCANX_UPCOMING: no <table> found; returning []", file=sys.stderr)
+            return results
+
+        cur_date = None
+        for tr in table.find_all("tr"):
+            cells = tr.find_all(["td", "th"], recursive=False)
+            texts = [c.get_text(strip=True) for c in cells]
+            nonempty = [x for x in texts if x]
+
+            # Date-group row: a single non-empty cell that parses as a date.
+            if len(nonempty) == 1:
+                d = _parse_date(nonempty[0])
+                if d:
+                    cur_date = d
+                    continue
+
+            if len(cells) < 3:
+                continue
+
+            # Company name from the clean <span class="name-1"> (avoids logo-letter artifact).
+            namespan = cells[1].find("span", class_="name-1")
+            company = namespan.get_text(strip=True) if namespan else cells[1].get_text(strip=True)
+            if not company or cur_date is None:
+                continue
+
+            # Ticker/slug from the /company/<slug> link.
+            slug = ""
+            a_company = cells[1].find("a", href=True)
+            if a_company and "/company/" in a_company["href"]:
+                slug = a_company["href"].split("/company/")[-1].strip("/")
+
+            status = texts[2] if len(texts) > 2 else ""
+
+            # Action link (BSE/NSE intimation) — present for Live/Upcoming rows.
+            ann = ""
+            if len(cells) > 3:
+                a_action = cells[3].find("a", href=True)
+                if a_action and a_action["href"].startswith("http"):
+                    ann = a_action["href"]
+
+            results.append({
+                "company_name": company,
+                "ticker": slug,
+                "call_date": cur_date.strftime("%Y-%m-%d"),
+                "call_time": _parse_time(texts[0]),
+                "announcement_url": ann,
+                "scanx_status": status,
+                "source": "scanx",
+            })
+
+        print(f"SCANX_UPCOMING: fetched {len(results)} upcoming concalls", file=sys.stderr)
+    except Exception as e:
+        print(f"SCANX_UPCOMING: fetch failed: {e}", file=sys.stderr)
+    return results
