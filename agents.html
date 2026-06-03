@@ -6015,8 +6015,24 @@
 
             // Render structured or markdown fallback
             const container = document.getElementById('cosmicReportContainer');
-            if (result.structured) {
-                renderCosmicReport(container, result.structured);
+            let structured = result.structured;
+            // Safety net: if the backend couldn't parse the JSON but the raw text
+            // still looks like a JSON object, try to recover it client-side and
+            // render the proper UI instead of dumping raw text.
+            if (!structured && result.analysis) {
+                try {
+                    const t = result.analysis.trim();
+                    const s = t.indexOf('{'), e = t.lastIndexOf('}');
+                    if (s !== -1 && e > s) {
+                        const parsed = JSON.parse(t.slice(s, e + 1));
+                        if (parsed && (parsed.report_title || parsed.crystal_ball || parsed.dashboard)) {
+                            structured = parsed;
+                        }
+                    }
+                } catch (e) { /* fall through to markdown */ }
+            }
+            if (structured) {
+                renderCosmicReport(container, structured);
             } else if (result.analysis) {
                 container.innerHTML = '<div class="analysis-body" style="max-height:none;">' + marked.parse(result.analysis) + '</div>';
             } else {

@@ -5241,10 +5241,13 @@ def call_openai_api(messages, model="gpt-5.4-mini", expect_json_format_flag=Fals
             stream = openai.chat.completions.create(**completion_params)
             parts = []
             chunk_count = 0
+            finish_reason = None
             for chunk in stream:
                 chunk_count += 1
                 if not chunk.choices:
                     continue  # e.g. usage-only chunk
+                if chunk.choices[0].finish_reason:
+                    finish_reason = chunk.choices[0].finish_reason
                 delta = chunk.choices[0].delta
                 content = getattr(delta, "content", None) if delta else None
                 if content:
@@ -5253,7 +5256,10 @@ def call_openai_api(messages, model="gpt-5.4-mini", expect_json_format_flag=Fals
                     print(f"API_DEBUG: OpenAI stream progress (model={model}) — {chunk_count} chunks, {sum(len(p) for p in parts)} chars", file=sys.stderr)
                     sys.stderr.flush()
             result = "".join(parts)
-            print(f"API_DEBUG: OpenAI streaming complete (model={model}) — {chunk_count} chunks, {len(result)} chars", file=sys.stderr)
+            # finish_reason='length' means the model was cut off → JSON will be truncated.
+            if finish_reason and finish_reason != "stop":
+                print(f"API_DEBUG: OpenAI stream finished with reason='{finish_reason}' (model={model}) — output may be truncated", file=sys.stderr)
+            print(f"API_DEBUG: OpenAI streaming complete (model={model}) — {chunk_count} chunks, {len(result)} chars, finish_reason={finish_reason}", file=sys.stderr)
             sys.stderr.flush()
             return result
         except Exception as e:

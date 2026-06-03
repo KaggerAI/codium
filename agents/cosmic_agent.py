@@ -41,6 +41,33 @@ COSMIC_CACHE_TTL_HOURS = 16  # Cache results for 16 hours
 COSMIC_CACHE_KEY = "GLOBAL"  # Non-ticker agent uses a fixed key
 
 
+def _extract_json_object(text):
+    """
+    Best-effort extraction of a single JSON object from an LLM response.
+
+    Handles the two ways GPT commonly breaks strict json.loads:
+      - wrapping the object in a ```json ... ``` (or plain ```) markdown fence, and
+      - adding prose before/after the object.
+    Returns the candidate JSON string (caller still parses it, with strict=False so
+    literal control characters inside strings are tolerated).
+    """
+    if not text:
+        return ""
+    s = text.strip()
+    # Pull the body out of a fenced block if one is present (anywhere, not just edges).
+    if "```" in s:
+        import re
+        m = re.search(r"```(?:json)?\s*(.*?)\s*```", s, re.DOTALL)
+        if m and m.group(1).strip():
+            s = m.group(1).strip()
+    # Slice to the outermost braces to drop any stray prose around the object.
+    start = s.find("{")
+    end = s.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        s = s[start:end + 1]
+    return s
+
+
 # =====================================================================
 # DATA FETCHING HELPERS
 # =====================================================================
@@ -273,21 +300,23 @@ Now produce the complete Cosmic Macro Intelligence Report as a single JSON objec
         structured_data = None
         raw_analysis = analysis_result
 
-        # Strip markdown code fences if GPT wraps the JSON
-        clean = analysis_result.strip()
-        if clean.startswith("```"):
-            # Remove opening fence (```json or ```)
-            first_newline = clean.index("\n")
-            clean = clean[first_newline + 1:]
-        if clean.endswith("```"):
-            clean = clean[:-3].strip()
+        clean = _extract_json_object(analysis_result)
 
         try:
-            structured_data = json.loads(clean)
+            # strict=False tolerates literal control chars (newlines/tabs) inside
+            # string values — a very common reason LLM JSON fails strict parsing.
+            structured_data = json.loads(clean, strict=False)
             print(f"COSMIC_AGENT: ✓ JSON parsed successfully — {len(structured_data)} top-level keys", file=sys.stderr)
-        except json.JSONDecodeError as jde:
-            print(f"COSMIC_AGENT: ⚠ JSON parse failed at pos {jde.pos}: {jde.msg}. Falling back to raw text.", file=sys.stderr)
-            # Store as raw markdown fallback
+        except (json.JSONDecodeError, TypeError) as jde:
+            # Log head/tail + length so we can tell a truncated response (tail not '}')
+            # apart from a formatting issue, without dumping the whole payload.
+            full = analysis_result or ""
+            pos = getattr(jde, "pos", -1)
+            head = full[:300].replace("\n", "\\n")
+            tail = full[-300:].replace("\n", "\\n")
+            print(f"COSMIC_AGENT: ⚠ JSON parse failed ({jde}) at pos {pos}; "
+                  f"raw_len={len(full)}. HEAD={head!r} TAIL={tail!r}. Falling back to raw text.",
+                  file=sys.stderr)
             structured_data = None
 
         # ── Store result ────────────────────────────────────────────
