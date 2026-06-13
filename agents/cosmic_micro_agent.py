@@ -99,6 +99,71 @@ def _lookup_trendlyne_industry_stocks(industry: str) -> list:
 
 
 # =====================================================================
+# SECTOR -> AGGREGATE INDEX MAPPING (for industry price-tape reconciliation)
+# =====================================================================
+# Maps each trendlyne Sector Name to the best-fit Nifty index in
+# market_data._MACRO_UNIVERSE, so an industry/sector forecast can be reconciled
+# against an aggregate sectoral price tape (the analog of a single stock's own tape).
+_SECTOR_TO_INDEX = {
+    "Banking and Finance":              "Nifty Financial Services",
+    "General Industrials":              "Nifty Infrastructure",
+    "Software & Services":              "Nifty IT",
+    "Pharmaceuticals & Biotechnology":  "Nifty Pharma",
+    "Textiles Apparels & Accessories":  "Nifty India Consumption",
+    "Commercial Services & Supplies":   "Nifty Services",
+    "Chemicals & Petrochemicals":       "Nifty Commodities",
+    "Cement and Construction":          "Nifty Infrastructure",
+    "Automobiles & Auto Components":    "Nifty Auto",
+    "Metals & Mining":                  "Nifty Metal",
+    "Food, Beverages & Tobacco":        "Nifty FMCG",
+    "Realty":                           "Nifty Realty",
+    "Consumer Durables":                "Nifty Consumer Durables",
+    "Utilities":                        "Nifty Energy",
+    "Transportation":                   "Nifty Infrastructure",
+    "Healthcare":                       "Nifty Healthcare",
+    "Retailing":                        "Nifty India Consumption",
+    "FMCG":                             "Nifty FMCG",
+    "Hotels Restaurants & Tourism":     "Nifty India Consumption",
+    "Diversified Consumer Services":    "Nifty India Consumption",
+    "Media":                            "Nifty Media",
+    "Oil & Gas":                        "Nifty Oil & Gas",
+    "Diversified":                      "Nifty 500",
+    "Fertilizers":                      "Nifty Commodities",
+    "Telecommunications Equipment":     "Nifty Services",
+    "Forest Materials":                 "Nifty Commodities",
+    "Telecom Services":                 "Nifty Services",
+    "Hardware Technology & Equipment":  "Nifty IT",
+    "Others":                           "Nifty 500",
+}
+
+# Finer industry-level overrides (checked BEFORE the sector map). Substring match,
+# lowercased, on the industry name. Order matters — first match wins.
+_INDUSTRY_INDEX_OVERRIDES = [
+    ("aerospace & defence", "Nifty India Defence"),
+    ("defence",             "Nifty India Defence"),
+    ("defense",             "Nifty India Defence"),
+    ("banks",               "Nifty Bank"),  # pure-bank industry; NBFC/insurance stay Financial Services
+]
+
+
+def _resolve_sector_index(industry: str, sector: str) -> str:
+    """
+    Pick the best-fit aggregate index display name (a key of market_data._MACRO_UNIVERSE)
+    for an industry/sector. Tries the finer industry overrides first, then the sector map,
+    then falls back to the broad market (Nifty 500) so a tape is always available.
+    """
+    ind_l = (industry or "").strip().lower()
+    for needle, idx in _INDUSTRY_INDEX_OVERRIDES:
+        if needle in ind_l:
+            return idx
+    if sector:
+        hit = _SECTOR_TO_INDEX.get(sector.strip())
+        if hit:
+            return hit
+    return "Nifty 500"
+
+
+# =====================================================================
 # BACKGROUND ANALYSIS JOB
 # =====================================================================
 def _run_cosmic_micro_analysis(
@@ -132,18 +197,27 @@ def _run_cosmic_micro_analysis(
             fundamentals = cached_data.get("fundamentals", {})
             company_description = cached_data.get("company_description", "")
             
-            # Fetch current market price (CMP) using yfinance
+            # Fetch current market price (CMP) + multi-session price trend using yfinance
             import yfinance as yf
+            from agents.utils.market_data import _trend_metrics, _format_trend
             live_price = None
+            price_trend_text = None
             try:
                 for suffix in [".NS", ".BO", ""]:
                     symbol = f"{ticker_upper}{suffix}" if suffix else ticker_upper
                     if suffix == "" and "." not in ticker_upper:
                         continue
                     t = yf.Ticker(symbol)
-                    hist = t.history(period="1d")
+                    hist = t.history(period="3mo")
                     if not hist.empty:
                         live_price = hist['Close'].iloc[-1]
+                        try:
+                            metrics = _trend_metrics(hist['Close'])
+                            if metrics:
+                                price_trend_text = _format_trend(metrics)
+                                print(f"COSMIC_MICRO_AGENT: {symbol} price trend: {price_trend_text}", file=sys.stderr)
+                        except Exception as te:
+                            print(f"WARNING: trend metrics failed for {symbol}: {te}", file=sys.stderr)
                         print(f"COSMIC_MICRO_AGENT: Fetched yfinance price for {symbol} via history: ₹{live_price:.2f}", file=sys.stderr)
                         break
                     else:
@@ -188,6 +262,14 @@ def _run_cosmic_micro_analysis(
             update_agent_job(job_id, {"progress": "🌌 Generating astronomical ephemeris data..."})
             astro_context = generate_cosmic_data_report()
             
+            # Build the deterministic price-tape (multi-session trend) block
+            if price_trend_text:
+                price_tape_text = f"- **{company_name} ({ticker_upper})**: ₹{live_price:,.2f} | {price_trend_text}"
+            elif live_price is not None:
+                price_tape_text = f"- **{company_name} ({ticker_upper})**: ₹{live_price:,.2f} | multi-session trend unavailable"
+            else:
+                price_tape_text = "Live price tape unavailable for this ticker."
+
             # Formulate user message
             current_date = datetime.datetime.now().strftime("%B %d, %Y")
             user_message = f"""## REPORT DATE: {current_date}
@@ -201,6 +283,11 @@ def _run_cosmic_micro_analysis(
 
 ## FEED 1: FINANCIAL FUNDAMENTAL SNAPSHOT
 {metrics_text}
+
+---
+
+## LIVE PRICE TAPE (Deterministic Ground Truth — multi-session trend)
+{price_tape_text}
 
 ---
 
@@ -228,6 +315,15 @@ def _run_cosmic_micro_analysis(
                 sector_name = industry_stocks[0].get("sector", "")
                 
             peers_list_str = "\n".join([f"- {s['ticker']}: {s['stock_name']}" for s in industry_stocks])
+
+            # Reconcile the industry/sector against an aggregate sectoral index price tape
+            from agents.utils.market_data import get_index_trend
+            sector_index_name = _resolve_sector_index(industry, sector_name)
+            sector_tape = get_index_trend(sector_index_name) if sector_index_name else None
+            if sector_tape:
+                sector_tape_text = f"- Aggregate sectoral index for {industry} ({sector_name or 'sector'}): {sector_tape}"
+            else:
+                sector_tape_text = f"Aggregate sectoral index ({sector_index_name or 'n/a'}) trend temporarily unavailable."
             
             update_agent_job(job_id, {"progress": "🌌 Generating astronomical ephemeris data..."})
             astro_context = generate_cosmic_data_report()
@@ -243,6 +339,11 @@ def _run_cosmic_micro_analysis(
 
 ## FEED 1: INDUSTRY COMPONENT STOCKS (from trendlyne CSV)
 {peers_list_str or "No component stocks found in CSV."}
+
+---
+
+## LIVE PRICE TAPE (Aggregate Sectoral Index — Deterministic Ground Truth)
+{sector_tape_text}
 
 ---
 
@@ -434,18 +535,26 @@ def register_cosmic_micro_routes(
             if ticker:
                 ticker_upper = ticker.upper().strip()
                 
-                # Fetch yfinance live price for chat
+                # Fetch yfinance live price + multi-session trend for chat
                 live_price = None
+                price_trend_text = None
                 try:
                     import yfinance as yf
+                    from agents.utils.market_data import _trend_metrics, _format_trend
                     for suffix in [".NS", ".BO", ""]:
                         symbol = f"{ticker_upper}{suffix}" if suffix else ticker_upper
                         if suffix == "" and "." not in ticker_upper:
                             continue
                         t = yf.Ticker(symbol)
-                        hist = t.history(period="1d")
+                        hist = t.history(period="3mo")
                         if not hist.empty:
                             live_price = hist['Close'].iloc[-1]
+                            try:
+                                metrics = _trend_metrics(hist['Close'])
+                                if metrics:
+                                    price_trend_text = _format_trend(metrics)
+                            except Exception:
+                                pass
                             break
                         else:
                             info = t.info
@@ -472,6 +581,7 @@ def register_cosmic_micro_routes(
                     
                     metrics_summary = [f"- {k}: {v}" for k, v in key_metrics.items()]
                     metrics_text = "\n".join(metrics_summary)
+                    price_tape_line = price_trend_text if price_trend_text else "multi-session trend unavailable"
                     
                     quarterly_text = "No quarterly results available."
                     quarterly_data = fundamentals.get("Quarterly Results", [])
@@ -486,6 +596,8 @@ def register_cosmic_micro_routes(
                     
 Key Metrics:
 {metrics_text}
+
+Recent Price Tape (multi-session trend): {price_tape_line}
 
 Quarterly Results:
 {quarterly_text}"""

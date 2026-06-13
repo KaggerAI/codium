@@ -10,6 +10,10 @@ Divisional charts (D9 Navamsa, D10 Dashamsa) confirmation, Vimshottari Dasha of
 India (gatekeeper layer), Mundane Yogas, and a revised Conflict Resolution Engine V2
 that turns signal arbitration into a pipeline (Gate → Tier → Precision → Confirmation
 → Modulation) instead of a flat hierarchy.
+
+v2.1 — Counter-dasha signals are surfaced (flagged COUNTER-DASHA at reduced conviction),
+never suppressed: the Dasha Gate weights signals but does not censor those that contradict
+the running dasha.
 """
 
 # =====================================================================
@@ -69,22 +73,52 @@ Use these when planets transit or aspect particular signs — commodities of tha
 
 ### 3. SUN INGRESS → MARKET & POLITICAL EFFECTS (12 Signs)
 
-Every month when the Sun enters a new sign, it triggers directional political and market effects.
+Every month when the Sun enters a new sign, it triggers directional political and market effects. Do not apply the trends below statically. The agent must evaluate the live Sankranti Kundali (Ingress Chart) for the exact moment of entry to determine the directional bias.
 
-| Sun enters | Political trend | Market trend |
-|-----------|----------------|-------------|
-| Aries | Trouble to leaders, regime change risk, war fear in East | Gold, silver, oil, mustard, gur prices RISE |
-| Taurus | Famine fear in South/West, peace in East | Ghee, cotton, gold, silver, linseed, til, coconut RISE |
-| Gemini | Trouble in East/North, happiness in West | Steep rise in prices broadly |
-| Cancer | Famine in South/West, peace in East, instability in North | Market unstable, prices fluctuate |
-| Leo | Trouble in East/North, peace in West, war in South | Gold, silver, oilseeds, ghee LOW; cotton may spike |
-| Virgo | Trouble in East/South, war fear in West, peace in North | Coconut, til, oil, silver, cotton, gold, gur RISE |
-| Libra | Same as Gemini/Leo pattern | Cotton and silver FALL; barley, gram, gold, copper RISE |
-| Scorpio | Same as Gemini/Leo pattern | Cotton, copper, silver, gold, woolens, betelnut RISE |
-| Sagittarius | Trouble in North/West, instability in South | Cotton, til, oil, gold, silver, grain, shares HIGH |
-| Capricorn | Same as Virgo pattern | Rising trend overall |
-| Aquarius | Same as Leo/Gemini pattern | All grains costly |
-| Pisces | Same as Leo pattern | All commodities trend upward |
+**Evaluation Rule:**
+- Afflicted Ingress = Sun or Ingress Lagna conjoined, aspected, or hemmed by malefics (Mars, Saturn, Rahu, Ketu). Triggers Scarcity / Teji.
+- Benefic Ingress = Sun or Ingress Lagna conjoined or aspected by benefics (Jupiter, Venus, strong Mercury). Triggers Abundance / Manda.
+
+| Sun enters | Political Baseline Trend | Activated Commodities | Afflicted Trend (Scarcity / Teji) | Benefic Trend (Abundance / Manda) |
+|---|---|---|---|---|
+| Aries | Trouble to leaders, regime change risk, war fear in East | Gold, silver, oil, mustard, gur | PRICES RISE: Supply disruptions trigger sharp asset spikes | PRICES STABILIZE: Orderly distribution; prices soften or flatten |
+| Taurus | Famine fear in South/West, peace in East | Ghee, cotton, gold, silver, linseed, til, coconut | PRICES RISE: Crop failures and hoarding drive asset inflation | PRICES FALL: High agricultural yields; commodity prices ease |
+| Gemini | Trouble in East/North, happiness in West | Broad macro indices, core grains, saffron, turmeric | STEEP BROAD RISE: Runaway inflation across multiple sectors | LIQUIDITY BOOM: Sustainable market growth without spikes |
+| Cancer | Famine in South/West, peace in East, instability in North | Root vegetables, onion, silver, mercury, grocery | HIGH VOLATILITY: Erratic price swings and panic buying | ORDERLY CYCLES: Predictable, smooth seasonal adjustments |
+| Leo | Trouble in East/North, peace in West, war in South | Gold, silver, oilseeds, ghee, cotton | COTTON SPIKES: Selective scarcity spikes cotton prices | PRICES LOW: Abundance brings gold, silver, ghee to lows |
+| Virgo | Trouble in East/South, war fear in West, peace in North | Coconut, til, oil, silver, cotton, gold, gur | PRICES RISE: Logistics bottlenecks break supply chains | TRADE EXPANSION: Seamless trade; agricultural sector thrives |
+| Libra | Same as Gemini/Leo pattern | Barley, gram, gold, copper, cotton, silver | GRAINS/METALS SPIKE: Barley, gold, copper rise sharply | TEXTILES EASE: Cotton and silver fall due to high supply |
+| Scorpio | Same as Gemini/Leo pattern | Cotton, copper, silver, gold, woolens, betelnut | PRICES RISE: Geopolitical panic causes aggressive stocking | REGULATED PRICING: Steady institutional supply anchors value |
+| Sagittarius | Trouble in North/West, instability in South | Cotton, til, oil, gold, silver, grain, shares | HIGH SPECULATION: Speculative frenzy drives prices high | EQUITY GROWTH: Grounded optimism; steady market volume |
+| Capricorn | Same as Virgo pattern | Core industrial metals, infrastructure items, gold | RISING TREND: Structural deficits trigger steady upward trend | CAPEX PROGRESS: Industrial inputs remain highly affordable |
+| Aquarius | Same as Leo/Gemini pattern | All essential food grains, pulses, oil | GRAINS COSTLY: Food inflation spikes; grains become expensive | FOOD SECURITY: Bumper harvest lowers wholesale grain prices |
+| Pisces | Same as Leo pattern | All commodities, precious stones, oil, ghee | AGGRESSIVE UPWARD: Widespread supply chain asset inflation | MARKET STABILITY: Broad correction; wholesale prices soften |
+
+**Conflict Resolution Note for Ingress Mappings:**
+If the Ingress chart contains mixed signals (e.g., Sun conjunct Mars but aspected by Jupiter), route the calculation directly through the Conflict Resolution Engine V2: Weight Normalization Matrix (Section 17) to resolve the conflicting vectors using the balanced Quantum Velocity Scale (QVS).
+
+---
+
+### 3A. THE EQUITY MARKET TRANSMISSION PROTOCOL
+
+Application Rule: The agent must never map Sun Ingress commodity signals 1:1 to the general stock market index. Translate the physical commodity trends from the table above into modern equity sector impacts on the National Stock Exchange (NSE) using these macroeconomic transmission layers.
+
+**1. Consumer Goods & FMCG Transmission:**
+- Agriculture Scarcity (Teji) -> BEARISH for FMCG and Food Processing stock sectors (immediate raw material input cost inflation squeezes corporate margins).
+- Agriculture Abundance (Manda) -> BULLISH for FMCG stock sectors (margin expansion and expected resurgence in rural consumer demand).
+
+**2. Infrastructure, Automobile, & Real Estate Transmission:**
+- Industrial Metals Scarcity (Teji) -> BEARISH for Automobile, Real Estate, and heavy Infrastructure stock sectors (soaring raw material costs and construction delays).
+- Industrial Metals Abundance (Manda) -> BULLISH for Automobile, Real Estate, Industrial Manufacturing, and Infrastructure stock sectors.
+
+**3. Banking & Financial Services (BFSI) Transmission:**
+- Pan-Market Inflation/Scarcity -> BEARISH for Banking indices (anticipate a hawkish stance and interest rate hikes by the Reserve Bank of India (RBI), compressing banking margins).
+- Pan-Market Price Stability/Abundance -> BULLISH for Banking indices (anticipate stable interest rates, lower corporate NPAs, and aggressive credit growth).
+
+**4. Sector-Specific Baseline Alignments:**
+- Aries Ingress (Afflicted) -> Gold Rises -> BULLISH for Gold Loan Non-Banking Financial Companies (NBFCs).
+- Gemini Ingress (Afflicted) -> Logistics Bottlenecks -> BEARISH for Transport, Shipping, and Railway equities.
+- Capricorn Ingress (Benefic) -> Industrial Metals Steady -> BULLISH for Capital Goods and Manufacturing equities.
 
 ---
 
@@ -1048,7 +1082,7 @@ This eliminates the "mixed signals" output failure mode.
 - Question: "Does the running MD/AD lord permit this theme?"
 - Output: GATE PASS / GATE FAIL / GATE AMPLIFY / DOUBLE AMPLIFY
 - Effect: GATE FAIL reduces conviction one tier; GATE AMPLIFY adds one tier; DOUBLE AMPLIFY adds two tiers
-- Block rule: If GATE FAIL AND base conviction is already LOW → SUPPRESS prediction entirely; do not include in crystal_ball
+- No-drop rule: GATE FAIL NEVER deletes a prediction. A GATE FAIL signal is retained at reduced conviction (-1 tier) and flagged COUNTER-DASHA. If the -1 tier penalty drops it below LOW, route it to trigger_calendar as a COUNTER-DASHA WATCH entry. The dasha gate may never be the sole reason a signal disappears from output.
 
 **STAGE 1 — TIER PRIMACY (Section 22):**
 - Identify the primary transit driver(s) of the prediction
@@ -1083,7 +1117,7 @@ This eliminates the "mixed signals" output failure mode.
 - Stacking allowed: multiple yogas combine multiplicatively
 - Final conviction = Stage 4 conviction × Σ(active yoga modulations)
 - If final conviction would exceed 85% → cap at 85% (no prediction is certain)
-- If final conviction would fall below 30% → SUPPRESS prediction (move to LOW CONFIDENCE or drop)
+- If final conviction would fall below 30% → SUPPRESS prediction (move to LOW CONFIDENCE or drop) — EXCEPT signals flagged COUNTER-DASHA that fell below 30% only because of the Stage 0 gate penalty: retain those as COUNTER-DASHA WATCH entries in trigger_calendar so the gate can never hide counter-evidence.
 
 **STAGE 6 — TIME DECAY APPLICATION (Section 24):**
 - Apply recency multipliers to determine sorting order in trigger_calendar
@@ -1123,15 +1157,15 @@ Question: Should the prediction be bullish or bearish on premium media / OTT?
 ### GUIDING PRINCIPLE V2:
 
 The new pipeline architecture means: NO prediction is published without passing through ALL 5 stages.
-A prediction that fails Stage 0 (Dasha Gate FAIL with already-low conviction) MUST be suppressed.
-A prediction that gets DOUBLE AMPLIFIED through Stage 0 and confirmed by D9+D10 in Stage 4 with
-benefic yoga support in Stage 5 = HIGH CONFIDENCE call worth top placement in crystal_ball.
+A prediction that fails Stage 0 (Dasha Gate FAIL) is NEVER suppressed for contradicting the dasha — it is retained at reduced conviction, flagged COUNTER-DASHA, and surfaced (in trigger_calendar as a WATCH entry when its conviction is LOW). The dasha gate weights signals; it does not censor them.
+A prediction that gets DOUBLE AMPLIFIED through Stage 0 and confirmed by D9+D10 in Stage 4 with benefic yoga support in Stage 5 = HIGH CONFIDENCE call worth top placement in crystal_ball.
 
-The pipeline produces three output classes:
+The pipeline produces these output classes:
 1. **HIGH CONFIDENCE calls** — Pipeline outputs HIGH conviction (>70%) after all 5 stages → goes in crystal_ball as top picks
 2. **MEDIUM CONFIDENCE calls** — MEDIUM conviction (50-70%) → goes in crystal_ball with appropriate confidence label
 3. **LOW CONFIDENCE calls** — LOW conviction (30-50%) OR failed final stage → goes in trigger_calendar as "monitor" entries
-4. **SUPPRESSED** — Below 30% or failed Stage 0 BLOCK rule → does not appear in output
+4. **COUNTER-DASHA WATCH** — Signal contradicts the running dasha theme: conviction reduced one tier, flagged counter_dasha, surfaced in trigger_calendar (or crystal_ball if it retains MEDIUM+). Never dropped for opposing the dasha.
+5. **SUPPRESSED** — Only genuinely weak signals (raw conviction below 30%, independent of the dasha gate) → does not appear in output.
 
 """
 
@@ -1166,7 +1200,7 @@ For every prediction, you MUST run the FULL pipeline below. NO prediction skips 
 - Identify current Mahadasha (MD) and Antardasha (AD) for India (or other relevant nation's birth chart)
 - Determine whether the predicted theme is consistent with MD/AD lord significations
 - Assign Gate Status: PASS / FAIL / AMPLIFY / DOUBLE AMPLIFY
-- If GATE FAIL and base conviction is LOW → SUPPRESS the prediction entirely
+- If GATE FAIL → reduce conviction one tier and flag the prediction COUNTER-DASHA; still surface it (route to trigger_calendar as a WATCH entry if it falls to LOW). Never drop a prediction solely because it contradicts the dasha.
 
 **STAGE 1 — TIER PRIMACY (Section 22) [TRANSIT LAYER]:**
 - Identify primary transit driver(s)
@@ -1205,7 +1239,7 @@ For every prediction, you MUST run the FULL pipeline below. NO prediction skips 
 **STAGE 5 — YOGA MODULATION (Section 29) [AMBIENT CONTEXT]:**
 - Identify ALL active yogas (Kala Sarpa, Gajakesari, Kemadruma, Chandra-Mangal, Lakshmi, Daridra, Vipreet Raja, Adhi, Shakata, Graha Malika)
 - Apply each yoga's modulation (amplify/dampen) to the post-Stage 4 conviction
-- Cap final conviction at 85%; suppress below 30%
+- Cap final conviction at 85%; suppress below 30% (except COUNTER-DASHA signals pushed under 30% by the gate — keep those as flagged WATCH entries)
 
 **STAGE 6 — GEOGRAPHIC & ANNUAL SYNTHESIS:**
 - Map affected signs to countries (Section 12)
@@ -1217,6 +1251,12 @@ For every prediction, you MUST run the FULL pipeline below. NO prediction skips 
 **STAGE 7 — HISTORICAL VALIDATION:**
 - Reference at least ONE historical analogue when making HIGH CONFIDENCE predictions
 - State outcome similarity (e.g., "Similar Saturn-Mars conjunction in Capricorn last occurred 2007-2008 → preceded global financial restructuring")
+
+**STAGE 7.5 — PRICE-TAPE RECONCILIATION [REALITY CHECK]:**
+- Cross-check EVERY directional call — Indian sector indices (IT, Auto, Pharma, Metal, FMCG, Realty, Energy, Infra, PSU/Pvt Bank, Defence, Oil & Gas, Healthcare, etc.), Nifty breadth & global equity indices, metals & commodities, currencies (USD/INR, DXY, USD/JPY), bond yields, volatility (VIX / India VIX), and crypto — against the multi-session trend in the LIVE MARKET PRICES feed (FEED 3): 1d/5d/10d/20d change, the sessions-down count, position vs the moving average, and any [SUSTAINED DECLINE] / [SUSTAINED RALLY] flag.
+- If the call AGREES with the recent trend → proceed at full conviction.
+- If the call CONTRADICTS a sustained trend (a negative/positive 10-day move with ≥7/10 sessions opposing, or a [SUSTAINED DECLINE]/[SUSTAINED RALLY] flag), you MUST NOT issue an unqualified call. Either: (a) reduce conviction by one tier and frame it as a CONTRARIAN / REVERSAL call with an explicit price-based invalidation/trigger (e.g. "Gold has fallen 10 sessions; the [transit] sets up a reversal ONLY IF gold reclaims ₹X by [date]"); or (b) if the astrological case is weak, flag it counter_trend and downgrade.
+- NEVER state an unqualified "bullish/bearish" call that ignores a sustained opposite trend in the feed. The astrology sets the thesis; the live tape sets the timing and the risk.
 
 **STAGE 8 — CONVICTION & PROBABILITY ASSIGNMENT (Section 30 final output):**
 - 🟢 HIGH CONFIDENCE (>70%): Pipeline produced HIGH after all stages
@@ -1256,13 +1296,15 @@ Return a single JSON object with this EXACT schema:
 
   "crystal_ball": [
     {{
-      "prediction": "<bold, specific, dated directional call — e.g. Gold WILL breach ₹78,000/10g by July 2026>",
+      "prediction": "<bold, specific, dated directional call — e.g. Nifty PSU Banks WILL outperform the Nifty by 10-15% by Sep 2026>",
       "probability": "<XX%>",
       "confidence": "<HIGH CONFIDENCE >70% | MEDIUM CONFIDENCE 50-70% | LOW CONFIDENCE <50%>",
       "planetary_trigger": "<specific transit driving this>",
       "pada_precision": "<exact pada activated + sub-sector identified from Section 25>",
       "decanate_stage": "<value-chain stage from Section 26>",
       "dasha_gate": "<PASS | FAIL | AMPLIFY | DOUBLE AMPLIFY + one-line reason>",
+      "counter_dasha": <true if this call contradicts the running dasha theme, else false>,
+      "counter_trend": <true if this call opposes the recent multi-session price trend in the live feed, else false>,
       "divisional_check": "<D9=strong/weak, D10=strong/weak, matrix verdict>",
       "yoga_modulation": "<which active yogas affect this + net amplify/dampen>",
       "economic_anchor": "<economic data point supporting>",
@@ -1282,7 +1324,8 @@ Return a single JSON object with this EXACT schema:
       "prediction": "<what happens when this triggers>",
       "markets_affected": ["<market/instrument>"],
       "action": "<BUY|SELL|HEDGE|WATCH> <specific instrument>",
-      "conviction": "<HIGH CONFIDENCE|MEDIUM CONFIDENCE|LOW CONFIDENCE>"
+      "conviction": "<HIGH CONFIDENCE|MEDIUM CONFIDENCE|LOW CONFIDENCE>",
+      "counter_dasha": <true|false>
     }}
   ],
 
@@ -1341,7 +1384,9 @@ Return a single JSON object with this EXACT schema:
       "key_date": "<trigger date>",
       "pada_signal": "<which pada drives this sector — Section 25>",
       "dashamsa_strength": "<D10 confirmation status>",
-      "dasha_alignment": "<does MD/AD support this sector?>"
+      "dasha_alignment": "<does MD/AD support this sector?>",
+      "recent_trend": "<this sector index's multi-session trend from the LIVE MARKET PRICES feed — e.g. Nifty IT 10d -3.1%, 7/10 sessions down, below 20d-MA>",
+      "counter_trend": <true if this sector call opposes that recent trend, else false>
     }}
   ],
 
@@ -1368,6 +1413,8 @@ Return a single JSON object with this EXACT schema:
       "badge": "<signal tag>",
       "sentiment": "<bull|bear|warn|neut>",
       "price_direction": "<UP|DOWN|FLAT>",
+      "recent_trend": "<multi-session trend from the LIVE MARKET PRICES feed — e.g. 10d -4.8%, 7/10 sessions down, below 20d-MA>",
+      "counter_trend": <true if this call opposes the recent multi-session trend, else false>,
       "target_range": "<price range — e.g. ₹72,000-78,000/10g>",
       "pada_driver": "<which pada activates this commodity>",
       "navamsa_confirmation": "<D9 status>"
@@ -1426,6 +1473,7 @@ Return a single JSON object with this EXACT schema:
 - Use actual data from feeds — do NOT fabricate numbers
 - **OUTPUT STYLE**: Speak with clarity and conviction, but always express probabilistic uncertainty and invalidation conditions. Avoid absolute certainties.
 - **PIPELINE INTEGRITY**: If a prediction would have been HIGH conviction on Stage 1 alone but fails Stage 4 (divisional rejection) → MUST downgrade to LOW CONFIDENCE. Do NOT inflate confidence to bypass the pipeline.
+- **PRICE-TAPE RECONCILIATION (MANDATORY — Stage 7.5)**: Cross-check every sector, index, commodity/metal, currency, bond-yield, volatility, or crypto call against the multi-session trend in the LIVE MARKET PRICES feed. If a call contradicts a sustained trend (≥7/10 sessions opposing or a [SUSTAINED DECLINE]/[SUSTAINED RALLY] flag), you MUST set "counter_trend": true and either frame it as a contrarian/reversal call with a price-based invalidation + reduced conviction, or downgrade it. NEVER print an unqualified bullish/bearish call that ignores a sustained opposite trend in the live feed.
 """
 
 
@@ -1461,6 +1509,8 @@ Key guidelines:
 - Use Indian context (INR, Nifty, MCX, RBI) alongside global perspectives
 - When a follow-up reveals a conflict between two predictions in the report, explicitly trace the V2 pipeline (Stage 0 → 5) to resolve it
 - If a follow-up question asks for a prediction outside the report, run the FULL pipeline mentally before answering — do not skip stages
+- COUNTER-DASHA signals are NEVER hidden: if a signal contradicts the running dasha, disclose it flagged as counter-dasha at reduced conviction — never claim it was suppressed
+- PRICE-TAPE RECONCILIATION: cross-check any directional call against the recent multi-session price trend in the live feed; if it contradicts a sustained trend, present it as a flagged contrarian/counter-trend call with a price invalidation — never restate an unqualified bull/bear case that ignores the tape
 """
 
 
@@ -1592,7 +1642,7 @@ SUB-SECTOR DATA (REQUIRED FOR V2 PIPELINE DEPTH):
 29. Auto sub-sectors: Tata Motors (PV+CV+EV split), Maruti, Mahindra, Bajaj Auto, TVS, Hero
 30. IT sub-sectors: TCS, Infosys, HCL, Wipro vs LTIMindtree, Persistent, Cyient (mid-cap)
 
-Include month-over-month and year-over-year changes where available. Sub-sector granularity is required for the V2 Depth Pipeline."""
+Include month-over-month and year-over-year changes where available. For commodities — ESPECIALLY Gold and Silver — also report the recent 1-2 week price trend/direction (e.g. the last ~10 trading sessions: is it rising or falling, and by how much) and whether price is currently above or below its recent moving average, NOT just the spot level and YoY. Sub-sector granularity is required for the V2 Depth Pipeline."""
 
 
 # =====================================================================
@@ -1617,7 +1667,7 @@ For the target stock, you MUST run the FULL pipeline below. NO prediction skips 
 - Identify the current Mahadasha (MD), Antardasha (AD), and Pratyantardasha (PD) for India (since the stock is listed in India)
 - Determine whether the target stock's sector or the company itself is favored or stressed by the dasha lords (e.g. Mars MD favors Defense/Metals/Real Estate)
 - Assign Gate Status: PASS / FAIL / AMPLIFY / DOUBLE AMPLIFY
-- If GATE FAIL and base conviction is LOW → SUPPRESS the prediction or set conviction to LOW
+- If GATE FAIL → reduce conviction one tier and flag the verdict COUNTER-DASHA (state cosmic_verdict.direction as normal, just at lower conviction). Never suppress the verdict solely for contradicting the dasha.
 
 **STAGE 1 — TIER PRIMACY (Section 22) [TRANSIT LAYER]:**
 - Identify the ruling planet(s) of the stock's sector or industry (from Section 20, Planet -> Modern Sector Rulership)
@@ -1646,7 +1696,7 @@ For the target stock, you MUST run the FULL pipeline below. NO prediction skips 
 **STAGE 5 — YOGA MODULATION (Section 29) [AMBIENT CONTEXT]:**
 - Identify active yogas (Kala Sarpa, Gajakesari, Kemadruma, Chandra-Mangal, Lakshmi, Daridra, etc.) affecting the chart or the transit map
 - Apply yoga modulation (amplify/dampen) to the final conviction
-- Cap final conviction at 85%; suppress below 30%
+- Cap final conviction at 85%; suppress below 30% (except COUNTER-DASHA signals pushed under 30% by the gate — keep those as flagged WATCH entries)
 
 **STAGE 6 — FUNDAMENTAL CORE INTEGRATION:**
 - Analyze the stock's key metrics (PE ratio, ROE, ROCE, debt level, margin trends)
@@ -1660,6 +1710,13 @@ For the target stock, you MUST run the FULL pipeline below. NO prediction skips 
 - Identify when the next quarterly results are expected (+3 months from last results)
 - Map the planetary transits active during the earnings window
 - Assess whether the ruling planet's strength confirms a beat or miss of expectations based on both fundamental trajectory and cosmic transits
+
+**STAGE 7.5 — PRICE-TAPE RECONCILIATION [REALITY CHECK]:**
+- Cross-check the cosmic_verdict direction (and the earnings_forecast direction) against the multi-session price trend in the **LIVE PRICE TAPE** section of the user message: the 1d/5d/10d/20d change, the sessions-down count, position vs the moving average, and any [SUSTAINED DECLINE] / [SUSTAINED RALLY] flag.
+- If the verdict AGREES with the recent trend → proceed at full conviction.
+- If the verdict CONTRADICTS a sustained trend (a negative/positive 10-day move with ≥7/10 sessions opposing, or a [SUSTAINED DECLINE]/[SUSTAINED RALLY] flag), you MUST NOT issue an unqualified call. Either: (a) reduce conviction by one tier and frame it as a CONTRARIAN / REVERSAL call with an explicit price-based invalidation/trigger (e.g. "the stock has fallen 10 of 12 sessions; the [transit] sets up a reversal ONLY IF it reclaims ₹X by [date]"); or (b) if the astrological case is weak, set counter_trend true and downgrade.
+- NEVER state an unqualified BULLISH/BEARISH verdict that ignores a sustained opposite trend in the tape. The astrology sets the thesis; the live tape sets the timing and the risk.
+- The LIVE PRICE TAPE is the stock's own multi-session trend for single-stock analysis, and the **aggregate sectoral index** trend for an industry/sector analysis — reconcile the call against whichever is shown. If the tape genuinely reads "unavailable", set counter_trend false and proceed on the astrological + fundamental case alone.
 
 **STAGE 8 — CONVICTION & PROBABILITY ASSIGNMENT (Section 30 final output):**
 - Assign final conviction: 🟢 HIGH CONFIDENCE (>70%), 🟡 MEDIUM CONFIDENCE (50-70%), 🔴 LOW CONFIDENCE (<50%)
@@ -1697,6 +1754,9 @@ Return a single JSON object with this EXACT schema:
   
   "cosmic_verdict": {{
     "direction": "BULLISH | BEARISH | NEUTRAL",
+    "counter_dasha": <true|false>,
+    "recent_trend": "<the multi-session price trend from the LIVE PRICE TAPE — the stock's own tape, or the aggregate sectoral index for an industry — e.g. 10d -6.2%, 9/10 sessions down, below 20d-MA; or 'unavailable'>",
+    "counter_trend": <true if this verdict opposes that recent price trend, else false>,
     "conviction": "HIGH CONFIDENCE | MEDIUM CONFIDENCE | LOW CONFIDENCE",
     "probability": "<percentage, e.g., 75%>",
     "timeframe": "<e.g., Next 2-3 months>",
@@ -1711,6 +1771,7 @@ Return a single JSON object with this EXACT schema:
     "precision_overlay": "Pada + Decanate identification",
     "divisional_check": "D9 and D10 confirmation status",
     "yoga_modulation": "Active yogas and their net effect",
+    "price_tape_reconciliation": "AGREES | CONTRARIAN/REVERSAL | NO TAPE — how the verdict reconciles with the live multi-session price trend",
     "net_conviction_after_pipeline": "<percentage>"
   }},
   
@@ -1777,4 +1838,6 @@ Key guidelines:
 - Do not make up astronomical transits or positions; rely only on the provided astro_context
 - Citing specific dates and price levels is expected and encouraged
 - Use Indian context (INR, NSE/BSE, Nifty sectors)
+- COUNTER-DASHA signals are NEVER hidden: if a signal contradicts the running dasha, disclose it flagged as counter-dasha at reduced conviction — never claim it was suppressed
+- PRICE-TAPE RECONCILIATION: cross-check any directional call against the recent multi-session price trend in the live feed; if it contradicts a sustained trend, present it as a flagged contrarian/counter-trend call with a price invalidation — never restate an unqualified bull/bear case that ignores the tape
 """
