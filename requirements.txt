@@ -27,6 +27,7 @@ tabulate  # For DataFrame.to_markdown() in AI News financial data
 # --- Plotting & Visualization ---
 matplotlib==3.7.2
 plotly
+kaleido  # server-side Plotly->PNG export (Technical Agent feeds chart images to GPT-5.4 vision)
 
 # --- AI & API Interaction ---
 openai>=1.0.0
@@ -65,6 +66,17 @@ python-dotenv
 flask-socketio>=5.3.0
 python-socketio>=5.0.0
 python-engineio>=4.0.0
+
+# --- Telephony (Live Concall — Exotel: outbound dial, DTMF passcode, recording) ---
+# Exotel is called over plain REST via httpx (listed above) — no SDK required.
+
+# --- Live transcription (Tier 2: Exotel Stream applet audio → Deepgram over WS) ---
+flask-sock>=0.7.0
+deepgram-sdk>=3.0.0
+# Only needed by the WS-serving gunicorn worker at deploy time (see plan); installing
+# these does not change app behaviour until the worker class is switched.
+gevent>=23.0.0
+gevent-websocket>=0.10.1
 
 # --- Cosmic Ephemeris Engine ---
 pyswisseph

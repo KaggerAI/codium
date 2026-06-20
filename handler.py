@@ -5196,7 +5196,7 @@ def convert_to_gemini_format(messages):
             gemini_messages.append({'role': role, 'parts': [msg["content"]]})
     return gemini_messages
 
-def call_openai_api(messages, model="gpt-5.4-mini", expect_json_format_flag=False, temperature=1, timeout=180, max_tokens=None, use_streaming=False):
+def call_openai_api(messages, model="gpt-5.4-mini", expect_json_format_flag=False, temperature=1, timeout=180, max_tokens=None, use_streaming=False, reasoning_effort=None):
     """
     Call OpenAI API with configurable timeout.
     Default timeout is 180 seconds (3 minutes) for slower models like gpt-5.4-mini.
@@ -5205,6 +5205,11 @@ def call_openai_api(messages, model="gpt-5.4-mini", expect_json_format_flag=Fals
     the outbound TCP connection active so it isn't killed by Azure's SNAT ~4-minute
     idle timeout during long generations (e.g. the Cosmic GPT-5.5 synthesis). The
     return value is identical to the non-streaming path, so callers are unaffected.
+
+    reasoning_effort (optional) is forwarded to reasoning-capable models (e.g. gpt-5.x)
+    as the Chat Completions `reasoning_effort` param (e.g. "low"/"medium"/"high"/"xhigh").
+    It is only added to the request when explicitly provided, so existing callers that
+    omit it are completely unaffected.
     """
     if not openai.api_key:
         raise ValueError("OpenAI API key is not configured.")
@@ -5215,6 +5220,11 @@ def call_openai_api(messages, model="gpt-5.4-mini", expect_json_format_flag=Fals
         "temperature": temperature,
         "timeout": timeout,  # Explicit timeout in seconds
     }
+
+    # Reasoning effort for reasoning-capable models — sent only when explicitly
+    # requested so all existing (text-only / no-effort) callers are unchanged.
+    if reasoning_effort is not None:
+        completion_params["reasoning_effort"] = reasoning_effort
 
     # Use OpenAI's JSON mode for reliable structured output
     if expect_json_format_flag and ("-turbo" in model or "-o" in model):
@@ -12722,7 +12732,17 @@ register_cosmic_micro_routes(app, call_openai_api, get_any_cache, get_analysis_f
 from agents.document_summarizer_agent import register_doc_summarizer_routes
 register_doc_summarizer_routes(app, call_openai_api)
 
-print("INFO: Agent Marketplace routes registered (Concall Agent, Live Concall Agent, Forensic Agent, Analyst Agent, Forecasting Agent, Cosmic Agent, Cosmic Micro Agent, Doc Summarizer Agent)", file=sys.stderr)
+# Register Technical Agent routes (multi-timeframe chartist: engine 1Y/5Y + 3 screeners + GPT-5.4 xhigh vision).
+# Wrapped so a problem here can never prevent the rest of the app from booting.
+try:
+    from agents.technical_agent import register_technical_routes
+    register_technical_routes(app, call_openai_api, call_gemini_api)
+    print("INFO: Technical Agent routes registered.", file=sys.stderr)
+except Exception as _tech_reg_err:
+    print(f"WARN: Technical Agent routes NOT registered: {_tech_reg_err}", file=sys.stderr)
+    traceback.print_exc(file=sys.stderr)
+
+print("INFO: Agent Marketplace routes registered (Concall Agent, Live Concall Agent, Forensic Agent, Analyst Agent, Forecasting Agent, Cosmic Agent, Cosmic Micro Agent, Doc Summarizer Agent, Technical Agent)", file=sys.stderr)
 
 # =====================================================================
 # END: Agent Marketplace

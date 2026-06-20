@@ -15,6 +15,806 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <!-- Plotly for the Technical Agent's interactive charts (same CDN as app.html) -->
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <style>
+        /* ===== Technical Agent report (.tr-*) ===== */
+        .tr-page {
+            display: flex;
+            flex-direction: column;
+            gap: 1.25rem;
+        }
+
+        .tr-hero {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 1rem;
+            padding: 1.25rem 1.5rem;
+            border-radius: 0.85rem;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-left: 4px solid var(--text-muted);
+        }
+
+        .tr-hero.bull {
+            border-left-color: #34d399;
+        }
+
+        .tr-hero.bear {
+            border-left-color: #f87171;
+        }
+
+        .tr-hero.neut {
+            border-left-color: #fbbf24;
+        }
+
+        .tr-hero-sub {
+            font-size: 0.72rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--text-muted);
+        }
+
+        .tr-headline {
+            font-size: 1.35rem;
+            line-height: 1.35;
+            color: var(--text-primary);
+            margin: 0.35rem 0 0.6rem;
+        }
+
+        .tr-pills {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.4rem;
+        }
+
+        .tr-hero-conv {
+            text-align: center;
+            min-width: 96px;
+        }
+
+        .tr-conv-num {
+            font-size: 2.5rem;
+            font-weight: 800;
+            line-height: 1;
+            color: var(--text-secondary);
+        }
+
+        .tr-conv-num span {
+            font-size: 1rem;
+            font-weight: 600;
+        }
+
+        .tr-hero-conv.bull .tr-conv-num {
+            color: #34d399;
+        }
+
+        .tr-hero-conv.bear .tr-conv-num {
+            color: #f87171;
+        }
+
+        .tr-hero-conv.neut .tr-conv-num {
+            color: #fbbf24;
+        }
+
+        .tr-conv-label {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--text-muted);
+            margin-top: 0.25rem;
+        }
+
+        .tr-takeaway {
+            padding: 0.85rem 1.1rem;
+            border-left: 3px solid var(--accent-purple);
+            background: var(--bg-card);
+            border-radius: 0.5rem;
+            color: var(--text-primary);
+            font-size: 1rem;
+            font-weight: 500;
+        }
+
+        .tr-section-h {
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-top: 0.5rem;
+            padding-bottom: 0.35rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .tr-align {
+            padding: 0.7rem 1rem;
+            border-radius: 0.5rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        .tr-confluence {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 0.85rem;
+        }
+
+        @media (max-width:760px) {
+            .tr-confluence {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .tr-col {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 0.65rem;
+            padding: 0.85rem;
+        }
+
+        .tr-col-h {
+            font-weight: 700;
+            font-size: 0.9rem;
+            margin-bottom: 0.6rem;
+            color: var(--text-primary);
+        }
+
+        .tr-factor {
+            background: var(--bg-card);
+            border-radius: 0.5rem;
+            padding: 0.55rem 0.65rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .tr-factor-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.25rem;
+        }
+
+        .tr-factor-text {
+            font-size: 0.86rem;
+            color: var(--text-primary);
+        }
+
+        .tr-factor-ev {
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            margin-top: 0.2rem;
+            font-style: italic;
+        }
+
+        .tr-weight {
+            font-size: 0.66rem;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: var(--text-muted);
+        }
+
+        .tr-weight-high {
+            color: #34d399;
+            font-weight: 700;
+        }
+
+        .tr-weight-medium {
+            color: #fbbf24;
+        }
+
+        .tr-empty {
+            font-size: 0.82rem;
+            color: var(--text-muted);
+            font-style: italic;
+        }
+
+        .tr-horizon {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-left: 4px solid var(--text-muted);
+            border-radius: 0.75rem;
+            padding: 1.1rem 1.25rem;
+        }
+
+        .tr-horizon.bull {
+            border-left-color: #34d399;
+        }
+
+        .tr-horizon.bear {
+            border-left-color: #f87171;
+        }
+
+        .tr-horizon.neut {
+            border-left-color: #fbbf24;
+        }
+
+        .tr-horizon-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .tr-horizon-title {
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .tr-conv-pill {
+            font-weight: 700;
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+        }
+
+        .tr-conv-bar {
+            height: 6px;
+            background: var(--bg-card);
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 0.6rem 0 0.85rem;
+        }
+
+        .tr-conv-fill {
+            height: 100%;
+            background: var(--text-muted);
+        }
+
+        .tr-conv-fill.bull {
+            background: #34d399;
+        }
+
+        .tr-conv-fill.bear {
+            background: #f87171;
+        }
+
+        .tr-conv-fill.neut {
+            background: #fbbf24;
+        }
+
+        .tr-narrative {
+            color: var(--text-secondary);
+            font-size: 0.92rem;
+            line-height: 1.6;
+        }
+
+        .tr-narrative p {
+            margin: 0.5rem 0;
+        }
+
+        .tr-levels {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 0.6rem;
+            margin: 0.9rem 0;
+        }
+
+        @media (max-width:760px) {
+            .tr-levels {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+
+        .tr-level {
+            background: var(--bg-card);
+            border-radius: 0.5rem;
+            padding: 0.55rem 0.65rem;
+            font-size: 0.84rem;
+            color: var(--text-primary);
+        }
+
+        .tr-level span {
+            display: block;
+            font-size: 0.66rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+            margin-bottom: 0.25rem;
+        }
+
+        .tr-level-inval {
+            box-shadow: inset 0 0 0 1px rgba(248, 113, 113, 0.25);
+        }
+
+        .tr-level-tgt {
+            box-shadow: inset 0 0 0 1px rgba(52, 211, 153, 0.25);
+        }
+
+        .tr-trigger,
+        .tr-change {
+            font-size: 0.84rem;
+            color: var(--text-secondary);
+            margin-top: 0.4rem;
+        }
+
+        .tr-charts {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.85rem;
+            margin-top: 0.9rem;
+        }
+
+        @media (max-width:760px) {
+            .tr-charts {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .tr-chart-wrap {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 0.6rem;
+            padding: 0.5rem;
+        }
+
+        .tr-chart-label {
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            margin-bottom: 0.25rem;
+            padding-left: 0.25rem;
+        }
+
+        .tr-chart {
+            width: 100%;
+            height: 340px;
+            overflow: hidden;
+        }
+
+        .tr-chart-tall {
+            height: 480px;
+        }
+
+        .tr-chart-missing {
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            padding: 1rem;
+            text-align: center;
+        }
+
+        /* Expand-to-modal affordance — sits over each chart's top-right corner */
+        .tr-chart-box {
+            position: relative;
+        }
+
+        .tr-chart-expand {
+            position: absolute;
+            top: 6px;
+            right: 6px;
+            z-index: 3;
+            width: 26px;
+            height: 26px;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            background: rgba(18, 18, 30, 0.55);
+            color: var(--text-muted);
+            cursor: pointer;
+            backdrop-filter: blur(2px);
+            opacity: 0;
+            transition: opacity .18s ease, color .18s ease, background .18s ease, transform .18s ease;
+        }
+
+        .tr-chart-box:hover .tr-chart-expand {
+            opacity: 1;
+        }
+
+        .tr-chart-expand:hover {
+            color: var(--text-primary);
+            background: rgba(42, 42, 64, 0.9);
+            transform: scale(1.08);
+        }
+
+        .tr-chart-expand:focus-visible {
+            opacity: 1;
+            outline: 2px solid var(--accent-purple);
+            outline-offset: 1px;
+        }
+
+        .tr-chart-expand svg {
+            display: block;
+            pointer-events: none;
+        }
+
+        /* Expanded-chart overlay modal (smooth fade + scale-in) */
+        .tr-modal {
+            position: fixed;
+            inset: 0;
+            z-index: 100000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2.2rem;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity .28s ease, visibility .28s ease;
+        }
+
+        .tr-modal.open {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .tr-modal-backdrop {
+            position: absolute;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.74);
+            backdrop-filter: blur(4px);
+        }
+
+        .tr-modal-card {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            width: min(1180px, 94vw);
+            height: min(800px, 88vh);
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 0.9rem;
+            padding: 0.85rem 1rem 1rem;
+            box-shadow: 0 24px 70px rgba(0, 0, 0, 0.55);
+            transform: scale(0.92) translateY(10px);
+            opacity: 0;
+            transition: transform .32s cubic-bezier(.16, 1, .3, 1), opacity .28s ease;
+        }
+
+        .tr-modal.open .tr-modal-card {
+            transform: scale(1) translateY(0);
+            opacity: 1;
+        }
+
+        .tr-modal-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .tr-modal-title {
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .tr-modal-close {
+            flex-shrink: 0;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid var(--border-color);
+            border-radius: 7px;
+            background: transparent;
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: color .18s ease, background .18s ease;
+        }
+
+        .tr-modal-close:hover {
+            color: var(--text-primary);
+            background: rgba(255, 255, 255, 0.06);
+        }
+
+        .tr-modal-chart {
+            flex: 1;
+            min-height: 0;
+            width: 100%;
+        }
+
+        @media (max-width:760px) {
+            .tr-modal {
+                padding: 0.8rem;
+            }
+
+            .tr-modal-card {
+                width: 96vw;
+                height: 90vh;
+            }
+        }
+
+        .tr-wcs {
+            display: grid;
+            grid-template-columns: 1fr 1.3fr;
+            gap: 0.85rem;
+            align-items: center;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 0.65rem;
+            padding: 0.85rem;
+        }
+
+        @media (max-width:760px) {
+            .tr-wcs {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .tr-wcs-top {
+            display: flex;
+            gap: 0.4rem;
+            margin-bottom: 0.4rem;
+        }
+
+        .tr-wcs-obs {
+            font-size: 0.9rem;
+            color: var(--text-primary);
+        }
+
+        .tr-wcs-impl {
+            font-size: 0.82rem;
+            color: var(--text-muted);
+            margin-top: 0.3rem;
+        }
+
+        .tr-screeners {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 0.85rem;
+        }
+
+        @media (max-width:760px) {
+            .tr-screeners {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .tr-screener {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 0.65rem;
+            padding: 0.85rem;
+        }
+
+        .tr-screener.pass {
+            box-shadow: inset 0 0 0 1px rgba(52, 211, 153, 0.3);
+        }
+
+        .tr-screener-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .tr-screener-name {
+            font-weight: 700;
+            font-size: 0.9rem;
+            color: var(--text-primary);
+        }
+
+        .tr-screener-badge {
+            font-size: 0.68rem;
+            font-weight: 700;
+            padding: 2px 8px;
+            border-radius: 10px;
+        }
+
+        .tr-screener-badge.pass {
+            background: rgba(52, 211, 153, 0.15);
+            color: #34d399;
+        }
+
+        .tr-screener-badge.fail {
+            background: rgba(160, 160, 184, 0.12);
+            color: var(--text-secondary);
+        }
+
+        .tr-screener-horizon {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            margin: 0.3rem 0;
+        }
+
+        .tr-screener-verdict {
+            font-size: 0.84rem;
+            color: var(--text-secondary);
+        }
+
+        .tr-screener-phase {
+            font-size: 0.78rem;
+            color: var(--text-muted);
+            margin-top: 0.35rem;
+            font-style: italic;
+        }
+
+        .tr-risks {
+            display: flex;
+            flex-direction: column;
+            gap: 0.4rem;
+        }
+
+        .tr-risk {
+            display: flex;
+            align-items: center;
+            gap: 0.55rem;
+            font-size: 0.86rem;
+            color: var(--text-secondary);
+        }
+
+        .tr-risk-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--text-muted);
+            flex-shrink: 0;
+        }
+
+        .tr-risk-high .tr-risk-dot {
+            background: #f87171;
+        }
+
+        .tr-risk-medium .tr-risk-dot {
+            background: #fbbf24;
+        }
+
+        .tr-risk-low .tr-risk-dot {
+            background: #34d399;
+        }
+
+        .tr-method {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            font-style: italic;
+            border-top: 1px solid var(--border-color);
+            padding-top: 0.7rem;
+        }
+
+        /* Multi-timeframe snapshot */
+        .tr-snapshot {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.85rem;
+        }
+
+        @media (max-width:760px) {
+            .tr-snapshot {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .tr-snapshot-cap {
+            font-size: 0.78rem;
+            color: var(--text-muted);
+            margin-top: 0.5rem;
+            text-align: center;
+        }
+
+        /* Confluence balance meter */
+        .tr-balance {
+            margin-bottom: 0.25rem;
+        }
+
+        .tr-balance-row {
+            display: flex;
+            height: 14px;
+            border-radius: 7px;
+            overflow: hidden;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+        }
+
+        .tr-balance-seg {
+            height: 100%;
+            transition: width 0.4s ease;
+        }
+
+        .tr-balance-bull {
+            background: #34d399;
+        }
+
+        .tr-balance-neut {
+            background: #fbbf24;
+        }
+
+        .tr-balance-bear {
+            background: #f87171;
+        }
+
+        .tr-balance-legend {
+            display: flex;
+            justify-content: space-between;
+            gap: 0.5rem;
+            margin-top: 0.4rem;
+            font-size: 0.74rem;
+            flex-wrap: wrap;
+        }
+
+        .tr-balance-legend .bull {
+            color: #34d399;
+        }
+
+        .tr-balance-legend .neut {
+            color: #fbbf24;
+        }
+
+        .tr-balance-legend .bear {
+            color: #f87171;
+        }
+
+        /* Tabbed chart gallery */
+        .tr-gallery-tabs {
+            display: flex;
+            gap: 0.4rem;
+            flex-wrap: wrap;
+            margin-bottom: 0.85rem;
+        }
+
+        .tr-gallery-tab {
+            font-size: 0.8rem;
+            font-weight: 600;
+            padding: 0.4rem 0.9rem;
+            border-radius: 8px;
+            cursor: pointer;
+            background: var(--bg-card);
+            color: var(--text-secondary);
+            border: 1px solid var(--border-color);
+            font-family: inherit;
+            transition: all 0.15s;
+        }
+
+        .tr-gallery-tab:hover {
+            color: var(--text-primary);
+        }
+
+        .tr-gallery-tab.active {
+            background: var(--accent-purple);
+            color: #fff;
+            border-color: var(--accent-purple);
+        }
+
+        .tr-gallery-panel {
+            display: none;
+        }
+
+        .tr-gallery-panel.active {
+            display: block;
+        }
+
+        .tr-gallery-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+            gap: 0.85rem;
+        }
+
+        @media (max-width:760px) {
+            .tr-gallery-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .tr-gcard {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 0.65rem;
+            padding: 0.6rem;
+        }
+
+        .tr-gcard-head {
+            font-size: 0.78rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 0.3rem;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            flex-wrap: wrap;
+        }
+
+        .tr-gcard-cap {
+            font-size: 0.78rem;
+            color: var(--text-secondary);
+            margin-top: 0.4rem;
+            line-height: 1.5;
+        }
+
+        .tr-gcard-cap em {
+            color: var(--text-muted);
+        }
+    </style>
     <style>
         :root {
             --bg-primary: #0a0a0f;
@@ -259,11 +1059,13 @@
             overflow-x: auto;
             scroll-behavior: smooth;
             -webkit-overflow-scrolling: touch;
-            scrollbar-width: none; /* Firefox */
+            scrollbar-width: none;
+            /* Firefox */
         }
-        
+
         .agent-tabs::-webkit-scrollbar {
-            display: none; /* Chrome, Safari */
+            display: none;
+            /* Chrome, Safari */
         }
 
         .agent-tab {
@@ -3156,67 +3958,83 @@
 
         <!-- Agent Tabs -->
         <div class="agent-tabs-container">
-            <button class="scroll-arrow scroll-left" id="scrollArrowLeft" onclick="scrollAgentTabs(-1)" aria-label="Scroll left">
-                <svg viewBox="0 0 24 24"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+            <button class="scroll-arrow scroll-left" id="scrollArrowLeft" onclick="scrollAgentTabs(-1)"
+                aria-label="Scroll left">
+                <svg viewBox="0 0 24 24">
+                    <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z" />
+                </svg>
             </button>
             <div class="agent-tabs" role="tablist" id="agentTabsContainer">
-            <button class="agent-tab active" onclick="switchAgent('concall')" role="tab" aria-selected="true"
-                id="tab-concall">
-                <span class="agent-tab-icon">📞</span>
-                <div class="agent-tab-info">
-                    <div class="agent-tab-name">Concall Agent</div>
-                    <div class="agent-tab-desc">Conference call transcript analysis</div>
-                </div>
-            </button>
-            <button class="agent-tab" onclick="switchAgent('forensic')" role="tab" aria-selected="false"
-                id="tab-forensic">
-                <span class="agent-tab-icon">🔍</span>
-                <div class="agent-tab-info">
-                    <div class="agent-tab-name">Forensic Agent</div>
-                    <div class="agent-tab-desc">Accounting red flags & governance</div>
-                </div>
-            </button>
-            <button class="agent-tab" onclick="switchAgent('analyst')" role="tab" aria-selected="false"
-                id="tab-analyst">
-                <span class="agent-tab-icon">📄</span>
-                <div class="agent-tab-info">
-                    <div class="agent-tab-name">Analyst Agent</div>
-                    <div class="agent-tab-desc">Domestic & global research</div>
-                </div>
-            </button>
-            <button class="agent-tab" onclick="switchAgent('forecasting')" role="tab" aria-selected="false"
-                id="tab-forecasting">
-                <span class="agent-tab-icon">📊</span>
-                <div class="agent-tab-info">
-                    <div class="agent-tab-name">Forecasting Agent (beta)</div>
-                    <div class="agent-tab-desc">Multi-method valuation</div>
-                </div>
-            </button>
-            <button class="agent-tab" onclick="switchAgent('cosmic')" role="tab" aria-selected="false" id="tab-cosmic">
-                <span class="agent-tab-icon">🌌</span>
-                <div class="agent-tab-info">
-                    <div class="agent-tab-name">Cosmic Macro Agent</div>
-                    <div class="agent-tab-desc">Astro-geopolitical market intelligence</div>
-                </div>
-            </button>
-            <button class="agent-tab" onclick="switchAgent('cosmic_micro')" role="tab" aria-selected="false"
-                id="tab-cosmic_micro">
-                <span class="agent-tab-icon">🔮</span>
-                <div class="agent-tab-info">
-                    <div class="agent-tab-name">Cosmic Micro Agent</div>
-                    <div class="agent-tab-desc">Astro-fundamental stock/industry oracle</div>
-                </div>
-            </button>
-            <button class="agent-tab" onclick="switchAgent('docsum')" role="tab" aria-selected="false" id="tab-docsum">
-                <span class="agent-tab-icon">📑</span>
-                <div class="agent-tab-info">
-                    <div class="agent-tab-name">Doc Summarizer</div>
-                    <div class="agent-tab-desc">Summarize financial documents</div>
-                </div>
-            </button>
+                <button class="agent-tab active" onclick="switchAgent('concall')" role="tab" aria-selected="true"
+                    id="tab-concall">
+                    <span class="agent-tab-icon">📞</span>
+                    <div class="agent-tab-info">
+                        <div class="agent-tab-name">Concall Agent</div>
+                        <div class="agent-tab-desc">Conference call transcript analysis</div>
+                    </div>
+                </button>
+                <button class="agent-tab" onclick="switchAgent('forensic')" role="tab" aria-selected="false"
+                    id="tab-forensic">
+                    <span class="agent-tab-icon">🔍</span>
+                    <div class="agent-tab-info">
+                        <div class="agent-tab-name">Forensic Agent</div>
+                        <div class="agent-tab-desc">Accounting red flags & governance</div>
+                    </div>
+                </button>
+                <button class="agent-tab" onclick="switchAgent('analyst')" role="tab" aria-selected="false"
+                    id="tab-analyst">
+                    <span class="agent-tab-icon">📄</span>
+                    <div class="agent-tab-info">
+                        <div class="agent-tab-name">Analyst Agent</div>
+                        <div class="agent-tab-desc">Domestic & global research</div>
+                    </div>
+                </button>
+                <button class="agent-tab" onclick="switchAgent('forecasting')" role="tab" aria-selected="false"
+                    id="tab-forecasting">
+                    <span class="agent-tab-icon">📊</span>
+                    <div class="agent-tab-info">
+                        <div class="agent-tab-name">Forecasting Agent (beta)</div>
+                        <div class="agent-tab-desc">Multi-method valuation</div>
+                    </div>
+                </button>
+                <button class="agent-tab" onclick="switchAgent('cosmic')" role="tab" aria-selected="false"
+                    id="tab-cosmic">
+                    <span class="agent-tab-icon">🌌</span>
+                    <div class="agent-tab-info">
+                        <div class="agent-tab-name">Cosmic Macro Agent</div>
+                        <div class="agent-tab-desc">Astro-geopolitical market intelligence</div>
+                    </div>
+                </button>
+                <button class="agent-tab" onclick="switchAgent('cosmic_micro')" role="tab" aria-selected="false"
+                    id="tab-cosmic_micro">
+                    <span class="agent-tab-icon">🔮</span>
+                    <div class="agent-tab-info">
+                        <div class="agent-tab-name">Cosmic Micro Agent</div>
+                        <div class="agent-tab-desc">Astro-fundamental stock/industry oracle</div>
+                    </div>
+                </button>
+                <button class="agent-tab" onclick="switchAgent('technical')" role="tab" aria-selected="false"
+                    id="tab-technical">
+                    <span class="agent-tab-icon">📈</span>
+                    <div class="agent-tab-info">
+                        <div class="agent-tab-name">Technical Agent</div>
+                        <div class="agent-tab-desc">Multi-timeframe chart analysis</div>
+                    </div>
+                </button>
+                <button class="agent-tab" onclick="switchAgent('docsum')" role="tab" aria-selected="false"
+                    id="tab-docsum">
+                    <span class="agent-tab-icon">📑</span>
+                    <div class="agent-tab-info">
+                        <div class="agent-tab-name">Doc Summarizer</div>
+                        <div class="agent-tab-desc">Summarize financial documents</div>
+                    </div>
+                </button>
             </div>
-            <button class="scroll-arrow scroll-right" id="scrollArrowRight" onclick="scrollAgentTabs(1)" aria-label="Scroll right">
-                <svg viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
+            <button class="scroll-arrow scroll-right" id="scrollArrowRight" onclick="scrollAgentTabs(1)"
+                aria-label="Scroll right">
+                <svg viewBox="0 0 24 24">
+                    <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z" />
+                </svg>
             </button>
         </div>
 
@@ -3849,6 +4667,84 @@
                         placeholder="Ask a follow-up question about this stock or industry..."
                         onkeydown="if(event.key==='Enter'){sendCosmicMicroChat();event.preventDefault();}" />
                     <button class="analyze-btn" style="padding:0.75rem 1.25rem;" onclick="sendCosmicMicroChat()">
+                        Send
+                    </button>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- =============================== -->
+        <!-- TECHNICAL AGENT WORKSPACE        -->
+        <!-- =============================== -->
+        <div class="agent-workspace" id="workspace-technical">
+
+            <!-- Input Card -->
+            <div class="ticker-card">
+                <h2>📈 Technical Agent</h2>
+                <p class="subtitle">An elite multi-timeframe chartist: reads the 1Y daily &amp; 5Y weekly charts,
+                    runs the Momentum, Divergence &amp; Wyckoff screeners, and reasons over the actual chart images
+                    (GPT-5.4, xhigh) to deliver a confluence-driven short / medium / long-term outlook.</p>
+                <div class="ticker-input-row" style="margin-top:1.25rem;">
+                    <div id="technicalTickerContainer" class="ticker-input-wrapper" style="flex:1;">
+                        <input type="text" class="ticker-input" id="technicalTickerInput"
+                            placeholder="Type a stock name or ticker... (e.g. Reliance, TCS, INFY)"
+                            autocomplete="off" />
+                        <div class="ticker-dropdown" id="technicalTickerDropdown"></div>
+                    </div>
+                    <button class="analyze-btn" id="technicalAnalyzeBtn" onclick="startTechnicalAnalysis()">
+                        <span id="technicalBtnText">📈 Analyze Chart</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Error -->
+            <div class="error-card" id="technicalError">
+                <h4>⚠️ Analysis Error</h4>
+                <p id="technicalErrorText"></p>
+            </div>
+
+            <!-- Progress -->
+            <div class="progress-card" id="technicalProgress">
+                <div class="progress-status">
+                    <div class="progress-dot"></div>
+                    <span id="technicalProgressText">Starting technical analysis...</span>
+                </div>
+                <div class="progress-timer" id="technicalProgressTimer">Elapsed: 0s</div>
+                <div class="progress-bar-container">
+                    <div class="progress-bar"></div>
+                </div>
+            </div>
+
+            <!-- Structured Report Container -->
+            <div class="analysis-card" id="technicalAnalysis">
+                <div class="analysis-header">
+                    <div class="analysis-header-left">
+                        <span style="font-size:1.25rem;">📈</span>
+                        <div>
+                            <h3>Technical Confluence Report</h3>
+                            <span class="analysis-meta" id="technicalAnalysisMeta"></span>
+                        </div>
+                    </div>
+                    <button class="analyze-btn" style="padding:0.5rem 1rem;font-size:0.75rem;"
+                        onclick="startTechnicalAnalysis(true)">
+                        🔄 Refresh
+                    </button>
+                </div>
+                <div id="technicalReportContainer" style="padding:0 1.5rem 1.5rem;"></div>
+            </div>
+
+            <!-- Chat -->
+            <div class="chat-card" id="technicalChat">
+                <div class="chat-header">
+                    <h3>💬 Ask about this chart</h3>
+                </div>
+                <div class="chat-messages" id="technicalChatMessages"></div>
+                <div style="padding:0.75rem 1.5rem;border-top:1px solid var(--border-color);display:flex;gap:0.5rem;">
+                    <input type="text" class="ticker-input" id="technicalChatInput"
+                        placeholder="Ask a follow-up question about the technical setup..."
+                        onkeydown="if(event.key==='Enter'){sendTechnicalChat();event.preventDefault();}" />
+                    <button class="analyze-btn" style="padding:0.75rem 1.25rem;" onclick="sendTechnicalChat()">
                         Send
                     </button>
                 </div>
@@ -5842,7 +6738,7 @@
                 }
             }
 
-            window.scrollAgentTabs = function(direction) {
+            window.scrollAgentTabs = function (direction) {
                 const scrollAmount = container.clientWidth * 0.5;
                 container.scrollBy({ left: direction * scrollAmount, behavior: 'smooth' });
             };
@@ -5850,7 +6746,7 @@
             container.addEventListener('scroll', updateArrows);
             window.addEventListener('resize', updateArrows);
 
-            window.centerActiveTab = function() {
+            window.centerActiveTab = function () {
                 const activeTab = container.querySelector('.agent-tab.active');
                 if (activeTab && activeTab.scrollIntoView) {
                     activeTab.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
@@ -6078,6 +6974,573 @@
                     geopolitical_context: currentCosmicData.geopolitical_context || '',
                     astro_context: currentCosmicData.astro_context || '',
                     economic_context: currentCosmicData.economic_context || '',
+                })
+            })
+                .then(r => r.json())
+                .then(data => {
+                    const el = document.getElementById(typingId); if (el) el.remove();
+                    if (data.answer) messagesDiv.innerHTML += `<div class="chat-message assistant"><div class="chat-bubble">${marked.parse(data.answer)}</div></div>`;
+                    else messagesDiv.innerHTML += `<div class="chat-message assistant"><div class="chat-bubble" style="color:var(--accent-red);">Error: ${data.error || 'No response'}</div></div>`;
+                    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+                })
+                .catch(err => {
+                    const el = document.getElementById(typingId); if (el) el.remove();
+                    messagesDiv.innerHTML += `<div class="chat-message assistant"><div class="chat-bubble" style="color:var(--accent-red);">Network error: ${err.message}</div></div>`;
+                    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+                });
+        }
+
+        // =====================================================
+        // TECHNICAL AGENT
+        // =====================================================
+        let technicalJobId = null;
+        let technicalPollTimer = null;
+        let technicalStartTime = null;
+        let technicalTimerInterval = null;
+        let technicalPollErrors = 0;
+        let currentTechnicalData = null;
+        let technicalSelectedTicker = null;
+        let technicalSelectedName = null;
+        const TECHNICAL_MAX_POLL_ERRORS = 8;
+
+        (function initTechnicalAutocomplete() {
+            const input = document.getElementById('technicalTickerInput');
+            const dropdown = document.getElementById('technicalTickerDropdown');
+            if (!input || !dropdown) return;
+            input.addEventListener('input', () => {
+                const val = input.value.trim();
+                if (val.length < 1) { dropdown.classList.remove('show'); return; }
+                const matches = filterAgentStocks(val);
+                if (!matches.length) { dropdown.classList.remove('show'); return; }
+                agentSelectedIndex = -1;
+                dropdown.innerHTML = matches.map((s, i) => `
+                    <div class="ticker-option ${i === agentSelectedIndex ? 'highlighted' : ''}"
+                         data-ticker="${s.ticker}" data-name="${s.name}"
+                         onclick="selectTechnicalTicker('${s.ticker}', '${s.name.replace(/'/g, "\\'")}')">
+                      <span class="ticker-option-name">${s.name}</span>
+                      <span class="ticker-option-ticker">${s.ticker}</span>
+                    </div>`).join('');
+                dropdown.classList.add('show');
+            });
+            input.addEventListener('keydown', (e) => {
+                const items = dropdown.querySelectorAll('.ticker-option');
+                if (!items.length) { if (e.key === 'Enter') { e.preventDefault(); startTechnicalAnalysis(); } return; }
+                if (e.key === 'ArrowDown') { e.preventDefault(); agentSelectedIndex = Math.min(agentSelectedIndex + 1, items.length - 1); items.forEach((el, i) => el.classList.toggle('highlighted', i === agentSelectedIndex)); }
+                else if (e.key === 'ArrowUp') { e.preventDefault(); agentSelectedIndex = Math.max(agentSelectedIndex - 1, 0); items.forEach((el, i) => el.classList.toggle('highlighted', i === agentSelectedIndex)); }
+                else if (e.key === 'Enter') { e.preventDefault(); if (agentSelectedIndex >= 0 && items[agentSelectedIndex]) items[agentSelectedIndex].click(); else startTechnicalAnalysis(); }
+                else if (e.key === 'Escape') { dropdown.classList.remove('show'); }
+            });
+            document.addEventListener('click', (e) => { if (!e.target.closest('#technicalTickerContainer')) dropdown.classList.remove('show'); });
+        })();
+
+        function selectTechnicalTicker(ticker, name) {
+            technicalSelectedTicker = ticker;
+            technicalSelectedName = name;
+            const input = document.getElementById('technicalTickerInput');
+            if (input) input.value = `${name} (${ticker})`;
+            const dropdown = document.getElementById('technicalTickerDropdown');
+            if (dropdown) dropdown.classList.remove('show');
+        }
+
+        function startTechnicalAnalysis(forceRefresh = false) {
+            const input = document.getElementById('technicalTickerInput');
+            const ticker = technicalSelectedTicker || (input ? input.value.replace(/\s*\(.*\)\s*$/, '').trim().toUpperCase() : '');
+            if (!ticker) return;
+
+            document.getElementById('technicalError').classList.remove('show');
+            document.getElementById('technicalAnalysis').classList.remove('show');
+            document.getElementById('technicalChat').classList.remove('show');
+            document.getElementById('technicalProgress').classList.add('show');
+            document.getElementById('technicalProgressText').textContent = forceRefresh
+                ? 'Refreshing technical analysis (ignoring cache)...'
+                : 'Starting technical analysis...';
+            document.getElementById('technicalAnalyzeBtn').disabled = true;
+            document.getElementById('technicalBtnText').innerHTML = '<span class="spinner"></span> Analyzing...';
+
+            technicalStartTime = Date.now();
+            technicalPollErrors = 0;
+            if (technicalTimerInterval) clearInterval(technicalTimerInterval);
+            technicalTimerInterval = setInterval(() => {
+                const elapsed = Math.floor((Date.now() - technicalStartTime) / 1000);
+                const mins = Math.floor(elapsed / 60), secs = elapsed % 60;
+                document.getElementById('technicalProgressTimer').textContent = mins > 0 ? `Elapsed: ${mins}m ${secs}s` : `Elapsed: ${secs}s`;
+            }, 1000);
+
+            fetch('/agent/technical/analyze', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ticker, force_refresh: forceRefresh === true })
+            })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.status === 'complete') { onTechnicalComplete(data.result, data.cached); }
+                    else if (data.job_id) { technicalJobId = data.job_id; pollTechnicalStatus(); }
+                    else if (data.error) { onTechnicalError(data.error); }
+                })
+                .catch(err => onTechnicalError(`Network error: ${err.message}`));
+        }
+
+        function pollTechnicalStatus() {
+            if (!technicalJobId) return;
+            fetch(`/agent/technical/${technicalJobId}/status`)
+                .then(r => r.text().then(text => ({ ok: r.ok, httpStatus: r.status, text })))
+                .then(({ ok, httpStatus, text }) => {
+                    let data = null;
+                    if (text) { try { data = JSON.parse(text); } catch (e) { data = null; } }
+                    if (!ok || !data) {
+                        technicalPollErrors++;
+                        if (technicalPollErrors <= TECHNICAL_MAX_POLL_ERRORS) { technicalPollTimer = setTimeout(pollTechnicalStatus, 3000); return; }
+                        onTechnicalError(`Polling error: server returned ${ok ? 'an unreadable' : 'HTTP ' + httpStatus} response`);
+                        return;
+                    }
+                    technicalPollErrors = 0;
+                    if (data.status === 'processing') {
+                        document.getElementById('technicalProgressText').textContent = data.progress || 'Analyzing...';
+                        technicalPollTimer = setTimeout(pollTechnicalStatus, 3000);
+                    } else if (data.status === 'complete') { onTechnicalComplete(data.result); }
+                    else if (data.status === 'error') { onTechnicalError(data.error); }
+                    else { onTechnicalError(data.error || 'Polling error: unexpected status response'); }
+                })
+                .catch(err => {
+                    technicalPollErrors++;
+                    if (technicalPollErrors <= TECHNICAL_MAX_POLL_ERRORS) { technicalPollTimer = setTimeout(pollTechnicalStatus, 3000); return; }
+                    onTechnicalError(`Polling error: ${err.message}`);
+                });
+        }
+
+        function onTechnicalComplete(result, cached) {
+            if (technicalTimerInterval) { clearInterval(technicalTimerInterval); technicalTimerInterval = null; }
+            if (technicalPollTimer) { clearTimeout(technicalPollTimer); technicalPollTimer = null; }
+            technicalJobId = null;
+            document.getElementById('technicalAnalyzeBtn').disabled = false;
+            document.getElementById('technicalBtnText').innerHTML = '📈 Analyze Chart';
+            document.getElementById('technicalProgress').classList.remove('show');
+            currentTechnicalData = result;
+
+            const meta = document.getElementById('technicalAnalysisMeta');
+            const elapsed = result.analysis_time_seconds ? `${result.analysis_time_seconds}s` : 'N/A';
+            const model = result.model_used || 'gpt-5.4';
+            const cacheLabel = cached ? ' (cached)' : '';
+            meta.textContent = `Model: ${model} | Time: ${elapsed}${cacheLabel} | Ticker: ${result.ticker || ''}`;
+
+            const container = document.getElementById('technicalReportContainer');
+            // Release any charts from a previous run before we overwrite the container —
+            // responsive:true binds a window resize listener per graph div, and innerHTML
+            // alone never frees them, so refreshing would leak listeners + retained figures.
+            if (typeof Plotly !== 'undefined') {
+                container.querySelectorAll('.tr-chart').forEach(el => { try { Plotly.purge(el); } catch (_) { } });
+            }
+            let structured = result.structured;
+            if (!structured && result.analysis) {
+                try {
+                    const t = result.analysis.trim();
+                    const s = t.indexOf('{'), e = t.lastIndexOf('}');
+                    if (s !== -1 && e > s) {
+                        const parsed = JSON.parse(t.slice(s, e + 1));
+                        if (parsed && (parsed.headline || parsed.horizons || parsed.confluence)) structured = parsed;
+                    }
+                } catch (e) { /* markdown fallback */ }
+            }
+            if (structured) {
+                try { renderTechnicalReport(container, structured); }
+                catch (e) { console.error('renderTechnicalReport failed', e); container.innerHTML = '<div class="analysis-body" style="max-height:none;">' + (result.analysis ? marked.parse(result.analysis) : 'Render error.') + '</div>'; }
+            } else if (result.analysis) {
+                container.innerHTML = '<div class="analysis-body" style="max-height:none;">' + marked.parse(result.analysis) + '</div>';
+            } else {
+                container.innerHTML = '<p style="color:var(--text-muted);">No data received.</p>';
+            }
+
+            document.getElementById('technicalAnalysis').classList.add('show');
+            document.getElementById('technicalChat').classList.add('show');
+        }
+
+        function onTechnicalError(errorMsg) {
+            if (technicalTimerInterval) { clearInterval(technicalTimerInterval); technicalTimerInterval = null; }
+            if (technicalPollTimer) { clearTimeout(technicalPollTimer); technicalPollTimer = null; }
+            technicalJobId = null;
+            document.getElementById('technicalAnalyzeBtn').disabled = false;
+            document.getElementById('technicalBtnText').innerHTML = '📈 Analyze Chart';
+            document.getElementById('technicalProgress').classList.remove('show');
+            document.getElementById('technicalErrorText').textContent = errorMsg || 'An unknown error occurred.';
+            document.getElementById('technicalError').classList.add('show');
+        }
+
+        // Lazy-mount state for the tabbed chart gallery (reset on each render)
+        let technicalGallery = { mounts: {}, mounted: {} };
+
+        // Strip a "[CHART: ... ]" wrapper the model sometimes adds around a label
+        function _stripChartWrap(raw) {
+            return String(raw || '').replace(/^\[?\s*chart\s*:\s*/i, '').replace(/\]\s*$/, '').trim();
+        }
+
+        // Map any model-emitted reference (wrapped, loose dash/case/&) to a real charts key
+        function _resolveChartKey(raw) {
+            const charts = currentTechnicalData && currentTechnicalData.charts;
+            if (!raw || !charts) return null;
+            const s = _stripChartWrap(raw);
+            if (charts[s]) return s;
+            if (charts[raw]) return raw;
+            const norm = x => String(x).toLowerCase().replace(/[—–-]/g, '-').replace(/&/g, 'and').replace(/\s+/g, ' ').trim();
+            const target = norm(s);
+            return Object.keys(charts).find(k => norm(k) === target) || null;
+        }
+
+        // Shared layout styling for every Technical-Agent chart: transparent background, muted
+        // font, and NO gridlines/zerolines on any axis (incl. subplot axes like xaxis2/yaxis2)
+        // for the clean look the report calls for.
+        function _styleTrLayout(layout) {
+            layout.paper_bgcolor = 'rgba(0,0,0,0)';
+            layout.plot_bgcolor = 'rgba(0,0,0,0)';
+            layout.font = Object.assign({ color: '#a0a0b8' }, layout.font || {});
+            layout.xaxis = layout.xaxis || {};
+            layout.yaxis = layout.yaxis || {};
+            Object.keys(layout).forEach(k => {
+                if (/^[xy]axis/.test(k) && layout[k] && typeof layout[k] === 'object') {
+                    layout[k].showgrid = false;
+                    layout[k].zeroline = false;
+                }
+            });
+            return layout;
+        }
+
+        // Inline SVG icons (no external deps; render crisply at any DPI)
+        const TR_EXPAND_ICON = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3m13-5v3a2 2 0 0 1-2 2h-3"/></svg>';
+        const TR_CLOSE_ICON = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>';
+
+        // Wrap a chart div with an expand-to-modal button. data-chart-key lets the modal
+        // re-plot the same figure full-size without threading the label through onclick.
+        function _trChartBox(elId, key, tallCls) {
+            return `<div class="tr-chart-box">`
+                + `<button class="tr-chart-expand" type="button" title="Expand chart" aria-label="Expand chart" onclick="openTrChartModal(this)">${TR_EXPAND_ICON}</button>`
+                + `<div class="tr-chart${tallCls || ''}" id="${elId}" data-chart-key="${_esc(key)}"></div>`
+                + `</div>`;
+        }
+
+        function mountTechnicalPlotly(elId, key) {
+            const el = document.getElementById(elId);
+            if (!el || !currentTechnicalData || !currentTechnicalData.charts) return;
+            const json = key && currentTechnicalData.charts[key];
+            if (!json) { el.innerHTML = `<div class="tr-chart-missing">Chart unavailable.</div>`; return; }
+            if (typeof Plotly === 'undefined') { el.innerHTML = '<div class="tr-chart-missing">Charts unavailable (Plotly failed to load).</div>'; return; }
+            try {
+                const f = JSON.parse(json);
+                const layout = f.layout || {};
+                // The server figures bake in a fixed pixel size (height 515–800px). Strip it so
+                // Plotly sizes to the card height instead of overflowing and bleeding into the
+                // sections below; the card's CSS height now governs the chart.
+                delete layout.height;
+                delete layout.width;
+                layout.autosize = true;
+                _styleTrLayout(layout);   // transparent bg, muted font, no gridlines
+                Plotly.newPlot(el, f.data || [], layout, { responsive: true, displayModeBar: false })
+                    .then(() => { try { Plotly.Plots.resize(el); } catch (_) { } });
+            } catch (e) { console.error('mountTechnicalPlotly', key, e); el.innerHTML = `<div class="tr-chart-missing">Failed to render chart.</div>`; }
+        }
+
+        // Lazily create the (single, body-level) expanded-chart modal. Lives outside the report
+        // container so re-renders / the purge loop never destroy it.
+        function _ensureTrChartModal() {
+            if (document.getElementById('trChartModal')) return;
+            const m = document.createElement('div');
+            m.id = 'trChartModal';
+            m.className = 'tr-modal';
+            m.setAttribute('role', 'dialog');
+            m.setAttribute('aria-modal', 'true');
+            m.innerHTML = '<div class="tr-modal-backdrop"></div>'
+                + '<div class="tr-modal-card">'
+                + '<div class="tr-modal-head"><span class="tr-modal-title" id="trModalTitle"></span>'
+                + '<button class="tr-modal-close" type="button" title="Close" aria-label="Close">' + TR_CLOSE_ICON + '</button></div>'
+                + '<div class="tr-modal-chart" id="trModalChart"></div>'
+                + '</div>';
+            document.body.appendChild(m);
+            m.querySelector('.tr-modal-backdrop').addEventListener('click', closeTrChartModal);
+            m.querySelector('.tr-modal-close').addEventListener('click', closeTrChartModal);
+            document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeTrChartModal(); });
+        }
+
+        // Open the expanded view for the chart whose box owns this button.
+        function openTrChartModal(btn) {
+            const box = btn && btn.closest('.tr-chart-box');
+            const chartEl = box && box.querySelector('.tr-chart');
+            const key = chartEl && chartEl.getAttribute('data-chart-key');
+            if (!key || !currentTechnicalData || !currentTechnicalData.charts) return;
+            const json = currentTechnicalData.charts[key];
+            if (!json || typeof Plotly === 'undefined') return;
+            _ensureTrChartModal();
+            const modal = document.getElementById('trChartModal');
+            document.getElementById('trModalTitle').textContent = key;
+            const host = document.getElementById('trModalChart');
+            try { Plotly.purge(host); } catch (_) { }
+            modal.classList.add('open');
+            document.body.style.overflow = 'hidden';
+            // Plot on the next frame so Plotly measures the modal's final (post-transition) size.
+            requestAnimationFrame(() => {
+                try {
+                    const f = JSON.parse(json);
+                    const layout = f.layout || {};
+                    delete layout.height; delete layout.width; layout.autosize = true;
+                    layout.margin = Object.assign({ t: 28, r: 24, b: 44, l: 58 }, layout.margin || {});
+                    _styleTrLayout(layout);
+                    layout.font.color = '#c8c8de';   // a touch brighter in the larger view
+                    Plotly.newPlot(host, f.data || [], layout, { responsive: true, displayModeBar: true, displaylogo: false })
+                        .then(() => { try { Plotly.Plots.resize(host); } catch (_) { } });
+                } catch (e) { console.error('openTrChartModal', key, e); host.innerHTML = '<div class="tr-chart-missing">Failed to render chart.</div>'; }
+            });
+        }
+
+        function closeTrChartModal() {
+            const modal = document.getElementById('trChartModal');
+            if (!modal || !modal.classList.contains('open')) return;
+            modal.classList.remove('open');
+            document.body.style.overflow = '';
+            // Purge after the close animation so the figure doesn't blank mid-transition.
+            setTimeout(function () {
+                if (modal.classList.contains('open')) return;
+                const host = document.getElementById('trModalChart');
+                if (host && typeof Plotly !== 'undefined') { try { Plotly.purge(host); } catch (_) { } }
+            }, 340);
+        }
+
+        // Mount charts progressively (2 per animation frame) so the report text paints first
+        // and the UI never freezes on a synchronous burst of Plotly.newPlot calls.
+        function _mountQueue(list) {
+            if (!list || !list.length) return;
+            let idx = 0;
+            const step = () => {
+                list.slice(idx, idx + 2).forEach(m => mountTechnicalPlotly(m.elId, m.key));
+                idx += 2;
+                if (idx < list.length) requestAnimationFrame(step);
+            };
+            requestAnimationFrame(step);
+        }
+
+        // Tabbed gallery: charts in hidden panels render at zero width, so mount a tab's
+        // charts only when it is first shown.
+        function showTechnicalGalleryTab(tabId, btn) {
+            const root = document.getElementById('trGalleryRoot');
+            if (!root) return;
+            root.querySelectorAll('.tr-gallery-tab').forEach(t => t.classList.remove('active'));
+            if (btn) btn.classList.add('active');
+            root.querySelectorAll('.tr-gallery-panel').forEach(p => p.classList.remove('active'));
+            const panel = document.getElementById('tr-gallery-' + tabId);
+            if (panel) panel.classList.add('active');
+            if (!technicalGallery.mounted[tabId]) {
+                _mountQueue(technicalGallery.mounts[tabId] || []);
+                technicalGallery.mounted[tabId] = true;
+            }
+        }
+
+        function renderTechnicalReport(container, d) {
+            const biasClass = (b) => b === 'bullish' ? 'bull' : (b === 'bearish' ? 'bear' : 'neut');
+            const sentClass = (s) => ({ bull: 'bull', bear: 'bear', warn: 'warn', neut: 'neut' }[s] || 'neut');
+            const charts = (currentTechnicalData && currentTechnicalData.charts) || {};
+            const hasCharts = Object.keys(charts).length > 0;
+            technicalGallery = { mounts: {}, mounted: {} };
+            const pending = [];   // eager inline mounts {elId, key}
+            let cid = 0;
+
+            // Inline chart card (eager mount). Returns '' when the label can't be resolved to a real chart.
+            const inlineChart = (rawLabel) => {
+                const key = _resolveChartKey(rawLabel);
+                if (!key) return '';
+                const elId = `tr-chart-${cid++}`;
+                pending.push({ elId, key });
+                const tall = /ADL Accumulation|RSI Divergence/i.test(key) ? ' tr-chart-tall' : '';
+                return `<div class="tr-chart-wrap"><div class="tr-chart-label">${_esc(key)}</div>${_trChartBox(elId, key, tall)}</div>`;
+            };
+            // Resolve a list of labels to unique keys (order preserved), optionally capped.
+            const resolveList = (labels, cap) => {
+                const out = [], seen = new Set();
+                (labels || []).forEach(l => { const k = _resolveChartKey(l); if (k && !seen.has(k)) { seen.add(k); out.push(k); } });
+                return cap ? out.slice(0, cap) : out;
+            };
+
+            let html = `<div class="tr-page">`;
+
+            // 1. HERO
+            const conv = (d.overall_conviction != null) ? d.overall_conviction : '–';
+            const eng = d.engine_signals || {};
+            html += `<div class="tr-hero ${biasClass(d.overall_bias)}">
+                <div class="tr-hero-main">
+                    <div class="tr-hero-sub">Technical Confluence Verdict</div>
+                    <h1 class="tr-headline">${_esc(d.headline || 'Technical Analysis')}</h1>
+                    <div class="tr-pills">
+                        ${_badge('1Y Daily: ' + (eng.daily_1y || 'N/A'), 'neut')}
+                        ${_badge('5Y Weekly: ' + (eng.weekly_5y || 'N/A'), 'neut')}
+                        ${_badge('Bias: ' + (d.overall_bias || 'n/a'), biasClass(d.overall_bias))}
+                    </div>
+                </div>
+                <div class="tr-hero-conv ${biasClass(d.overall_bias)}">
+                    <div class="tr-conv-num">${conv}${(typeof conv === 'number') ? '<span>%</span>' : ''}</div>
+                    <div class="tr-conv-label">Conviction</div>
+                </div>
+            </div>`;
+            if (d.one_line_takeaway) html += `<div class="tr-takeaway">${_esc(d.one_line_takeaway)}</div>`;
+
+            const c = d.confluence || {};
+
+            // 2. MULTI-TIMEFRAME SNAPSHOT (anchor charts — tide vs waves)
+            const snapWeekly = inlineChart('5Y Weekly — Close & SMA20');
+            const snapDaily = inlineChart('1Y Daily — Close & SMA20');
+            const alignBanner = (c.timeframe_alignment || c.alignment_note)
+                ? `<div class="tr-align"><strong>Timeframe alignment:</strong> ${_esc((c.timeframe_alignment || '').replace(/_/g, ' '))}. ${_esc(c.alignment_note || '')}</div>` : '';
+            if (snapWeekly || snapDaily) {
+                html += `<div class="tr-section-h">Multi-Timeframe Snapshot</div>${alignBanner}
+                    <div class="tr-snapshot">${snapWeekly}${snapDaily}</div>
+                    <div class="tr-snapshot-cap">The 5Y weekly is the tide (regime); the 1Y daily is the waves (timing &amp; invalidation).</div>`;
+            } else if (alignBanner) {
+                html += alignBanner;
+            }
+
+            // 3. CONFLUENCE DASHBOARD — balance meter + chip columns
+            const wv = w => ({ high: 3, medium: 2, low: 1 }[String(w || 'low').toLowerCase()] || 1);
+            const sumW = arr => (arr || []).reduce((a, f) => a + wv(f.weight), 0);
+            const bullW = sumW(c.bullish_factors), bearW = sumW(c.bearish_factors), neutW = sumW(c.neutral_watch_factors);
+            const totW = (bullW + bearW + neutW) || 1;
+            const pBull = Math.round(bullW / totW * 100), pBear = Math.round(bearW / totW * 100);
+            const pNeut = Math.max(0, 100 - pBull - pBear);
+            html += `<div class="tr-section-h">Confluence Dashboard</div>`;
+            html += `<div class="tr-balance">
+                <div class="tr-balance-row">
+                    <div class="tr-balance-seg tr-balance-bull" style="width:${pBull}%"></div>
+                    <div class="tr-balance-seg tr-balance-neut" style="width:${pNeut}%"></div>
+                    <div class="tr-balance-seg tr-balance-bear" style="width:${pBear}%"></div>
+                </div>
+                <div class="tr-balance-legend"><span class="bull">▲ Bullish ${pBull}%</span><span class="neut">◆ Watch ${pNeut}%</span><span class="bear">▼ Bearish ${pBear}%</span></div>
+            </div>`;
+            const factorCol = (title, arr, cls) => {
+                const items = (arr || []).map(f => `<div class="tr-factor">
+                    <div class="tr-factor-top">${_badge((f.horizon || 'all'), 'neut')}<span class="tr-weight tr-weight-${_esc(f.weight || 'low')}">${_esc(f.weight || '')}</span></div>
+                    <div class="tr-factor-text">${_esc(f.factor || '')}</div>
+                    <div class="tr-factor-ev">${_esc(_stripChartWrap(f.evidence) || '')}</div></div>`).join('') || `<div class="tr-empty">None identified.</div>`;
+                return `<div class="tr-col tr-col-${cls}"><div class="tr-col-h">${title}</div>${items}</div>`;
+            };
+            html += `<div class="tr-confluence">
+                ${factorCol('🟢 Bullish', c.bullish_factors, 'bull')}
+                ${factorCol('🔴 Bearish', c.bearish_factors, 'bear')}
+                ${factorCol('🟡 Watch', c.neutral_watch_factors, 'neut')}
+            </div>`;
+
+            // 4. OUTLOOK BY HORIZON — narrative + levels + inline relevant charts
+            const horizons = d.horizons || {};
+            const HZ_FALLBACK = {
+                short_term: ['1Y Daily — Close & SMA20', '1Y Daily — RSI'],
+                medium_term: ['1Y Daily — EMA Stack', '5Y Weekly — Close & SMA20'],
+                long_term: ['5Y Weekly — Close & SMA20', '5Y Weekly — ADL Accumulation', '5Y Weekly — RS vs Nifty'],
+            };
+            const horizonOrder = [['short_term', 'Short-term (1-3 months)'], ['medium_term', 'Medium-term (3-6 months)'], ['long_term', 'Long-term (>6 months)']];
+            html += `<div class="tr-section-h">Outlook by Horizon</div>`;
+            horizonOrder.forEach(([key, fallbackLabel]) => {
+                const h = horizons[key]; if (!h) return;
+                const kl = h.key_levels || {};
+                let keys = resolveList(h.chart_refs, 3);
+                if (!keys.length) keys = resolveList(HZ_FALLBACK[key], 3);
+                const refs = keys.map(inlineChart).join('');
+                html += `<div class="tr-horizon ${biasClass(h.bias)}">
+                    <div class="tr-horizon-head">
+                        <div class="tr-horizon-title">${_esc(h.label || fallbackLabel)}</div>
+                        <div>${_badge(h.bias || 'neutral', biasClass(h.bias))} <span class="tr-conv-pill">${(h.conviction != null ? h.conviction + '%' : '')}</span></div>
+                    </div>
+                    <div class="tr-conv-bar"><div class="tr-conv-fill ${biasClass(h.bias)}" style="width:${Math.max(0, Math.min(100, h.conviction || 0))}%"></div></div>
+                    <div class="tr-narrative">${marked.parse(String(h.narrative || '').replace(/\[chart:\s*([^\]]+)\]/gi, '**$1**'))}</div>
+                    <div class="tr-levels">
+                        <div class="tr-level"><span>Entry</span><div>${(kl.entry_zones || []).map(_esc).join('<br>') || '—'}</div></div>
+                        <div class="tr-level tr-level-inval"><span>Invalidation</span><div>${_esc(kl.invalidation || '—')}</div></div>
+                        <div class="tr-level tr-level-tgt"><span>Targets</span><div>${(kl.targets || []).map(_esc).join('<br>') || '—'}</div></div>
+                        <div class="tr-level"><span>Risk / Reward</span><div>${_esc(kl.risk_reward || '—')}</div></div>
+                    </div>
+                    ${(h.triggers && h.triggers.length) ? `<div class="tr-trigger">⚡ Triggers: ${h.triggers.map(_esc).join('; ')}</div>` : ''}
+                    ${h.what_would_change_thesis ? `<div class="tr-change">🔄 What would change this: ${_esc(h.what_would_change_thesis)}</div>` : ''}
+                    ${refs ? `<div class="tr-charts">${refs}</div>` : ''}
+                </div>`;
+            });
+
+            // 5. SCREENER VERDICTS — verdict + screener chart when present
+            const SCR_KEY = { 'Momentum Breakout': 'Momentum Breakout — Chart', 'Divergence Bottom': 'Divergence Bottom — Chart', 'Wyckoff Institutional Base': 'Wyckoff Institutional Base — Chart' };
+            if (Array.isArray(d.screeners) && d.screeners.length) {
+                html += `<div class="tr-section-h">Screener Verdicts</div><div class="tr-screeners">`;
+                d.screeners.forEach(s => {
+                    const pass = s.passes === true;
+                    const chartHtml = inlineChart(SCR_KEY[s.name] || (s.name + ' — Chart'));
+                    html += `<div class="tr-screener ${pass ? 'pass' : 'fail'}">
+                        <div class="tr-screener-head"><span class="tr-screener-name">${_esc(s.name || '')}</span><span class="tr-screener-badge ${pass ? 'pass' : 'fail'}">${pass ? 'PASS' : 'FAIL'}</span></div>
+                        <div class="tr-screener-horizon">${_esc(s.horizon || '')}</div>
+                        <div class="tr-screener-verdict">${_esc(s.verdict || '')}</div>
+                        ${s.phase ? `<div class="tr-screener-phase">${_esc(s.phase)}${s.trigger && s.trigger !== 'none' ? ' · trigger: ' + _esc(s.trigger) : ''}</div>` : ''}
+                        ${chartHtml}
+                    </div>`;
+                });
+                html += `</div>`;
+            }
+
+            // 6. CHART GALLERY — tabbed, lazy-mounted; captions from what_charts_show
+            if (hasCharts) {
+                const obsByKey = {};
+                (d.what_charts_show || []).forEach(w => { const k = _resolveChartKey(w.chart_label); if (k && !obsByKey[k]) obsByKey[k] = w; });
+                const SUFFIX = ['Close & SMA20', 'High/Low Swing Structure', 'EMA Stack', 'RSI', 'ADL Accumulation', 'RS vs Nifty', 'RSI Divergence'];
+                const galleryCard = (tabId, k) => {
+                    const elId = `tr-gchart-${cid++}`;
+                    (technicalGallery.mounts[tabId] = technicalGallery.mounts[tabId] || []).push({ elId, key: k });
+                    const w = obsByKey[k];
+                    const badge = w ? _badge(w.sentiment || 'neut', sentClass(w.sentiment)) : '';
+                    const cap = w ? `${_esc(w.observation || '')} ${w.implication ? '<em>' + _esc(w.implication) + '</em>' : ''}` : '';
+                    const tall = /ADL Accumulation|RSI Divergence/i.test(k) ? ' tr-chart-tall' : '';
+                    return `<div class="tr-gcard"><div class="tr-gcard-head">${_esc(k)} ${badge}</div>${_trChartBox(elId, k, tall)}${cap ? `<div class="tr-gcard-cap">${cap}</div>` : ''}</div>`;
+                };
+                const buildPanel = (tabId, tfPrefix) => resolveList(SUFFIX.map(sfx => `${tfPrefix} — ${sfx}`)).map(k => galleryCard(tabId, k)).join('');
+                const dailyHtml = buildPanel('daily', '1Y Daily');
+                const weeklyHtml = buildPanel('weekly', '5Y Weekly');
+                const scrHtml = resolveList(['Momentum Breakout — Chart', 'Divergence Bottom — Chart', 'Wyckoff Institutional Base — Chart']).map(k => galleryCard('screeners', k)).join('');
+                const tabs = [];
+                if (dailyHtml) tabs.push({ id: 'daily', label: '1Y Daily', body: dailyHtml });
+                if (weeklyHtml) tabs.push({ id: 'weekly', label: '5Y Weekly', body: weeklyHtml });
+                if (scrHtml) tabs.push({ id: 'screeners', label: 'Screeners', body: scrHtml });
+                if (tabs.length) {
+                    const activeId = tabs[0].id;
+                    technicalGallery._activeId = activeId;
+                    html += `<div class="tr-section-h">Chart Gallery</div><div id="trGalleryRoot">
+                        <div class="tr-gallery-tabs">${tabs.map(t => `<button class="tr-gallery-tab ${t.id === activeId ? 'active' : ''}" onclick="showTechnicalGalleryTab('${t.id}', this)">${_esc(t.label)}</button>`).join('')}</div>
+                        ${tabs.map(t => `<div class="tr-gallery-panel ${t.id === activeId ? 'active' : ''}" id="tr-gallery-${t.id}"><div class="tr-gallery-grid">${t.body}</div></div>`).join('')}
+                    </div>`;
+                }
+            }
+
+            // 7. RISKS + METHODOLOGY
+            if (Array.isArray(d.risk_factors) && d.risk_factors.length) {
+                html += `<div class="tr-section-h">Risk Factors</div><div class="tr-risks">`;
+                d.risk_factors.forEach(r => { html += `<div class="tr-risk tr-risk-${_esc(r.severity || 'low')}"><span class="tr-risk-dot"></span>${_esc(r.risk || '')}</div>`; });
+                html += `</div>`;
+            }
+            if (d.methodology_note) html += `<div class="tr-method">${_esc(d.methodology_note)}</div>`;
+
+            html += `</div>`;
+            container.innerHTML = html;
+
+            // Mount eager inline charts + the active gallery tab, progressively (paint text first).
+            const eager = pending.slice();
+            if (technicalGallery._activeId) {
+                (technicalGallery.mounts[technicalGallery._activeId] || []).forEach(m => eager.push(m));
+                technicalGallery.mounted[technicalGallery._activeId] = true;
+            }
+            _mountQueue(eager);
+        }
+
+        function sendTechnicalChat() {
+            const input = document.getElementById('technicalChatInput');
+            const question = input.value.trim();
+            if (!question || !currentTechnicalData) return;
+            const messagesDiv = document.getElementById('technicalChatMessages');
+            messagesDiv.innerHTML += `<div class="chat-message user"><div class="chat-bubble">${question.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div></div>`;
+            input.value = '';
+            const typingId = 'technical-typing-' + Date.now();
+            messagesDiv.innerHTML += `<div class="chat-message assistant" id="${typingId}"><div class="chat-bubble"><span class="spinner" style="display:inline-block;width:14px;height:14px;"></span> Thinking...</div></div>`;
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            fetch('/agent/technical/chat', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    ticker: currentTechnicalData.ticker || '',
+                    question,
+                    analysis_context: JSON.stringify(currentTechnicalData.structured || {}),
+                    text_context: currentTechnicalData.text_context || ''
                 })
             })
                 .then(r => r.json())

@@ -7,10 +7,15 @@ earnings conference calls.
 Workflow:
 1. Fetch upcoming concall schedules from IR Pulse Engine API
 2. Extract dial-in credentials from NSE/BSE PDF announcements
-3. Place Twilio outbound call with DTMF passcode injection
-4. Record the call; when recording is ready, transcribe via Gemini
-5. Broadcast transcript & summary to frontend via Flask-SocketIO
-6. Post-call: aggregate transcript and run Gemini analysis
+3. Place Exotel outbound call; passcode entered via the 'number,,,passcode#' tuple
+4. Record the call; when ready, transcribe via Gemini (post-call backstop)
+5. Optionally stream call audio live (Exotel Stream applet → STT) for a live transcript
+6. Broadcast transcript & summary to the frontend via Flask-SocketIO
+7. Post-call: aggregate transcript and run Gemini analysis
+
+Telephony provider: Exotel (India-domestic; ~20x cheaper India calls than Twilio).
+Env vars: EXOTEL_API_KEY, EXOTEL_API_TOKEN, EXOTEL_SID, EXOTEL_CALLER_ID,
+EXOTEL_FLOW_APP_ID (+ optional EXOTEL_SUBDOMAIN / EXOTEL_FLOW_URL).
 """
 
 import os
@@ -37,10 +42,23 @@ from google.genai import types
 # Configuration
 # ---------------------------------------------------------------------------
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
-TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
-TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
-TWILIO_PHONE_NUMBER = os.getenv("TWILIO_PHONE_NUMBER")
-DEEPGRAM_API_KEY = os.getenv("DEEPGRAM_API_KEY")
+# Exotel (India-domestic telephony). HTTP Basic auth = API key + API token.
+EXOTEL_API_KEY = os.getenv("EXOTEL_API_KEY")
+EXOTEL_API_TOKEN = os.getenv("EXOTEL_API_TOKEN")
+EXOTEL_SID = os.getenv("EXOTEL_SID")                       # Exotel Account SID
+EXOTEL_SUBDOMAIN = os.getenv("EXOTEL_SUBDOMAIN", "api.in.exotel.com")
+EXOTEL_CALLER_ID = os.getenv("EXOTEL_CALLER_ID")           # ExoPhone (caller ID)
+EXOTEL_FLOW_APP_ID = os.getenv("EXOTEL_FLOW_APP_ID")       # App Bazaar flow id
+EXOTEL_FLOW_URL = os.getenv("EXOTEL_FLOW_URL")             # optional full flow URL override
+DEEPGRAM_API_KEY = os.getenv("DEEPGRAM_API_KEY")           # Tier 2: real-time streaming STT
+
+# Tier 2 toggle: when enabled, the Exotel Stream applet forks call audio to our
+# WebSocket (/api/live-concall/media-stream) for live transcription instead of
+# relying only on the post-call recording. Requires the Stream applet in the
+# Exotel flow + Azure WebSockets + a WS-capable worker. Off by default so Tier 1
+# (record → post-call transcribe) runs cleanly with no extra infra.
+LIVE_STREAM_ENABLED = os.getenv("LIVE_CONCALL_STREAMING", "").strip().lower() in (
+    "1", "true", "yes", "on")
 
 IR_PULSE_API = "https://ir-pulse-engine-production.up.railway.app/api/calls"
 
@@ -658,136 +676,236 @@ def _regex_fallback_extract(text: str, source_url: str) -> Dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# 3. TWILIO INTEGRATION
+# 3. EXOTEL INTEGRATION
 # ---------------------------------------------------------------------------
+# Exotel is an India-domestic CPaaS (cheap India termination). We dial the
+# conference bridge via the Calls/connect API, enter the passcode using the
+# post-dial "number,,,passcode#" DTMF tuple, and run an App Bazaar flow
+# (Record + Passthru, plus an optional Stream applet for live transcription).
+# Call status + RecordingUrl arrive on /api/live-concall/status. Plain REST.
 
-def _get_twilio_client():
-    """Lazy-load Twilio client."""
-    sid = TWILIO_ACCOUNT_SID or os.getenv("TWILIO_ACCOUNT_SID")
-    token = TWILIO_AUTH_TOKEN or os.getenv("TWILIO_AUTH_TOKEN")
-    if not sid or not token:
-        raise RuntimeError("TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN must be set")
-    from twilio.rest import Client
-    return Client(sid, token)
+# Maps an Exotel CallSid -> our session_id. Set when the call is placed; used to
+# correlate the Stream applet's WebSocket and the /status callbacks back to a
+# session. Pruned when the session ends.
+_callsid_to_session: Dict[str, str] = {}
 
 
-def place_twilio_call(phone_number: str, passcode: str = "",
+def _exotel_base() -> str:
+    """Build the authenticated Exotel REST base URL."""
+    key = EXOTEL_API_KEY or os.getenv("EXOTEL_API_KEY")
+    token = EXOTEL_API_TOKEN or os.getenv("EXOTEL_API_TOKEN")
+    sid = EXOTEL_SID or os.getenv("EXOTEL_SID")
+    subdomain = (EXOTEL_SUBDOMAIN or os.getenv("EXOTEL_SUBDOMAIN")
+                 or "api.in.exotel.com")
+    if not (key and token and sid):
+        raise RuntimeError("EXOTEL_API_KEY, EXOTEL_API_TOKEN and EXOTEL_SID must be set")
+    return f"https://{key}:{token}@{subdomain}/v1/Accounts/{sid}"
+
+
+def _format_phone_exotel(phone_number: str) -> str:
+    """
+    Normalize a dial-in number to Exotel's national format. Exotel expects a
+    leading 0 for Indian numbers (NOT E.164 '+91').
+    """
+    p = re.sub(r'[^\d+]', '', phone_number or "")
+    if p.startswith('+91'):
+        p = p[3:]
+    elif p.startswith('91') and len(p) >= 12:
+        p = p[2:]
+    p = p.lstrip('+')
+    if p and not p.startswith('0'):
+        p = '0' + p
+    return p
+
+
+def _build_dial_string(phone_number: str, passcode: str = "",
+                       pin: str = "") -> str:
+    """
+    Build Exotel's 'number,,,passcode#' post-dial DTMF tuple so the passcode is
+    keyed in automatically after the bridge answers (commas insert pauses).
+    """
+    number = _format_phone_exotel(phone_number)
+    digits = ""
+    clean_passcode = re.sub(r'[^0-9#*]', '', passcode or "")
+    if clean_passcode:
+        digits = clean_passcode if clean_passcode.endswith('#') else clean_passcode + '#'
+    clean_pin = re.sub(r'[^0-9#*]', '', pin or "")
+    if clean_pin:
+        digits += clean_pin if clean_pin.endswith('#') else clean_pin + '#'
+    if digits:
+        # 3 commas ≈ a few seconds of pause to let the bridge prompt play first.
+        return f"{number},,,{digits}"
+    return number
+
+
+def place_exotel_call(phone_number: str, passcode: str = "",
                       pin: str = "", session_id: str = "",
                       webhook_base_url: str = "") -> Dict[str, Any]:
     """
-    Place an outbound Twilio call to a conference bridge.
+    Place an outbound Exotel call to a conference bridge and run our App flow.
 
-    Args:
-        phone_number: Dial-in number (e.g. +912262801123)
-        passcode: Conference passcode (digits + optional # at end)
-        pin: Participant PIN (if separate from passcode)
-        session_id: Unique session identifier for tracking
-        webhook_base_url: Base URL for Twilio callbacks (e.g. https://your-server.com)
+    The passcode is entered via the post-dial DTMF tuple in 'From'. The flow
+    (configured once in the Exotel dashboard) records the call, optionally
+    streams audio to /media-stream for live transcription, and POSTs status +
+    the RecordingUrl to /status. Calls/connect returns the CallSid synchronously.
 
-    Returns:
-        Dict with call_sid, status, etc.
+    Returns {call_sid, status, to} or {"error": ...} on failure.
     """
     try:
-        client = _get_twilio_client()
+        caller_id = EXOTEL_CALLER_ID or os.getenv("EXOTEL_CALLER_ID")
+        app_id = EXOTEL_FLOW_APP_ID or os.getenv("EXOTEL_FLOW_APP_ID")
+        sid = EXOTEL_SID or os.getenv("EXOTEL_SID")
+        if not caller_id:
+            raise RuntimeError("EXOTEL_CALLER_ID (ExoPhone) not set")
+        flow_url = (EXOTEL_FLOW_URL or os.getenv("EXOTEL_FLOW_URL")
+                    or (f"http://my.exotel.com/{sid}/exoml/start_voice/{app_id}"
+                        if app_id else ""))
+        if not flow_url:
+            raise RuntimeError("EXOTEL_FLOW_APP_ID or EXOTEL_FLOW_URL not set")
 
-        # Build TwiML URL — Twilio will fetch this to get call instructions
-        twiml_url = f"{webhook_base_url}/api/live-concall/twiml?session_id={session_id}"
-        status_url = f"{webhook_base_url}/api/live-concall/call-status?session_id={session_id}"
+        dial_string = _build_dial_string(phone_number, passcode, pin)
 
-        # Build send_digits string with pauses
-        send_digits = ""
-        if passcode:
-            clean_passcode = re.sub(r'[^0-9#*]', '', passcode)
-            send_digits = f"wwwwww{clean_passcode}"  # 3-second pause then digits
-            if not clean_passcode.endswith('#'):
-                send_digits += '#'
-        if pin:
-            clean_pin = re.sub(r'[^0-9#*]', '', pin)
-            send_digits += f"wwww{clean_pin}"
-            if not clean_pin.endswith('#'):
-                send_digits += '#'
-
-        from_number = TWILIO_PHONE_NUMBER or os.getenv("TWILIO_PHONE_NUMBER")
-        if not from_number:
-            raise RuntimeError("TWILIO_PHONE_NUMBER not set")
-
-        # Ensure phone number has proper format
-        clean_phone = re.sub(r'[\s\-()]', '', phone_number)
-        if not clean_phone.startswith('+'):
-            if clean_phone.startswith('91') and len(clean_phone) >= 12:
-                clean_phone = '+' + clean_phone
-            elif len(clean_phone) == 10:
-                clean_phone = '+91' + clean_phone
-            else:
-                clean_phone = '+' + clean_phone
-
-        # Store session info for TwiML generation
         if session_id and session_id in _active_sessions:
-            _active_sessions[session_id].send_digits = send_digits
-            _active_sessions[session_id].dial_number = clean_phone
+            sess = _active_sessions[session_id]
+            sess.dial_number = dial_string
+            if webhook_base_url:
+                sess.webhook_base = webhook_base_url
 
-        recording_callback = f"{webhook_base_url}/api/live-concall/recording?session_id={session_id}"
+        status_cb = f"{webhook_base_url}/api/live-concall/status?session_id={session_id}"
+        form = {
+            "From": dial_string,
+            "CallerId": caller_id,
+            "CallType": "trans",
+            "Url": flow_url,
+            "TimeLimit": "7200",
+            "StatusCallback": status_cb,
+            "CustomField": session_id,
+        }
 
-        call = client.calls.create(
-            url=twiml_url,
-            to=clean_phone,
-            from_=from_number,
-            status_callback=status_url,
-            status_callback_event=["initiated", "ringing", "answered",
-                                   "completed", "failed", "busy", "no-answer"],
-            status_callback_method="POST",
-            record=True,
-            recording_status_callback=recording_callback,
-            recording_status_callback_method="POST",
-        )
+        resp = httpx.post(f"{_exotel_base()}/Calls/connect.json", data=form,
+                          timeout=30)
+        resp.raise_for_status()
+        body = resp.json() if resp.content else {}
+        call_sid = (((body or {}).get("Call") or {}).get("Sid")) or ""
 
-        print(f"LIVE_CONCALL: Twilio call placed: SID={call.sid}, "
-              f"to={clean_phone}, status={call.status}", file=sys.stderr)
+        if call_sid:
+            _callsid_to_session[call_sid] = session_id
+            if session_id and session_id in _active_sessions:
+                _active_sessions[session_id].call_sid = call_sid
+
+        print(f"LIVE_CONCALL: Exotel call placed: CallSid={call_sid}, "
+              f"to={dial_string}", file=sys.stderr)
 
         return {
-            "call_sid": call.sid,
-            "status": call.status,
-            "to": clean_phone,
+            "call_sid": call_sid,
+            "status": "queued",
+            "to": dial_string,
             "session_id": session_id,
         }
 
     except Exception as e:
-        print(f"LIVE_CONCALL: Twilio call failed: {e}", file=sys.stderr)
+        print(f"LIVE_CONCALL: Exotel call failed: {e}", file=sys.stderr)
         traceback.print_exc(file=sys.stderr)
         return {"error": str(e), "session_id": session_id}
 
 
 def inject_dtmf(call_sid: str, digits: str) -> Dict[str, Any]:
-    """Send DTMF tones into an active Twilio call (fallback button)."""
+    """
+    Not supported on Exotel: there is no documented API to inject DTMF into an
+    active call. The passcode is entered automatically at dial time via the
+    'number,,,passcode#' tuple in place_exotel_call().
+    """
+    return {"error": "DTMF injection is not supported on Exotel; the passcode is "
+                     "entered automatically when the call is placed."}
+
+
+def end_exotel_call(call_sid: str) -> Dict[str, Any]:
+    """Hang up an active Exotel call by setting its status to completed."""
     try:
-        client = _get_twilio_client()
-        call = client.calls(call_sid)
-
-        from twilio.twiml.voice_response import VoiceResponse
-        twiml = VoiceResponse()
-        twiml.play(digits=digits)
-
-        call.update(twiml=str(twiml))
-
-        print(f"LIVE_CONCALL: Injected DTMF '{digits}' into call {call_sid}",
+        resp = httpx.post(f"{_exotel_base()}/Calls/{call_sid}.json",
+                          data={"Status": "completed"}, timeout=30)
+        ok = resp.status_code < 400
+        print(f"LIVE_CONCALL: End call {call_sid}: HTTP {resp.status_code}",
               file=sys.stderr)
-        return {"status": "ok", "digits": digits, "call_sid": call_sid}
-
-    except Exception as e:
-        print(f"LIVE_CONCALL: DTMF injection failed: {e}", file=sys.stderr)
-        return {"error": str(e)}
-
-
-def end_twilio_call(call_sid: str) -> Dict[str, Any]:
-    """Hang up an active Twilio call."""
-    try:
-        client = _get_twilio_client()
-        call = client.calls(call_sid).update(status="completed")
-        print(f"LIVE_CONCALL: Call {call_sid} ended", file=sys.stderr)
-        return {"status": "completed", "call_sid": call_sid}
+        return {"status": "completed" if ok else "error", "call_sid": call_sid}
     except Exception as e:
         print(f"LIVE_CONCALL: End call failed: {e}", file=sys.stderr)
         return {"error": str(e)}
+
+
+# --- Tier 2: live transcription from the Exotel Stream applet ----------------
+
+def _resolve_stream_session(start_obj: Dict[str, Any]):
+    """Correlate a Stream 'start' event to a LiveConcallSession."""
+    start_obj = start_obj or {}
+    call_sid = start_obj.get("call_sid", "")
+    sid = _callsid_to_session.get(call_sid, "")
+    if not sid:
+        custom = start_obj.get("custom_parameters") or {}
+        sid = custom.get("session_id", "")
+    session = _active_sessions.get(sid) if sid else None
+    if session is None:
+        # Last resort: if exactly one call is live, attribute the stream to it.
+        live = [s for s in _active_sessions.values()
+                if s.state in ("dialing", "connected", "recording")]
+        if len(live) == 1:
+            session = live[0]
+    return session
+
+
+def _handle_media_stream(ws):
+    """
+    Handle the raw WebSocket opened by Exotel's Stream applet: decode PCM media
+    frames, stream them to the STT engine, and push transcripts into the
+    session. Listen-only — we never send audio back. Fully isolated/defensive so
+    a failure here never affects the call, recording, or the rest of the app.
+    """
+    import base64
+    session = None
+    stt = None
+    try:
+        from agents.live_concall_stt import open_stt_stream
+    except Exception as e:
+        print(f"LIVE_CONCALL: STT unavailable, media-stream is a no-op ({e})",
+              file=sys.stderr)
+        open_stt_stream = None
+
+    try:
+        while True:
+            msg = ws.receive()
+            if msg is None:
+                break
+            try:
+                evt = json.loads(msg)
+            except Exception:
+                continue
+            etype = evt.get("event")
+            if etype == "start":
+                session = _resolve_stream_session(evt.get("start") or evt)
+                if session and open_stt_stream:
+                    stt = open_stt_stream(
+                        lambda text, final: session.add_transcript(text, is_final=final))
+                print("LIVE_CONCALL: media-stream started (session="
+                      f"{session.session_id if session else None})", file=sys.stderr)
+            elif etype == "media":
+                if stt:
+                    payload = (evt.get("media") or {}).get("payload", "")
+                    if payload:
+                        try:
+                            stt.send(base64.b64decode(payload))
+                        except Exception:
+                            pass
+            elif etype == "stop":
+                break
+    except Exception as e:
+        print(f"LIVE_CONCALL: media-stream error: {e}", file=sys.stderr)
+    finally:
+        if stt:
+            try:
+                stt.finish()
+            except Exception:
+                pass
+        print("LIVE_CONCALL: media-stream closed", file=sys.stderr)
 
 
 # ---------------------------------------------------------------------------
@@ -823,6 +941,10 @@ class LiveConcallSession:
 
     # Analysis
     analysis_result: str = ""
+
+    # Call tracking / webhook routing
+    request_uuid: str = ""   # (legacy) provider request id; unused with Exotel
+    webhook_base: str = ""   # public base URL Exotel calls back to
 
     # Callback for SocketIO emit
     _emit_fn: Any = None
@@ -889,14 +1011,15 @@ class LiveConcallSession:
 
 
 # ---------------------------------------------------------------------------
-# 5. POST-CALL TRANSCRIPTION (Twilio Recording → Gemini)
+# 5. POST-CALL TRANSCRIPTION (Exotel Recording → Gemini)
 # ---------------------------------------------------------------------------
 
 def _transcribe_recording_with_gemini(session: LiveConcallSession,
                                        recording_url: str) -> str:
     """
-    Download a Twilio recording and transcribe it with Gemini Files API.
-    Returns transcript text or empty string on failure.
+    Download an Exotel recording and transcribe it with Gemini Files API.
+    Exotel recording URLs are usually public; we retry with HTTP Basic auth if
+    the download is blocked. Returns transcript text or empty string on failure.
     """
     api_key = GOOGLE_API_KEY or os.getenv("GOOGLE_API_KEY")
     if not api_key:
@@ -905,10 +1028,6 @@ def _transcribe_recording_with_gemini(session: LiveConcallSession,
         return ""
 
     try:
-        # Twilio recording URLs require auth credentials to download
-        sid = TWILIO_ACCOUNT_SID or os.getenv("TWILIO_ACCOUNT_SID")
-        token = TWILIO_AUTH_TOKEN or os.getenv("TWILIO_AUTH_TOKEN")
-
         # Ensure URL ends with .mp3 for easy download
         dl_url = recording_url
         if not any(dl_url.endswith(ext) for ext in ['.mp3', '.wav']):
@@ -917,7 +1036,13 @@ def _transcribe_recording_with_gemini(session: LiveConcallSession,
         print(f"LIVE_CONCALL: Downloading recording from {dl_url}", file=sys.stderr)
 
         import requests as _requests
-        resp = _requests.get(dl_url, auth=(sid, token), timeout=120)
+        resp = _requests.get(dl_url, timeout=120)
+        # Exotel recording URLs may require HTTP Basic auth — retry if blocked.
+        if resp.status_code in (401, 403):
+            key = EXOTEL_API_KEY or os.getenv("EXOTEL_API_KEY")
+            token = EXOTEL_API_TOKEN or os.getenv("EXOTEL_API_TOKEN")
+            if key and token:
+                resp = _requests.get(dl_url, auth=(key, token), timeout=120)
         if resp.status_code != 200:
             print(f"LIVE_CONCALL: Recording download failed: HTTP {resp.status_code}",
                   file=sys.stderr)
@@ -1090,12 +1215,11 @@ def register_live_concall_routes(app, socketio, call_gemini_api_fn):
       GET  /api/live-concall/schedule       — Get upcoming concall schedule
       POST /api/live-concall/extract-dialin  — Extract dial-in from PDF URL
       POST /api/live-concall/start          — Start a live session (dial out)
-      POST /api/live-concall/inject-dtmf    — Send DTMF to active call
+      POST /api/live-concall/inject-dtmf    — (Exotel: not supported)
       POST /api/live-concall/end            — End active call & summarize
       GET  /api/live-concall/session/<id>   — Get session state
-      POST /api/live-concall/twiml          — TwiML webhook (Twilio)
-      POST /api/live-concall/call-status    — Call status webhook (Twilio)
-      POST /api/live-concall/recording      — Recording webhook (Twilio)
+      GET/POST /api/live-concall/status     — Exotel Passthru/StatusCallback (lifecycle + recording)
+      WS   /api/live-concall/media-stream   — Exotel Stream applet audio (Tier 2)
     """
     global _call_gemini_api_fn
     _call_gemini_api_fn = call_gemini_api_fn
@@ -1143,7 +1267,7 @@ def register_live_concall_routes(app, socketio, call_gemini_api_fn):
     # --- Start Session ---
     @app.route('/api/live-concall/start', methods=['POST'])
     def live_concall_start():
-        """Start a live concall session — place Twilio call."""
+        """Start a live concall session — place Exotel call."""
         try:
             data = request.get_json(force=True)
             phone_number = data.get('phone_number', '').strip()
@@ -1155,13 +1279,26 @@ def register_live_concall_routes(app, socketio, call_gemini_api_fn):
             if not phone_number:
                 return jsonify({"error": "phone_number is required"}), 400
 
-            # Check Twilio credentials before starting
-            if not (TWILIO_ACCOUNT_SID or os.getenv("TWILIO_ACCOUNT_SID")):
-                return jsonify({"error": "Twilio not configured. "
-                                         "TWILIO_ACCOUNT_SID is missing."}), 503
-            if not (TWILIO_PHONE_NUMBER or os.getenv("TWILIO_PHONE_NUMBER")):
-                return jsonify({"error": "Twilio not configured. "
-                                         "TWILIO_PHONE_NUMBER is missing."}), 503
+            # Check Exotel credentials before starting
+            if not (EXOTEL_API_KEY or os.getenv("EXOTEL_API_KEY")):
+                return jsonify({"error": "Exotel not configured. EXOTEL_API_KEY is "
+                                         "missing. Set EXOTEL_API_KEY, "
+                                         "EXOTEL_API_TOKEN, EXOTEL_SID, "
+                                         "EXOTEL_CALLER_ID and EXOTEL_FLOW_APP_ID "
+                                         "in the environment."}), 503
+            if not (EXOTEL_API_TOKEN or os.getenv("EXOTEL_API_TOKEN")):
+                return jsonify({"error": "Exotel not configured. "
+                                         "EXOTEL_API_TOKEN is missing."}), 503
+            if not (EXOTEL_SID or os.getenv("EXOTEL_SID")):
+                return jsonify({"error": "Exotel not configured. "
+                                         "EXOTEL_SID is missing."}), 503
+            if not (EXOTEL_CALLER_ID or os.getenv("EXOTEL_CALLER_ID")):
+                return jsonify({"error": "Exotel not configured. "
+                                         "EXOTEL_CALLER_ID (ExoPhone) is missing."}), 503
+            if not (EXOTEL_FLOW_APP_ID or os.getenv("EXOTEL_FLOW_APP_ID")
+                    or EXOTEL_FLOW_URL or os.getenv("EXOTEL_FLOW_URL")):
+                return jsonify({"error": "Exotel not configured. "
+                                         "EXOTEL_FLOW_APP_ID is missing."}), 503
 
             # Create session
             session_id = f"lc_{int(time.time())}_{ticker or 'UNKNOWN'}"
@@ -1174,16 +1311,17 @@ def register_live_concall_routes(app, socketio, call_gemini_api_fn):
             session._emit_fn = lambda evt, d: socketio.emit(evt, d)
             _active_sessions[session_id] = session
 
-            # Determine webhook base URL
+            # Determine webhook base URL (Exotel calls back to this public host)
             webhook_base = data.get('webhook_base_url', '').strip()
             if not webhook_base:
                 webhook_base = request.host_url.rstrip('/')
+            session.webhook_base = webhook_base
 
             session.update_state("dialing")
 
-            # Place call in background thread
+            # Place call in background thread (place_exotel_call sets call_sid)
             def _dial():
-                result = place_twilio_call(
+                result = place_exotel_call(
                     phone_number, passcode, pin,
                     session_id, webhook_base
                 )
@@ -1193,8 +1331,6 @@ def register_live_concall_routes(app, socketio, call_gemini_api_fn):
                         "session_id": session_id,
                         "error": result["error"]
                     })
-                else:
-                    session.call_sid = result.get("call_sid", "")
 
             thread = threading.Thread(target=_dial, daemon=True)
             thread.start()
@@ -1242,12 +1378,12 @@ def register_live_concall_routes(app, socketio, call_gemini_api_fn):
 
             session.ended_at = time.time()
 
-            # End Twilio call
+            # End Exotel call
             if session.call_sid:
-                end_twilio_call(session.call_sid)
+                end_exotel_call(session.call_sid)
 
             # If we already have a recording URL, kick off the full pipeline now.
-            # If not, the recording webhook will trigger it when Twilio delivers the file.
+            # If not, the /status webhook will trigger it when Exotel delivers it.
             if session.recording_url:
                 thread = threading.Thread(
                     target=_run_post_call_pipeline,
@@ -1286,105 +1422,89 @@ def register_live_concall_routes(app, socketio, call_gemini_api_fn):
             "sessions": [s.get_state_dict() for s in _active_sessions.values()]
         })
 
-    # --- TwiML Webhook ---
-    @app.route('/api/live-concall/twiml', methods=['POST', 'GET'])
-    def live_concall_twiml():
+    # --- Status / Recording Webhook (Exotel Passthru + StatusCallback) ---
+    @app.route('/api/live-concall/status', methods=['GET', 'POST'])
+    def live_concall_status():
         """
-        Return TwiML instructions for Twilio call.
-        1. Play DTMF digits to enter the conference passcode.
-        2. Pause for up to 2 hours to keep the call alive (recording runs
-           in parallel via the record=True flag set at call creation time).
+        Exotel Passthru / StatusCallback receiver: drives the call lifecycle and
+        kicks off post-call transcription when the RecordingUrl arrives. Exotel
+        may call this via GET (Passthru) or POST (StatusCallback).
         """
-        session_id = request.args.get('session_id', '')
+        vals = request.values
+        call_sid = vals.get('CallSid', '')
+        session_id = (request.args.get('session_id', '')
+                      or vals.get('CustomField', '')
+                      or _callsid_to_session.get(call_sid, ''))
+        call_status = (vals.get('Status', '') or vals.get('CallStatus', '')).lower()
+        recording_url = vals.get('RecordingUrl', '')
+
+        print(f"LIVE_CONCALL: Exotel status: status={call_status} "
+              f"CallSid={call_sid} rec={'yes' if recording_url else 'no'} "
+              f"(session={session_id})", file=sys.stderr)
+
         session = _active_sessions.get(session_id)
+        if not session:
+            return Response("OK", status=200)
 
-        from twilio.twiml.voice_response import VoiceResponse
-        resp = VoiceResponse()
+        if call_sid and not session.call_sid:
+            session.call_sid = call_sid
+            _callsid_to_session[call_sid] = session_id
 
-        if session and session.send_digits:
-            # Send passcode digits with preceding pauses
-            resp.play(digits=session.send_digits)
-
-        # Keep the call alive for up to 2 hours
-        resp.pause(length=7200)
-
-        return Response(str(resp), mimetype='text/xml')
-
-    # --- Call Status Webhook ---
-    @app.route('/api/live-concall/call-status', methods=['POST'])
-    def live_concall_call_status():
-        """Handle Twilio call status callbacks."""
-        session_id = request.args.get('session_id', '')
-        session = _active_sessions.get(session_id)
-
-        call_status = request.form.get('CallStatus', '')
-        call_sid = request.form.get('CallSid', '')
-
-        print(f"LIVE_CONCALL: Call status update: {call_status} "
-              f"(SID: {call_sid}, session: {session_id})", file=sys.stderr)
-
-        if session:
-            if not session.call_sid and call_sid:
-                session.call_sid = call_sid
-
-            if call_status == 'in-progress':
+        # Lifecycle transitions
+        if call_status in ('in-progress', 'in_progress', 'answered', 'connected'):
+            if not session.connected_at:
                 session.connected_at = time.time()
+            if session.state in ('created', 'dialing'):
                 session.update_state("recording")
-            elif call_status == 'completed':
-                session.ended_at = time.time()
-                if session.state not in ('summarizing', 'transcribing',
-                                          'complete', 'ended'):
-                    # Recording webhook will trigger the pipeline
-                    session.update_state("ended")
-            elif call_status in ('failed', 'busy', 'no-answer'):
+        elif call_status in ('failed', 'busy', 'no-answer', 'no_answer',
+                             'canceled', 'cancelled'):
+            session.ended_at = time.time()
+            if session.state not in ('summarizing', 'transcribing', 'complete'):
                 session.update_state("error")
                 session._emit("live_concall_error", {
                     "session_id": session_id,
                     "error": f"Call {call_status}. "
                              "Please check the dial-in number and passcode.",
                 })
+        elif call_status in ('completed', 'complete'):
+            if not session.ended_at:
+                session.ended_at = time.time()
+            if session.state not in ('summarizing', 'transcribing',
+                                     'complete', 'ended'):
+                session.update_state("ended")
 
-        return Response("OK", status=200)
-
-    # --- Recording Webhook ---
-    @app.route('/api/live-concall/recording', methods=['POST'])
-    def live_concall_recording():
-        """
-        Handle Twilio recording status callbacks.
-        When the recording is ready, auto-trigger transcription + summarization.
-        """
-        session_id = request.args.get('session_id', '')
-        recording_url = request.form.get('RecordingUrl', '')
-        recording_status = request.form.get('RecordingStatus', '')
-        recording_duration = request.form.get('RecordingDuration', '0')
-
-        print(f"LIVE_CONCALL: Recording callback: status={recording_status}, "
-              f"duration={recording_duration}s, url={recording_url} "
-              f"(session: {session_id})", file=sys.stderr)
-
-        session = _active_sessions.get(session_id)
-        if not session:
-            return Response("OK", status=200)
-
-        if recording_status != 'completed' or not recording_url:
-            return Response("OK", status=200)
-
-        session.recording_url = recording_url
-        session._emit("live_concall_recording", {
-            "session_id": session_id,
-            "recording_url": recording_url,
-            "duration_seconds": int(recording_duration or 0),
-        })
-
-        # Only run the pipeline if not already running/complete
-        if session.state not in ('summarizing', 'transcribing', 'complete'):
-            thread = threading.Thread(
+        # Recording ready → run the post-call pipeline (Tier-1 transcript / backstop)
+        if recording_url and session.state not in ('summarizing', 'transcribing',
+                                                    'complete'):
+            session.recording_url = recording_url
+            session._emit("live_concall_recording", {
+                "session_id": session_id,
+                "recording_url": recording_url,
+            })
+            threading.Thread(
                 target=_run_post_call_pipeline,
                 args=(session, call_gemini_api_fn, recording_url),
-                daemon=True
-            )
-            thread.start()
+                daemon=True,
+            ).start()
 
         return Response("OK", status=200)
+
+    # --- Live audio WebSocket (Exotel Stream applet → STT) — Tier 2, gated ---
+    # Registered only when LIVE_CONCALL_STREAMING is on, and guarded so a missing
+    # flask-sock package (or any error) can never block app startup.
+    if LIVE_STREAM_ENABLED:
+        try:
+            from flask_sock import Sock
+            _sock = Sock(app)
+
+            @_sock.route('/api/live-concall/media-stream')
+            def live_concall_media_stream(ws):
+                _handle_media_stream(ws)
+
+            print("LIVE_CONCALL: ✓ media-stream WebSocket registered",
+                  file=sys.stderr)
+        except Exception as e:
+            print(f"LIVE_CONCALL: media-stream WS NOT registered ({e})",
+                  file=sys.stderr)
 
     print("LIVE_CONCALL: ✓ Live Concall routes registered", file=sys.stderr)
