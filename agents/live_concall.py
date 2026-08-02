@@ -78,6 +78,46 @@ _active_sessions: Dict[str, "LiveConcallSession"] = {}
 _call_gemini_api_fn = None
 
 
+def _gemini_file_state(uploaded) -> str:
+    """
+    Uppercased state name of an uploaded Gemini file ('' when unknown).
+    FileState subclasses (str, Enum), so str(state) renders as
+    'FileState.PROCESSING' — compare on .name, never on str().
+    """
+    state = getattr(uploaded, "state", None)
+    if state is None:
+        return ""
+    return str(getattr(state, "name", state)).upper()
+
+
+def _await_gemini_file(client, uploaded, max_wait_secs: int, poll_secs: int = 2):
+    """
+    Poll an uploaded Gemini file until it leaves PROCESSING. files.upload() does
+    not block for decoding, and generate_content rejects a non-ACTIVE file.
+    Returns the refreshed file, or None when it FAILED or timed out.
+    """
+    waited = 0
+    while _gemini_file_state(uploaded) == "PROCESSING" and waited < max_wait_secs:
+        time.sleep(poll_secs)
+        waited += poll_secs
+        try:
+            uploaded = client.files.get(name=uploaded.name)
+        except Exception as e:
+            print(f"LIVE_CONCALL: files.get failed while waiting: {e}", file=sys.stderr)
+            return None
+
+    state = _gemini_file_state(uploaded)
+    if state in ("ACTIVE", ""):
+        return uploaded
+
+    print(f"LIVE_CONCALL: Gemini file is {state} after {waited}s — aborting", file=sys.stderr)
+    try:
+        client.files.delete(name=uploaded.name)
+    except Exception:
+        pass
+    return None
+
+
 # ---------------------------------------------------------------------------
 # 1. SCHEDULE FETCHING (IR Pulse Engine API)
 # ---------------------------------------------------------------------------
@@ -544,11 +584,9 @@ async def _extract_dialin_gemini_vision(pdf_bytes: bytes,
         )
 
         # Wait for processing
-        wait = 0
-        while uploaded.state and str(uploaded.state) == "PROCESSING" and wait < 30:
-            time.sleep(1)
-            uploaded = client.files.get(name=uploaded.name)
-            wait += 1
+        uploaded = _await_gemini_file(client, uploaded, max_wait_secs=60, poll_secs=1)
+        if uploaded is None:
+            raise RuntimeError("announcement PDF never became ACTIVE")
 
         prompt = """Extract all dial-in details from this Indian corporate earnings conference call (concall) announcement PDF.
 
@@ -1068,12 +1106,10 @@ def _transcribe_recording_with_gemini(session: LiveConcallSession,
             )
         )
 
-        # Wait for processing
-        wait = 0
-        while uploaded.state and str(uploaded.state) == "PROCESSING" and wait < 60:
-            time.sleep(2)
-            uploaded = client.files.get(name=uploaded.name)
-            wait += 1
+        # Wait for processing — a full-length recording can take minutes to decode
+        uploaded = _await_gemini_file(client, uploaded, max_wait_secs=300, poll_secs=3)
+        if uploaded is None:
+            return ""
 
         prompt = """You are a financial transcription specialist. This audio is from an earnings conference call (concall) for a publicly traded Indian company.
 

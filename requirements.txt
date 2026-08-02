@@ -50,6 +50,9 @@ playwright-stealth==1.0.6  # <--- USE THIS CORRECT, STABLE VERSION
 scrapling[fetchers]
 yt-dlp
 youtube-transcript-api
+# Static ffmpeg build — the container image installs ffmpeg via apt, but the
+# zip/Oryx deployment has no system packages. Concall audio demuxing needs it.
+imageio-ffmpeg
 
 # --- Other utilities ---
 feedparser

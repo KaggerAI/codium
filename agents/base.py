@@ -61,14 +61,35 @@ def create_agent_job(agent_type, ticker, metadata=None):
     }
     with AGENT_JOBS_LOCK:
         AGENT_JOBS[job_id] = job_data
+        
+    if AGENT_REDIS_CLIENT:
+        try:
+            AGENT_REDIS_CLIENT.setex(f"agent_job_{job_id}", AGENT_JOB_TTL, json.dumps(job_data))
+        except Exception as e:
+            print(f"WARN: Failed to cache agent job in Redis: {e}", file=sys.stderr)
+            
     return job_id
 
 
 def update_agent_job(job_id, updates):
     """Update fields of an existing agent job."""
+    job_data = None
     with AGENT_JOBS_LOCK:
         if job_id in AGENT_JOBS:
             AGENT_JOBS[job_id].update(updates)
+            job_data = dict(AGENT_JOBS[job_id])
+            
+    if AGENT_REDIS_CLIENT:
+        try:
+            if not job_data:
+                raw = AGENT_REDIS_CLIENT.get(f"agent_job_{job_id}")
+                if raw:
+                    job_data = json.loads(raw)
+                    job_data.update(updates)
+            if job_data:
+                AGENT_REDIS_CLIENT.setex(f"agent_job_{job_id}", AGENT_JOB_TTL, json.dumps(job_data))
+        except Exception as e:
+            print(f"WARN: Failed to update agent job in Redis: {e}", file=sys.stderr)
 
 
 def get_agent_job(job_id):
@@ -81,6 +102,19 @@ def get_agent_job(job_id):
                 del AGENT_JOBS[job_id]
                 return None
             return dict(job)  # return a copy
+            
+    if AGENT_REDIS_CLIENT:
+        try:
+            raw = AGENT_REDIS_CLIENT.get(f"agent_job_{job_id}")
+            if raw:
+                job_data = json.loads(raw)
+                if time.time() - job_data['started_at'] > AGENT_JOB_TTL:
+                    AGENT_REDIS_CLIENT.delete(f"agent_job_{job_id}")
+                    return None
+                return job_data
+        except Exception as e:
+            print(f"WARN: Failed to retrieve agent job from Redis: {e}", file=sys.stderr)
+            
     return None
 
 

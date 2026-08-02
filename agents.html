@@ -4083,7 +4083,8 @@
             <!-- Error -->
             <div class="error-card" id="concallError">
                 <h4>⚠️ Analysis Error</h4>
-                <p id="concallErrorText"></p>
+                <div id="concallErrorText"></div>
+                <div id="concallSourceLog"></div>
             </div>
 
             <!-- Progress -->
@@ -5064,6 +5065,8 @@
                         onConcallComplete(data.result);
                     } else if (data.status === 'error') {
                         onConcallError(data.error, data);
+                    } else if (data.error) {
+                        onConcallError(data.error);
                     }
                 })
                 .catch(err => {
@@ -5143,7 +5146,16 @@
 
             hideEl('concallProgress');
             showEl('concallError');
-            document.getElementById('concallErrorText').textContent = errorMsg;
+
+            // The backend now sends a short diagnosis using **bold** and "- " bullets.
+            // Escape first, then apply that minimal formatting.
+            const narrative = String(errorMsg || '').split('**Where I looked:**')[0].trim();
+            document.getElementById('concallErrorText').innerHTML = escapeHtml(narrative)
+                .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\n\n/g, '<br><br>')
+                .replace(/\n/g, '<br>');
+
+            renderConcallSourceLog(data && data.sources_tried);
 
             const btn = document.getElementById('concallAnalyzeBtn');
             btn.disabled = false;
@@ -5154,9 +5166,17 @@
                 const mismatchNotice = document.getElementById('concallMismatchNotice');
                 document.getElementById('concallMismatchTitle').textContent = `Auto-Fetch Failed`;
 
-                let msg = `We automatically searched for the latest concall recording but couldn't find it. If you have a link (YouTube, PDF, etc.), paste it below.`;
-                if (data.quarter_mismatch) {
-                    msg = `The latest transcript is from an older quarter. We automatically searched for the latest concall audio but couldn't find it. If you have a link, paste it below.`;
+                const tried = (data.sources_tried || []);
+                const failedTranscription = tried.some(s => s.status === 'transcription_failed');
+                const q = data.target_quarter ? ` (${escapeHtml(data.target_quarter)})` : '';
+
+                let msg = `We automatically searched for the latest concall recording${q} but couldn't find it. If you have a link (YouTube, PDF, etc.), paste it below.`;
+                if (failedTranscription) {
+                    // Pasting the same URL would hit the identical failure, so
+                    // point at the one thing that actually differs.
+                    msg = `We found the recording${q} but couldn't transcribe it. Pasting the same file won't help — try a <strong>YouTube link</strong> to the same call, or retry in a few minutes.`;
+                } else if (data.quarter_mismatch) {
+                    msg = `The latest transcript is from an older quarter. We automatically searched for the latest concall audio${q} but couldn't find it. If you have a link, paste it below.`;
                 }
 
                 document.getElementById('concallMismatchText').innerHTML = msg;
@@ -5165,6 +5185,52 @@
                 document.getElementById('concallMismatchAnalyzeBtn').textContent = 'Analyze Latest Concall';
                 showEl('concallMismatchNotice');
             }
+        }
+
+        // Per-source attempt log — turns "couldn't find one" into something
+        // diagnosable (which source failed, and how).
+        const CONCALL_SOURCE_LABELS = {
+            nse_transcript: 'NSE-filed written transcript',
+            bse_transcript: 'BSE-filed written transcript',
+            screener_transcript: 'Screener.in transcript PDF',
+            bse_audio: 'BSE-filed call audio',
+            nse_filing: 'NSE-filed call audio',
+            ir_website: 'Company IR website',
+            screener_rec: 'Screener.in recording link',
+            youtube_search: 'YouTube search',
+            web_search: 'Web search (company domain)'
+        };
+        const CONCALL_STATUS_STYLE = {
+            found: ['✓', '#4ade80'],
+            not_found: ['—', '#94a3b8'],
+            wrong_quarter: ['≠', '#fbbf24'],
+            transcription_failed: ['✗', '#f87171'],
+            parse_error: ['✗', '#f87171'],
+            blocked: ['⛔', '#f87171'],
+            error: ['✗', '#f87171']
+        };
+
+        function renderConcallSourceLog(sources) {
+            const el = document.getElementById('concallSourceLog');
+            if (!el) return;
+            if (!sources || !sources.length) { el.innerHTML = ''; return; }
+
+            const rows = sources.map(s => {
+                const [icon, color] = CONCALL_STATUS_STYLE[s.status] || ['·', '#94a3b8'];
+                const label = CONCALL_SOURCE_LABELS[s.source] || s.source || 'unknown';
+                const detail = s.detail ? ` — ${escapeHtml(s.detail)}` : '';
+                const link = s.url
+                    ? ` <a href="${escapeHtml(s.url)}" target="_blank" rel="noopener" style="color:#60a5fa;">link</a>`
+                    : '';
+                return `<li style="margin:.25rem 0;"><span style="color:${color};">${icon}</span> `
+                     + `<strong>${escapeHtml(label)}</strong>: ${escapeHtml(s.status || '')}`
+                     + `${detail}${link}</li>`;
+            }).join('');
+
+            el.innerHTML = `<details style="margin-top:.75rem;">`
+                + `<summary style="cursor:pointer;opacity:.8;">Where I looked (${sources.length} source${sources.length === 1 ? '' : 's'})</summary>`
+                + `<ul style="margin:.5rem 0 0 .5rem;padding-left:1rem;font-size:.85rem;line-height:1.5;">${rows}</ul>`
+                + `</details>`;
         }
 
         // =====================================================
@@ -8552,6 +8618,8 @@
 
             let fcOriginalAssumptions = null; // Stores deep copy for resetting
             let fcOriginalModels = null; // Stores deep copy to restore AI baseline on scenario switch
+            let fcGuidanceMeta = null; // Management-guidance metadata for the current run
+            let fcOriginalPeerData = null; // Deep copy of Screener peer set (for "reset to Screener peers")
 
             // =====================================================
             // TICKER AUTOCOMPLETE
@@ -8729,6 +8797,7 @@
                 // Store deep copy of original AI assumptions and models
                 fcOriginalAssumptions = JSON.parse(JSON.stringify(result.assumptions || {}));
                 fcOriginalModels = JSON.parse(JSON.stringify(result.models || {}));
+                fcOriginalPeerData = JSON.parse(JSON.stringify(result.peer_data || { peers: [], company: {} }));
                 fcCurrentData = result;
                 fcActiveScenario = 'base';
                 openForecastingOverlay(result);
@@ -8770,9 +8839,13 @@
                 const applicableModels = Object.entries(models).filter(([k, v]) => v.applicable);
                 fcApplicableModels = applicableModels; // Store globally for chart re-rendering
 
+                // Does this run have a management-guidance scenario?
+                const fcHasGuidance = !!(data.guidance_meta && data.guidance_meta.has_guidance);
+                fcGuidanceMeta = data.guidance_meta || null;
+
                 // Compute simple averages for each scenario (fallback)
                 const simpleAvg = {};
-                ['bull', 'base', 'bear'].forEach(s => {
+                ['bull', 'base', 'bear', 'guidance'].forEach(s => {
                     const vals = applicableModels.map(([k, v]) => v[s]?.fair_value).filter(v => v != null && v > 0);
                     simpleAvg[s] = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
                 });
@@ -8791,6 +8864,8 @@
                     scenarioAvg.bear = simpleAvg.bear;
                     console.log('[FC] No triangulated values found, using simple averages:', scenarioAvg);
                 }
+                // Guidance is always a simple average of the guidance-consumable models.
+                scenarioAvg.guidance = simpleAvg.guidance;
                 fcScenarioAvg = scenarioAvg; // Store globally
 
                 // Also compute full range for the "Range" view
@@ -8829,6 +8904,7 @@
                                 <button class="fc-scenario-btn" data-s="bull" onclick="setFcScenario('bull')">🟢 Bull</button>
                                 <button class="fc-scenario-btn active" data-s="base" onclick="setFcScenario('base')">🟡 Base</button>
                                 <button class="fc-scenario-btn" data-s="bear" onclick="setFcScenario('bear')">🔴 Bear</button>
+                                ${fcHasGuidance ? `<button class="fc-scenario-btn" data-s="guidance" onclick="setFcScenario('guidance')" title="Per management's latest concall guidance">🎯 Guidance</button>` : ''}
                             </div>
                         </div>
                         <div class="fc-cmp-block">
@@ -8928,20 +9004,21 @@
                 const rangeData = [];
                 const pointData = [];
 
-                const barColors = { bull: 'rgba(16,185,129,1)', base: 'rgba(139,92,246,1)', bear: 'rgba(239,68,68,1)' };
+                const barColors = { bull: 'rgba(16,185,129,1)', base: 'rgba(139,92,246,1)', bear: 'rgba(239,68,68,1)', guidance: 'rgba(6,182,212,1)' };
 
                 applicableModels.forEach(([key, model], idx) => {
                     const cfg = model.config || {};
                     const bear = model.bear?.fair_value || 0;
                     const bull = model.bull?.fair_value || 0;
-                    const ptVal = model[activeScen]?.fair_value || 0;
+                    const rawPt = model[activeScen]?.fair_value;
 
                     if (!bear && !bull) return;
 
                     labels.push(cfg.icon + ' ' + (cfg.name || key));
                     bearData.push(Math.max(0, bear));
                     rangeData.push(Math.max(0, (bull || bear) - bear));
-                    pointData.push({ x: ptVal, y: idx });
+                    // Guidance only exists for some models — plot a point only where present.
+                    pointData.push({ x: (rawPt != null && rawPt > 0) ? rawPt : null, y: idx });
                 });
 
                 // The translucent background ranges (Always show these, highly translucent if specific scenario is active)
@@ -9052,6 +9129,16 @@
                     const slidersHtml = sliders.map(sp => {
                         const currentVal = getNestedVal(assumptions, sp.key);
                         const displayVal = typeof currentVal === 'object' ? (currentVal.base || 0) : (currentVal || 0);
+                        const isObj = (typeof currentVal === 'object' && currentVal !== null);
+                        const fmtSV = v => (v == null || isNaN(v)) ? '—' : (+v).toLocaleString('en-IN', { maximumFractionDigits: 2 });
+                        const rangeHint = isObj
+                            ? `<div style="font-size:0.65rem;color:var(--text-muted);margin-top:0.2rem;display:flex;gap:0.6rem;flex-wrap:wrap;">
+                                   <span style="color:#ef4444">🔴 ${fmtSV(currentVal.bear)}</span>
+                                   <span style="color:#eab308">🟡 ${fmtSV(currentVal.base)}</span>
+                                   <span style="color:#10b981">🟢 ${fmtSV(currentVal.bull)}</span>
+                                   ${currentVal.guidance != null ? `<span style="color:#06b6d4">🎯 ${fmtSV(currentVal.guidance)}</span>` : ''}
+                               </div>`
+                            : '';
                         return `
                         <div class="fc-slider-group">
                             <div class="fc-slider-label">
@@ -9062,6 +9149,7 @@
                                 min="${sp.min}" max="${sp.max}" step="${sp.step}" value="${displayVal}"
                                 data-model="${modelKey}" data-key="${sp.key}"
                                 oninput="onFcSlider(this)" />
+                            ${rangeHint}
                         </div>
                     `;
                     }).join('');
@@ -9091,6 +9179,7 @@
                             <div class="fc-scenario-val bear">🔴 Bear<strong>₹${bearVal ? formatNum(bearVal) : 'N/A'}</strong></div>
                             <div class="fc-scenario-val base">🟡 Base<strong>₹${baseVal ? formatNum(baseVal) : 'N/A'}</strong></div>
                             <div class="fc-scenario-val bull">🟢 Bull<strong>₹${bullVal ? formatNum(bullVal) : 'N/A'}</strong></div>
+                            ${model.guidance && model.guidance.fair_value != null ? `<div class="fc-scenario-val" style="color:#06b6d4">🎯 Guid<strong>₹${formatNum(model.guidance.fair_value)}</strong></div>` : ''}
                         </div>
                     </div>
                 `;
@@ -9119,30 +9208,139 @@
                 document.getElementById('fcModalTitle').innerText = (cfg.icon || '📊') + ' ' + (cfg.name || modelKey) + ' AI Research & Assumptions';
 
                 let html = '';
+                const isRelativeModel = cfg.reasoning_keys && cfg.reasoning_keys.includes('relative_valuation');
+                const pc = fcCurrentData.peer_confidence || {};
+                const ownh = pc.own_history || {};
+                const gm = fcCurrentData.guidance_meta || null;
+                const GUIDANCE_MODEL_KEYS = ['dcf_fcff', 'dcf_fcfe', 'relative_pe', 'ev_ebitda', 'mcap_sales'];
+                const modelHasGuidance = !!(gm && gm.has_guidance && GUIDANCE_MODEL_KEYS.includes(modelKey));
+                const relA = assumptions.relative_valuation || {};
 
-                // Section 1: AI Reasoning
+                const fmtDrv = v => (v == null || v === '' || isNaN(v)) ? '—' : (+v).toLocaleString('en-IN', { maximumFractionDigits: 2 });
+                const srcBadge = (source) => {
+                    const map = { peer: ['#10b981', 'Peer-derived'], own_history: ['#f59e0b', "Company's own history"], peer_thin: ['#f59e0b', 'Thin peer set'], default: ['#ef4444', 'Default — verify'], user: ['#06b6d4', 'User-curated'] };
+                    const [c, t] = map[source] || ['#6b7280', source || '—'];
+                    return `<span style="display:inline-block;padding:0.15rem 0.5rem;border-radius:999px;font-size:0.65rem;font-weight:700;background:${c}22;color:${c};border:1px solid ${c}55;">${t}</span>`;
+                };
+                // Best-effort historical/peer anchor for a given driver key
+                const drvAnchor = (key) => {
+                    const sm = pc.per_multiple_source || {};
+                    if (key === 'relative_valuation.peer_median_pe') return { label: 'Peer/own median', value: (pc.peer_median_pe != null ? pc.peer_median_pe : ownh.pe), src: sm.pe };
+                    if (key === 'relative_valuation.peer_median_pb') return { label: 'Peer/own median', value: (pc.peer_median_pb != null ? pc.peer_median_pb : ownh.pb), src: sm.pb };
+                    if (key === 'relative_valuation.peer_median_ev_ebitda') return { label: 'Own 3yr median', value: ownh.ev_ebitda, src: sm.ev_ebitda };
+                    if (key === 'relative_valuation.peer_median_mcap_sales') return { label: 'Own 3yr median', value: ownh.mcap_sales, src: sm.mcap_sales };
+                    if (key === 'relative_valuation.forward_eps') return relA.trailing_eps != null ? { label: 'Trailing EPS', value: relA.trailing_eps } : null;
+                    if (key === 'relative_valuation.forward_bvps') return relA.trailing_bvps != null ? { label: 'Trailing BVPS', value: relA.trailing_bvps } : null;
+                    if (key === 'relative_valuation.forward_revenue_cr') return relA.trailing_revenue_cr != null ? { label: 'Trailing Revenue', value: relA.trailing_revenue_cr } : null;
+                    if (key === 'relative_valuation.forward_ebitda_cr') return relA.trailing_ebitda_cr != null ? { label: 'Trailing EBITDA', value: relA.trailing_ebitda_cr } : null;
+                    return null;
+                };
+
+                // ── Section 0a: Peer-confidence badge (relative models) ──
+                if (isRelativeModel && pc.per_multiple_source) {
+                    const mk2 = { relative_pe: 'pe', relative_pb: 'pb', ev_ebitda: 'ev_ebitda', mcap_sales: 'mcap_sales', statistical_band: 'pe' };
+                    const src = pc.per_multiple_source[mk2[modelKey]];
+                    const idWarn = (pc.target_identified === false) ? `<span style="margin-left:0.5rem;color:#ef4444;font-size:0.7rem;">⚠ Target company not confidently matched in peer table</span>` : '';
+                    html += `<div style="margin-bottom:1rem;display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
+                        <span style="font-size:0.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">Multiple source:</span>
+                        ${srcBadge(pc.source === 'user' ? 'user' : src)} ${idWarn}
+                    </div>`;
+                }
+
+                // ── Section 0b: Key Drivers table ──
+                const sliderParams = cfg.slider_params || [];
+                if (sliderParams.length) {
+                    let rows = '';
+                    sliderParams.forEach(sp => {
+                        const v = getNestedVal(assumptions, sp.key);
+                        const isObj = (typeof v === 'object' && v !== null);
+                        const bear = isObj ? v.bear : v, base = isObj ? v.base : v, bull = isObj ? v.bull : v;
+                        const guid = isObj ? v.guidance : null;
+                        const anc = drvAnchor(sp.key);
+                        // Conservative / aggressive colouring vs the anchor (where comparable)
+                        let baseColor = 'var(--text-primary)';
+                        if (anc && anc.value != null && base != null && +anc.value > 0) {
+                            const ratio = +base / +anc.value;
+                            if (ratio > 1.10) baseColor = '#f59e0b';      // above anchor → aggressive
+                            else if (ratio < 0.90) baseColor = '#10b981'; // below anchor → conservative
+                        }
+                        rows += `<tr>
+                            <td style="text-align:left">${sp.label}</td>
+                            <td style="color:#ef4444">${fmtDrv(bear)}</td>
+                            <td style="font-weight:700;color:${baseColor}">${fmtDrv(base)}</td>
+                            <td style="color:#10b981">${fmtDrv(bull)}</td>
+                            ${modelHasGuidance ? `<td style="color:#06b6d4">${guid != null ? fmtDrv(guid) : '—'}</td>` : ''}
+                            <td style="color:var(--text-muted);font-size:0.72rem">${anc && anc.value != null ? `${fmtDrv(anc.value)} <span style="opacity:0.7">(${anc.label})</span>` : '—'}</td>
+                        </tr>`;
+                    });
+                    html += `
+                    <div style="background:rgba(124,58,237,0.04);border:1px solid var(--border-color);padding:1.25rem;margin-bottom:1.5rem;border-radius:0.5rem;">
+                        <div style="font-size:0.85rem;color:var(--text-primary);font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:0.75rem;">🎛️ Key Assumptions Driving This Model</div>
+                        <div style="overflow-x:auto;">
+                          <table class="fc-peer-table">
+                            <thead><tr>
+                              <th style="text-align:left">Driver</th><th>🔴 Bear</th><th>🟡 Base</th><th>🟢 Bull</th>
+                              ${modelHasGuidance ? '<th>🎯 Guidance</th>' : ''}
+                              <th>Hist./Peer Anchor</th>
+                            </tr></thead>
+                            <tbody>${rows}</tbody>
+                          </table>
+                        </div>
+                        <div style="font-size:0.68rem;color:var(--text-muted);margin-top:0.5rem;">🟡 base coloured <span style="color:#f59e0b">amber = above anchor (aggressive)</span>, <span style="color:#10b981">green = below anchor (conservative)</span>.</div>
+                    </div>`;
+                }
+
+                // ── Section 0c: Management guidance block (guidance-consumable models) ──
+                if (modelHasGuidance) {
+                    const fields = gm.fields || {};
+                    let frows = '';
+                    const flabels = { revenue_growth_pct: 'Revenue growth %', ebitda_margin_pct: 'EBITDA margin %', ebit_margin_pct: 'EBIT margin %', capex_cr: 'CapEx (₹ Cr)', revenue_cr: 'Revenue (₹ Cr)', ebitda_cr: 'EBITDA (₹ Cr)', eps: 'EPS (₹)' };
+                    Object.keys(flabels).forEach(fk => {
+                        const f = fields[fk];
+                        if (!f) return;
+                        const val = (typeof f === 'object') ? f.value : f;
+                        const quote = (typeof f === 'object') ? (f.quote || '') : '';
+                        const conf = (typeof f === 'object') ? (f.confidence || '') : '';
+                        frows += `<tr><td style="text-align:left">${flabels[fk]}</td><td style="font-weight:700;color:#06b6d4">${fmtDrv(val)}</td><td style="font-size:0.7rem;color:var(--text-muted)">${conf}</td><td style="font-size:0.72rem;color:var(--text-secondary);text-align:left">${quote ? '“' + escHtml(quote) + '”' : ''}</td></tr>`;
+                    });
+                    html += `
+                    <div style="background:rgba(6,182,212,0.06);border-left:3px solid #06b6d4;padding:1.25rem;margin-bottom:1.5rem;border-radius:0.5rem;">
+                        <div style="font-size:0.85rem;color:var(--text-primary);font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:0.5rem;">🎯 Per Management Guidance</div>
+                        <div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:0.75rem;">
+                            Horizon: <strong>${gm.guidance_horizon || 'N/A'}</strong> · Tone: <strong>${gm.management_tone || 'N/A'}</strong> · Source: <strong style="color:#06b6d4">${gm.source === 'cached' ? 'Cached concall' : (gm.source === 'transcript_only' ? 'Fresh transcript' : (gm.source || 'N/A'))}</strong>
+                        </div>
+                        ${frows ? `<div style="overflow-x:auto;"><table class="fc-peer-table"><thead><tr><th style="text-align:left">Metric</th><th>Guided</th><th>Conf.</th><th style="text-align:left">Management quote</th></tr></thead><tbody>${frows}</tbody></table></div>` : '<div style="color:var(--text-muted);font-size:0.8rem">No numeric guidance fields extracted.</div>'}
+                        ${gm.notes ? `<div style="font-size:0.78rem;color:var(--text-secondary);margin-top:0.75rem;">${escHtml(gm.notes)}</div>` : ''}
+                    </div>`;
+                }
+
+                // ── Section 1: AI Reasoning (collapsible) ──
+                let reasoningHtml = '';
                 if (cfg.reasoning_keys && cfg.reasoning_keys.length > 0) {
                     cfg.reasoning_keys.forEach(rKey => {
                         const rootObj = assumptions[rKey];
                         if (rootObj && rootObj.reasoning) {
                             const parsedReasoning = typeof marked !== 'undefined' ? marked.parse(rootObj.reasoning) : `<pre style="white-space:pre-wrap;">${rootObj.reasoning}</pre>`;
-
-                            html += `
-                            <div style="background:rgba(124,58,237,0.06);border-left:3px solid var(--accent-purple);padding:1.5rem;margin-bottom:1.5rem;border-radius:0.5rem;">
+                            reasoningHtml += `
+                            <div style="background:rgba(124,58,237,0.06);border-left:3px solid var(--accent-purple);padding:1.5rem;margin-bottom:1rem;border-radius:0.5rem;">
                                 <div style="font-size:0.85rem;color:var(--text-primary);font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:1rem;border-bottom:1px solid rgba(255,255,255,0.1);padding-bottom:0.5rem;">
                                     ${rKey.replace(/_/g, ' ')} Rationale
                                 </div>
                                 <div style="color:var(--text-secondary)">${parsedReasoning}</div>
-                            </div>
-                        `;
+                            </div>`;
                         }
                     });
+                }
+                if (reasoningHtml) {
+                    html += `<details style="margin-bottom:1.5rem;" open>
+                        <summary style="cursor:pointer;font-size:0.85rem;font-weight:700;color:var(--text-primary);text-transform:uppercase;letter-spacing:1px;margin-bottom:0.75rem;">🧠 AI Reasoning &amp; Narrative</summary>
+                        <div style="margin-top:0.75rem;">${reasoningHtml}</div>
+                    </details>`;
                 } else {
                     html += `<p style="color:var(--text-muted)">No specific AI reasoning available for this model.</p>`;
                 }
 
                 // Section 2: Peer Multiples Table (only for relative valuation models)
-                const isRelativeModel = cfg.reasoning_keys && cfg.reasoning_keys.includes('relative_valuation');
                 if (isRelativeModel && fcCurrentData.peer_data) {
                     const peerData = fcCurrentData.peer_data;
                     const company = peerData.company || {};
@@ -9388,14 +9586,15 @@
                             fcCurrentData.models[modelKey].bear = data.result.bear;
                             fcCurrentData.models[modelKey].base = data.result.base;
                             fcCurrentData.models[modelKey].bull = data.result.bull;
+                            if (data.result.guidance !== undefined) fcCurrentData.models[modelKey].guidance = data.result.guidance;
                         }
 
                         // Update the model card fair value to reflect the ACTIVE scenario
                         const fvEl = document.getElementById(`fv_${modelKey}`);
                         const activeScen = (fcActiveScenario === 'range') ? 'base' : fcActiveScenario;
                         const dispVal = data.result[activeScen]?.fair_value;
-                        if (fvEl && dispVal) {
-                            fvEl.innerHTML = `<span class="fc-currency">₹</span>${formatNum(dispVal)}`;
+                        if (fvEl) {
+                            fvEl.innerHTML = (dispVal != null) ? `<span class="fc-currency">₹</span>${formatNum(dispVal)}` : '<span style="color:var(--text-muted)">—</span>';
                         }
 
                         // Update scenarios
@@ -9410,6 +9609,7 @@
                                 <div class="fc-scenario-val bear">🔴 Bear<strong>₹${bearV ? formatNum(bearV) : 'N/A'}</strong></div>
                                 <div class="fc-scenario-val base">🟡 Base<strong>₹${baseV ? formatNum(baseV) : 'N/A'}</strong></div>
                                 <div class="fc-scenario-val bull">🟢 Bull<strong>₹${bullV ? formatNum(bullV) : 'N/A'}</strong></div>
+                                ${data.result.guidance && data.result.guidance.fair_value != null ? `<div class="fc-scenario-val" style="color:#06b6d4">🎯 Guid<strong>₹${formatNum(data.result.guidance.fair_value)}</strong></div>` : ''}
                             `;
                             }
                         }
@@ -9462,10 +9662,10 @@
                         }
                         const restoredModel = fcCurrentData.models[key];
 
-                        // 1. Update Headline Prices
+                        // 1. Update Headline Prices (guidance only exists for some models → show — otherwise)
                         const fvEl = document.getElementById(`fv_${key}`);
                         const val = restoredModel[activeScen]?.fair_value;
-                        if (fvEl && val) fvEl.innerHTML = `<span class="fc-currency">₹</span>${formatNum(val)}`;
+                        if (fvEl) fvEl.innerHTML = (val != null) ? `<span class="fc-currency">₹</span>${formatNum(val)}` : '<span style="color:var(--text-muted)">—</span>';
 
                         // 2. Restore scenario values to bottom of card
                         const card = document.getElementById(`card_${key}`);
@@ -9475,10 +9675,12 @@
                                 const bearV = restoredModel.bear?.fair_value;
                                 const baseV = restoredModel.base?.fair_value;
                                 const bullV = restoredModel.bull?.fair_value;
+                                const guidV = restoredModel.guidance?.fair_value;
                                 scenDiv.innerHTML = `
                                 <div class="fc-scenario-val bear">🔴 Bear<strong>₹${bearV ? formatNum(bearV) : 'N/A'}</strong></div>
                                 <div class="fc-scenario-val base">🟡 Base<strong>₹${baseV ? formatNum(baseV) : 'N/A'}</strong></div>
                                 <div class="fc-scenario-val bull">🟢 Bull<strong>₹${bullV ? formatNum(bullV) : 'N/A'}</strong></div>
+                                ${guidV != null ? `<div class="fc-scenario-val" style="color:#06b6d4">🎯 Guid<strong>₹${formatNum(guidV)}</strong></div>` : ''}
                                 `;
                             }
                         }
@@ -9611,26 +9813,136 @@
                 `;
                 }
 
+                // Peer-confidence badge + target-match warning
+                const pc = fcCurrentData?.peer_confidence || {};
+                const badge = (source) => {
+                    const map = { peer: ['#10b981', 'Peer-derived'], own_history: ['#f59e0b', "Company's own history"], peer_thin: ['#f59e0b', 'Thin peer set'], default: ['#ef4444', 'Default — verify'], user: ['#06b6d4', 'User-curated'] };
+                    const [c, t] = map[source] || ['#6b7280', source || '—'];
+                    return `<span style="display:inline-block;padding:0.15rem 0.5rem;border-radius:999px;font-size:0.65rem;font-weight:700;background:${c}22;color:${c};border:1px solid ${c}55;">${t}</span>`;
+                };
+                const sm = pc.per_multiple_source || {};
+                html += `<div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;margin-bottom:1rem;">
+                    <span style="font-size:0.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">Multiple sources:</span>
+                    <span style="font-size:0.7rem">P/E ${badge(pc.source === 'user' ? 'user' : sm.pe)}</span>
+                    <span style="font-size:0.7rem">P/B ${badge(pc.source === 'user' ? 'user' : sm.pb)}</span>
+                    <span style="font-size:0.7rem">EV/EBITDA ${badge(pc.source === 'user' ? 'user' : sm.ev_ebitda)}</span>
+                    <span style="font-size:0.7rem">MCap/Sales ${badge(pc.source === 'user' ? 'user' : sm.mcap_sales)}</span>
+                    ${pc.target_identified === false ? `<span style="color:#ef4444;font-size:0.7rem;">⚠ Target not confidently matched — peers shown may include the company itself</span>` : ''}
+                </div>`;
+
+                // Editable peer controls
+                html += `<div style="display:flex;justify-content:space-between;align-items:center;gap:0.5rem;flex-wrap:wrap;margin-bottom:0.5rem;">
+                    <span style="font-size:0.75rem;color:var(--text-muted);">Edit the peer set to recompute medians (P/E & P/B drive the medians).</span>
+                    <button onclick="fcResetPeers()" style="font-size:0.7rem;padding:0.3rem 0.7rem;border-radius:0.4rem;background:rgba(255,255,255,0.06);color:var(--text-secondary);border:1px solid var(--border-color);cursor:pointer;">↺ Reset to Screener peers</button>
+                </div>`;
+
                 html += '<div style="overflow-x:auto"><table class="fc-peer-table"><thead><tr>';
                 headers.forEach(h => html += `<th>${h}</th>`);
-                html += '</tr></thead><tbody>';
+                html += '<th></th></tr></thead><tbody>';
 
-                // Company row (highlighted)
+                // Company row (highlighted, not removable)
                 if (company.name) {
                     html += '<tr class="fc-highlight-row">';
                     cols.forEach(c => html += `<td>${company[c] || 'N/A'}</td>`);
-                    html += '</tr>';
+                    html += '<td></td></tr>';
                 }
 
-                peers.forEach(p => {
+                peers.forEach((p, idx) => {
                     html += '<tr>';
                     cols.forEach(c => html += `<td>${p[c] || 'N/A'}</td>`);
+                    html += `<td><button onclick="fcRemovePeer(${idx})" title="Remove peer" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:0.9rem;">✕</button></td>`;
                     html += '</tr>';
                 });
+
+                // Add-peer row
+                html += `<tr style="background:rgba(6,182,212,0.05)">
+                    <td><input id="fcNewPeerName" placeholder="Peer name" style="width:100%;background:transparent;border:1px solid var(--border-color);border-radius:0.3rem;color:var(--text-primary);font-size:0.75rem;padding:0.2rem 0.4rem;"></td>
+                    <td>—</td><td>—</td>
+                    <td><input id="fcNewPeerPE" type="number" step="0.1" placeholder="P/E" style="width:70px;background:transparent;border:1px solid var(--border-color);border-radius:0.3rem;color:var(--text-primary);font-size:0.75rem;padding:0.2rem 0.4rem;"></td>
+                    <td><input id="fcNewPeerPB" type="number" step="0.1" placeholder="P/B" style="width:70px;background:transparent;border:1px solid var(--border-color);border-radius:0.3rem;color:var(--text-primary);font-size:0.75rem;padding:0.2rem 0.4rem;"></td>
+                    <td>—</td><td>—</td>
+                    <td><button onclick="fcAddPeer()" title="Add peer" style="background:none;border:none;color:#10b981;cursor:pointer;font-size:1rem;">＋</button></td>
+                </tr>`;
 
                 html += '</tbody></table></div>';
                 body.innerHTML = html;
             }
+
+            // =====================================================
+            // EDITABLE PEERS — recompute medians from a user-curated set
+            // =====================================================
+            function recomputeFcScenarioAvg() {
+                const sa = {};
+                ['bull', 'base', 'bear', 'guidance'].forEach(s => {
+                    const vals = (fcApplicableModels || []).map(([k, v]) => v[s]?.fair_value).filter(v => v != null && v > 0);
+                    sa[s] = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
+                });
+                fcScenarioAvg = sa;
+                fcRangeMin = sa.bear || 0;
+                fcRangeMax = sa.bull || 0;
+            }
+
+            async function fcApplyPeerEdits() {
+                if (!fcCurrentData || !fcCurrentData.peer_data) return;
+                try {
+                    const resp = await fetch('/agent/forecasting/recalculate_peers', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            assumptions: fcCurrentData.assumptions,
+                            key_metrics: fcCurrentData.key_metrics || {},
+                            peers: fcCurrentData.peer_data.peers || [],
+                            company: fcCurrentData.peer_data.company || {},
+                            target_historical_medians: fcCurrentData.target_historical_medians || {},
+                            target_value_snapshot: fcCurrentData.target_value_snapshot || {}
+                        })
+                    });
+                    const data = await resp.json();
+                    if (data.status === 'success') {
+                        fcCurrentData.assumptions = data.assumptions;
+                        fcCurrentData.models = data.models;
+                        fcCurrentData.peer_confidence = data.peer_confidence;
+                        if (data.guidance_meta) fcCurrentData.guidance_meta = data.guidance_meta;
+                        fcOriginalAssumptions = JSON.parse(JSON.stringify(data.assumptions));
+                        fcOriginalModels = JSON.parse(JSON.stringify(data.models));
+                        fcApplicableModels = Object.entries(data.models).filter(([k, v]) => v.applicable);
+                        recomputeFcScenarioAvg();
+                        renderModelCards(fcApplicableModels, fcCurrentData.assumptions);
+                        renderPeerComparison(fcCurrentData.peer_data, fcCurrentData.assumptions);
+                        setFcScenario(fcActiveScenario);
+                    } else {
+                        console.error('Peer recalc failed:', data.error);
+                    }
+                } catch (e) {
+                    console.error('Peer recalc error:', e);
+                }
+            }
+
+            window.fcRemovePeer = function (idx) {
+                if (!fcCurrentData?.peer_data?.peers) return;
+                fcCurrentData.peer_data.peers.splice(idx, 1);
+                fcApplyPeerEdits();
+            };
+
+            window.fcAddPeer = function () {
+                if (!fcCurrentData?.peer_data) return;
+                const name = (document.getElementById('fcNewPeerName')?.value || '').trim();
+                const pe = document.getElementById('fcNewPeerPE')?.value;
+                const pb = document.getElementById('fcNewPeerPB')?.value;
+                if (!name && !pe && !pb) return;
+                if (!Array.isArray(fcCurrentData.peer_data.peers)) fcCurrentData.peer_data.peers = [];
+                fcCurrentData.peer_data.peers.push({
+                    name: name || 'Custom Peer',
+                    pe_ratio: pe || 'N/A',
+                    pb_ratio: pb || 'N/A'
+                });
+                fcApplyPeerEdits();
+            };
+
+            window.fcResetPeers = function () {
+                if (!fcCurrentData || !fcOriginalPeerData) return;
+                fcCurrentData.peer_data = JSON.parse(JSON.stringify(fcOriginalPeerData));
+                fcApplyPeerEdits();
+            };
 
             // =====================================================
             // CHAT

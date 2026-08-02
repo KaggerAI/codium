@@ -24,7 +24,7 @@ from agents.base import (
 from agents.prompts.forecasting_prompts import (
     FORECAST_ASSUMPTIONS_PROMPT, FORECAST_RESEARCH_PROMPT,
     FORECAST_TRIANGULATION_PROMPT, FORECAST_CHAT_PROMPT,
-    FORECAST_NO_DATA_MSG
+    FORECAST_NO_DATA_MSG, FORECAST_GUIDANCE_EXTRACTION_PROMPT
 )
 
 
@@ -177,11 +177,22 @@ def compute_dcf_fcff(assumptions, scenario='base'):
         cost_of_debt_posttax = cost_of_debt_pretax * (1 - tax_rate)
         wacc = equity_pct * cost_of_equity + debt_pct * cost_of_debt_posttax
 
+        # Sanity guard: perpetual terminal growth cannot exceed the risk-free
+        # rate (a long-run GDP/nominal-growth proxy). Clamp rather than error.
+        terminal_growth_capped = False
+        if terminal_growth >= rf:
+            terminal_growth = max(0.0, rf - 0.005)
+            terminal_growth_capped = True
+
         if wacc <= terminal_growth or wacc <= 0:
             return {'fair_value': None, 'error': 'WACC must exceed terminal growth rate'}
 
-        # Get base revenue (forward revenue from relative valuation)
-        base_revenue = get_val(rel, 'forward_revenue_cr')
+        # Base off TRAILING (current) revenue and project forward exactly once.
+        # Using forward_revenue as the base double-counts Y1 growth (forward is
+        # already next-year revenue). Fall back to forward only if trailing absent.
+        base_revenue = get_val(rel, 'trailing_revenue_cr')
+        if not base_revenue or base_revenue <= 0:
+            base_revenue = get_val(rel, 'forward_revenue_cr')
         if not base_revenue or base_revenue <= 0:
             return {'fair_value': None, 'error': 'No base revenue available'}
 
@@ -232,6 +243,7 @@ def compute_dcf_fcff(assumptions, scenario='base'):
             'cost_of_equity': round(cost_of_equity * 100, 2),
             'terminal_value_pct': round(pv_terminal / enterprise_value * 100, 1) if enterprise_value > 0 else 0,
             'projected_fcff': [round(f, 2) for f in projected_fcff],
+            'terminal_growth_capped': terminal_growth_capped,
             'scenario': scenario
         }
     except Exception as e:
@@ -241,6 +253,13 @@ def compute_dcf_fcff(assumptions, scenario='base'):
 def compute_dcf_fcfe(assumptions, scenario='base'):
     """
     DCF — Free Cash Flow to Equity. Discounts at Cost of Equity.
+
+    Net income is grown from TRAILING EPS at the model's growth rates (the FCFE
+    sliders are labelled "Earnings Growth"); the equity-funded portion of net
+    reinvestment is then deducted. Reinvestment is sized off a revenue projection
+    that grows at the same rate — i.e. a constant-margin simplification (margins
+    are modelled explicitly in FCFF). NI and revenue are advanced together within
+    each year, so they stay in sync.
     """
     try:
         dcf = assumptions.get('dcf_assumptions', {})
@@ -260,37 +279,68 @@ def compute_dcf_fcfe(assumptions, scenario='base'):
         coe = rf + beta * erp
         terminal_growth = get_val(dcf, 'terminal_growth') / 100
 
+        # Sanity guard: perpetual terminal growth cannot exceed the risk-free rate.
+        terminal_growth_capped = False
+        if terminal_growth >= rf:
+            terminal_growth = max(0.0, rf - 0.005)
+            terminal_growth_capped = True
+
         if coe <= terminal_growth or coe <= 0:
             return {'fair_value': None, 'error': 'CoE must exceed terminal growth'}
-
-        # Use forward EPS as proxy for earnings
-        forward_eps = get_val(rel, 'forward_eps')
-        if not forward_eps or forward_eps <= 0:
-            return {'fair_value': None, 'error': 'No forward EPS available'}
 
         shares = get_val(rel, 'shares_outstanding_cr')
         if not shares or shares <= 0:
             return {'fair_value': None, 'error': 'No shares outstanding'}
 
-        # Growth rates
+        # Base earnings off TRAILING EPS (current actual) and grow ONCE — using
+        # forward EPS as the base double-counts Y1 growth.
+        trailing_eps = get_val(rel, 'trailing_eps')
+        base_eps = trailing_eps if (trailing_eps and trailing_eps > 0) else get_val(rel, 'forward_eps')
+        if not base_eps or base_eps <= 0:
+            return {'fair_value': None, 'error': 'No EPS available'}
+
+        # Growth rates (Y1, then Y2-Y5 average for 4 years)
         growth_rates = [
             get_val(dcf, 'revenue_growth_y1') / 100
         ] + [
             get_val(dcf, 'revenue_growth_y2_to_y5') / 100
         ] * 4
 
-        # Rough FCFE = Net Income * (1 - reinvestment rate)
-        # Simplified: FCFE ≈ EPS * shares * payout ratio proxy
-        tax_rate = dcf.get('tax_rate', 25) / 100
-        net_income = forward_eps * shares
-        reinvestment_rate = get_val(dcf, 'reinvestment_rate', scenario) / 100 if isinstance(dcf.get('reinvestment_rate'), dict) else dcf.get('reinvestment_rate', 50) / 100
+        # Proper FCFE: Net Income less the equity-funded portion of net
+        # reinvestment (CapEx + ΔWC − D&A). Debt funds a `debt_ratio` share of
+        # reinvestment, so equity funds (1 − debt_ratio). Reuses the same
+        # revenue-driven CapEx/D&A/WC assumptions as FCFF for consistency.
+        debt_ratio = wacc_comp.get('debt_to_total_capital', 30) / 100
+        da_pct = get_val(dcf, 'da_pct_of_revenue', scenario) / 100 if isinstance(dcf.get('da_pct_of_revenue'), dict) else dcf.get('da_pct_of_revenue', 5) / 100
+        capex_pct = get_val(dcf, 'capex_pct_of_revenue', scenario) / 100 if isinstance(dcf.get('capex_pct_of_revenue'), dict) else dcf.get('capex_pct_of_revenue', 7) / 100
+        wc_pct = dcf.get('working_capital_pct_of_revenue', 10) / 100
 
+        trailing_revenue = get_val(rel, 'trailing_revenue_cr')
+        if not trailing_revenue or trailing_revenue <= 0:
+            fwd_rev = get_val(rel, 'forward_revenue_cr')
+            g1 = growth_rates[0]
+            trailing_revenue = (fwd_rev / (1 + g1)) if (fwd_rev and (1 + g1) != 0) else 0
+
+        net_income_0 = base_eps * shares
         projected_fcfe = []
-        current_ni = net_income
+        current_ni = net_income_0
+        prev_revenue = trailing_revenue
+        revenue = trailing_revenue
         for g in growth_rates:
             current_ni = current_ni * (1 + g)
-            fcfe = current_ni * (1 - reinvestment_rate)
-            projected_fcfe.append(fcfe)
+            if trailing_revenue and trailing_revenue > 0:
+                revenue = prev_revenue * (1 + g)
+                da = revenue * da_pct
+                capex = revenue * capex_pct
+                delta_wc = (revenue - prev_revenue) * wc_pct
+                net_reinvestment = (capex + delta_wc - da)
+                fcfe = current_ni - (1 - debt_ratio) * net_reinvestment
+                prev_revenue = revenue
+            else:
+                # No revenue base — fall back to reinvestment-rate proxy.
+                reinvestment_rate = get_val(dcf, 'reinvestment_rate', scenario) / 100 if isinstance(dcf.get('reinvestment_rate'), dict) else dcf.get('reinvestment_rate', 50) / 100
+                fcfe = current_ni * (1 - reinvestment_rate)
+            projected_fcfe.append(max(0.0, fcfe))
 
         # Terminal Value
         terminal_fcfe = projected_fcfe[-1] * (1 + terminal_growth)
@@ -309,6 +359,7 @@ def compute_dcf_fcfe(assumptions, scenario='base'):
             'fair_value': round(fair_value, 2),
             'equity_value': round(equity_value, 2),
             'cost_of_equity': round(coe * 100, 2),
+            'terminal_growth_capped': terminal_growth_capped,
             'scenario': scenario
         }
     except Exception as e:
@@ -563,6 +614,13 @@ def compute_residual_income(assumptions, scenario='base'):
         coe = get_val(ri, 'cost_of_equity') / 100
         fade_years = ri.get('excess_return_fade_years', 10)
 
+        # Book value grows only by RETAINED earnings (1 - payout), not full ROE.
+        payout = ri.get('payout_ratio_current')
+        if payout is None:
+            payout = assumptions.get('ddm_assumptions', {}).get('payout_ratio_current', 0)
+        retention = 1 - (_safe_float(payout, 0) or 0) / 100
+        retention = max(0.0, min(1.0, retention))
+
         if not bvps or coe <= 0:
             return {'fair_value': None, 'error': 'Missing BVPS or CoE data'}
 
@@ -583,7 +641,8 @@ def compute_residual_income(assumptions, scenario='base'):
             fade = max(0, 1 - (year - 1) / fade_years)
             ri_year = current_bv * excess_return * fade
             pv_excess += ri_year / ((1 + coe) ** year)
-            current_bv = current_bv * (1 + roe * fade)  # BV grows at fading ROE
+            # BV grows only by retained earnings at the (fading) ROE
+            current_bv = current_bv * (1 + roe * fade * retention)
 
         fair_value = max(0.0, bvps + pv_excess)
 
@@ -656,18 +715,28 @@ def compute_statistical_band(assumptions, key_metrics, scenario='base'):
         # Try to get current P/E from key_metrics
         current_pe = _safe_float(key_metrics.get('pe_ratio') or key_metrics.get('stock_pe') or key_metrics.get('Stock P/E'))
 
-        peer_pe = rel.get('peer_median_pe', 0)
+        peer_pe = get_val(rel, 'peer_median_pe')
 
         if not current_pe and not peer_pe:
             return {'fair_value': None, 'error': 'No P/E data for statistical analysis'}
 
-        # Use available P/E data to create a band
+        # Use available P/E data as the mean-reversion reference
         reference_pe = current_pe or peer_pe
 
-        # Statistical band: mean P/E ± 1 std dev (approximated)
-        pe_low = reference_pe * 0.75  # -25% as bear case
+        # Use the REAL historical P/E dispersion when available
+        # (band = reference ± 1 std dev), else fall back to a ±25% proxy.
+        pe_std = _safe_float(rel.get('pe_history_std'))
+        if pe_std and pe_std > 0:
+            # Cap the band so a noisy/volatile history can't produce an absurdly wide range
+            pe_std = min(pe_std, reference_pe * 0.6)
+            pe_low = max(0.0, reference_pe - pe_std)
+            pe_high = reference_pe + pe_std
+            band_basis = f"±1σ ({pe_std:.1f})"
+        else:
+            pe_low = reference_pe * 0.75
+            pe_high = reference_pe * 1.25
+            band_basis = "±25% (no history)"
         pe_mid = reference_pe
-        pe_high = reference_pe * 1.25  # +25% as bull case
 
         if scenario == 'bull':
             fair_value = max(0.0, forward_eps * pe_high)
@@ -680,6 +749,7 @@ def compute_statistical_band(assumptions, key_metrics, scenario='base'):
             'fair_value': round(fair_value, 2),
             'pe_used': round(pe_mid if scenario == 'base' else (pe_high if scenario == 'bull' else pe_low), 1),
             'pe_range': f"{pe_low:.1f}x — {pe_high:.1f}x",
+            'band_basis': band_basis,
             'forward_eps': forward_eps,
             'scenario': scenario
         }
@@ -841,6 +911,7 @@ def run_all_models(assumptions, key_metrics):
     Returns dict of model_key -> {bull, base, bear, config, applicable}.
     """
     results = {}
+    has_guidance = bool(assumptions.get('guidance_meta', {}).get('has_guidance'))
 
     for model_key, config in MODEL_CONFIGS.items():
         model_result = {'config': {
@@ -853,7 +924,10 @@ def run_all_models(assumptions, key_metrics):
 
         try:
             scenarios = {}
-            for scenario in ['bull', 'base', 'bear']:
+            scen_list = ['bull', 'base', 'bear']
+            if has_guidance and model_key in GUIDANCE_MODELS:
+                scen_list = scen_list + ['guidance']
+            for scenario in scen_list:
                 if model_key == 'statistical_band':
                     out = compute_statistical_band(assumptions, key_metrics, scenario)
                 else:
@@ -864,6 +938,8 @@ def run_all_models(assumptions, key_metrics):
             model_result['bull'] = scenarios['bull']
             model_result['base'] = scenarios['base']
             model_result['bear'] = scenarios['bear']
+            if 'guidance' in scenarios:
+                model_result['guidance'] = scenarios['guidance']
 
             # Check if model was skipped
             if scenarios['base'].get('skipped'):
@@ -893,8 +969,13 @@ def recalculate_single_model(model_key, assumptions, key_metrics):
     if not config:
         return {'error': f'Unknown model: {model_key}'}
 
+    has_guidance = bool(assumptions.get('guidance_meta', {}).get('has_guidance'))
+    scen_list = ['bull', 'base', 'bear']
+    if has_guidance and model_key in GUIDANCE_MODELS:
+        scen_list = scen_list + ['guidance']
+
     results = {}
-    for scenario in ['bull', 'base', 'bear']:
+    for scenario in scen_list:
         if model_key == 'statistical_band':
             results[scenario] = compute_statistical_band(assumptions, key_metrics, scenario)
         else:
@@ -1036,6 +1117,44 @@ def register_forecasting_routes(app, call_gemini_api_fn, call_perplexity_api_fn,
             print(f"FORECASTING_RECALC ERROR: {e}", file=sys.stderr)
             return jsonify({'error': str(e)}), 500
 
+    @app.route('/agent/forecasting/recalculate_peers', methods=['POST'])
+    def agent_forecasting_recalculate_peers():
+        """
+        Recompute peer medians from a user-curated peer set and re-run all
+        models. Pure Python — no AI calls. Used by the editable peer table.
+        """
+        try:
+            data = request.get_json(force=True)
+            assumptions = data.get('assumptions', {})
+            key_metrics = data.get('key_metrics', {})
+            peers = data.get('peers', [])
+            company = data.get('company', {})
+            target_meds = data.get('target_historical_medians', {})
+            target_snapshot = data.get('target_value_snapshot', {})
+
+            peer_data = {
+                'company': company,
+                'peers': peers,
+                'target_identified': True,
+                'match_method': 'user'
+            }
+
+            peer_confidence = apply_authoritative_peer_medians(
+                assumptions, peer_data, target_meds, target_snapshot, source='user', recenter=True
+            )
+            models = run_all_models(assumptions, key_metrics)
+
+            return jsonify({
+                'status': 'success',
+                'models': models,
+                'assumptions': assumptions,
+                'peer_confidence': peer_confidence,
+                'guidance_meta': assumptions.get('guidance_meta', {})
+            })
+        except Exception as e:
+            print(f"FORECASTING_PEER_RECALC ERROR: {e}", file=sys.stderr)
+            return jsonify({'error': str(e)}), 500
+
     @app.route('/agent/forecasting/chat', methods=['POST'])
     def agent_forecasting_chat():
         """Chat about the valuation results."""
@@ -1155,6 +1274,10 @@ def _run_forecasting_pipeline(job_id, ticker, cached_data, call_gemini_api_fn,
                 except Exception as e:
                     pass
 
+        # Latest snapshot of each multiple + historical P/E std-dev (for the
+        # own-history peer fallback and the statistical band).
+        target_snapshot, pe_std = _compute_target_snapshot_and_std(valuation_history)
+
         # Build financial data context for AI
         financial_context = _build_financial_context(ticker, company_name, fundamentals, key_metrics, target_meds)
 
@@ -1183,6 +1306,33 @@ def _run_forecasting_pipeline(job_id, ticker, cached_data, call_gemini_api_fn,
             )
         finally:
             loop.close()
+
+        # ── Make peer multiples deterministic/authoritative ──
+        # Computes real peer medians (P/E, P/B) and uses the company's own
+        # historical multiples for EV/EBITDA, MCap/Sales (and as a fallback when
+        # peers are missing/thin). The AI's value is kept only as a clamped
+        # premium/discount.
+        try:
+            peer_confidence = apply_authoritative_peer_medians(
+                assumptions, peer_data, target_meds, target_snapshot, source='screener'
+            )
+        except Exception as pe_err:
+            print(f"FORECASTING_AGENT: peer median override failed: {pe_err}", file=sys.stderr)
+            peer_confidence = {'n_peers': len(peer_data.get('peers', []) or []),
+                               'per_multiple_source': {}, 'source': 'screener'}
+
+        # Thread historical P/E std-dev into the statistical band input.
+        if pe_std:
+            assumptions.setdefault('relative_valuation', {})['pe_history_std'] = pe_std
+
+        # ── Management guidance ("Guidance" scenario) ──
+        update_agent_job(job_id, {
+            'progress': f'Checking latest concall for management guidance on {company_name}...'
+        })
+        guidance_meta = build_guidance(ticker, company_name, assumptions, call_gemini_api_fn, allow_fetch=True)
+        assumptions['guidance_meta'] = guidance_meta
+        print(f"FORECASTING_AGENT: guidance — has_guidance={guidance_meta.get('has_guidance')}, "
+              f"source={guidance_meta.get('source')}", file=sys.stderr)
 
         elapsed_s2 = int(time.time() - start_time)
         print(f"FORECASTING_AGENT: Stage 2 complete — {elapsed_s2}s", file=sys.stderr)
@@ -1269,7 +1419,10 @@ def _run_forecasting_pipeline(job_id, ticker, cached_data, call_gemini_api_fn,
             'triangulated_values': triangulated_values,
             'market_research': str(market_research)[:5000] if market_research else None,
             'peer_data': peer_data,
+            'peer_confidence': peer_confidence,
+            'guidance_meta': guidance_meta,
             'target_historical_medians': target_meds,
+            'target_value_snapshot': target_snapshot,
             'key_metrics': key_metrics,
             'cmp': str(cmp),
             'market_cap': str(market_cap),
@@ -1424,6 +1577,245 @@ async def _fetch_ai_research_async(ticker, company_name, financial_context,
 
 
 # =====================================================================
+# MANAGEMENT GUIDANCE ("Guidance" scenario)
+# Sources the latest concall (cached Concall Agent result, else a quick
+# transcript-only fetch), extracts structured forward guidance, and merges
+# it into the assumptions so the guidance-consumable models can run a
+# scenario='guidance' driven by management's own numbers.
+# =====================================================================
+
+# Models that can consume management guidance (DCF + revenue/EPS-multiple based).
+GUIDANCE_MODELS = {'dcf_fcff', 'dcf_fcfe', 'relative_pe', 'ev_ebitda', 'mcap_sales'}
+
+
+async def _quick_fetch_transcript_async(ticker, company_name):
+    """
+    Bounded, transcript-ONLY fetch reused from the Concall Agent helpers
+    (no full concall analysis). Tries Screener REC audio, then YouTube.
+    Returns transcript text or ''.
+    """
+    try:
+        from fetchers.screener_fetcher import fetch_concall_rec_url_async
+        from agents.concall_agent import (
+            _extract_youtube_transcript, _transcribe_audio_video_from_url,
+            _search_youtube_concall
+        )
+    except Exception as e:
+        print(f"FORECASTING_AGENT: concall helpers unavailable: {e}", file=sys.stderr)
+        return ''
+
+    async def _transcribe(url):
+        is_yt = ('youtube' in url.lower() or 'youtu.be' in url.lower())
+        text = ''
+        if is_yt:
+            try:
+                text = await _extract_youtube_transcript(url, max_chars=80000)
+            except Exception:
+                text = ''
+        if not text or text.startswith('Error'):
+            try:
+                text = await _transcribe_audio_video_from_url(url, 'audio')
+            except Exception:
+                text = ''
+        return text or ''
+
+    # 1. Screener REC audio link
+    audio_url = ''
+    try:
+        rec_info = await fetch_concall_rec_url_async(ticker)
+        if rec_info and rec_info.get('url'):
+            audio_url = rec_info.get('url')
+    except Exception:
+        audio_url = ''
+
+    text = ''
+    if audio_url:
+        text = await _transcribe(audio_url)
+
+    # 2. YouTube fallback
+    if not text or text.startswith('Error'):
+        try:
+            yt_url = await asyncio.to_thread(_search_youtube_concall, company_name, ticker, '')
+        except Exception:
+            yt_url = ''
+        if yt_url:
+            text = await _transcribe(yt_url)
+
+    return text if (text and not text.startswith('Error')) else ''
+
+
+def _get_concall_text(ticker, company_name, allow_fetch=True, fetch_timeout=180):
+    """
+    Obtain the latest concall text for guidance extraction.
+    Returns (text, source) where source ∈ {'cached','transcript_only','unavailable'}.
+    """
+    # 1. Cached Concall Agent result (preferred — fast)
+    try:
+        cached = get_latest_result('concall', ticker)
+    except Exception:
+        cached = None
+    if cached and cached.get('result'):
+        r = cached['result']
+        txt = r.get('transcript_text') or r.get('analysis') or ''
+        if txt and len(str(txt).strip()) > 200:
+            return str(txt), 'cached'
+
+    # 2. Quick transcript-only fetch (bounded)
+    if allow_fetch:
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                txt = loop.run_until_complete(
+                    asyncio.wait_for(_quick_fetch_transcript_async(ticker, company_name),
+                                     timeout=fetch_timeout)
+                )
+            finally:
+                loop.close()
+            if txt and len(str(txt).strip()) > 200:
+                return str(txt), 'transcript_only'
+        except Exception as e:
+            print(f"FORECASTING_AGENT: quick transcript fetch failed: {e}", file=sys.stderr)
+
+    return '', 'unavailable'
+
+
+def _extract_guidance(text, ticker, company_name, call_gemini_api_fn):
+    """Extract structured forward guidance JSON from concall text via Gemini."""
+    if not text:
+        return {'has_guidance': False}
+    try:
+        prompt = FORECAST_GUIDANCE_EXTRACTION_PROMPT.format(
+            company_name=company_name, ticker=ticker, transcript_text=text[:60000]
+        )
+        raw = call_gemini_api_fn(
+            [{"role": "user", "content": prompt}],
+            model="gemini-3-flash-preview", temperature=0.2
+        )
+        cleaned = (raw or '').strip()
+        if cleaned.startswith('```json'):
+            cleaned = cleaned[7:]
+        elif cleaned.startswith('```'):
+            cleaned = cleaned[3:]
+        if cleaned.endswith('```'):
+            cleaned = cleaned[:-3]
+        cleaned = cleaned.strip()
+        s, e = cleaned.find('{'), cleaned.rfind('}')
+        if s != -1 and e != -1 and e > s:
+            cleaned = cleaned[s:e + 1]
+        data = json.loads(cleaned)
+        return data if isinstance(data, dict) else {'has_guidance': False}
+    except Exception as e:
+        print(f"FORECASTING_AGENT: guidance extraction failed: {e}", file=sys.stderr)
+        return {'has_guidance': False}
+
+
+def _guidance_field(guidance, key):
+    """Pull a numeric value from a guidance field that may be {value,...} or scalar/null."""
+    v = guidance.get(key)
+    if isinstance(v, dict):
+        return _safe_float(v.get('value'))
+    return _safe_float(v)
+
+
+def merge_guidance_into_assumptions(assumptions, guidance):
+    """
+    Add a 'guidance' key to the relevant per-metric assumption dicts so the
+    scenario machinery (get_val with scen='guidance') uses management's numbers,
+    falling back to base for anything not guided. Returns guidance_meta.
+    """
+    if not guidance or not guidance.get('has_guidance'):
+        return {'has_guidance': False}
+
+    dcf = assumptions.setdefault('dcf_assumptions', {})
+    rel = assumptions.setdefault('relative_valuation', {})
+
+    def set_guidance(container, key, value):
+        if value is None:
+            return
+        cur = container.get(key)
+        if isinstance(cur, dict):
+            cur['guidance'] = value
+        else:
+            # promote scalar/missing to a scenario dict preserving base
+            base = _safe_float(cur)
+            container[key] = {'bull': base, 'base': base, 'bear': base, 'guidance': value} if base is not None else {'guidance': value}
+
+    rev_growth = _guidance_field(guidance, 'revenue_growth_pct')
+    ebitda_margin = _guidance_field(guidance, 'ebitda_margin_pct')
+    capex_cr = _guidance_field(guidance, 'capex_cr')
+    eps = _guidance_field(guidance, 'eps')
+    revenue_cr = _guidance_field(guidance, 'revenue_cr')
+    ebitda_cr = _guidance_field(guidance, 'ebitda_cr')
+
+    # DCF growth: apply guided Y1 growth; leave Y2-Y5 to fall back to base.
+    set_guidance(dcf, 'revenue_growth_y1', rev_growth)
+    set_guidance(dcf, 'ebitda_margin', ebitda_margin)
+
+    # CapEx guidance → % of revenue. Convert against the revenue the GUIDANCE
+    # scenario will actually project (trailing × (1+guided growth)), so the
+    # year-1 CapEx ≈ the absolute amount management guided. Fall back to
+    # management's guided revenue, then the base forward revenue.
+    if capex_cr is not None:
+        ref_rev = None
+        trailing_rev = _safe_float(rel.get('trailing_revenue_cr'))
+        if trailing_rev and trailing_rev > 0 and rev_growth is not None:
+            ref_rev = trailing_rev * (1 + rev_growth / 100.0)
+        if not ref_rev or ref_rev <= 0:
+            ref_rev = revenue_cr  # management's own guided revenue (if any)
+        if not ref_rev or ref_rev <= 0:
+            ref_rev = _safe_float(_get_scenario_val(rel.get('forward_revenue_cr'), 'base'))
+        if ref_rev and ref_rev > 0.1:
+            set_guidance(dcf, 'capex_pct_of_revenue', round(capex_cr / ref_rev * 100, 2))
+        else:
+            print(f"FORECASTING_AGENT: capex guidance skipped — no valid revenue reference", file=sys.stderr)
+
+    # Relative-valuation forward figures
+    set_guidance(rel, 'forward_eps', eps)
+    set_guidance(rel, 'forward_revenue_cr', revenue_cr)
+    set_guidance(rel, 'forward_ebitda_cr', ebitda_cr)
+
+    return {
+        'has_guidance': True,
+        'guidance_horizon': guidance.get('guidance_horizon'),
+        'management_tone': guidance.get('management_tone'),
+        'notes': guidance.get('notes'),
+        'fields': {
+            k: guidance.get(k) for k in (
+                'revenue_growth_pct', 'ebitda_margin_pct', 'ebit_margin_pct',
+                'capex_cr', 'revenue_cr', 'ebitda_cr', 'eps'
+            ) if guidance.get(k) is not None
+        }
+    }
+
+
+def _get_scenario_val(v, scen='base'):
+    """Read a scenario value from a {bull,base,bear,...} dict or scalar."""
+    if isinstance(v, dict):
+        return v.get(scen, v.get('base'))
+    return v
+
+
+def build_guidance(ticker, company_name, assumptions, call_gemini_api_fn, allow_fetch=True):
+    """
+    Orchestrate: source concall text → extract guidance → merge into assumptions.
+    Mutates `assumptions` in place. Returns guidance_meta (always a dict with
+    'has_guidance' and 'source'). Never raises.
+    """
+    try:
+        text, source = _get_concall_text(ticker, company_name, allow_fetch=allow_fetch)
+        if not text:
+            return {'has_guidance': False, 'source': 'unavailable'}
+        guidance = _extract_guidance(text, ticker, company_name, call_gemini_api_fn)
+        meta = merge_guidance_into_assumptions(assumptions, guidance)
+        meta['source'] = source if meta.get('has_guidance') else 'unavailable'
+        return meta
+    except Exception as e:
+        print(f"FORECASTING_AGENT: build_guidance failed: {e}", file=sys.stderr)
+        return {'has_guidance': False, 'source': 'unavailable'}
+
+
+# =====================================================================
 # HELPER FUNCTIONS
 # =====================================================================
 
@@ -1494,6 +1886,217 @@ def _build_peer_context(peer_data):
                 lines.append(f"- {col}: Median = {median:.2f}, Mean = {mean:.2f} (n={len(vals)})")
 
     return "\n".join(lines) if lines else "No peer comparison data available."
+
+
+# =====================================================================
+# DETERMINISTIC PEER MEDIANS & OWN-HISTORY FALLBACK
+# The Screener peer table only carries P/E and P/B (plus ROE/ROCE). EV/EBITDA
+# and MCap/Sales are NOT in that table, so for those we fall back to the
+# company's OWN "Valuation & Margin History" (target medians + latest snapshot).
+# =====================================================================
+
+def _median(vals):
+    """Median of a non-empty list of numbers."""
+    s = sorted(vals)
+    n = len(s)
+    mid = n // 2
+    return s[mid] if n % 2 == 1 else (s[mid - 1] + s[mid]) / 2.0
+
+
+def compute_peer_medians(peer_data):
+    """
+    Compute real peer medians from the scraped peer table.
+    Only P/E and P/B are available from Screener's peer comparison table.
+    Returns {'pe', 'pb', 'n_pe', 'n_pb'} (values None if no valid data).
+    """
+    out = {'pe': None, 'pb': None, 'n_pe': 0, 'n_pb': 0}
+    if not isinstance(peer_data, dict):
+        return out
+    peers = peer_data.get('peers') or []
+    pe_vals, pb_vals = [], []
+    for p in peers:
+        pe = _safe_float(p.get('pe_ratio'))
+        if pe is not None and pe > 0:
+            pe_vals.append(pe)
+        pb = _safe_float(p.get('pb_ratio'))
+        if pb is not None and pb > 0:
+            pb_vals.append(pb)
+    if pe_vals:
+        out['pe'] = round(_median(pe_vals), 2)
+        out['n_pe'] = len(pe_vals)
+    if pb_vals:
+        out['pb'] = round(_median(pb_vals), 2)
+        out['n_pb'] = len(pb_vals)
+    return out
+
+
+def _own_history_multiples(target_meds, target_snapshot):
+    """
+    Pull the company's OWN historical multiples (P/E, P/B, EV/EBITDA, MCap/Sales)
+    from the Valuation & Margin History medians, preferring the 3yr median and
+    falling back to 5yr/1yr, then the latest snapshot.
+    """
+    out = {'pe': None, 'pb': None, 'ev_ebitda': None, 'mcap_sales': None}
+    target_meds = target_meds or {}
+    target_snapshot = target_snapshot or {}
+
+    def pick(label, prefix):
+        d = target_meds.get(label) or {}
+        for suffix in ('_3yr', '_5yr', '_1yr'):
+            v = _safe_float(d.get(prefix + suffix))
+            if v is not None and v > 0:
+                return round(v, 2)
+        return None
+
+    out['pe'] = pick('PE Ratio', 'PE') or target_snapshot.get('pe')
+    out['pb'] = pick('PB Ratio', 'Price to BV') or target_snapshot.get('pb')
+    out['ev_ebitda'] = pick('EV / EBITDA', 'EV / EBITDA') or target_snapshot.get('ev_ebitda')
+    out['mcap_sales'] = pick('Market Cap / Sales', 'Market Cap / Sales') or target_snapshot.get('mcap_sales')
+    return out
+
+
+def _clamp_multiple_to_authoritative(ai_val, auth, band=0.30):
+    """
+    Make the code-computed `auth` median authoritative while preserving the AI's
+    justified premium/discount and bull/base/bear spread — clamped to ±band of auth.
+    Returns a {'bull','base','bear'} dict (or scalar if AI gave a scalar).
+    """
+    lo, hi = auth * (1 - band), auth * (1 + band)
+
+    def cl(x):
+        x = _safe_float(x)
+        if x is None or x <= 0:
+            return round(auth, 2)
+        return round(min(hi, max(lo, x)), 2)
+
+    if isinstance(ai_val, dict):
+        out = {}
+        for scen in ('bull', 'base', 'bear'):
+            if scen in ai_val:
+                out[scen] = cl(ai_val.get(scen))
+        if 'base' not in out:
+            out['base'] = round(auth, 2)
+        # carry through any non-scenario keys (e.g. a pre-existing guidance value)
+        for k, v in ai_val.items():
+            if k not in ('bull', 'base', 'bear'):
+                out[k] = v
+        return out
+    if ai_val is None:
+        return {'bull': round(auth * 1.1, 2), 'base': round(auth, 2), 'bear': round(auth * 0.9, 2)}
+    return cl(ai_val)
+
+
+def apply_authoritative_peer_medians(assumptions, peer_data, target_meds, target_snapshot, source='screener', recenter=False):
+    """
+    Override the AI's peer multiples with deterministic, authoritative values.
+      - P/E and P/B: real peer-table median when >=3 valid peers, else the
+        company's own historical multiple.
+      - EV/EBITDA and MCap/Sales: always the company's own historical multiple
+        (not available in Screener's peer table).
+    On the first pipeline pass the AI's chosen value is kept as a premium/discount
+    clamped to ±30%. When `recenter=True` (a user-curated peer set), the multiple
+    is re-centered directly on the new computed median (the user is the authority).
+    Returns a `peer_confidence` dict describing what was used per multiple.
+    """
+    rel = assumptions.setdefault('relative_valuation', {})
+    peer_med = compute_peer_medians(peer_data)
+    own = _own_history_multiples(target_meds, target_snapshot)
+    peers = (peer_data.get('peers') or []) if isinstance(peer_data, dict) else []
+    # Default conservatively: only "identified" if the key says so, or (legacy
+    # payloads without the key) if a company row is present.
+    target_identified = peer_data.get('target_identified', bool(peer_data.get('company'))) if isinstance(peer_data, dict) else False
+    MIN_PEERS = 3
+    sources = {}
+
+    def resolve(metric_key, peer_val, peer_n):
+        if peer_val is not None and peer_n >= MIN_PEERS:
+            return peer_val, 'peer'
+        own_val = own.get(metric_key)
+        if own_val is not None and own_val > 0:
+            return own_val, 'own_history'
+        if peer_val is not None and peer_n > 0:
+            return peer_val, 'peer_thin'
+        return None, 'default'
+
+    plan = [
+        ('pe', 'peer_median_pe', peer_med.get('pe'), peer_med.get('n_pe', 0)),
+        ('pb', 'peer_median_pb', peer_med.get('pb'), peer_med.get('n_pb', 0)),
+        ('ev_ebitda', 'peer_median_ev_ebitda', None, 0),
+        ('mcap_sales', 'peer_median_mcap_sales', None, 0),
+    ]
+    for metric_key, rel_key, pv, pn in plan:
+        auth, src = resolve(metric_key, pv, pn)
+        sources[metric_key] = src
+        if auth is None:
+            continue  # leave AI / default value untouched
+        if recenter:
+            rel[rel_key] = {'bull': round(auth * 1.1, 2), 'base': round(auth, 2), 'bear': round(auth * 0.9, 2)}
+        else:
+            rel[rel_key] = _clamp_multiple_to_authoritative(rel.get(rel_key), auth)
+
+    return {
+        'n_peers': len(peers),
+        'target_identified': target_identified,
+        'match_method': peer_data.get('match_method', 'unknown') if isinstance(peer_data, dict) else 'unknown',
+        'source': source,
+        'peer_median_pe': peer_med.get('pe'),
+        'peer_median_pb': peer_med.get('pb'),
+        'own_history': own,
+        'per_multiple_source': sources,
+    }
+
+
+def _compute_target_snapshot_and_std(valuation_history):
+    """
+    From the Valuation & Margin History timeseries, return:
+      - snapshot: latest value per multiple {'pe','pb','ev_ebitda','mcap_sales'}
+      - pe_std: std-dev of the historical P/E (for the statistical band)
+    """
+    snapshot = {}
+    pe_std = None
+    if not valuation_history:
+        return snapshot, pe_std
+    try:
+        import pandas as pd
+    except Exception:
+        return snapshot, pe_std
+
+    label_map = {
+        'PE Ratio': ('pe', 'PE'),
+        'PB Ratio': ('pb', 'Price to BV'),
+        'EV / EBITDA': ('ev_ebitda', 'EV / EBITDA'),
+        'Market Cap / Sales': ('mcap_sales', 'Market Cap / Sales'),
+    }
+    for label, (key, col) in label_map.items():
+        rows = valuation_history.get(label)
+        if not rows:
+            continue
+        try:
+            df = pd.DataFrame(rows)
+            if 'date' in df.columns:
+                df['date'] = pd.to_datetime(df['date'], errors='coerce')
+                df = df.dropna(subset=['date']).sort_values('date')
+            if col not in df.columns:
+                cand = [c for c in df.columns if c != 'date']
+                if not cand:
+                    continue
+                col = cand[0]
+            s = pd.to_numeric(df[col], errors='coerce').dropna()
+            if s.empty:
+                continue
+            snapshot[key] = round(float(s.iloc[-1]), 2)
+            if key == 'pe' and len(s) >= 5:
+                # Drop extreme outliers (1.5×IQR fences) before measuring dispersion
+                q1, q3 = s.quantile(0.25), s.quantile(0.75)
+                iqr = q3 - q1
+                s_f = s[(s >= q1 - 1.5 * iqr) & (s <= q3 + 1.5 * iqr)] if (iqr and iqr > 0) else s
+                if len(s_f) >= 5:
+                    std_val = float(s_f.std())
+                    if std_val == std_val:  # not NaN
+                        pe_std = round(std_val, 2)
+        except Exception:
+            continue
+    return snapshot, pe_std
 
 
 def _build_financial_context(ticker, company_name, fundamentals, key_metrics, target_meds=None):

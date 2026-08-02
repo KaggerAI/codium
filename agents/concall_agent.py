@@ -27,7 +27,7 @@ from agents.base import (
     store_latest_result, get_latest_result
 )
 from agents.prompts.concall_prompts import (
-    CONCALL_ANALYSIS_PROMPT, CONCALL_CHAT_PROMPT, CONCALL_FETCH_ERROR_MSG
+    CONCALL_ANALYSIS_PROMPT, CONCALL_CHAT_PROMPT, build_concall_fetch_error
 )
 
 import csv
@@ -48,6 +48,124 @@ def _get_company_name_from_ticker(ticker: str) -> str:
         print(f"CONCALL_AGENT error reading stock master: {e}", file=sys.stderr)
     return ticker
 
+_CORP_SUFFIX_RE = re.compile(
+    r'[\s,]+(?:pvt\.?|private|ltd\.?|limited|inc\.?|incorporated|'
+    r'corp\.?|corporation|plc|llp)\.?$',
+    re.IGNORECASE,
+)
+
+
+def _strip_quotes(text: str) -> str:
+    """Drop apostrophes so "Divi's" and "Divis" normalise to the same token."""
+    return (text or '').replace("'", "").replace("’", "").replace("‘", "")
+
+
+def _query_name(company_name: str) -> str:
+    """
+    Company name trimmed of its corporate suffix for use in a search query.
+
+    Measured against YouTube: "Divi S Laboratories Ltd concall Q1 FY27" returns
+    a single unrelated clip, while "Divi S Laboratories concall Q1 FY27" returns
+    the correct call as the top two hits. The suffix is what breaks the match.
+    Applied repeatedly since "Foo Pvt Ltd" carries two.
+    """
+    name = (company_name or '').strip()
+    for _ in range(3):
+        trimmed = _CORP_SUFFIX_RE.sub('', name).strip(' ,.')
+        if not trimmed or trimmed == name:
+            break
+        name = trimmed
+    return re.sub(r'\s+', ' ', name).strip() or (company_name or '').strip()
+
+
+_COMPANY_STOPWORDS = {
+    'ltd', 'limited', 'inc', 'incorporated', 'corp', 'corporation',
+    'company', 'co', 'holdings', 'holding', 'india', 'indian',
+    'industries', 'industrial', 'enterprises', 'enterprise',
+    'services', 'service', 'the', 'and', 'pvt', 'private', 'group',
+}
+
+
+def _company_core_groups(company_name: str):
+    """
+    Distinctive tokens of a company name, each as a set of accepted spellings.
+
+    "Premier Explosives Ltd" -> [{"premier"}, {"explosives"}]
+
+    The stock master mangles possessives — "Divi's Laboratories" is stored as
+    "Divi S Laboratories" — so a standalone single letter is folded into the
+    preceding token as an *alternative* spelling rather than dropped:
+    "Divi S Laboratories Ltd" -> [{"divi", "divis"}, {"laboratories"}].
+    That covers both "Divi's Laboratories" and "Divis Laboratories", which are
+    the two forms real video titles actually use.
+    """
+    raw = [t for t in re.split(r'[^a-z0-9]+',
+                               _strip_quotes(company_name).lower()) if t]
+    groups = []
+    last_base = None
+    for tok in raw:
+        if len(tok) == 1:
+            if groups and last_base:
+                groups[-1].add(last_base + tok)
+            continue
+        if tok in _COMPANY_STOPWORDS:
+            last_base = None
+            continue
+        groups.append({tok})
+        last_base = tok
+    return groups
+
+
+_Q_TAG_RE = re.compile(r'\bq\s*-?\s*([1-4])\b')
+_FY_TAG_RE = re.compile(r'\bfy\s*-?\s*(\d{2,4})\b')
+
+
+def _title_contradicts_quarter(title_lower: str, target_q_num: str, fy_short: str) -> bool:
+    """
+    True when a title names a quarter or fiscal year that is NOT the target.
+
+    Deliberately distinguishes "names a different quarter" (evidence it is the
+    wrong call) from "names no quarter at all" (simply unknown — a title like
+    "Earnings Call August 2026" is not contradicting). Only the former is a
+    reason to reject.
+    """
+    if not target_q_num:
+        return False
+    q_tags = {m.group(1) for m in _Q_TAG_RE.finditer(title_lower)}
+    if q_tags and target_q_num[1:] not in q_tags:
+        return True
+    fy_tags = {m.group(1)[-2:] for m in _FY_TAG_RE.finditer(title_lower)}
+    if fy_tags and fy_short and fy_short not in fy_tags:
+        return True
+    return False
+
+
+def _company_title_match(title_lower: str, company_name: str, ticker: str) -> bool:
+    """
+    STRICT check that a video title refers to the TARGET company. True if EITHER
+    the normalized ticker appears, OR every distinctive core token appears as a
+    whole word (in any accepted spelling). Rejects confusable siblings (e.g.
+    "Premier Energies" when the target is "Premier Explosives"). False negatives
+    are cheap here (we fall back to the PDF transcript); false positives are
+    catastrophic — they would analyse the wrong company's call.
+    """
+    title_norm = _strip_quotes(title_lower or '').lower()
+    # Branch 1: ticker rescue (length-gated; handles abbreviated titles).
+    t_raw = (ticker or '').lower()
+    t_norm = t_raw.replace('-', '')
+    for cand in (t_raw, t_norm):
+        if len(cand) >= 4 and cand in title_norm:
+            return True
+    # Branch 2: EVERY distinctive core token present as a whole word.
+    groups = _company_core_groups(company_name)
+    if groups and all(
+        any(re.search(r'\b' + re.escape(alt) + r'\b', title_norm) for alt in grp)
+        for grp in groups
+    ):
+        return True
+    return False
+
+
 def _get_q_fy_from_quarter(quarter_str: str) -> str:
     """Convert 'Mar 2026' into 'Q4 FY26' for better search"""
     if not quarter_str: return ""
@@ -66,17 +184,45 @@ def _get_q_fy_from_quarter(quarter_str: str) -> str:
             pass
     return quarter_str
 
-def _get_current_expected_quarter() -> str:
-    """Derive the most likely latest quarter from today's date.
-    e.g. In April 2026, the latest quarter end is Mar 2026 → 'Q4 FY26'"""
+def _get_current_expected_quarter(as_of=None) -> str:
+    """Most likely latest *reported* quarter label, derived from today's date.
+
+    Keyed on the reporting month, not on the quarter itself: Indian results for
+    the Jun quarter are published across Jul–Sep, so in August the latest
+    reported quarter is Q1, not Q2.
+      2026-08-02 -> 'Q1 FY27'   (Jun 2026 quarter)
+      2026-01-10 -> 'Q3 FY26'   (Dec 2025 quarter)
+    """
     from datetime import datetime
-    now = datetime.now()
+    now = as_of or datetime.now()
     m, y = now.month, now.year
-    # Which quarter just ended?
-    if m in (1, 2, 3, 4):    return f"Q4 FY{str(y)[-2:]}"       # Mar quarter
-    elif m in (5, 6, 7):      return f"Q1 FY{str(y+1)[-2:]}"     # Jun quarter
-    elif m in (8, 9, 10):     return f"Q2 FY{str(y+1)[-2:]}"     # Sep quarter
-    else:                     return f"Q3 FY{str(y+1)[-2:]}"     # Dec quarter
+    if m in (1, 2, 3):    return f"Q3 FY{str(y)[-2:]}"        # Dec quarter
+    if m in (4, 5, 6):    return f"Q4 FY{str(y)[-2:]}"        # Mar quarter
+    if m in (7, 8, 9):    return f"Q1 FY{str(y + 1)[-2:]}"    # Jun quarter
+    return f"Q2 FY{str(y + 1)[-2:]}"                          # Sep quarter
+
+
+def _expected_results_quarters(as_of=None):
+    """
+    (primary, previous) quarter-end labels in Screener's 'Mon YYYY' form.
+
+    The reporting-lag heuristic is a month or so early at the start of a season
+    — in early July many companies have not filed Q1 yet — so callers should
+    accept either label rather than commit to the primary.
+      2026-08-02 -> ('Jun 2026', 'Mar 2026')
+    """
+    from datetime import datetime
+    now = as_of or datetime.now()
+    m, y = now.month, now.year
+    if m in (1, 2, 3):
+        primary, prev = f"Dec {y - 1}", f"Sep {y - 1}"
+    elif m in (4, 5, 6):
+        primary, prev = f"Mar {y}", f"Dec {y - 1}"
+    elif m in (7, 8, 9):
+        primary, prev = f"Jun {y}", f"Mar {y}"
+    else:
+        primary, prev = f"Sep {y}", f"Jun {y}"
+    return primary, prev
 
 def _parse_iso_duration(duration_str: str) -> int:
     """Parse ISO 8601 duration (e.g. PT48M39S) to seconds."""
@@ -252,12 +398,36 @@ def _search_youtube_concall(company_name: str, ticker: str, quarter: str = '') -
         except Exception:
             pass
 
+    # Queries are emitted in priority tiers because the list is capped below —
+    # the highest-yield forms must survive the cut.
+    q_name = _query_name(company_name)
+    has_name = bool(q_name) and q_name.upper() != ticker.upper()
+    primary_q = q_search_variants[0] if q_search_variants else ''
+
     search_queries = []
-    for q_var in q_search_variants:
+
+    # Tier 1 — company name + primary quarter label. Indian concall uploads are
+    # titled by company name, never by NSE symbol, so this form leads.
+    if has_name and primary_q:
+        search_queries.append(f"{q_name} concall {primary_q}")
+        search_queries.append(f"{q_name} earnings call {primary_q}")
+
+    # Tier 2 — undated. Titles like "Earnings Call August 2026" carry no quarter
+    # token at all and are invisible to every quarter-tagged query.
+    if has_name:
+        search_queries.append(f"{q_name} earnings call")
+        search_queries.append(f"{q_name} concall")
+
+    # Tier 3 — ticker form, for the channels that do use the NSE symbol.
+    if primary_q:
+        search_queries.append(f"{ticker} concall {primary_q}")
+        search_queries.append(f"{ticker} earnings call {primary_q}")
+
+    # Tier 4 — remaining FY spellings (FY2025-26, FY 2026, ...).
+    for q_var in q_search_variants[1:]:
+        if has_name:
+            search_queries.append(f"{q_name} concall {q_var}")
         search_queries.append(f"{ticker} concall {q_var}")
-        search_queries.append(f"{ticker} earnings call {q_var}")
-        if company_name and company_name.upper() != ticker.upper():
-            search_queries.append(f"{company_name} concall {q_var}")
 
     # Deduplicate while preserving order
     seen = set()
@@ -268,8 +438,8 @@ def _search_youtube_concall(company_name: str, ticker: str, quarter: str = '') -
             seen.add(q_lower)
             unique_queries.append(q)
 
-    # Limit to top 6 queries to keep YouTube API / search requests fast
-    unique_queries = unique_queries[:6]
+    # Cap to keep YouTube API / search requests bounded
+    unique_queries = unique_queries[:10]
 
     proxy_url = _os.environ.get("RESIDENTIAL_PROXY_URL")
 
@@ -333,39 +503,8 @@ def _search_youtube_concall(company_name: str, ticker: str, quarter: str = '') -
         return ("trendlyne" in chan_lower or "alphastreet" in chan_lower
                 or "concall" in chan_lower or "alfafinder" in chan_lower)
 
-    def _company_core_tokens():
-        """Distinctive lowercased tokens of the target company name.
-        "Premier Explosives Ltd" -> ["premier", "explosives"]
-        """
-        stop = {
-            'ltd', 'limited', 'inc', 'incorporated', 'corp', 'corporation',
-            'company', 'co', 'holdings', 'holding', 'india', 'indian',
-            'industries', 'industrial', 'enterprises', 'enterprise',
-            'services', 'service', 'the', 'and', 'pvt', 'private', 'group',
-        }
-        raw = re.split(r'[^a-z0-9]+', (company_name or '').lower())
-        return [t for t in raw if len(t) > 1 and t not in stop]
-
     def _title_matches_company(title_lower):
-        """STRICT check that the title refers to the TARGET company. True if
-        EITHER the normalized ticker appears, OR every distinctive core token
-        appears as a whole word. Rejects confusable siblings (e.g. "Premier
-        Energies" when the target is "Premier Explosives"). False negatives are
-        cheap here (fall back to PDF transcript); false positives are catastrophic.
-        """
-        # Branch 1: ticker rescue (length-gated; handles abbreviated titles).
-        t_raw = (ticker or '').lower()
-        t_norm = t_raw.replace('-', '')
-        for cand in (t_raw, t_norm):
-            if len(cand) >= 4 and cand in title_lower:
-                return True
-        # Branch 2: ALL distinctive core tokens present as whole words.
-        core = _company_core_tokens()
-        if core and all(
-            re.search(r'\b' + re.escape(tok) + r'\b', title_lower) for tok in core
-        ):
-            return True
-        return False
+        return _company_title_match(title_lower, company_name, ticker)
 
     # ── Collect candidates across all queries ──
     all_candidates = []       # list of dicts with metadata
@@ -527,6 +666,29 @@ def _search_youtube_concall(company_name: str, ticker: str, quarter: str = '') -
     if quarter_matched:
         print(f"CONCALL_AGENT: Pre-filtered to {len(quarter_matched)} quarter-matching candidate(s)", file=sys.stderr)
         all_candidates = quarter_matched
+    elif target_q_num:
+        # Nothing confirms the target quarter. Previously the best remaining
+        # candidate was returned anyway and the caller then LABELLED it with the
+        # target quarter — a confidently wrong answer. Keep only candidates that
+        # do not contradict the target and are recent enough to be plausible;
+        # if none survive, return '' so the caller falls through to the exchange
+        # filing and IR-website sources instead of guessing.
+        plausible = [
+            c for c in all_candidates
+            if not _title_contradicts_quarter((c['title'] or '').lower(), target_q_num, fy_short)
+            and c.get('is_recent') is True
+        ]
+        if not plausible:
+            print(
+                f"CONCALL_AGENT: No YouTube candidate confirms {target_quarter} "
+                f"— skipping YouTube so other sources can be tried", file=sys.stderr
+            )
+            return ""
+        print(
+            f"CONCALL_AGENT: No explicit {target_quarter} match; keeping "
+            f"{len(plausible)} recent candidate(s) that don't contradict it", file=sys.stderr
+        )
+        all_candidates = plausible
 
     print(
         f"CONCALL_AGENT: {len(all_candidates)} candidate(s) going to Gemini for final selection...",
@@ -589,11 +751,41 @@ def _search_youtube_concall(company_name: str, ticker: str, quarter: str = '') -
         "No explanation needed."
     )
 
+    def _deterministic_pick(reason):
+        """
+        Best candidate by the code-enforced signals alone.
+
+        Used whenever the LLM tie-break is unavailable or unusable. Everything
+        here has already cleared Rule 0 (company match) and, when any matched,
+        Rule B (quarter match) — so it is a sound choice, and far better than
+        discarding a correct video because one API call hiccuped. Only an
+        explicit "NONE" from the model is treated as a real rejection.
+        """
+        if not all_candidates:   # unreachable today (Rule 0 returns early), but
+            return ""            # this runs inside an except handler — stay total
+
+        def _sort_key(c):
+            raw = str(c.get('upload_date') or '')
+            uploaded = raw if (len(raw) == 8 and raw.isdigit()) else ''
+            return (
+                bool(c.get('matches_quarter')),
+                bool(c.get('is_concall')),
+                bool(c.get('is_preferred')),
+                c.get('is_recent') is True,
+                uploaded,
+            )
+
+        best = sorted(all_candidates, key=_sort_key, reverse=True)[0]
+        print(
+            f"CONCALL_AGENT: {reason} — using top-ranked candidate: "
+            f"{best['url']}  (title: {best['title']})", file=sys.stderr
+        )
+        return best['url']
+
     try:
         GOOGLE_API_KEY = _os.getenv("GOOGLE_API_KEY")
         if not GOOGLE_API_KEY:
-            print("CONCALL_AGENT: No API key for Gemini fallback", file=sys.stderr)
-            return ""
+            return _deterministic_pick("No API key for Gemini tie-break")
 
         _genai_client = genai.Client(api_key=GOOGLE_API_KEY)
         response = _genai_client.models.generate_content(
@@ -605,6 +797,7 @@ def _search_youtube_concall(company_name: str, ticker: str, quarter: str = '') -
         print(f"CONCALL_AGENT: Gemini picked: '{answer}'", file=sys.stderr)
 
         if answer == "NONE":
+            # A deliberate rejection by the model — respect it.
             print("CONCALL_AGENT: Gemini says none of the candidates match", file=sys.stderr)
             return ""
 
@@ -625,27 +818,108 @@ def _search_youtube_concall(company_name: str, ticker: str, quarter: str = '') -
             )
             return chosen['url']
 
-        print(f"CONCALL_AGENT: Could not parse Gemini response: '{answer}'", file=sys.stderr)
-        return ""
+        return _deterministic_pick(f"Could not parse Gemini response '{answer}'")
 
     except Exception as e:
-        print(f"CONCALL_AGENT: Gemini fallback failed: {e}", file=sys.stderr)
-        return ""
+        return _deterministic_pick(f"Gemini tie-break failed ({e})")
+
+
+def _quarter_end_date(results_quarter: str):
+    """'Jun 2026' -> date(2026, 6, 30). None when unparseable."""
+    from datetime import date
+    m = re.match(r'([A-Za-z]{3})\s+(\d{4})$', (results_quarter or '').strip())
+    if not m:
+        return None
+    month = {'mar': (3, 31), 'jun': (6, 30), 'sep': (9, 30), 'dec': (12, 31)}.get(
+        m.group(1).lower())
+    if not month:
+        return None
+    try:
+        return date(int(m.group(2)), month[0], month[1])
+    except ValueError:
+        return None
+
+
+async def _probe_wordpress_media(origin: str, homepage_html: str = '') -> list:
+    """
+    Ask a WordPress site's media library directly for earnings-call files.
+
+    Many Indian IR sites run WordPress, which exposes every uploaded file — with
+    its **upload date** — at /wp-json/wp/v2/media. That date is the signal the
+    HTML crawl fundamentally lacks: crawling only ever sees a filename, so a
+    file named 'earnings_call.mp3' is unverifiable, whereas an upload date can
+    be checked against the quarter end.
+
+    Returns [{url, date, mime}] newest-first, or [] when the site isn't
+    WordPress or the endpoint is disabled.
+    """
+    from urllib.parse import urlparse
+
+    if homepage_html and not any(
+            marker in homepage_html.lower()
+            for marker in ('wp-content', 'wp-json', 'wp-includes')):
+        return []
+
+    parsed = urlparse(origin)
+    if not parsed.scheme or not parsed.netloc:
+        return []
+    base = f"{parsed.scheme}://{parsed.netloc}"
+
+    found = {}
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                             "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+               "Accept": "application/json"}
+    try:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=15.0) as client:
+            for term in ('earnings', 'concall', 'conference call'):
+                try:
+                    r = await client.get(
+                        f"{base}/wp-json/wp/v2/media",
+                        params={"search": term, "per_page": 50,
+                                "orderby": "date", "order": "desc"},
+                        headers=headers,
+                    )
+                    if r.status_code != 200:
+                        continue
+                    items = r.json()
+                except Exception:
+                    continue
+                if not isinstance(items, list):
+                    continue
+                for it in items:
+                    mime = str(it.get('mime_type', ''))
+                    url = it.get('source_url') or ''
+                    if not url or not (mime.startswith('audio/') or mime.startswith('video/')):
+                        continue
+                    found[url] = {'url': url, 'date': str(it.get('date', ''))[:10], 'mime': mime}
+    except Exception as e:
+        print(f"CONCALL_AGENT: WordPress media probe failed: {e}", file=sys.stderr)
+        return []
+
+    out = sorted(found.values(), key=lambda x: x['date'], reverse=True)
+    if out:
+        print(f"CONCALL_AGENT: WordPress media library exposed {len(out)} audio/video file(s)",
+              file=sys.stderr)
+    return out
 
 
 async def _fetch_ir_website_audio(ticker: str, company_name: str = '',
-                                  results_quarter: str = '', seed_url: str = None) -> str:
+                                  results_quarter: str = '', seed_url: str = None) -> dict:
     """
     Best-effort: find a downloadable earnings-call audio file on the company's
     Investor Relations website. Starts from `seed_url` (e.g. an IR page link
     pulled from an NSE filing — the most reliable seed) or, failing that,
-    discovers the company website via Screener. Shallow-crawls a few investor
-    pages (same domain only) and returns a direct audio/video media URL, or ''
-    when none is exposed (e.g. streaming-only webcasts). Company-correct by
-    construction — it never leaves the company's own domain.
+    discovers the company website via Screener. Company-correct by construction
+    — it never leaves the company's own domain.
+
+    Returns ``{url, quarter_confirmed, via}``. ``quarter_confirmed`` says whether
+    the target quarter was actually evidenced (by the filename or by an upload
+    date after the quarter end) rather than merely assumed — the caller uses it
+    to decide whether this outranks YouTube or falls below it.
     """
     from urllib.parse import urljoin, urlparse
 
+    empty = {'url': '', 'quarter_confirmed': False, 'via': ''}
     start_url = seed_url or ""
     if not start_url:
         try:
@@ -655,25 +929,38 @@ async def _fetch_ir_website_audio(ticker: str, company_name: str = '',
             print(f"CONCALL_AGENT: IR website discovery failed: {e}", file=sys.stderr)
             start_url = ""
     if not start_url:
-        return ""
+        return empty
 
     from fetchers.screener_fetcher import _stealth_get_html_async
 
     # Quarter tokens for ranking candidates (best-effort).
+    # Split into two strengths on purpose. IR sites keep every past call in the
+    # same directory, so a loose token silently ties the right file with the
+    # wrong one and the pick ends up riding on stable-sort order:
+    #   * q_tokens  — quarter AND fiscal year together ("q1fy27"): decisive.
+    #   * fy_tokens — fiscal year only ("fy27"): weak, since it matches all four
+    #                 quarters of that year.
     q_tokens = []
+    fy_tokens = []
     try:
         q_fy = _get_q_fy_from_quarter(results_quarter) if results_quarter else ""
         m = re.search(r'Q([1-4])\s*FY(\d{2})', q_fy or "", re.IGNORECASE)
         if m:
             qn, yy = m.group(1), int(m.group(2))
-            q_tokens = [f"q{qn}", f"q{qn}fy{yy}", f"fy{yy}", f"fy20{yy}",
-                        f"20{yy-1}-{yy}", f"20{yy-1}-20{yy}"]
+            q_tokens = [f"q{qn}fy{yy}", f"q{qn}-fy{yy}", f"q{qn}_fy{yy}",
+                        f"q{qn} fy{yy}", f"q{qn}fy20{yy}", f"q{qn}_fy20{yy}",
+                        f"q{qn}-fy20{yy}"]
+            fy_tokens = [f"fy{yy}", f"fy20{yy}", f"20{yy-1}-{yy}", f"20{yy-1}-20{yy}"]
     except Exception:
         pass
+
+    # Any quarter tag at all — used to demote a prior quarter's recording.
+    _other_q_re = re.compile(r'q([1-4])\s*[-_]?\s*fy\s*(\d{2,4})', re.IGNORECASE)
 
     base_netloc = urlparse(start_url).netloc
     seen = set()
     audio_found = []
+    homepage_html = ['']
 
     async def _scan(url, depth):
         if not url or url in seen or len(seen) >= 6 or depth > 2:
@@ -685,6 +972,8 @@ async def _fetch_ir_website_audio(ticker: str, company_name: str = '',
                 return
         except Exception:
             return
+        if depth == 0:
+            homepage_html[0] = text          # used to sniff for WordPress
         soup = BeautifulSoup(text, 'html.parser')
         follow = []
         for a in soup.find_all('a', href=True):
@@ -705,22 +994,164 @@ async def _fetch_ir_website_audio(ticker: str, company_name: str = '',
     except Exception as e:
         print(f"CONCALL_AGENT: IR crawl error: {e}", file=sys.stderr)
 
-    if not audio_found:
-        return ""
-
     def _score(u):
         ul = u.lower()
         s = 0
         if q_tokens and any(t in ul for t in q_tokens):
-            s += 10
+            s += 10                                  # exact quarter + fiscal year
+        elif q_tokens and _other_q_re.search(ul):
+            s -= 10                                  # tagged with a DIFFERENT quarter
+        elif fy_tokens and any(t in ul for t in fy_tokens):
+            s += 3                                   # right year, quarter unstated
         if any(k in ul for k in ('earning', 'concall', 'conference', 'investor', 'audio', 'recording')):
             s += 1
         return s
 
+    # WordPress media library — one request, and unlike the crawl it returns
+    # upload dates, so a file the filename can't vouch for can still be pinned
+    # to the quarter. Tried before falling back to filename-only scoring.
+    q_end = _quarter_end_date(results_quarter)
+    wp_items = await _probe_wordpress_media(start_url, homepage_html[0])
+    for item in wp_items:
+        if item['url'] not in audio_found:
+            audio_found.append(item['url'])
+    if q_end and wp_items:
+        from datetime import date as _date
+        for item in wp_items:
+            if _score(item['url']) < 0:
+                continue                              # filename says another quarter
+            try:
+                y, mo, d = (int(x) for x in item['date'].split('-'))
+                uploaded = _date(y, mo, d)
+            except Exception:
+                continue
+            # Published after the quarter closed and within a normal reporting
+            # window — that is real evidence, not a filename guess.
+            if 0 <= (uploaded - q_end).days <= 120:
+                print(
+                    f"CONCALL_AGENT: IR audio confirmed by upload date "
+                    f"({item['date']}, quarter ended {q_end}): {item['url']}", file=sys.stderr
+                )
+                return {'url': item['url'], 'quarter_confirmed': True, 'via': 'wp_media'}
+
+    if not audio_found:
+        return empty
+
     audio_found.sort(key=_score, reverse=True)
     best = audio_found[0]
-    print(f"CONCALL_AGENT: IR website audio found: {best}", file=sys.stderr)
-    return best
+    best_score = _score(best)
+
+    # Every candidate is tagged with a quarter that is not the one we want —
+    # usually because this quarter's recording is not published yet. Returning
+    # the closest match would hand the caller a previous quarter's call which it
+    # would then label as the target quarter. No answer is the honest answer.
+    if best_score < 0:
+        print(
+            f"CONCALL_AGENT: IR website has {len(audio_found)} recording(s) but none "
+            f"for {results_quarter or 'the target quarter'} (best: {best})",
+            file=sys.stderr
+        )
+        return empty
+
+    # >= 10 means the filename carried the exact quarter AND fiscal year.
+    confirmed = best_score >= 10
+    print(
+        f"CONCALL_AGENT: IR website audio found: {best} "
+        f"(score {best_score}, quarter {'confirmed' if confirmed else 'UNconfirmed'}, "
+        f"{len(audio_found)} candidate(s))", file=sys.stderr
+    )
+    return {'url': best, 'quarter_confirmed': confirmed, 'via': 'crawl'}
+
+
+async def _fetch_nse_transcript_candidate(ticker: str, results_quarter: str = '') -> dict:
+    """Written concall transcript filed with NSE -> {url, quarter}."""
+    try:
+        from fetchers.nse_fetcher import fetch_nse_concall_transcript_async
+        rec = await fetch_nse_concall_transcript_async(ticker, results_quarter)
+    except Exception as e:
+        print(f"CONCALL_AGENT: NSE transcript lookup failed: {e}", file=sys.stderr)
+        return {'url': '', 'quarter': ''}
+    return {'url': rec.get('pdf_url', ''), 'quarter': rec.get('quarter', '')}
+
+
+async def _fetch_bse_transcript_candidate(ticker: str, results_quarter: str = '') -> dict:
+    """Written concall transcript filed with BSE -> {url, quarter}."""
+    try:
+        from fetchers.bse_fetcher import fetch_bse_concall_docs_async
+        cands = await fetch_bse_concall_docs_async(ticker, results_quarter)
+    except Exception as e:
+        print(f"CONCALL_AGENT: BSE transcript lookup failed: {e}", file=sys.stderr)
+        return {'url': '', 'quarter': ''}
+    for c in cands:
+        if c.get('kind') == 'transcript_pdf':
+            return {'url': c['url'], 'quarter': c.get('quarter', '')}
+    return {'url': '', 'quarter': ''}
+
+
+# Injected at route-registration time; None when Perplexity isn't configured.
+_call_perplexity_search_fn = None
+
+
+async def _web_search_concall_media(ticker: str, company_name: str = '',
+                                    results_quarter: str = '') -> str:
+    """
+    Last-resort search for a concall recording, restricted to the company's OWN
+    domain.
+
+    Every other source in the cascade is company-correct by construction — keyed
+    to an exchange symbol or confined to the company's website. A web search is
+    not, and an open query can confidently return a competitor's file. Pinning
+    the search to the company's own domain keeps that guarantee; without a
+    resolvable domain this step is skipped entirely rather than run unrestricted.
+    """
+    if _call_perplexity_search_fn is None:
+        print("CONCALL_AGENT: web search not configured — skipping", file=sys.stderr)
+        return ""
+
+    from urllib.parse import urlparse
+    try:
+        from fetchers.screener_fetcher import fetch_company_website_async
+        site = await fetch_company_website_async(ticker)
+    except Exception:
+        site = ""
+    domain = urlparse(site).netloc.lower().lstrip('www.') if site else ""
+    if not domain:
+        print("CONCALL_AGENT: no company domain — skipping web search", file=sys.stderr)
+        return ""
+
+    q_fy = _get_q_fy_from_quarter(results_quarter) if results_quarter else ""
+    query = f"{company_name or ticker} {q_fy} earnings conference call audio recording".strip()
+
+    after = None
+    q_end = _quarter_end_date(results_quarter)
+    if q_end:
+        after = f"{q_end.month}/{q_end.day}/{q_end.year}"
+
+    try:
+        results = await asyncio.to_thread(
+            _call_perplexity_search_fn, query,
+            [domain],          # search_domain_filter
+            after,             # search_after_date_filter
+            None,              # search_recency_filter
+            10,                # max_results
+        )
+    except Exception as e:
+        print(f"CONCALL_AGENT: Perplexity search failed: {e}", file=sys.stderr)
+        return ""
+
+    for r in (results or []):
+        url = (r.get('url') or '').strip()
+        if not url:
+            continue
+        # Only accept a real media file, and only on the company's own domain.
+        if urlparse(url).netloc.lower().lstrip('www.') != domain:
+            continue
+        if _get_url_type(url) in ('audio', 'video'):
+            print(f"CONCALL_AGENT: web search found media on {domain}: {url}", file=sys.stderr)
+            return url
+
+    print(f"CONCALL_AGENT: web search on {domain} returned no media files", file=sys.stderr)
+    return ""
 
 
 # =====================================================================
@@ -760,53 +1191,70 @@ def _date_to_quarter(date_str: str) -> str:
     return ''
 
 
-async def _fetch_latest_results_quarter(ticker: str) -> str:
+async def _fetch_screener_quarter_and_name(ticker: str):
     """
-    Lightweight HTTP call to Screener.in to extract the latest quarterly
-    results column header (e.g., 'Dec 2025').
-    Checks BOTH consolidated and standalone URLs, returns whichever is newer.
-    Does NOT download any PDFs — only parses the HTML for table headers.
-    Returns the quarter string or empty string on failure.
+    One pass over Screener.in for the two things the pipeline needs up front:
+      * the latest quarterly results column header (e.g. 'Jun 2026')
+      * the canonical company name from the page <h1>
+
+    Checks BOTH consolidated and standalone URLs and keeps whichever quarter is
+    newer. Downloads no PDFs — HTML only.
+
+    The name matters because the local stock master mangles possessives
+    ("Divi's Laboratories" is stored as "Divi S Laboratories") whereas Screener
+    renders them cleanly ("Divis Laboratories Ltd") — and since this page is
+    being fetched anyway, the better name is free.
+
+    Returns (quarter, company_name); either may be '' on failure.
     """
     try:
+        from fetchers.screener_fetcher import _stealth_get_html_async
+
         consolidated_url = f"https://www.screener.in/company/{ticker}/consolidated/"
         standalone_url = f"https://www.screener.in/company/{ticker}/"
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            "Accept-Language": "en-US,en;q=0.9",
-        }
         quarter_pattern = re.compile(r'^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{4}$', re.IGNORECASE)
 
-        async def _get_quarter_from_url(url):
+        async def _parse_page(url):
+            """-> (quarter, company_name), both '' on failure."""
             try:
-                async with httpx.AsyncClient(follow_redirects=True) as client:
-                    response = await client.get(url, headers=headers, timeout=15.0)
-                    if response.status_code != 200:
-                        return ""
-                    soup = BeautifulSoup(response.text, 'html.parser')
-                    quarters_section = soup.find('section', id='quarters')
-                    if not quarters_section:
-                        return ""
+                # Screener sits behind Cloudflare; the stealth ladder
+                # (httpx -> curl_cffi -> curl_cffi+proxy) is what every other
+                # Screener call in the codebase uses. A bare httpx GET here
+                # silently returned '' from datacenter IPs, which then cascaded
+                # into a wrong derived quarter downstream.
+                text, _final_url, status = await _stealth_get_html_async(url)
+                if status != 200 or not text:
+                    return "", ""
+                soup = BeautifulSoup(text, 'html.parser')
+
+                name = ""
+                h1 = soup.find('h1')
+                if h1:
+                    name = re.sub(r'\s+', ' ', h1.get_text(strip=True)).strip()
+
+                quarter = ""
+                quarters_section = soup.find('section', id='quarters')
+                if quarters_section:
                     table = quarters_section.find('table')
-                    if not table:
-                        return ""
-                    header_row = table.find('thead')
-                    if not header_row:
-                        return ""
-                    headers_list = [th.get_text(strip=True) for th in header_row.find_all('th')]
-                    quarter_headers = [h for h in headers_list if quarter_pattern.match(h.strip())]
-                    if quarter_headers:
-                        return quarter_headers[-1].strip()
+                    header_row = table.find('thead') if table else None
+                    if header_row:
+                        headers_list = [th.get_text(strip=True) for th in header_row.find_all('th')]
+                        quarter_headers = [h for h in headers_list if quarter_pattern.match(h.strip())]
+                        if quarter_headers:
+                            quarter = quarter_headers[-1].strip()
+                return quarter, name
             except Exception:
-                pass
-            return ""
+                return "", ""
 
         # Fetch both in parallel for speed
-        consol_q, standalone_q = await asyncio.gather(
-            _get_quarter_from_url(consolidated_url),
-            _get_quarter_from_url(standalone_url)
+        (consol_q, consol_name), (standalone_q, standalone_name) = await asyncio.gather(
+            _parse_page(consolidated_url),
+            _parse_page(standalone_url)
         )
+
+        company_name = consol_name or standalone_name
+        if company_name:
+            print(f"CONCALL_AGENT: Screener company name for {ticker}: {company_name}", file=sys.stderr)
 
         # Compare and pick the newest
         best = ""
@@ -827,10 +1275,10 @@ async def _fetch_latest_results_quarter(ticker: str) -> str:
         else:
             print(f"CONCALL_AGENT: Could not determine latest results quarter for {ticker}", file=sys.stderr)
 
-        return best
+        return best, company_name
     except Exception as e:
-        print(f"CONCALL_AGENT: _fetch_latest_results_quarter failed for {ticker}: {e}", file=sys.stderr)
-        return ''
+        print(f"CONCALL_AGENT: _fetch_screener_quarter_and_name failed for {ticker}: {e}", file=sys.stderr)
+        return '', ''
 
 
 async def _extract_text_from_webpage(url: str, max_chars: int = 80000) -> str:
@@ -897,6 +1345,83 @@ def _get_url_type(url: str) -> str:
         return 'webpage'
 
 
+_FFMPEG_EXE = None
+
+
+def _get_ffmpeg() -> str:
+    """
+    Path to an ffmpeg binary, or '' when none is available. Prefers a system
+    install (present in the container image) and falls back to the static build
+    shipped by imageio-ffmpeg (which covers the zip/Oryx deployment). Probed
+    once per process.
+    """
+    global _FFMPEG_EXE
+    if _FFMPEG_EXE is None:
+        import shutil
+        exe = shutil.which('ffmpeg') or ''
+        if not exe:
+            try:
+                import imageio_ffmpeg
+                exe = imageio_ffmpeg.get_ffmpeg_exe() or ''
+            except Exception as e:
+                print(f"CONCALL_AGENT: imageio-ffmpeg unavailable: {e}", file=sys.stderr)
+        _FFMPEG_EXE = exe
+        print(
+            f"CONCALL_AGENT: ffmpeg {'found at ' + exe if exe else 'NOT available'}",
+            file=sys.stderr
+        )
+    return _FFMPEG_EXE
+
+
+def _demux_to_audio(src_path: str):
+    """
+    Strip the video track and re-encode to mono 16 kHz.
+
+    Company IR sites publish earnings calls as .webm/.mp4 containers carrying a
+    video track. Gemini would bill those as an hour of video frames when the
+    audio is the only thing we need — this typically cuts a 45 MB webm to a few MB.
+
+    Returns (path, mime_type), or ('', '') when ffmpeg is missing or the
+    conversion fails; the caller then uploads the original file unchanged.
+    """
+    ffmpeg = _get_ffmpeg()
+    if not ffmpeg:
+        return '', ''
+
+    import subprocess
+
+    base = os.path.splitext(src_path)[0]
+    # libopus is present in both the Debian and imageio-ffmpeg builds, but fall
+    # back to AAC rather than give up if this build lacks the encoder.
+    attempts = [
+        (base + '.audio.ogg', ['-c:a', 'libopus', '-b:a', '24k'], 'audio/ogg'),
+        (base + '.audio.m4a', ['-c:a', 'aac', '-b:a', '32k'], 'audio/mp4'),
+    ]
+
+    for out_path, codec_args, mime in attempts:
+        cmd = [ffmpeg, '-y', '-loglevel', 'error', '-i', src_path,
+               '-vn', '-ac', '1', '-ar', '16000'] + codec_args + [out_path]
+        try:
+            proc = subprocess.run(cmd, capture_output=True, timeout=600)
+        except Exception as e:
+            print(f"CONCALL_AGENT: ffmpeg demux errored ({e})", file=sys.stderr)
+            continue
+
+        if proc.returncode == 0 and os.path.exists(out_path) and os.path.getsize(out_path) > 1024:
+            src_mb = os.path.getsize(src_path) / (1024 * 1024)
+            out_mb = os.path.getsize(out_path) / (1024 * 1024)
+            print(
+                f"CONCALL_AGENT: ✓ Demuxed to audio ({mime}): "
+                f"{src_mb:.1f} MB → {out_mb:.1f} MB", file=sys.stderr
+            )
+            return out_path, mime
+
+        err = (proc.stderr or b'').decode('utf-8', 'replace').strip()[:300]
+        print(f"CONCALL_AGENT: ffmpeg demux to {mime} failed: {err}", file=sys.stderr)
+
+    return '', ''
+
+
 def _extract_video_id(url: str) -> str:
     """Extract YouTube video ID from various URL formats."""
     import re as _re
@@ -911,6 +1436,64 @@ def _extract_video_id(url: str) -> str:
         if match:
             return match.group(1)
     return ''
+
+
+# A freshly uploaded Gemini file is not immediately usable — it sits in
+# PROCESSING until the backend finishes decoding it, and files.upload() does NOT
+# block for that. Long recordings must be polled to ACTIVE before generate_content,
+# which otherwise rejects them with "File is not in an ACTIVE state".
+# NOTE: FileState subclasses (str, Enum), so str(state) renders as
+# 'FileState.PROCESSING' — compare on .name, never on str().
+_GEMINI_FILE_POLL_SECS = 3
+_GEMINI_FILE_MAX_WAIT_SECS = 300
+
+
+def _file_state_name(uploaded) -> str:
+    """Uppercased state name of an uploaded Gemini file ('' when unknown)."""
+    state = getattr(uploaded, 'state', None)
+    if state is None:
+        return ''
+    return str(getattr(state, 'name', state)).upper()
+
+
+def _wait_for_gemini_file_active(client, uploaded, label: str = ''):
+    """
+    Poll an uploaded Gemini file until it leaves PROCESSING.
+    Returns the refreshed file when it is usable, or None when it FAILED or
+    did not finish within the budget (callers must not transcribe in that case).
+    """
+    import time as _time
+
+    waited = 0
+    while _file_state_name(uploaded) == 'PROCESSING' and waited < _GEMINI_FILE_MAX_WAIT_SECS:
+        _time.sleep(_GEMINI_FILE_POLL_SECS)
+        waited += _GEMINI_FILE_POLL_SECS
+        try:
+            uploaded = client.files.get(name=uploaded.name)
+        except Exception as e:
+            print(f"CONCALL_AGENT: files.get failed while waiting for {label}: {e}", file=sys.stderr)
+            return None
+        if waited % 30 == 0:
+            print(f"CONCALL_AGENT: Waiting for Gemini to process {label}... ({waited}s)", file=sys.stderr)
+
+    state = _file_state_name(uploaded)
+    # An unknown/absent state is treated as usable — only an explicit non-ACTIVE
+    # state (FAILED, or still PROCESSING at timeout) aborts.
+    if state in ('ACTIVE', ''):
+        if waited:
+            print(f"CONCALL_AGENT: Gemini file {label} ready after {waited}s", file=sys.stderr)
+        return uploaded
+
+    print(
+        f"CONCALL_AGENT: ❌ Gemini file {label} is {state} after {waited}s "
+        f"— skipping transcription", file=sys.stderr
+    )
+    # Don't leave the orphan behind on the Files API.
+    try:
+        client.files.delete(name=uploaded.name)
+    except Exception:
+        pass
+    return None
 
 
 async def _extract_youtube_transcript(url: str, max_chars: int = 80000) -> str:
@@ -1041,13 +1624,11 @@ async def _extract_youtube_transcript(url: str, max_chars: int = 80000) -> str:
                     )
                 )
 
-                # Wait for processing
-                import time as _time
-                wait_count = 0
-                while uploaded.state and str(uploaded.state) == 'PROCESSING' and wait_count < 60:
-                    _time.sleep(2)
-                    uploaded = _genai_client.files.get(name=uploaded.name)
-                    wait_count += 1
+                # Wait for Gemini to finish decoding before transcribing
+                uploaded = _wait_for_gemini_file_active(
+                    _genai_client, uploaded, label=f'youtube_{video_id}{ext}')
+                if uploaded is None:
+                    return ''
 
                 prompt = """You are a financial transcription specialist. This audio is from an earnings conference call (concall) for a publicly traded company.
 
@@ -1109,28 +1690,42 @@ async def _transcribe_audio_video_from_url(url: str, media_type: str = 'audio',
         print("CONCALL_AGENT: GOOGLE_API_KEY not set, cannot transcribe audio/video", file=sys.stderr)
         return ''
 
-    uploaded_file = None
+    import shutil as _shutil
+    import tempfile as _tempfile
+
+    tmp_dir = _tempfile.mkdtemp(prefix='concall_media_')
 
     try:
         print(f"CONCALL_AGENT: Downloading {media_type} from {url}", file=sys.stderr)
 
-        # Download the file — try httpx first, then curl_cffi fallback
-        file_bytes = None
+        clean_url = url.split('?')[0].split('#')[0]
+        suffix = os.path.splitext(clean_url)[1][:8] or '.bin'
+        src_path = os.path.join(tmp_dir, 'concall' + suffix)
+
+        # Download the file — try httpx first, then curl_cffi fallback.
+        # Streamed to disk: a full-length call runs to tens of MB and buffering
+        # the whole body in memory is needless pressure on the worker.
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
             "Accept": "audio/mpeg,audio/*,*/*;q=0.8",
             "Accept-Language": "en-US,en;q=0.9",
             "Referer": url.rsplit('/', 1)[0] + "/",
         }
+
+        def _downloaded_bytes():
+            return os.path.getsize(src_path) if os.path.exists(src_path) else 0
+
         try:
             async with httpx.AsyncClient(follow_redirects=True) as client:
-                response = await client.get(url, headers=headers, timeout=120.0)
-                response.raise_for_status()
-            file_bytes = response.content
+                async with client.stream('GET', url, headers=headers, timeout=300.0) as response:
+                    response.raise_for_status()
+                    with open(src_path, 'wb') as fh:
+                        async for chunk in response.aiter_bytes(1024 * 1024):
+                            fh.write(chunk)
         except Exception as httpx_err:
             print(f"CONCALL_AGENT: httpx audio download failed ({httpx_err}), trying curl_cffi...", file=sys.stderr)
             try:
-                def _cffi_audio_download(audio_url, use_proxy=False):
+                def _cffi_audio_download(audio_url, dest, use_proxy=False):
                     from curl_cffi import requests as cffi_requests
                     import os as _os2
                     proxies = None
@@ -1139,47 +1734,66 @@ async def _transcribe_audio_video_from_url(url: str, media_type: str = 'audio',
                         if proxy_url:
                             proxies = {"http": proxy_url, "https": proxy_url}
                         else:
-                            return None
+                            return False
                     session = cffi_requests.Session(impersonate="chrome110", proxies=proxies)
                     r = session.get(
                         audio_url,
                         headers={"Referer": audio_url.rsplit('/', 1)[0] + "/",
                                  "Accept": "audio/mpeg,audio/*,*/*;q=0.8"},
-                        allow_redirects=True, timeout=120
+                        allow_redirects=True, timeout=300
                     )
                     if r.status_code == 200 and r.content:
-                        return r.content
-                    return None
+                        with open(dest, 'wb') as fh:
+                            fh.write(r.content)
+                        return True
+                    return False
+
                 # Attempt 1: Direct (no proxy)
-                file_bytes = await asyncio.to_thread(_cffi_audio_download, url, False)
-                if not file_bytes:
+                ok = await asyncio.to_thread(_cffi_audio_download, url, src_path, False)
+                if not ok:
                     # Attempt 2: With proxy
-                    file_bytes = await asyncio.to_thread(_cffi_audio_download, url, True)
-                if file_bytes:
-                    print(f"CONCALL_AGENT: ✓ curl_cffi audio download succeeded ({len(file_bytes)} bytes)", file=sys.stderr)
+                    ok = await asyncio.to_thread(_cffi_audio_download, url, src_path, True)
+                if ok:
+                    print(f"CONCALL_AGENT: ✓ curl_cffi audio download succeeded ({_downloaded_bytes()} bytes)", file=sys.stderr)
             except Exception as cffi_err:
                 print(f"CONCALL_AGENT: curl_cffi audio fallback also failed: {cffi_err}", file=sys.stderr)
 
-        if not file_bytes:
+        if _downloaded_bytes() <= 0:
             print(f"CONCALL_AGENT: ❌ All audio download methods failed for {url}", file=sys.stderr)
             return ''
 
-        file_size_mb = len(file_bytes) / (1024 * 1024)
+        file_size_mb = _downloaded_bytes() / (1024 * 1024)
         print(f"CONCALL_AGENT: Downloaded {file_size_mb:.1f} MB of {media_type}", file=sys.stderr)
 
         # Determine mime type
-        clean_url = url.split('?')[0].split('#')[0]
         mime_type = mimetypes.guess_type(clean_url)[0]
         if not mime_type:
             mime_type = f"{media_type}/mp4" if media_type == 'video' else f"{media_type}/mpeg"
 
+        # A video container means Gemini would bill video frames for what is really
+        # just a conference call, so strip the video track when ffmpeg is available.
+        upload_path = src_path
+        if _get_url_type(url) == 'video' or mime_type.startswith('video/'):
+            audio_path, audio_mime = _demux_to_audio(src_path)
+            if audio_path:
+                upload_path, mime_type = audio_path, audio_mime
+            else:
+                # Without ffmpeg, keep the true video mime: Gemini handles it
+                # (just far more expensively), whereas claiming audio/webm for a
+                # video container is not an accepted type and hard-fails.
+                print(
+                    f"CONCALL_AGENT: ⚠️ No ffmpeg — uploading as {mime_type}; "
+                    f"install ffmpeg or imageio-ffmpeg to cut cost substantially",
+                    file=sys.stderr
+                )
+
         # Upload to Gemini Files API (blocking — run in thread)
-        def _blocking_transcribe(content, mime, filename):
+        def _blocking_transcribe(path, mime, filename):
             _genai_client = genai.Client(api_key=GOOGLE_API_KEY)
 
             print(f"CONCALL_AGENT: Uploading {media_type} to Gemini Files API ({mime})...", file=sys.stderr)
             uploaded = _genai_client.files.upload(
-                file=BytesIO(content),
+                file=path,
                 config=types.UploadFileConfig(
                     display_name=filename,
                     mime_type=mime
@@ -1187,15 +1801,10 @@ async def _transcribe_audio_video_from_url(url: str, media_type: str = 'audio',
             )
             print(f"CONCALL_AGENT: Uploaded as '{uploaded.name}'", file=sys.stderr)
 
-            # Wait for processing if needed (video files may take time)
-            import time as _time
-            wait_count = 0
-            while uploaded.state and str(uploaded.state) == 'PROCESSING' and wait_count < 60:
-                _time.sleep(2)
-                uploaded = _genai_client.files.get(name=uploaded.name)
-                wait_count += 1
-                if wait_count % 5 == 0:
-                    print(f"CONCALL_AGENT: Waiting for {media_type} processing... ({wait_count * 2}s)", file=sys.stderr)
+            # Wait for Gemini to finish decoding — long recordings take minutes
+            uploaded = _wait_for_gemini_file_active(_genai_client, uploaded, label=filename)
+            if uploaded is None:
+                return ''
 
             prompt = f"""You are a financial transcription specialist. This {media_type} contains an earnings conference call (concall) for a publicly traded company.
 
@@ -1229,7 +1838,7 @@ Return ONLY the transcript text."""
 
         filename = url.split('/')[-1].split('?')[0] or f'concall.{media_type}'
         transcript = await asyncio.to_thread(
-            _blocking_transcribe, file_bytes, mime_type, filename
+            _blocking_transcribe, upload_path, mime_type, filename
         )
 
         if transcript:
@@ -1241,9 +1850,12 @@ Return ONLY the transcript text."""
         print(f"CONCALL_AGENT: Failed to transcribe {media_type} from {url}: {e}", file=sys.stderr)
         traceback.print_exc(file=sys.stderr)
         return ''
+    finally:
+        _shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
-def register_concall_routes(app, call_gemini_api_fn, fetch_documents_fn, get_pdf_text_fn):
+def register_concall_routes(app, call_gemini_api_fn, fetch_documents_fn, get_pdf_text_fn,
+                            call_perplexity_search_fn=None):
     """
     Register all Concall Agent API routes with the Flask app.
 
@@ -1252,7 +1864,12 @@ def register_concall_routes(app, call_gemini_api_fn, fetch_documents_fn, get_pdf
         call_gemini_api_fn: Reference to call_gemini_api from handler.py
         fetch_documents_fn: Reference to fetch_latest_documents_async from screener_fetcher
         get_pdf_text_fn: Reference to get_text_from_pdf_url_async from screener_fetcher
+        call_perplexity_search_fn: Optional reference to call_perplexity_search_api.
+            Only used for the last-resort, domain-restricted media search; when
+            omitted that step is skipped rather than run unrestricted.
     """
+    global _call_perplexity_search_fn
+    _call_perplexity_search_fn = call_perplexity_search_fn
 
     @app.route('/agent/concall/analyze', methods=['POST'])
     def agent_concall_analyze():
@@ -1311,12 +1928,13 @@ def register_concall_routes(app, call_gemini_api_fn, fetch_documents_fn, get_pdf
         job = get_agent_job(job_id)
 
         if not job:
-            return jsonify({'error': 'Job not found or expired'}), 404
+            return jsonify({'status': 'error', 'error': 'Job not found or expired'})
 
         if job['status'] == 'processing':
             return jsonify({
                 'status': 'processing',
                 'progress': job['progress'],
+                'sources_tried': job.get('sources_tried', []),
                 'elapsed_seconds': int(time.time() - job['started_at'])
             })
 
@@ -1331,7 +1949,10 @@ def register_concall_routes(app, call_gemini_api_fn, fetch_documents_fn, get_pdf
                 'status': 'error',
                 'error': job['error'],
                 'auto_fetch_failed': job.get('auto_fetch_failed', False),
-                'quarter_mismatch': job.get('quarter_mismatch', False)
+                'quarter_mismatch': job.get('quarter_mismatch', False),
+                'sources_tried': job.get('sources_tried', []),
+                'target_quarter': job.get('target_quarter', ''),
+                'quarter_source': job.get('quarter_source', ''),
             })
 
         return jsonify({'error': 'Unknown job status'}), 500
@@ -1472,16 +2093,29 @@ def _run_concall_analysis(job_id, ticker, call_gemini_api_fn, fetch_documents_fn
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 
+        # Ask for the concall document only. The results-presentation summary
+        # costs a Gemini request and this agent never reads it — it only ever
+        # looks at the doc whose type is 'Concall'.
+        try:
+            docs_coro = fetch_documents_fn(ticker, include_presentation=False)
+        except TypeError:
+            # Older/other injected fetcher without the flag — still works.
+            docs_coro = fetch_documents_fn(ticker)
+
         try:
             # Run both fetches concurrently for speed
-            documents, results_quarter = loop.run_until_complete(
+            documents, (results_quarter, screener_name) = loop.run_until_complete(
                 asyncio.gather(
-                    fetch_documents_fn(ticker),
-                    _fetch_latest_results_quarter(ticker)
+                    docs_coro,
+                    _fetch_screener_quarter_and_name(ticker)
                 )
             )
         finally:
             loop.close()
+
+        # Screener's <h1> is cleaner than the local stock master (which mangles
+        # possessives), so prefer it and fall back to the CSV.
+        company_name = screener_name or _get_company_name_from_ticker(ticker)
 
         # Find the concall transcript
         concall_doc = None
@@ -1503,21 +2137,67 @@ def _run_concall_analysis(job_id, ticker, call_gemini_api_fn, fetch_documents_fn
         quarter_mismatch = False
         if results_quarter and concall_quarter:
             quarter_mismatch = (concall_quarter != results_quarter)
-            
+
+        # Where the target quarter came from, so the UI can qualify its claims.
+        quarter_source = 'screener' if results_quarter else 'derived'
+        expected_primary, expected_previous = _expected_results_quarters()
+
+        # When Screener is unreachable, results_quarter is '' and the mismatch
+        # check above is vacuously False — which used to mean a stale prior-quarter
+        # transcript was analysed silently. Fall back to the date-derived quarter
+        # instead, accepting either the primary or previous label because the
+        # reporting-lag heuristic runs early at the start of a season.
+        stale_vs_derived = (
+            not results_quarter
+            and concall_quarter
+            and concall_quarter not in (expected_primary, expected_previous)
+        )
+
         auto_fetch_failed = False
         auto_fetch_source = None
 
-        if (not concall_text or len(concall_text.strip()) < 200) or quarter_mismatch:
+        # Per-source attempt log. Every discovery step appends exactly one entry
+        # so a failure can be diagnosed from the result instead of from stderr.
+        # status: found | not_found | wrong_quarter | transcription_failed | blocked | error
+        sources_tried = []
+
+        def _log_source(source, status, url='', quarter='', detail=''):
+            sources_tried.append({
+                'source': source, 'status': status,
+                'url': url, 'quarter': quarter, 'detail': detail,
+            })
+            update_agent_job(job_id, {'sources_tried': list(sources_tried)})
+
+        transcript_missing = (not concall_text or len(concall_text.strip()) < 200)
+
+        if transcript_missing or quarter_mismatch or not concall_quarter or stale_vs_derived:
             if quarter_mismatch:
                 print(f"CONCALL_AGENT: ⚠️ Quarter mismatch! Concall={concall_quarter}, Results={results_quarter}", file=sys.stderr)
+            elif stale_vs_derived:
+                print(
+                    f"CONCALL_AGENT: ⚠️ Screener quarter unavailable; concall quarter "
+                    f"{concall_quarter} is older than expected "
+                    f"({expected_primary}/{expected_previous}) — searching for a newer call",
+                    file=sys.stderr
+                )
+            elif not concall_quarter:
+                print(f"CONCALL_AGENT: ⚠️ Concall document has no usable date for {ticker}", file=sys.stderr)
             else:
                 print(f"CONCALL_AGENT: ⚠️ No concall transcript found for {ticker}", file=sys.stderr)
-                
+
             update_agent_job(job_id, {'progress': 'Transcript missing or outdated. Auto-searching for latest concall audio...'})
-            
+
+            _log_source(
+                'screener_transcript',
+                'not_found' if transcript_missing else 'wrong_quarter',
+                url=concall_link, quarter=concall_quarter,
+                detail=('no transcript PDF on Screener' if transcript_missing
+                        else f'transcript is for {concall_quarter or "an unknown quarter"}')
+            )
+
             new_audio_url = ""
             new_source = ""
-            
+
             # Helper to attempt transcription within a loop
             async def _try_transcribe(audio_url):
                 is_yt = 'youtube' in audio_url.lower() or 'youtu.be' in audio_url.lower()
@@ -1525,136 +2205,262 @@ def _run_concall_analysis(job_id, ticker, call_gemini_api_fn, fetch_documents_fn
                 if is_yt:
                     print("CONCALL_AGENT: Trying _extract_youtube_transcript", file=sys.stderr)
                     text = await _extract_youtube_transcript(audio_url, max_chars=80000)
-                    
+
                 if not text or text.startswith("Error"):
                     print(f"CONCALL_AGENT: Falling back to _transcribe_audio_video_from_url via Gemini for {audio_url}", file=sys.stderr)
                     update_agent_job(job_id, {'progress': 'Running deep transcription via Gemini AI...'})
                     text = await _transcribe_audio_video_from_url(audio_url, 'audio')
                 return text
 
-            # 2a. Try to fetch REC link from Screener
-            from fetchers.screener_fetcher import fetch_concall_rec_url_async
-            loop2 = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop2)
-            try:
-                rec_info = loop2.run_until_complete(fetch_concall_rec_url_async(ticker))
-            finally:
-                loop2.close()
-                
-            # Keep a separate loop for transcriptions
+            # Screener REC link. fetch_latest_documents_async already puts a
+            # 'rec_link' on the concall doc, so reuse it and only re-fetch the
+            # (Cloudflare-gated) page when it is absent.
+            rec_info = {}
+            doc_rec_link = concall_doc.get('rec_link', '') if concall_doc else ''
+            if doc_rec_link:
+                rec_info = {"url": doc_rec_link, "date": concall_raw_date}
+                print(f"CONCALL_AGENT: Reusing REC link from documents fetch: {doc_rec_link}", file=sys.stderr)
+            else:
+                from fetchers.screener_fetcher import fetch_concall_rec_url_async
+                loop2 = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop2)
+                try:
+                    rec_info = loop2.run_until_complete(fetch_concall_rec_url_async(ticker))
+                finally:
+                    loop2.close()
+
+            # One event loop for the whole discovery cascade.
             loop3 = asyncio.new_event_loop()
             asyncio.set_event_loop(loop3)
-            
+
+            def _commit(source, url, label, quarter, text):
+                """Accept a transcript and record it as the winning source."""
+                nonlocal concall_text, concall_link, concall_label
+                nonlocal concall_quarter, quarter_mismatch, auto_fetch_source, new_audio_url
+                concall_text = text
+                concall_link = url
+                concall_label = label
+                concall_quarter = quarter or results_quarter or "Latest"
+                quarter_mismatch = False
+                auto_fetch_source = source
+                new_audio_url = url
+
+            def _try_media(source, url, label, quarter=''):
+                """
+                Download + transcribe `url`; commit on success. Returns True when
+                it worked. Every outcome is written to the attempt log, so a
+                failure here is diagnosable rather than silent.
+                """
+                if not url:
+                    return False
+                print(f"CONCALL_AGENT: [{source}] trying {url}", file=sys.stderr)
+                try:
+                    text = loop3.run_until_complete(_try_transcribe(url))
+                except Exception as e:
+                    print(f"CONCALL_AGENT: [{source}] transcription raised: {e}", file=sys.stderr)
+                    _log_source(source, 'transcription_failed', url=url,
+                                quarter=quarter, detail=str(e)[:200])
+                    return False
+                if text and not text.startswith("Error") and len(text.strip()) >= 200:
+                    _commit(source, url, label, quarter, text)
+                    _log_source(source, 'found', url=url, quarter=concall_quarter,
+                                detail=f'transcribed {len(text)} chars')
+                    return True
+                _log_source(source, 'transcription_failed', url=url, quarter=quarter,
+                            detail='transcription returned nothing usable')
+                return False
+
+            def _quarter_ok(q):
+                """Does quarter label `q` match what we are looking for?"""
+                if not q:
+                    return False
+                if results_quarter:
+                    return q == results_quarter
+                return q in (expected_primary, expected_previous)
+
             try:
-                # First, test Screener REC URL
-                if rec_info and rec_info.get("url"):
-                    rec_date = rec_info.get("date", "")
-                    rec_quarter = _date_to_quarter(rec_date)
-                    if rec_quarter and results_quarter and rec_quarter == results_quarter:
-                        new_audio_url = rec_info.get("url")
-                        new_source = "screener_rec"
-                        print(f"CONCALL_AGENT: Found REC link on Screener: {new_audio_url}", file=sys.stderr)
-                        
-                        try:
-                            # Attempt transcription NOW
-                            transcribed_text = loop3.run_until_complete(_try_transcribe(new_audio_url))
-                            if transcribed_text and not transcribed_text.startswith("Error"):
-                                concall_text = transcribed_text
-                                concall_link = new_audio_url
-                                concall_label = "Auto-Fetched Audio Transcription"
-                                concall_quarter = results_quarter if results_quarter else "Latest"
-                                quarter_mismatch = False
-                                auto_fetch_source = new_source
-                            else:
-                                print("CONCALL_AGENT: Transcription returned empty or error for REC url", file=sys.stderr)
-                                new_audio_url = "" # Reset to allow fallback
-                        except Exception as e:
-                            print(f"CONCALL_AGENT: Transcription of REC url failed entirely: {e}", file=sys.stderr)
-                            new_audio_url = "" # Reset to allow fallback
+                # ---------------------------------------------------------------
+                # Source order is deliberate: prefer whatever proves BOTH the
+                # company and the quarter. A written transcript filed with an
+                # exchange proves both and costs nothing to use, so it leads.
+                # A company-hosted file whose quarter cannot be verified is the
+                # weakest evidence and therefore ranks BELOW YouTube, which does
+                # check the company name, quarter tag, upload date and duration.
+                # ---------------------------------------------------------------
 
-                # Resolve company name once for all remaining auto-fetch sources.
-                company_name = _get_company_name_from_ticker(ticker)
+                # 1. Written transcript filed with NSE / BSE.
+                update_agent_job(job_id, {'progress': 'Checking exchange filings for a written transcript...'})
+                for src_name, fetch_fn in (
+                    ('nse_transcript', _fetch_nse_transcript_candidate),
+                    ('bse_transcript', _fetch_bse_transcript_candidate),
+                ):
+                    if new_audio_url:
+                        break
+                    try:
+                        cand = loop3.run_until_complete(fetch_fn(ticker, results_quarter))
+                    except Exception as e:
+                        print(f"CONCALL_AGENT: {src_name} lookup failed: {e}", file=sys.stderr)
+                        _log_source(src_name, 'blocked', detail=str(e)[:200])
+                        continue
+                    if not cand.get('url'):
+                        _log_source(src_name, 'not_found', detail='no transcript filed yet')
+                        continue
+                    if not _quarter_ok(cand.get('quarter')):
+                        _log_source(src_name, 'wrong_quarter', url=cand['url'],
+                                    quarter=cand.get('quarter'),
+                                    detail=f"transcript is for {cand.get('quarter') or 'an unknown quarter'}")
+                        continue
+                    try:
+                        text = loop3.run_until_complete(
+                            get_pdf_text_fn(cand['url'], max_chars_to_return=80000))
+                    except Exception as e:
+                        _log_source(src_name, 'blocked', url=cand['url'], detail=str(e)[:200])
+                        continue
+                    if text and len(text.strip()) >= 200:
+                        _commit(src_name, cand['url'], 'Exchange-Filed Concall Transcript',
+                                cand.get('quarter'), text)
+                        _log_source(src_name, 'found', url=cand['url'],
+                                    quarter=concall_quarter, detail=f'{len(text)} chars from PDF')
+                    else:
+                        _log_source(src_name, 'parse_error', url=cand['url'],
+                                    detail='transcript PDF yielded no text')
 
-                # 2b. If no valid REC link or transcription failed, search YouTube
-                if not new_audio_url:
-                    update_agent_job(job_id, {'progress': 'Searching YouTube for latest earnings call...'})
-                    
-                    search_q = results_quarter if results_quarter else ""
-                    yt_audio_url = _search_youtube_concall(company_name, ticker, search_q)
-                    
-                    if yt_audio_url:
-                        new_source = "youtube_search"
-                        print(f"CONCALL_AGENT: Found YouTube hit: {yt_audio_url}", file=sys.stderr)
-                        try:
-                            transcribed_text = loop3.run_until_complete(_try_transcribe(yt_audio_url))
-                            if transcribed_text and not transcribed_text.startswith("Error"):
-                                concall_text = transcribed_text
-                                concall_link = yt_audio_url
-                                concall_label = "Auto-Fetched YouTube Transcription"
-                                concall_quarter = results_quarter if results_quarter else "Latest"
-                                quarter_mismatch = False
-                                auto_fetch_source = new_source
-                                new_audio_url = yt_audio_url
-                        except Exception as e:
-                            print(f"CONCALL_AGENT: Transcription of YT url failed: {e}", file=sys.stderr)
-
-                # 2c. Exchange filing (NSE): the company's own filed earnings-call audio
-                #     recording. Company-correct by construction (keyed by NSE symbol). The
-                #     filing yields either a direct audio file or the official IR-page URL.
+                # 2. Audio the company itself filed with an exchange. Company-correct
+                #    by construction and carries a filing date. BSE often hosts the
+                #    mp3 directly, which is far smaller than a company-site video.
                 ir_seed_url = ""
+                bse_cands = []
                 if not new_audio_url:
                     update_agent_job(job_id, {'progress': 'Searching exchange filings for concall audio...'})
+                    try:
+                        from fetchers.bse_fetcher import fetch_bse_concall_docs_async
+                        bse_cands = loop3.run_until_complete(
+                            fetch_bse_concall_docs_async(ticker, results_quarter))
+                    except Exception as e:
+                        print(f"CONCALL_AGENT: BSE filing fetch failed: {e}", file=sys.stderr)
+                        _log_source('bse_audio', 'blocked', detail=str(e)[:200])
+                    bse_audio = next(
+                        (c for c in bse_cands
+                         if c['kind'] in ('audio', 'video') and _quarter_ok(c.get('quarter'))),
+                        None)
+                    if bse_audio:
+                        _try_media('bse_audio', bse_audio['url'],
+                                   'Exchange-Filed Concall Audio (BSE)', bse_audio.get('quarter'))
+                    elif any(c['kind'] in ('audio', 'video') for c in bse_cands):
+                        _log_source('bse_audio', 'wrong_quarter',
+                                    detail='only older-quarter recordings filed')
+                    elif bse_cands is not None:
+                        _log_source('bse_audio', 'not_found', detail='no audio filing on BSE')
+                    if not new_audio_url:
+                        ir_seed_url = next(
+                            (c['url'] for c in bse_cands if c['kind'] == 'ir_page'), "")
+
+                if not new_audio_url:
+                    nse_blocked = False
+                    rec = {}
                     try:
                         from fetchers.nse_fetcher import fetch_nse_concall_recording_async
                         rec = loop3.run_until_complete(
                             fetch_nse_concall_recording_async(ticker, results_quarter))
                     except Exception as e:
                         print(f"CONCALL_AGENT: NSE filing fetch failed: {e}", file=sys.stderr)
-                        rec = {}
-                    ir_seed_url = rec.get('ir_url') or ""
+                        nse_blocked = True
+                        _log_source('nse_filing', 'blocked', detail=str(e)[:200])
+                    ir_seed_url = ir_seed_url or (rec.get('ir_url') or "")
                     nse_audio_url = rec.get('audio_url') or ""
-                    if nse_audio_url:
-                        new_source = "nse_filing"
-                        print(f"CONCALL_AGENT: Found NSE filing audio: {nse_audio_url}", file=sys.stderr)
-                        try:
-                            transcribed_text = loop3.run_until_complete(_try_transcribe(nse_audio_url))
-                            if transcribed_text and not transcribed_text.startswith("Error"):
-                                concall_text = transcribed_text
-                                concall_link = nse_audio_url
-                                concall_label = "Auto-Fetched Exchange Filing Audio"
-                                concall_quarter = rec.get('quarter') or results_quarter or "Latest"
-                                quarter_mismatch = False
-                                auto_fetch_source = new_source
-                                new_audio_url = nse_audio_url
-                        except Exception as e:
-                            print(f"CONCALL_AGENT: Transcription of NSE filing audio failed: {e}", file=sys.stderr)
+                    if nse_audio_url and _quarter_ok(rec.get('quarter') or results_quarter):
+                        _try_media('nse_filing', nse_audio_url,
+                                   'Exchange-Filed Concall Audio (NSE)',
+                                   rec.get('quarter') or results_quarter)
+                    elif nse_audio_url:
+                        _log_source('nse_filing', 'wrong_quarter', url=nse_audio_url,
+                                    quarter=rec.get('quarter'),
+                                    detail=f"recording is for {rec.get('quarter') or 'an unknown quarter'}")
+                    elif not nse_blocked:
+                        _log_source('nse_filing', 'not_found',
+                                    detail=('filing found but no audio link in it'
+                                            if ir_seed_url else 'no recording filing found'))
 
-                # 2d. Company IR website — seeded from the NSE filing's IR link when available,
-                #     else discovered via Screener. Scrapes for a downloadable audio file.
+                # 3. Company IR website. Resolved once, used twice: a file whose
+                #    quarter is CONFIRMED (by upload date, or by an explicit tag in
+                #    the filename) outranks YouTube; an unconfirmed one does not.
+                ir_result = {'url': '', 'quarter_confirmed': False, 'via': ''}
                 if not new_audio_url:
                     update_agent_job(job_id, {'progress': 'Searching company IR page for concall audio...'})
                     try:
-                        ir_audio_url = loop3.run_until_complete(
+                        ir_result = loop3.run_until_complete(
                             _fetch_ir_website_audio(ticker, company_name, results_quarter,
                                                     seed_url=ir_seed_url or None))
                     except Exception as e:
                         print(f"CONCALL_AGENT: IR website audio fetch failed: {e}", file=sys.stderr)
-                        ir_audio_url = ""
-                    if ir_audio_url:
-                        new_source = "ir_website"
-                        print(f"CONCALL_AGENT: Found IR website audio: {ir_audio_url}", file=sys.stderr)
-                        try:
-                            transcribed_text = loop3.run_until_complete(_try_transcribe(ir_audio_url))
-                            if transcribed_text and not transcribed_text.startswith("Error"):
-                                concall_text = transcribed_text
-                                concall_link = ir_audio_url
-                                concall_label = "Auto-Fetched IR Website Audio"
-                                concall_quarter = results_quarter if results_quarter else "Latest"
-                                quarter_mismatch = False
-                                auto_fetch_source = new_source
-                                new_audio_url = ir_audio_url
-                        except Exception as e:
-                            print(f"CONCALL_AGENT: Transcription of IR website audio failed: {e}", file=sys.stderr)
+                        _log_source('ir_website', 'blocked', detail=str(e)[:200])
+                        ir_result = {'url': '', 'quarter_confirmed': False, 'via': 'error'}
+
+                if not new_audio_url and ir_result.get('url') and ir_result.get('quarter_confirmed'):
+                    _try_media('ir_website', ir_result['url'],
+                               'Company IR Website Audio', results_quarter)
+
+                # 4. Screener REC link — quarter-gated against the results quarter.
+                if not new_audio_url:
+                    if rec_info and rec_info.get("url"):
+                        rec_quarter = _date_to_quarter(rec_info.get("date", ""))
+                        if _quarter_ok(rec_quarter):
+                            _try_media('screener_rec', rec_info["url"],
+                                       'Auto-Fetched Audio Transcription', rec_quarter)
+                        else:
+                            print(
+                                f"CONCALL_AGENT: Skipping Screener REC ({rec_quarter or 'undated'}) "
+                                f"- target is {results_quarter or expected_primary}", file=sys.stderr
+                            )
+                            _log_source('screener_rec', 'wrong_quarter', url=rec_info["url"],
+                                        quarter=rec_quarter,
+                                        detail=f"recording is for {rec_quarter or 'an unknown quarter'}")
+                    else:
+                        _log_source('screener_rec', 'not_found', detail='no REC link on Screener')
+
+                # 5. YouTube - third-party, but the best-verified of the remaining
+                #    options (company name, quarter tag, upload date, duration).
+                if not new_audio_url:
+                    update_agent_job(job_id, {'progress': 'Searching YouTube for latest earnings call...'})
+                    yt_audio_url = _search_youtube_concall(
+                        company_name, ticker, results_quarter if results_quarter else "")
+                    if yt_audio_url:
+                        _try_media('youtube_search', yt_audio_url,
+                                   'Auto-Fetched YouTube Transcription', results_quarter)
+                    else:
+                        _log_source('youtube_search', 'not_found',
+                                    detail='no video matched this company and quarter')
+
+                # 6. Company IR file whose quarter could NOT be confirmed. Last
+                #    deterministic resort - ranked below YouTube because here the
+                #    quarter is an assumption rather than evidence.
+                if not new_audio_url and ir_result.get('url') and not ir_result.get('quarter_confirmed'):
+                    print("CONCALL_AGENT: Falling back to IR file with unconfirmed quarter",
+                          file=sys.stderr)
+                    _try_media('ir_website', ir_result['url'],
+                               'Company IR Website Audio (quarter unconfirmed)', results_quarter)
+                elif not new_audio_url and not ir_result.get('url'):
+                    _log_source('ir_website', 'not_found',
+                                detail='no matching recording on the company site')
+
+                # 7. Web search, restricted to the company's own domain. Last resort
+                #    only: unlike every source above, it is not company-correct by
+                #    construction, so an open query could return a competitor's file.
+                if not new_audio_url:
+                    update_agent_job(job_id, {'progress': 'Last resort: searching the company domain...'})
+                    ws_url = ""
+                    try:
+                        ws_url = loop3.run_until_complete(
+                            _web_search_concall_media(ticker, company_name, results_quarter))
+                    except Exception as e:
+                        print(f"CONCALL_AGENT: web search failed: {e}", file=sys.stderr)
+                        _log_source('web_search', 'blocked', detail=str(e)[:200])
+                    if ws_url:
+                        _try_media('web_search', ws_url,
+                                   'Concall Audio (web search)', results_quarter)
+                    else:
+                        _log_source('web_search', 'not_found',
+                                    detail='nothing found on the company domain')
 
             finally:
                 loop3.close()
@@ -1664,12 +2470,19 @@ def _run_concall_analysis(job_id, ticker, call_gemini_api_fn, fetch_documents_fn
         if not concall_text or len(concall_text.strip()) < 200:
             elapsed = int(time.time() - start_time)
             print(f"CONCALL_AGENT: No concall transcript found for {ticker} after {elapsed}s", file=sys.stderr)
-            
+            for entry in sources_tried:
+                print(f"CONCALL_AGENT:   · {entry['source']}: {entry['status']}"
+                      f"{' — ' + entry['detail'] if entry.get('detail') else ''}", file=sys.stderr)
+
             update_agent_job(job_id, {
                 'status': 'error',
-                'error': CONCALL_FETCH_ERROR_MSG,
+                'error': build_concall_fetch_error(
+                    sources_tried, results_quarter or expected_primary),
                 'auto_fetch_failed': auto_fetch_failed,
-                'quarter_mismatch': quarter_mismatch
+                'quarter_mismatch': quarter_mismatch,
+                'sources_tried': sources_tried,
+                'target_quarter': results_quarter or expected_primary,
+                'quarter_source': quarter_source,
             })
             return
 
@@ -1718,6 +2531,8 @@ def _run_concall_analysis(job_id, ticker, call_gemini_api_fn, fetch_documents_fn
             'results_quarter': results_quarter,
             'quarter_mismatch': quarter_mismatch,
             'auto_fetch_source': auto_fetch_source,
+            'quarter_source': quarter_source,
+            'sources_tried': sources_tried,
             'transcript_text': concall_text,
             'analyzed_at': time.time(),
             'analysis_time_seconds': elapsed_total

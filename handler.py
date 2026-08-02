@@ -12696,7 +12696,8 @@ def serve_agents_page():
 # Register Concall Agent routes
 from agents.concall_agent import register_concall_routes
 from fetchers.screener_fetcher import fetch_latest_documents_async, get_text_from_pdf_url_async, fetch_forensic_documents_async
-register_concall_routes(app, call_gemini_api, fetch_latest_documents_async, get_text_from_pdf_url_async)
+register_concall_routes(app, call_gemini_api, fetch_latest_documents_async, get_text_from_pdf_url_async,
+                        call_perplexity_search_api)
 
 # Register Live Concall routes
 from agents.live_concall import register_live_concall_routes

@@ -28,6 +28,8 @@ Your job is to synthesize ALL THREE data sources into a coherent, conviction-dri
 3. All monetary values should be in ₹ Crores (Indian Rupees). Per-share values in ₹.
 4. Growth rates, margins, and returns should be in percentages.
 5. Be conservative but realistic. Use the company's trailing 3-5 year trends as a baseline.
+6. **Peer multiples are AUTHORITATIVE and computed for you.** The `peer_median_pe`, `peer_median_pb`, `peer_median_ev_ebitda`, and `peer_median_mcap_sales` you output will be OVERRIDDEN/CLAMPED by the system using the real peer medians supplied in the "PEER COMPARISON DATA" section (or, when peers are unavailable, the company's own historical multiples). Therefore, DO NOT invent absolute multiples from thin air — set each peer_median_* to the supplied peer/own-history median, then apply at most a justified premium or discount (roughly within ±30%) reflecting the company's ROE, growth, market-share, or leverage advantage versus peers. Explain the premium/discount in your reasoning.
+7. **Trailing anchors:** You MUST also output the company's latest ACTUAL trailing values (`trailing_revenue_cr`, `trailing_eps`, `trailing_ebitda_cr`, `trailing_bvps`) read directly from the financial data. These are the base off which forward figures are projected — getting them right prevents double-counting of growth.
 
 ## REASONING QUALITY — THIS IS THE MOST IMPORTANT PART:
 Each `"reasoning"` field must read like a **mini equity research note** — a clear narrative that convinces the reader WHY these assumptions are correct. Follow this mandatory structure for EVERY reasoning field:
@@ -84,6 +86,10 @@ Return ONLY a valid JSON object with this exact structure. No markdown fences ar
     }},
     
     "relative_valuation": {{
+        "trailing_revenue_cr": 158000,
+        "trailing_eps": 98,
+        "trailing_ebitda_cr": 29000,
+        "trailing_bvps": 430,
         "forward_eps": {{"bull": 120, "base": 108, "bear": 95}},
         "forward_bvps": {{"bull": 500, "base": 450, "bear": 400}},
         "forward_ebitda_cr": {{"bull": 35000, "base": 32000, "bear": 28000}},
@@ -94,7 +100,7 @@ Return ONLY a valid JSON object with this exact structure. No markdown fences ar
         "peer_median_mcap_sales": {{"bull": 3.5, "base": 2.8, "bear": 2.2}},
         "net_debt_cr": 50000,
         "shares_outstanding_cr": 675,
-        "reasoning": "Follow the 4-step structure. Step 1: Table showing the actual peer multiples from the Peer Data section (use the REAL numbers provided, do not fabricate). Include a row for the peer median/mean. Step 2: Narrative explaining (a) how you derived the forward EPS estimate — reference trailing EPS, recent quarterly run-rate, and growth assumptions, (b) why the target P/E multiple is set at this level — is it a premium or discount to peers and why (cite ROE advantage, market share, parent backing, etc.). Step 3: Cross-reference your chosen multiples against the sector medians from Market Research. Step 4: Bull requires multiple re-rating from [X]; Bear assumes de-rating to [Y] due to [specific reason]."
+        "reasoning": "Follow the 4-step structure. Step 1: Table showing the actual peer multiples from the Peer Data section (use the REAL numbers provided, do not fabricate). Include a row for the peer median/mean. Step 2: Narrative explaining (a) the trailing anchors (trailing_revenue_cr, trailing_eps, trailing_ebitda_cr, trailing_bvps) read from the latest actuals, and how you projected forward EPS/revenue/EBITDA from them using the growth assumptions, (b) why the target P/E multiple is set at a premium or discount to the supplied peer median and why (cite ROE advantage, market share, parent backing, etc.) — remember the absolute peer median is supplied; you only justify the premium/discount. Step 3: Cross-reference against the sector medians from Market Research. Step 4: Bull requires multiple re-rating from [X]; Bear assumes de-rating to [Y] due to [specific reason]."
     }},
     
     "residual_income_assumptions": {{
@@ -303,6 +309,44 @@ Below is the full valuation analysis and underlying data. Use it to answer the u
 - If asked to change assumptions, explain the impact qualitatively
 - Maintain a professional, institutional-grade tone
 - Use markdown formatting for tables, bold text, and structure
+"""
+
+
+# =====================================================================
+# PROMPT 5: MANAGEMENT GUIDANCE EXTRACTION (Gemini Flash)
+# Parses the latest earnings-call transcript / concall analysis into a
+# small, strict JSON of quantitative forward guidance the valuation models
+# can consume directly. Used to build the "Guidance" scenario.
+# =====================================================================
+
+FORECAST_GUIDANCE_EXTRACTION_PROMPT = """You are an equity research analyst extracting MANAGEMENT'S OWN forward guidance from the latest earnings conference call of {company_name} ({ticker}).
+
+From the transcript/analysis below, extract ONLY explicit or clearly-implied forward-looking guidance that management themselves stated. Do NOT substitute your own forecasts, sell-side estimates, or historical figures. If a figure was not guided by management, return null for it.
+
+## RULES:
+1. Numbers only — strip ₹, %, "crore", commas. Growth/margins as plain percentages (e.g. 15 for 15%). Absolute monetary figures in ₹ Crore. Per-share in ₹.
+2. Each extracted field MUST carry a short verbatim `quote` (≤ 240 chars) from the transcript and a `confidence` of "explicit" (management stated a specific number/range) or "implied" (management gave qualitative direction you converted to a number — be conservative).
+3. For a range (e.g. "12-14% growth"), use the midpoint as `value`.
+4. If the text contains NO usable forward guidance at all, set "has_guidance": false and all fields null.
+5. Output ONLY the JSON object, no markdown fences, no commentary.
+
+## OUTPUT (strict JSON):
+{{
+  "has_guidance": true,
+  "guidance_horizon": "e.g. FY25 / FY25-FY27 / next 2-3 years",
+  "management_tone": "bullish|neutral|cautious",
+  "revenue_growth_pct": {{"value": 15, "quote": "...", "confidence": "explicit"}},
+  "ebitda_margin_pct": {{"value": 22, "quote": "...", "confidence": "explicit"}},
+  "ebit_margin_pct": null,
+  "capex_cr": {{"value": 5000, "quote": "...", "confidence": "explicit"}},
+  "revenue_cr": null,
+  "ebitda_cr": null,
+  "eps": null,
+  "notes": "1-2 sentence summary of the overall guidance posture."
+}}
+
+## LATEST CONCALL TRANSCRIPT / ANALYSIS FOR {company_name} ({ticker}):
+{transcript_text}
 """
 
 

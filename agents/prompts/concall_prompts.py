@@ -93,7 +93,7 @@ Your role is to answer the investor's follow-up questions about the concall. You
 - Use markdown formatting for readability
 """
 
-CONCALL_FETCH_ERROR_MSG = """I was unable to fetch the conference call transcript for this company. 
+CONCALL_FETCH_ERROR_MSG = """I was unable to fetch the conference call transcript for this company.
 I also automatically searched for the concall recording on Screener.in and YouTube, but couldn't find one.
 
 This could be because:
@@ -103,3 +103,92 @@ This could be because:
 
 You can manually provide a URL to the concall transcript/recording below, or try again later.
 """
+
+# Human-readable label per source key used in the attempt log.
+CONCALL_SOURCE_LABELS = {
+    'nse_transcript': 'NSE-filed written transcript',
+    'bse_transcript': 'BSE-filed written transcript',
+    'screener_transcript': 'Screener.in transcript PDF',
+    'bse_audio': 'BSE-filed call audio',
+    'nse_filing': 'NSE-filed call audio',
+    'ir_website': 'Company IR website',
+    'screener_rec': 'Screener.in recording link',
+    'youtube_search': 'YouTube search',
+    'web_search': 'Web search (company domain)',
+}
+
+
+def build_concall_fetch_error(sources_tried, target_quarter=''):
+    """
+    Build a diagnosis from the per-source attempt log instead of one static
+    paragraph. The three states below are genuinely different for the user and
+    used to be indistinguishable — in particular "we found the recording but
+    could not transcribe it", where pasting the same URL back would not help.
+
+    `sources_tried` is a list of dicts: {source, status, url, quarter, detail}.
+    """
+    sources_tried = sources_tried or []
+    if not sources_tried:
+        return CONCALL_FETCH_ERROR_MSG
+
+    def _label(entry):
+        return CONCALL_SOURCE_LABELS.get(entry.get('source'), entry.get('source', 'unknown'))
+
+    # parse_error belongs here too: it means "found the document but could not
+    # read it", which is the same story for the user as a failed transcription.
+    transcription_failed = [e for e in sources_tried
+                            if e.get('status') in ('transcription_failed', 'parse_error')]
+    blocked = [e for e in sources_tried if e.get('status') in ('blocked', 'timeout', 'error')]
+    stale = [e for e in sources_tried if e.get('status') == 'wrong_quarter']
+
+    quarter_note = f" for {target_quarter}" if target_quarter else ""
+    lines = []
+
+    # Strict priority, most specific and most actionable first. Note a
+    # wrong_quarter entry carries a URL but is NOT a usable find, so
+    # "did we find something" cannot be tested by URL presence alone.
+    if transcription_failed:
+        srcs = ', '.join(sorted({_label(e) for e in transcription_failed}))
+        lines.append(
+            f"I found the earnings call recording{quarter_note} ({srcs}) but could not "
+            f"transcribe it. That is a processing failure on my side, not a missing file — "
+            f"pasting the same link below will hit the same problem."
+        )
+        lines.append("")
+        lines.append("What usually works: paste a **YouTube link** to the same call instead, or retry in a few minutes.")
+    elif stale:
+        qs = ', '.join(sorted({e.get('quarter', '') for e in stale if e.get('quarter')}))
+        lines.append(
+            f"The only recordings I could find are from an earlier quarter"
+            + (f" ({qs})" if qs else "")
+            + f", not{quarter_note or ' the latest quarter'}. It looks like this quarter's "
+              f"call has not been published yet."
+        )
+        lines.append("")
+        lines.append("If you have a link to the latest call, paste it below.")
+    elif blocked:
+        srcs = ', '.join(sorted({_label(e) for e in blocked}))
+        lines.append(
+            f"I could not reach some sources ({srcs}), so I cannot tell whether the "
+            f"call{quarter_note} has been published. This is usually temporary."
+        )
+        lines.append("")
+        lines.append("Try again shortly, or paste a link to the recording below.")
+    else:
+        lines.append(
+            f"I could not find a conference call transcript or recording{quarter_note} "
+            f"for this company."
+        )
+        lines.append("")
+        lines.append("The most likely reason is that it has not been published yet. "
+                     "If you have a link, paste it below.")
+
+    lines.append("")
+    lines.append("**Where I looked:**")
+    for e in sources_tried:
+        status = e.get('status', 'unknown')
+        detail = e.get('detail', '')
+        suffix = f" — {detail}" if detail else ""
+        lines.append(f"- {_label(e)}: {status}{suffix}")
+
+    return "\n".join(lines)

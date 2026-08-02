@@ -1,0 +1,1367 @@
+warning: in the working copy of 'agents/forecasting_agent.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'agents/prompts/forecasting_prompts.py', LF will be replaced by CRLF the next time Git touches it
+diff --git a/agents.html b/agents.html
+index f6279ced..1a50d48a 100644
+--- a/agents.html
++++ b/agents.html
+@@ -8552,6 +8552,8 @@
+ 
+             let fcOriginalAssumptions = null; // Stores deep copy for resetting
+             let fcOriginalModels = null; // Stores deep copy to restore AI baseline on scenario switch
++            let fcGuidanceMeta = null; // Management-guidance metadata for the current run
++            let fcOriginalPeerData = null; // Deep copy of Screener peer set (for "reset to Screener peers")
+ 
+             // =====================================================
+             // TICKER AUTOCOMPLETE
+@@ -8729,6 +8731,7 @@
+                 // Store deep copy of original AI assumptions and models
+                 fcOriginalAssumptions = JSON.parse(JSON.stringify(result.assumptions || {}));
+                 fcOriginalModels = JSON.parse(JSON.stringify(result.models || {}));
++                fcOriginalPeerData = JSON.parse(JSON.stringify(result.peer_data || { peers: [], company: {} }));
+                 fcCurrentData = result;
+                 fcActiveScenario = 'base';
+                 openForecastingOverlay(result);
+@@ -8770,9 +8773,13 @@
+                 const applicableModels = Object.entries(models).filter(([k, v]) => v.applicable);
+                 fcApplicableModels = applicableModels; // Store globally for chart re-rendering
+ 
++                // Does this run have a management-guidance scenario?
++                const fcHasGuidance = !!(data.guidance_meta && data.guidance_meta.has_guidance);
++                fcGuidanceMeta = data.guidance_meta || null;
++
+                 // Compute simple averages for each scenario (fallback)
+                 const simpleAvg = {};
+-                ['bull', 'base', 'bear'].forEach(s => {
++                ['bull', 'base', 'bear', 'guidance'].forEach(s => {
+                     const vals = applicableModels.map(([k, v]) => v[s]?.fair_value).filter(v => v != null && v > 0);
+                     simpleAvg[s] = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
+                 });
+@@ -8791,6 +8798,8 @@
+                     scenarioAvg.bear = simpleAvg.bear;
+                     console.log('[FC] No triangulated values found, using simple averages:', scenarioAvg);
+                 }
++                // Guidance is always a simple average of the guidance-consumable models.
++                scenarioAvg.guidance = simpleAvg.guidance;
+                 fcScenarioAvg = scenarioAvg; // Store globally
+ 
+                 // Also compute full range for the "Range" view
+@@ -8829,6 +8838,7 @@
+                                 <button class="fc-scenario-btn" data-s="bull" onclick="setFcScenario('bull')">🟢 Bull</button>
+                                 <button class="fc-scenario-btn active" data-s="base" onclick="setFcScenario('base')">🟡 Base</button>
+                                 <button class="fc-scenario-btn" data-s="bear" onclick="setFcScenario('bear')">🔴 Bear</button>
++                                ${fcHasGuidance ? `<button class="fc-scenario-btn" data-s="guidance" onclick="setFcScenario('guidance')" title="Per management's latest concall guidance">🎯 Guidance</button>` : ''}
+                             </div>
+                         </div>
+                         <div class="fc-cmp-block">
+@@ -8928,20 +8938,21 @@
+                 const rangeData = [];
+                 const pointData = [];
+ 
+-                const barColors = { bull: 'rgba(16,185,129,1)', base: 'rgba(139,92,246,1)', bear: 'rgba(239,68,68,1)' };
++                const barColors = { bull: 'rgba(16,185,129,1)', base: 'rgba(139,92,246,1)', bear: 'rgba(239,68,68,1)', guidance: 'rgba(6,182,212,1)' };
+ 
+                 applicableModels.forEach(([key, model], idx) => {
+                     const cfg = model.config || {};
+                     const bear = model.bear?.fair_value || 0;
+                     const bull = model.bull?.fair_value || 0;
+-                    const ptVal = model[activeScen]?.fair_value || 0;
++                    const rawPt = model[activeScen]?.fair_value;
+ 
+                     if (!bear && !bull) return;
+ 
+                     labels.push(cfg.icon + ' ' + (cfg.name || key));
+                     bearData.push(Math.max(0, bear));
+                     rangeData.push(Math.max(0, (bull || bear) - bear));
+-                    pointData.push({ x: ptVal, y: idx });
++                    // Guidance only exists for some models — plot a point only where present.
++                    pointData.push({ x: (rawPt != null && rawPt > 0) ? rawPt : null, y: idx });
+                 });
+ 
+                 // The translucent background ranges (Always show these, highly translucent if specific scenario is active)
+@@ -9052,6 +9063,16 @@
+                     const slidersHtml = sliders.map(sp => {
+                         const currentVal = getNestedVal(assumptions, sp.key);
+                         const displayVal = typeof currentVal === 'object' ? (currentVal.base || 0) : (currentVal || 0);
++                        const isObj = (typeof currentVal === 'object' && currentVal !== null);
++                        const fmtSV = v => (v == null || isNaN(v)) ? '—' : (+v).toLocaleString('en-IN', { maximumFractionDigits: 2 });
++                        const rangeHint = isObj
++                            ? `<div style="font-size:0.65rem;color:var(--text-muted);margin-top:0.2rem;display:flex;gap:0.6rem;flex-wrap:wrap;">
++                                   <span style="color:#ef4444">🔴 ${fmtSV(currentVal.bear)}</span>
++                                   <span style="color:#eab308">🟡 ${fmtSV(currentVal.base)}</span>
++                                   <span style="color:#10b981">🟢 ${fmtSV(currentVal.bull)}</span>
++                                   ${currentVal.guidance != null ? `<span style="color:#06b6d4">🎯 ${fmtSV(currentVal.guidance)}</span>` : ''}
++                               </div>`
++                            : '';
+                         return `
+                         <div class="fc-slider-group">
+                             <div class="fc-slider-label">
+@@ -9062,6 +9083,7 @@
+                                 min="${sp.min}" max="${sp.max}" step="${sp.step}" value="${displayVal}"
+                                 data-model="${modelKey}" data-key="${sp.key}"
+                                 oninput="onFcSlider(this)" />
++                            ${rangeHint}
+                         </div>
+                     `;
+                     }).join('');
+@@ -9091,6 +9113,7 @@
+                             <div class="fc-scenario-val bear">🔴 Bear<strong>₹${bearVal ? formatNum(bearVal) : 'N/A'}</strong></div>
+                             <div class="fc-scenario-val base">🟡 Base<strong>₹${baseVal ? formatNum(baseVal) : 'N/A'}</strong></div>
+                             <div class="fc-scenario-val bull">🟢 Bull<strong>₹${bullVal ? formatNum(bullVal) : 'N/A'}</strong></div>
++                            ${model.guidance && model.guidance.fair_value != null ? `<div class="fc-scenario-val" style="color:#06b6d4">🎯 Guid<strong>₹${formatNum(model.guidance.fair_value)}</strong></div>` : ''}
+                         </div>
+                     </div>
+                 `;
+@@ -9119,30 +9142,137 @@
+                 document.getElementById('fcModalTitle').innerText = (cfg.icon || '📊') + ' ' + (cfg.name || modelKey) + ' AI Research & Assumptions';
+ 
+                 let html = '';
++                const isRelativeModel = cfg.reasoning_keys && cfg.reasoning_keys.includes('relative_valuation');
++                const pc = fcCurrentData.peer_confidence || {};
++                const ownh = pc.own_history || {};
++                const gm = fcCurrentData.guidance_meta || null;
++                const relA = assumptions.relative_valuation || {};
++
++                const fmtDrv = v => (v == null || v === '' || isNaN(v)) ? '—' : (+v).toLocaleString('en-IN', { maximumFractionDigits: 2 });
++                const srcBadge = (source) => {
++                    const map = { peer: ['#10b981', 'Peer-derived'], own_history: ['#f59e0b', "Company's own history"], peer_thin: ['#f59e0b', 'Thin peer set'], default: ['#ef4444', 'Default — verify'], user: ['#06b6d4', 'User-curated'] };
++                    const [c, t] = map[source] || ['#6b7280', source || '—'];
++                    return `<span style="display:inline-block;padding:0.15rem 0.5rem;border-radius:999px;font-size:0.65rem;font-weight:700;background:${c}22;color:${c};border:1px solid ${c}55;">${t}</span>`;
++                };
++                // Best-effort historical/peer anchor for a given driver key
++                const drvAnchor = (key) => {
++                    const sm = pc.per_multiple_source || {};
++                    if (key === 'relative_valuation.peer_median_pe') return { label: 'Peer/own median', value: (pc.peer_median_pe != null ? pc.peer_median_pe : ownh.pe), src: sm.pe };
++                    if (key === 'relative_valuation.peer_median_pb') return { label: 'Peer/own median', value: (pc.peer_median_pb != null ? pc.peer_median_pb : ownh.pb), src: sm.pb };
++                    if (key === 'relative_valuation.peer_median_ev_ebitda') return { label: 'Own 3yr median', value: ownh.ev_ebitda, src: sm.ev_ebitda };
++                    if (key === 'relative_valuation.peer_median_mcap_sales') return { label: 'Own 3yr median', value: ownh.mcap_sales, src: sm.mcap_sales };
++                    if (key === 'relative_valuation.forward_eps') return relA.trailing_eps != null ? { label: 'Trailing EPS', value: relA.trailing_eps } : null;
++                    if (key === 'relative_valuation.forward_bvps') return relA.trailing_bvps != null ? { label: 'Trailing BVPS', value: relA.trailing_bvps } : null;
++                    if (key === 'relative_valuation.forward_revenue_cr') return relA.trailing_revenue_cr != null ? { label: 'Trailing Revenue', value: relA.trailing_revenue_cr } : null;
++                    if (key === 'relative_valuation.forward_ebitda_cr') return relA.trailing_ebitda_cr != null ? { label: 'Trailing EBITDA', value: relA.trailing_ebitda_cr } : null;
++                    return null;
++                };
++
++                // ── Section 0a: Peer-confidence badge (relative models) ──
++                if (isRelativeModel && pc.per_multiple_source) {
++                    const mk2 = { relative_pe: 'pe', relative_pb: 'pb', ev_ebitda: 'ev_ebitda', mcap_sales: 'mcap_sales', statistical_band: 'pe' };
++                    const src = pc.per_multiple_source[mk2[modelKey]];
++                    const idWarn = (pc.target_identified === false) ? `<span style="margin-left:0.5rem;color:#ef4444;font-size:0.7rem;">⚠ Target company not confidently matched in peer table</span>` : '';
++                    html += `<div style="margin-bottom:1rem;display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
++                        <span style="font-size:0.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">Multiple source:</span>
++                        ${srcBadge(pc.source === 'user' ? 'user' : src)} ${idWarn}
++                    </div>`;
++                }
++
++                // ── Section 0b: Key Drivers table ──
++                const sliderParams = cfg.slider_params || [];
++                if (sliderParams.length) {
++                    let rows = '';
++                    sliderParams.forEach(sp => {
++                        const v = getNestedVal(assumptions, sp.key);
++                        const isObj = (typeof v === 'object' && v !== null);
++                        const bear = isObj ? v.bear : v, base = isObj ? v.base : v, bull = isObj ? v.bull : v;
++                        const guid = isObj ? v.guidance : null;
++                        const anc = drvAnchor(sp.key);
++                        // Conservative / aggressive colouring vs the anchor (where comparable)
++                        let baseColor = 'var(--text-primary)';
++                        if (anc && anc.value != null && base != null && +anc.value > 0) {
++                            const ratio = +base / +anc.value;
++                            if (ratio > 1.10) baseColor = '#f59e0b';      // above anchor → aggressive
++                            else if (ratio < 0.90) baseColor = '#10b981'; // below anchor → conservative
++                        }
++                        rows += `<tr>
++                            <td style="text-align:left">${sp.label}</td>
++                            <td style="color:#ef4444">${fmtDrv(bear)}</td>
++                            <td style="font-weight:700;color:${baseColor}">${fmtDrv(base)}</td>
++                            <td style="color:#10b981">${fmtDrv(bull)}</td>
++                            ${gm && gm.has_guidance ? `<td style="color:#06b6d4">${guid != null ? fmtDrv(guid) : '—'}</td>` : ''}
++                            <td style="color:var(--text-muted);font-size:0.72rem">${anc && anc.value != null ? `${fmtDrv(anc.value)} <span style="opacity:0.7">(${anc.label})</span>` : '—'}</td>
++                        </tr>`;
++                    });
++                    html += `
++                    <div style="background:rgba(124,58,237,0.04);border:1px solid var(--border-color);padding:1.25rem;margin-bottom:1.5rem;border-radius:0.5rem;">
++                        <div style="font-size:0.85rem;color:var(--text-primary);font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:0.75rem;">🎛️ Key Assumptions Driving This Model</div>
++                        <div style="overflow-x:auto;">
++                          <table class="fc-peer-table">
++                            <thead><tr>
++                              <th style="text-align:left">Driver</th><th>🔴 Bear</th><th>🟡 Base</th><th>🟢 Bull</th>
++                              ${gm && gm.has_guidance ? '<th>🎯 Guidance</th>' : ''}
++                              <th>Hist./Peer Anchor</th>
++                            </tr></thead>
++                            <tbody>${rows}</tbody>
++                          </table>
++                        </div>
++                        <div style="font-size:0.68rem;color:var(--text-muted);margin-top:0.5rem;">🟡 base coloured <span style="color:#f59e0b">amber = above anchor (aggressive)</span>, <span style="color:#10b981">green = below anchor (conservative)</span>.</div>
++                    </div>`;
++                }
+ 
+-                // Section 1: AI Reasoning
++                // ── Section 0c: Management guidance block (guidance-consumable models) ──
++                if (gm && gm.has_guidance && ['dcf_fcff', 'dcf_fcfe', 'relative_pe', 'ev_ebitda', 'mcap_sales'].includes(modelKey)) {
++                    const fields = gm.fields || {};
++                    let frows = '';
++                    const flabels = { revenue_growth_pct: 'Revenue growth %', ebitda_margin_pct: 'EBITDA margin %', ebit_margin_pct: 'EBIT margin %', capex_cr: 'CapEx (₹ Cr)', revenue_cr: 'Revenue (₹ Cr)', ebitda_cr: 'EBITDA (₹ Cr)', eps: 'EPS (₹)' };
++                    Object.keys(flabels).forEach(fk => {
++                        const f = fields[fk];
++                        if (!f) return;
++                        const val = (typeof f === 'object') ? f.value : f;
++                        const quote = (typeof f === 'object') ? (f.quote || '') : '';
++                        const conf = (typeof f === 'object') ? (f.confidence || '') : '';
++                        frows += `<tr><td style="text-align:left">${flabels[fk]}</td><td style="font-weight:700;color:#06b6d4">${fmtDrv(val)}</td><td style="font-size:0.7rem;color:var(--text-muted)">${conf}</td><td style="font-size:0.72rem;color:var(--text-secondary);text-align:left">${quote ? '“' + escHtml(quote) + '”' : ''}</td></tr>`;
++                    });
++                    html += `
++                    <div style="background:rgba(6,182,212,0.06);border-left:3px solid #06b6d4;padding:1.25rem;margin-bottom:1.5rem;border-radius:0.5rem;">
++                        <div style="font-size:0.85rem;color:var(--text-primary);font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:0.5rem;">🎯 Per Management Guidance</div>
++                        <div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:0.75rem;">
++                            Horizon: <strong>${gm.guidance_horizon || 'N/A'}</strong> · Tone: <strong>${gm.management_tone || 'N/A'}</strong> · Source: <strong style="color:#06b6d4">${gm.source === 'cached' ? 'Cached concall' : (gm.source === 'transcript_only' ? 'Fresh transcript' : (gm.source || 'N/A'))}</strong>
++                        </div>
++                        ${frows ? `<div style="overflow-x:auto;"><table class="fc-peer-table"><thead><tr><th style="text-align:left">Metric</th><th>Guided</th><th>Conf.</th><th style="text-align:left">Management quote</th></tr></thead><tbody>${frows}</tbody></table></div>` : '<div style="color:var(--text-muted);font-size:0.8rem">No numeric guidance fields extracted.</div>'}
++                        ${gm.notes ? `<div style="font-size:0.78rem;color:var(--text-secondary);margin-top:0.75rem;">${escHtml(gm.notes)}</div>` : ''}
++                    </div>`;
++                }
++
++                // ── Section 1: AI Reasoning (collapsible) ──
++                let reasoningHtml = '';
+                 if (cfg.reasoning_keys && cfg.reasoning_keys.length > 0) {
+                     cfg.reasoning_keys.forEach(rKey => {
+                         const rootObj = assumptions[rKey];
+                         if (rootObj && rootObj.reasoning) {
+                             const parsedReasoning = typeof marked !== 'undefined' ? marked.parse(rootObj.reasoning) : `<pre style="white-space:pre-wrap;">${rootObj.reasoning}</pre>`;
+-
+-                            html += `
+-                            <div style="background:rgba(124,58,237,0.06);border-left:3px solid var(--accent-purple);padding:1.5rem;margin-bottom:1.5rem;border-radius:0.5rem;">
++                            reasoningHtml += `
++                            <div style="background:rgba(124,58,237,0.06);border-left:3px solid var(--accent-purple);padding:1.5rem;margin-bottom:1rem;border-radius:0.5rem;">
+                                 <div style="font-size:0.85rem;color:var(--text-primary);font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:1rem;border-bottom:1px solid rgba(255,255,255,0.1);padding-bottom:0.5rem;">
+                                     ${rKey.replace(/_/g, ' ')} Rationale
+                                 </div>
+                                 <div style="color:var(--text-secondary)">${parsedReasoning}</div>
+-                            </div>
+-                        `;
++                            </div>`;
+                         }
+                     });
++                }
++                if (reasoningHtml) {
++                    html += `<details style="margin-bottom:1.5rem;" open>
++                        <summary style="cursor:pointer;font-size:0.85rem;font-weight:700;color:var(--text-primary);text-transform:uppercase;letter-spacing:1px;margin-bottom:0.75rem;">🧠 AI Reasoning &amp; Narrative</summary>
++                        <div style="margin-top:0.75rem;">${reasoningHtml}</div>
++                    </details>`;
+                 } else {
+                     html += `<p style="color:var(--text-muted)">No specific AI reasoning available for this model.</p>`;
+                 }
+ 
+                 // Section 2: Peer Multiples Table (only for relative valuation models)
+-                const isRelativeModel = cfg.reasoning_keys && cfg.reasoning_keys.includes('relative_valuation');
+                 if (isRelativeModel && fcCurrentData.peer_data) {
+                     const peerData = fcCurrentData.peer_data;
+                     const company = peerData.company || {};
+@@ -9388,6 +9518,7 @@
+                             fcCurrentData.models[modelKey].bear = data.result.bear;
+                             fcCurrentData.models[modelKey].base = data.result.base;
+                             fcCurrentData.models[modelKey].bull = data.result.bull;
++                            if (data.result.guidance !== undefined) fcCurrentData.models[modelKey].guidance = data.result.guidance;
+                         }
+ 
+                         // Update the model card fair value to reflect the ACTIVE scenario
+@@ -9410,6 +9541,7 @@
+                                 <div class="fc-scenario-val bear">🔴 Bear<strong>₹${bearV ? formatNum(bearV) : 'N/A'}</strong></div>
+                                 <div class="fc-scenario-val base">🟡 Base<strong>₹${baseV ? formatNum(baseV) : 'N/A'}</strong></div>
+                                 <div class="fc-scenario-val bull">🟢 Bull<strong>₹${bullV ? formatNum(bullV) : 'N/A'}</strong></div>
++                                ${data.result.guidance && data.result.guidance.fair_value != null ? `<div class="fc-scenario-val" style="color:#06b6d4">🎯 Guid<strong>₹${formatNum(data.result.guidance.fair_value)}</strong></div>` : ''}
+                             `;
+                             }
+                         }
+@@ -9462,10 +9594,10 @@
+                         }
+                         const restoredModel = fcCurrentData.models[key];
+ 
+-                        // 1. Update Headline Prices
++                        // 1. Update Headline Prices (guidance only exists for some models → show — otherwise)
+                         const fvEl = document.getElementById(`fv_${key}`);
+                         const val = restoredModel[activeScen]?.fair_value;
+-                        if (fvEl && val) fvEl.innerHTML = `<span class="fc-currency">₹</span>${formatNum(val)}`;
++                        if (fvEl) fvEl.innerHTML = (val != null) ? `<span class="fc-currency">₹</span>${formatNum(val)}` : '<span style="color:var(--text-muted)">—</span>';
+ 
+                         // 2. Restore scenario values to bottom of card
+                         const card = document.getElementById(`card_${key}`);
+@@ -9611,27 +9743,136 @@
+                 `;
+                 }
+ 
++                // Peer-confidence badge + target-match warning
++                const pc = fcCurrentData?.peer_confidence || {};
++                const badge = (source) => {
++                    const map = { peer: ['#10b981', 'Peer-derived'], own_history: ['#f59e0b', "Company's own history"], peer_thin: ['#f59e0b', 'Thin peer set'], default: ['#ef4444', 'Default — verify'], user: ['#06b6d4', 'User-curated'] };
++                    const [c, t] = map[source] || ['#6b7280', source || '—'];
++                    return `<span style="display:inline-block;padding:0.15rem 0.5rem;border-radius:999px;font-size:0.65rem;font-weight:700;background:${c}22;color:${c};border:1px solid ${c}55;">${t}</span>`;
++                };
++                const sm = pc.per_multiple_source || {};
++                html += `<div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;margin-bottom:1rem;">
++                    <span style="font-size:0.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">Multiple sources:</span>
++                    <span style="font-size:0.7rem">P/E ${badge(pc.source === 'user' ? 'user' : sm.pe)}</span>
++                    <span style="font-size:0.7rem">P/B ${badge(pc.source === 'user' ? 'user' : sm.pb)}</span>
++                    <span style="font-size:0.7rem">EV/EBITDA ${badge(pc.source === 'user' ? 'user' : sm.ev_ebitda)}</span>
++                    <span style="font-size:0.7rem">MCap/Sales ${badge(pc.source === 'user' ? 'user' : sm.mcap_sales)}</span>
++                    ${pc.target_identified === false ? `<span style="color:#ef4444;font-size:0.7rem;">⚠ Target not confidently matched — peers shown may include the company itself</span>` : ''}
++                </div>`;
++
++                // Editable peer controls
++                html += `<div style="display:flex;justify-content:space-between;align-items:center;gap:0.5rem;flex-wrap:wrap;margin-bottom:0.5rem;">
++                    <span style="font-size:0.75rem;color:var(--text-muted);">Edit the peer set to recompute medians (P/E & P/B drive the medians).</span>
++                    <button onclick="fcResetPeers()" style="font-size:0.7rem;padding:0.3rem 0.7rem;border-radius:0.4rem;background:rgba(255,255,255,0.06);color:var(--text-secondary);border:1px solid var(--border-color);cursor:pointer;">↺ Reset to Screener peers</button>
++                </div>`;
++
+                 html += '<div style="overflow-x:auto"><table class="fc-peer-table"><thead><tr>';
+                 headers.forEach(h => html += `<th>${h}</th>`);
+-                html += '</tr></thead><tbody>';
++                html += '<th></th></tr></thead><tbody>';
+ 
+-                // Company row (highlighted)
++                // Company row (highlighted, not removable)
+                 if (company.name) {
+                     html += '<tr class="fc-highlight-row">';
+                     cols.forEach(c => html += `<td>${company[c] || 'N/A'}</td>`);
+-                    html += '</tr>';
++                    html += '<td></td></tr>';
+                 }
+ 
+-                peers.forEach(p => {
++                peers.forEach((p, idx) => {
+                     html += '<tr>';
+                     cols.forEach(c => html += `<td>${p[c] || 'N/A'}</td>`);
++                    html += `<td><button onclick="fcRemovePeer(${idx})" title="Remove peer" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:0.9rem;">✕</button></td>`;
+                     html += '</tr>';
+                 });
+ 
++                // Add-peer row
++                html += `<tr style="background:rgba(6,182,212,0.05)">
++                    <td><input id="fcNewPeerName" placeholder="Peer name" style="width:100%;background:transparent;border:1px solid var(--border-color);border-radius:0.3rem;color:var(--text-primary);font-size:0.75rem;padding:0.2rem 0.4rem;"></td>
++                    <td>—</td><td>—</td>
++                    <td><input id="fcNewPeerPE" type="number" step="0.1" placeholder="P/E" style="width:70px;background:transparent;border:1px solid var(--border-color);border-radius:0.3rem;color:var(--text-primary);font-size:0.75rem;padding:0.2rem 0.4rem;"></td>
++                    <td><input id="fcNewPeerPB" type="number" step="0.1" placeholder="P/B" style="width:70px;background:transparent;border:1px solid var(--border-color);border-radius:0.3rem;color:var(--text-primary);font-size:0.75rem;padding:0.2rem 0.4rem;"></td>
++                    <td>—</td><td>—</td>
++                    <td><button onclick="fcAddPeer()" title="Add peer" style="background:none;border:none;color:#10b981;cursor:pointer;font-size:1rem;">＋</button></td>
++                </tr>`;
++
+                 html += '</tbody></table></div>';
+                 body.innerHTML = html;
+             }
+ 
++            // =====================================================
++            // EDITABLE PEERS — recompute medians from a user-curated set
++            // =====================================================
++            function recomputeFcScenarioAvg() {
++                const sa = {};
++                ['bull', 'base', 'bear', 'guidance'].forEach(s => {
++                    const vals = (fcApplicableModels || []).map(([k, v]) => v[s]?.fair_value).filter(v => v != null && v > 0);
++                    sa[s] = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
++                });
++                fcScenarioAvg = sa;
++                fcRangeMin = sa.bear || 0;
++                fcRangeMax = sa.bull || 0;
++            }
++
++            async function fcApplyPeerEdits() {
++                if (!fcCurrentData || !fcCurrentData.peer_data) return;
++                try {
++                    const resp = await fetch('/agent/forecasting/recalculate_peers', {
++                        method: 'POST', headers: { 'Content-Type': 'application/json' },
++                        body: JSON.stringify({
++                            assumptions: fcCurrentData.assumptions,
++                            key_metrics: fcCurrentData.key_metrics || {},
++                            peers: fcCurrentData.peer_data.peers || [],
++                            company: fcCurrentData.peer_data.company || {},
++                            target_historical_medians: fcCurrentData.target_historical_medians || {},
++                            target_value_snapshot: fcCurrentData.target_value_snapshot || {}
++                        })
++                    });
++                    const data = await resp.json();
++                    if (data.status === 'success') {
++                        fcCurrentData.assumptions = data.assumptions;
++                        fcCurrentData.models = data.models;
++                        fcCurrentData.peer_confidence = data.peer_confidence;
++                        fcOriginalAssumptions = JSON.parse(JSON.stringify(data.assumptions));
++                        fcOriginalModels = JSON.parse(JSON.stringify(data.models));
++                        fcApplicableModels = Object.entries(data.models).filter(([k, v]) => v.applicable);
++                        recomputeFcScenarioAvg();
++                        renderModelCards(fcApplicableModels, fcCurrentData.assumptions);
++                        renderPeerComparison(fcCurrentData.peer_data, fcCurrentData.assumptions);
++                        setFcScenario(fcActiveScenario);
++                    } else {
++                        console.error('Peer recalc failed:', data.error);
++                    }
++                } catch (e) {
++                    console.error('Peer recalc error:', e);
++                }
++            }
++
++            window.fcRemovePeer = function (idx) {
++                if (!fcCurrentData?.peer_data?.peers) return;
++                fcCurrentData.peer_data.peers.splice(idx, 1);
++                fcApplyPeerEdits();
++            };
++
++            window.fcAddPeer = function () {
++                if (!fcCurrentData?.peer_data) return;
++                const name = (document.getElementById('fcNewPeerName')?.value || '').trim();
++                const pe = document.getElementById('fcNewPeerPE')?.value;
++                const pb = document.getElementById('fcNewPeerPB')?.value;
++                if (!name && !pe && !pb) return;
++                if (!Array.isArray(fcCurrentData.peer_data.peers)) fcCurrentData.peer_data.peers = [];
++                fcCurrentData.peer_data.peers.push({
++                    name: name || 'Custom Peer',
++                    pe_ratio: pe || 'N/A',
++                    pb_ratio: pb || 'N/A'
++                });
++                fcApplyPeerEdits();
++            };
++
++            window.fcResetPeers = function () {
++                if (!fcCurrentData || !fcOriginalPeerData) return;
++                fcCurrentData.peer_data = JSON.parse(JSON.stringify(fcOriginalPeerData));
++                fcApplyPeerEdits();
++            };
++
+             // =====================================================
+             // CHAT
+             // =====================================================
+diff --git a/agents/forecasting_agent.py b/agents/forecasting_agent.py
+index b4670a38..7b058edc 100644
+--- a/agents/forecasting_agent.py
++++ b/agents/forecasting_agent.py
+@@ -24,7 +24,7 @@ from agents.base import (
+ from agents.prompts.forecasting_prompts import (
+     FORECAST_ASSUMPTIONS_PROMPT, FORECAST_RESEARCH_PROMPT,
+     FORECAST_TRIANGULATION_PROMPT, FORECAST_CHAT_PROMPT,
+-    FORECAST_NO_DATA_MSG
++    FORECAST_NO_DATA_MSG, FORECAST_GUIDANCE_EXTRACTION_PROMPT
+ )
+ 
+ 
+@@ -177,11 +177,22 @@ def compute_dcf_fcff(assumptions, scenario='base'):
+         cost_of_debt_posttax = cost_of_debt_pretax * (1 - tax_rate)
+         wacc = equity_pct * cost_of_equity + debt_pct * cost_of_debt_posttax
+ 
++        # Sanity guard: perpetual terminal growth cannot exceed the risk-free
++        # rate (a long-run GDP/nominal-growth proxy). Clamp rather than error.
++        terminal_growth_capped = False
++        if terminal_growth >= rf:
++            terminal_growth = max(0.0, rf - 0.005)
++            terminal_growth_capped = True
++
+         if wacc <= terminal_growth or wacc <= 0:
+             return {'fair_value': None, 'error': 'WACC must exceed terminal growth rate'}
+ 
+-        # Get base revenue (forward revenue from relative valuation)
+-        base_revenue = get_val(rel, 'forward_revenue_cr')
++        # Base off TRAILING (current) revenue and project forward exactly once.
++        # Using forward_revenue as the base double-counts Y1 growth (forward is
++        # already next-year revenue). Fall back to forward only if trailing absent.
++        base_revenue = get_val(rel, 'trailing_revenue_cr')
++        if not base_revenue or base_revenue <= 0:
++            base_revenue = get_val(rel, 'forward_revenue_cr')
+         if not base_revenue or base_revenue <= 0:
+             return {'fair_value': None, 'error': 'No base revenue available'}
+ 
+@@ -232,6 +243,7 @@ def compute_dcf_fcff(assumptions, scenario='base'):
+             'cost_of_equity': round(cost_of_equity * 100, 2),
+             'terminal_value_pct': round(pv_terminal / enterprise_value * 100, 1) if enterprise_value > 0 else 0,
+             'projected_fcff': [round(f, 2) for f in projected_fcff],
++            'terminal_growth_capped': terminal_growth_capped,
+             'scenario': scenario
+         }
+     except Exception as e:
+@@ -260,37 +272,68 @@ def compute_dcf_fcfe(assumptions, scenario='base'):
+         coe = rf + beta * erp
+         terminal_growth = get_val(dcf, 'terminal_growth') / 100
+ 
++        # Sanity guard: perpetual terminal growth cannot exceed the risk-free rate.
++        terminal_growth_capped = False
++        if terminal_growth >= rf:
++            terminal_growth = max(0.0, rf - 0.005)
++            terminal_growth_capped = True
++
+         if coe <= terminal_growth or coe <= 0:
+             return {'fair_value': None, 'error': 'CoE must exceed terminal growth'}
+ 
+-        # Use forward EPS as proxy for earnings
+-        forward_eps = get_val(rel, 'forward_eps')
+-        if not forward_eps or forward_eps <= 0:
+-            return {'fair_value': None, 'error': 'No forward EPS available'}
+-
+         shares = get_val(rel, 'shares_outstanding_cr')
+         if not shares or shares <= 0:
+             return {'fair_value': None, 'error': 'No shares outstanding'}
+ 
+-        # Growth rates
++        # Base earnings off TRAILING EPS (current actual) and grow ONCE — using
++        # forward EPS as the base double-counts Y1 growth.
++        trailing_eps = get_val(rel, 'trailing_eps')
++        base_eps = trailing_eps if (trailing_eps and trailing_eps > 0) else get_val(rel, 'forward_eps')
++        if not base_eps or base_eps <= 0:
++            return {'fair_value': None, 'error': 'No EPS available'}
++
++        # Growth rates (Y1, then Y2-Y5 average for 4 years)
+         growth_rates = [
+             get_val(dcf, 'revenue_growth_y1') / 100
+         ] + [
+             get_val(dcf, 'revenue_growth_y2_to_y5') / 100
+         ] * 4
+ 
+-        # Rough FCFE = Net Income * (1 - reinvestment rate)
+-        # Simplified: FCFE ≈ EPS * shares * payout ratio proxy
+-        tax_rate = dcf.get('tax_rate', 25) / 100
+-        net_income = forward_eps * shares
+-        reinvestment_rate = get_val(dcf, 'reinvestment_rate', scenario) / 100 if isinstance(dcf.get('reinvestment_rate'), dict) else dcf.get('reinvestment_rate', 50) / 100
++        # Proper FCFE: Net Income less the equity-funded portion of net
++        # reinvestment (CapEx + ΔWC − D&A). Debt funds a `debt_ratio` share of
++        # reinvestment, so equity funds (1 − debt_ratio). Reuses the same
++        # revenue-driven CapEx/D&A/WC assumptions as FCFF for consistency.
++        debt_ratio = wacc_comp.get('debt_to_total_capital', 30) / 100
++        da_pct = get_val(dcf, 'da_pct_of_revenue', scenario) / 100 if isinstance(dcf.get('da_pct_of_revenue'), dict) else dcf.get('da_pct_of_revenue', 5) / 100
++        capex_pct = get_val(dcf, 'capex_pct_of_revenue', scenario) / 100 if isinstance(dcf.get('capex_pct_of_revenue'), dict) else dcf.get('capex_pct_of_revenue', 7) / 100
++        wc_pct = dcf.get('working_capital_pct_of_revenue', 10) / 100
+ 
++        trailing_revenue = get_val(rel, 'trailing_revenue_cr')
++        if not trailing_revenue or trailing_revenue <= 0:
++            fwd_rev = get_val(rel, 'forward_revenue_cr')
++            g1 = growth_rates[0]
++            trailing_revenue = (fwd_rev / (1 + g1)) if (fwd_rev and (1 + g1) != 0) else 0
++
++        net_income_0 = base_eps * shares
+         projected_fcfe = []
+-        current_ni = net_income
++        current_ni = net_income_0
++        prev_revenue = trailing_revenue
++        revenue = trailing_revenue
+         for g in growth_rates:
+             current_ni = current_ni * (1 + g)
+-            fcfe = current_ni * (1 - reinvestment_rate)
+-            projected_fcfe.append(fcfe)
++            if trailing_revenue and trailing_revenue > 0:
++                revenue = prev_revenue * (1 + g)
++                da = revenue * da_pct
++                capex = revenue * capex_pct
++                delta_wc = (revenue - prev_revenue) * wc_pct
++                net_reinvestment = (capex + delta_wc - da)
++                fcfe = current_ni - (1 - debt_ratio) * net_reinvestment
++                prev_revenue = revenue
++            else:
++                # No revenue base — fall back to reinvestment-rate proxy.
++                reinvestment_rate = get_val(dcf, 'reinvestment_rate', scenario) / 100 if isinstance(dcf.get('reinvestment_rate'), dict) else dcf.get('reinvestment_rate', 50) / 100
++                fcfe = current_ni * (1 - reinvestment_rate)
++            projected_fcfe.append(max(0.0, fcfe))
+ 
+         # Terminal Value
+         terminal_fcfe = projected_fcfe[-1] * (1 + terminal_growth)
+@@ -309,6 +352,7 @@ def compute_dcf_fcfe(assumptions, scenario='base'):
+             'fair_value': round(fair_value, 2),
+             'equity_value': round(equity_value, 2),
+             'cost_of_equity': round(coe * 100, 2),
++            'terminal_growth_capped': terminal_growth_capped,
+             'scenario': scenario
+         }
+     except Exception as e:
+@@ -563,6 +607,13 @@ def compute_residual_income(assumptions, scenario='base'):
+         coe = get_val(ri, 'cost_of_equity') / 100
+         fade_years = ri.get('excess_return_fade_years', 10)
+ 
++        # Book value grows only by RETAINED earnings (1 - payout), not full ROE.
++        payout = ri.get('payout_ratio_current')
++        if payout is None:
++            payout = assumptions.get('ddm_assumptions', {}).get('payout_ratio_current', 0)
++        retention = 1 - (_safe_float(payout, 0) or 0) / 100
++        retention = max(0.0, min(1.0, retention))
++
+         if not bvps or coe <= 0:
+             return {'fair_value': None, 'error': 'Missing BVPS or CoE data'}
+ 
+@@ -583,7 +634,8 @@ def compute_residual_income(assumptions, scenario='base'):
+             fade = max(0, 1 - (year - 1) / fade_years)
+             ri_year = current_bv * excess_return * fade
+             pv_excess += ri_year / ((1 + coe) ** year)
+-            current_bv = current_bv * (1 + roe * fade)  # BV grows at fading ROE
++            # BV grows only by retained earnings at the (fading) ROE
++            current_bv = current_bv * (1 + roe * fade * retention)
+ 
+         fair_value = max(0.0, bvps + pv_excess)
+ 
+@@ -656,18 +708,26 @@ def compute_statistical_band(assumptions, key_metrics, scenario='base'):
+         # Try to get current P/E from key_metrics
+         current_pe = _safe_float(key_metrics.get('pe_ratio') or key_metrics.get('stock_pe') or key_metrics.get('Stock P/E'))
+ 
+-        peer_pe = rel.get('peer_median_pe', 0)
++        peer_pe = get_val(rel, 'peer_median_pe')
+ 
+         if not current_pe and not peer_pe:
+             return {'fair_value': None, 'error': 'No P/E data for statistical analysis'}
+ 
+-        # Use available P/E data to create a band
++        # Use available P/E data as the mean-reversion reference
+         reference_pe = current_pe or peer_pe
+ 
+-        # Statistical band: mean P/E ± 1 std dev (approximated)
+-        pe_low = reference_pe * 0.75  # -25% as bear case
++        # Use the REAL historical P/E dispersion when available
++        # (band = reference ± 1 std dev), else fall back to a ±25% proxy.
++        pe_std = _safe_float(rel.get('pe_history_std'))
++        if pe_std and pe_std > 0:
++            pe_low = max(0.0, reference_pe - pe_std)
++            pe_high = reference_pe + pe_std
++            band_basis = f"±1σ ({pe_std:.1f})"
++        else:
++            pe_low = reference_pe * 0.75
++            pe_high = reference_pe * 1.25
++            band_basis = "±25% (no history)"
+         pe_mid = reference_pe
+-        pe_high = reference_pe * 1.25  # +25% as bull case
+ 
+         if scenario == 'bull':
+             fair_value = max(0.0, forward_eps * pe_high)
+@@ -680,6 +740,7 @@ def compute_statistical_band(assumptions, key_metrics, scenario='base'):
+             'fair_value': round(fair_value, 2),
+             'pe_used': round(pe_mid if scenario == 'base' else (pe_high if scenario == 'bull' else pe_low), 1),
+             'pe_range': f"{pe_low:.1f}x — {pe_high:.1f}x",
++            'band_basis': band_basis,
+             'forward_eps': forward_eps,
+             'scenario': scenario
+         }
+@@ -841,6 +902,7 @@ def run_all_models(assumptions, key_metrics):
+     Returns dict of model_key -> {bull, base, bear, config, applicable}.
+     """
+     results = {}
++    has_guidance = bool(assumptions.get('guidance_meta', {}).get('has_guidance'))
+ 
+     for model_key, config in MODEL_CONFIGS.items():
+         model_result = {'config': {
+@@ -853,7 +915,10 @@ def run_all_models(assumptions, key_metrics):
+ 
+         try:
+             scenarios = {}
+-            for scenario in ['bull', 'base', 'bear']:
++            scen_list = ['bull', 'base', 'bear']
++            if has_guidance and model_key in GUIDANCE_MODELS:
++                scen_list = scen_list + ['guidance']
++            for scenario in scen_list:
+                 if model_key == 'statistical_band':
+                     out = compute_statistical_band(assumptions, key_metrics, scenario)
+                 else:
+@@ -864,6 +929,8 @@ def run_all_models(assumptions, key_metrics):
+             model_result['bull'] = scenarios['bull']
+             model_result['base'] = scenarios['base']
+             model_result['bear'] = scenarios['bear']
++            if 'guidance' in scenarios:
++                model_result['guidance'] = scenarios['guidance']
+ 
+             # Check if model was skipped
+             if scenarios['base'].get('skipped'):
+@@ -893,8 +960,13 @@ def recalculate_single_model(model_key, assumptions, key_metrics):
+     if not config:
+         return {'error': f'Unknown model: {model_key}'}
+ 
++    has_guidance = bool(assumptions.get('guidance_meta', {}).get('has_guidance'))
++    scen_list = ['bull', 'base', 'bear']
++    if has_guidance and model_key in GUIDANCE_MODELS:
++        scen_list = scen_list + ['guidance']
++
+     results = {}
+-    for scenario in ['bull', 'base', 'bear']:
++    for scenario in scen_list:
+         if model_key == 'statistical_band':
+             results[scenario] = compute_statistical_band(assumptions, key_metrics, scenario)
+         else:
+@@ -1036,6 +1108,43 @@ def register_forecasting_routes(app, call_gemini_api_fn, call_perplexity_api_fn,
+             print(f"FORECASTING_RECALC ERROR: {e}", file=sys.stderr)
+             return jsonify({'error': str(e)}), 500
+ 
++    @app.route('/agent/forecasting/recalculate_peers', methods=['POST'])
++    def agent_forecasting_recalculate_peers():
++        """
++        Recompute peer medians from a user-curated peer set and re-run all
++        models. Pure Python — no AI calls. Used by the editable peer table.
++        """
++        try:
++            data = request.get_json(force=True)
++            assumptions = data.get('assumptions', {})
++            key_metrics = data.get('key_metrics', {})
++            peers = data.get('peers', [])
++            company = data.get('company', {})
++            target_meds = data.get('target_historical_medians', {})
++            target_snapshot = data.get('target_value_snapshot', {})
++
++            peer_data = {
++                'company': company,
++                'peers': peers,
++                'target_identified': True,
++                'match_method': 'user'
++            }
++
++            peer_confidence = apply_authoritative_peer_medians(
++                assumptions, peer_data, target_meds, target_snapshot, source='user', recenter=True
++            )
++            models = run_all_models(assumptions, key_metrics)
++
++            return jsonify({
++                'status': 'success',
++                'models': models,
++                'assumptions': assumptions,
++                'peer_confidence': peer_confidence
++            })
++        except Exception as e:
++            print(f"FORECASTING_PEER_RECALC ERROR: {e}", file=sys.stderr)
++            return jsonify({'error': str(e)}), 500
++
+     @app.route('/agent/forecasting/chat', methods=['POST'])
+     def agent_forecasting_chat():
+         """Chat about the valuation results."""
+@@ -1155,6 +1264,10 @@ def _run_forecasting_pipeline(job_id, ticker, cached_data, call_gemini_api_fn,
+                 except Exception as e:
+                     pass
+ 
++        # Latest snapshot of each multiple + historical P/E std-dev (for the
++        # own-history peer fallback and the statistical band).
++        target_snapshot, pe_std = _compute_target_snapshot_and_std(valuation_history)
++
+         # Build financial data context for AI
+         financial_context = _build_financial_context(ticker, company_name, fundamentals, key_metrics, target_meds)
+ 
+@@ -1184,6 +1297,33 @@ def _run_forecasting_pipeline(job_id, ticker, cached_data, call_gemini_api_fn,
+         finally:
+             loop.close()
+ 
++        # ── Make peer multiples deterministic/authoritative ──
++        # Computes real peer medians (P/E, P/B) and uses the company's own
++        # historical multiples for EV/EBITDA, MCap/Sales (and as a fallback when
++        # peers are missing/thin). The AI's value is kept only as a clamped
++        # premium/discount.
++        try:
++            peer_confidence = apply_authoritative_peer_medians(
++                assumptions, peer_data, target_meds, target_snapshot, source='screener'
++            )
++        except Exception as pe_err:
++            print(f"FORECASTING_AGENT: peer median override failed: {pe_err}", file=sys.stderr)
++            peer_confidence = {'n_peers': len(peer_data.get('peers', []) or []),
++                               'per_multiple_source': {}, 'source': 'screener'}
++
++        # Thread historical P/E std-dev into the statistical band input.
++        if pe_std:
++            assumptions.setdefault('relative_valuation', {})['pe_history_std'] = pe_std
++
++        # ── Management guidance ("Guidance" scenario) ──
++        update_agent_job(job_id, {
++            'progress': f'Checking latest concall for management guidance on {company_name}...'
++        })
++        guidance_meta = build_guidance(ticker, company_name, assumptions, call_gemini_api_fn, allow_fetch=True)
++        assumptions['guidance_meta'] = guidance_meta
++        print(f"FORECASTING_AGENT: guidance — has_guidance={guidance_meta.get('has_guidance')}, "
++              f"source={guidance_meta.get('source')}", file=sys.stderr)
++
+         elapsed_s2 = int(time.time() - start_time)
+         print(f"FORECASTING_AGENT: Stage 2 complete — {elapsed_s2}s", file=sys.stderr)
+ 
+@@ -1269,7 +1409,10 @@ def _run_forecasting_pipeline(job_id, ticker, cached_data, call_gemini_api_fn,
+             'triangulated_values': triangulated_values,
+             'market_research': str(market_research)[:5000] if market_research else None,
+             'peer_data': peer_data,
++            'peer_confidence': peer_confidence,
++            'guidance_meta': guidance_meta,
+             'target_historical_medians': target_meds,
++            'target_value_snapshot': target_snapshot,
+             'key_metrics': key_metrics,
+             'cmp': str(cmp),
+             'market_cap': str(market_cap),
+@@ -1423,6 +1566,233 @@ async def _fetch_ai_research_async(ticker, company_name, financial_context,
+     return assumptions, market_research, peer_data
+ 
+ 
++# =====================================================================
++# MANAGEMENT GUIDANCE ("Guidance" scenario)
++# Sources the latest concall (cached Concall Agent result, else a quick
++# transcript-only fetch), extracts structured forward guidance, and merges
++# it into the assumptions so the guidance-consumable models can run a
++# scenario='guidance' driven by management's own numbers.
++# =====================================================================
++
++# Models that can consume management guidance (DCF + revenue/EPS-multiple based).
++GUIDANCE_MODELS = {'dcf_fcff', 'dcf_fcfe', 'relative_pe', 'ev_ebitda', 'mcap_sales'}
++
++
++async def _quick_fetch_transcript_async(ticker, company_name):
++    """
++    Bounded, transcript-ONLY fetch reused from the Concall Agent helpers
++    (no full concall analysis). Tries Screener REC audio, then YouTube.
++    Returns transcript text or ''.
++    """
++    try:
++        from fetchers.screener_fetcher import fetch_concall_rec_url_async
++        from agents.concall_agent import (
++            _extract_youtube_transcript, _transcribe_audio_video_from_url,
++            _search_youtube_concall
++        )
++    except Exception as e:
++        print(f"FORECASTING_AGENT: concall helpers unavailable: {e}", file=sys.stderr)
++        return ''
++
++    async def _transcribe(url):
++        is_yt = ('youtube' in url.lower() or 'youtu.be' in url.lower())
++        text = ''
++        if is_yt:
++            try:
++                text = await _extract_youtube_transcript(url, max_chars=80000)
++            except Exception:
++                text = ''
++        if not text or text.startswith('Error'):
++            try:
++                text = await _transcribe_audio_video_from_url(url, 'audio')
++            except Exception:
++                text = ''
++        return text or ''
++
++    # 1. Screener REC audio link
++    audio_url = ''
++    try:
++        rec_info = await fetch_concall_rec_url_async(ticker)
++        if rec_info and rec_info.get('url'):
++            audio_url = rec_info.get('url')
++    except Exception:
++        audio_url = ''
++
++    text = ''
++    if audio_url:
++        text = await _transcribe(audio_url)
++
++    # 2. YouTube fallback
++    if not text or text.startswith('Error'):
++        try:
++            yt_url = await asyncio.to_thread(_search_youtube_concall, company_name, ticker, '')
++        except Exception:
++            yt_url = ''
++        if yt_url:
++            text = await _transcribe(yt_url)
++
++    return text if (text and not text.startswith('Error')) else ''
++
++
++def _get_concall_text(ticker, company_name, allow_fetch=True, fetch_timeout=180):
++    """
++    Obtain the latest concall text for guidance extraction.
++    Returns (text, source) where source ∈ {'cached','transcript_only','unavailable'}.
++    """
++    # 1. Cached Concall Agent result (preferred — fast)
++    try:
++        cached = get_latest_result('concall', ticker)
++    except Exception:
++        cached = None
++    if cached and cached.get('result'):
++        r = cached['result']
++        txt = r.get('transcript_text') or r.get('analysis') or ''
++        if txt and len(str(txt).strip()) > 200:
++            return str(txt), 'cached'
++
++    # 2. Quick transcript-only fetch (bounded)
++    if allow_fetch:
++        try:
++            loop = asyncio.new_event_loop()
++            asyncio.set_event_loop(loop)
++            try:
++                txt = loop.run_until_complete(
++                    asyncio.wait_for(_quick_fetch_transcript_async(ticker, company_name),
++                                     timeout=fetch_timeout)
++                )
++            finally:
++                loop.close()
++            if txt and len(str(txt).strip()) > 200:
++                return str(txt), 'transcript_only'
++        except Exception as e:
++            print(f"FORECASTING_AGENT: quick transcript fetch failed: {e}", file=sys.stderr)
++
++    return '', 'unavailable'
++
++
++def _extract_guidance(text, ticker, company_name, call_gemini_api_fn):
++    """Extract structured forward guidance JSON from concall text via Gemini."""
++    if not text:
++        return {'has_guidance': False}
++    try:
++        prompt = FORECAST_GUIDANCE_EXTRACTION_PROMPT.format(
++            company_name=company_name, ticker=ticker, transcript_text=text[:60000]
++        )
++        raw = call_gemini_api_fn(
++            [{"role": "user", "content": prompt}],
++            model="gemini-3-flash-preview", temperature=0.2
++        )
++        cleaned = (raw or '').strip()
++        if cleaned.startswith('```json'):
++            cleaned = cleaned[7:]
++        elif cleaned.startswith('```'):
++            cleaned = cleaned[3:]
++        if cleaned.endswith('```'):
++            cleaned = cleaned[:-3]
++        cleaned = cleaned.strip()
++        s, e = cleaned.find('{'), cleaned.rfind('}')
++        if s != -1 and e != -1 and e > s:
++            cleaned = cleaned[s:e + 1]
++        data = json.loads(cleaned)
++        return data if isinstance(data, dict) else {'has_guidance': False}
++    except Exception as e:
++        print(f"FORECASTING_AGENT: guidance extraction failed: {e}", file=sys.stderr)
++        return {'has_guidance': False}
++
++
++def _guidance_field(guidance, key):
++    """Pull a numeric value from a guidance field that may be {value,...} or scalar/null."""
++    v = guidance.get(key)
++    if isinstance(v, dict):
++        return _safe_float(v.get('value'))
++    return _safe_float(v)
++
++
++def merge_guidance_into_assumptions(assumptions, guidance):
++    """
++    Add a 'guidance' key to the relevant per-metric assumption dicts so the
++    scenario machinery (get_val with scen='guidance') uses management's numbers,
++    falling back to base for anything not guided. Returns guidance_meta.
++    """
++    if not guidance or not guidance.get('has_guidance'):
++        return {'has_guidance': False}
++
++    dcf = assumptions.setdefault('dcf_assumptions', {})
++    rel = assumptions.setdefault('relative_valuation', {})
++
++    def set_guidance(container, key, value):
++        if value is None:
++            return
++        cur = container.get(key)
++        if isinstance(cur, dict):
++            cur['guidance'] = value
++        else:
++            # promote scalar/missing to a scenario dict preserving base
++            base = _safe_float(cur)
++            container[key] = {'bull': base, 'base': base, 'bear': base, 'guidance': value} if base is not None else {'guidance': value}
++
++    rev_growth = _guidance_field(guidance, 'revenue_growth_pct')
++    ebitda_margin = _guidance_field(guidance, 'ebitda_margin_pct')
++    capex_cr = _guidance_field(guidance, 'capex_cr')
++    eps = _guidance_field(guidance, 'eps')
++    revenue_cr = _guidance_field(guidance, 'revenue_cr')
++    ebitda_cr = _guidance_field(guidance, 'ebitda_cr')
++
++    # DCF growth: apply guided Y1 growth; leave Y2-Y5 to fall back to base.
++    set_guidance(dcf, 'revenue_growth_y1', rev_growth)
++    set_guidance(dcf, 'ebitda_margin', ebitda_margin)
++
++    # CapEx guidance → % of revenue (needs a forward revenue reference)
++    if capex_cr is not None:
++        ref_rev = _safe_float(_get_scenario_val(rel.get('forward_revenue_cr'), 'base'))
++        if ref_rev and ref_rev > 0:
++            set_guidance(dcf, 'capex_pct_of_revenue', round(capex_cr / ref_rev * 100, 2))
++
++    # Relative-valuation forward figures
++    set_guidance(rel, 'forward_eps', eps)
++    set_guidance(rel, 'forward_revenue_cr', revenue_cr)
++    set_guidance(rel, 'forward_ebitda_cr', ebitda_cr)
++
++    return {
++        'has_guidance': True,
++        'guidance_horizon': guidance.get('guidance_horizon'),
++        'management_tone': guidance.get('management_tone'),
++        'notes': guidance.get('notes'),
++        'fields': {
++            k: guidance.get(k) for k in (
++                'revenue_growth_pct', 'ebitda_margin_pct', 'ebit_margin_pct',
++                'capex_cr', 'revenue_cr', 'ebitda_cr', 'eps'
++            ) if guidance.get(k) is not None
++        }
++    }
++
++
++def _get_scenario_val(v, scen='base'):
++    """Read a scenario value from a {bull,base,bear,...} dict or scalar."""
++    if isinstance(v, dict):
++        return v.get(scen, v.get('base'))
++    return v
++
++
++def build_guidance(ticker, company_name, assumptions, call_gemini_api_fn, allow_fetch=True):
++    """
++    Orchestrate: source concall text → extract guidance → merge into assumptions.
++    Mutates `assumptions` in place. Returns guidance_meta (always a dict with
++    'has_guidance' and 'source'). Never raises.
++    """
++    try:
++        text, source = _get_concall_text(ticker, company_name, allow_fetch=allow_fetch)
++        if not text:
++            return {'has_guidance': False, 'source': 'unavailable'}
++        guidance = _extract_guidance(text, ticker, company_name, call_gemini_api_fn)
++        meta = merge_guidance_into_assumptions(assumptions, guidance)
++        meta['source'] = source if meta.get('has_guidance') else 'unavailable'
++        return meta
++    except Exception as e:
++        print(f"FORECASTING_AGENT: build_guidance failed: {e}", file=sys.stderr)
++        return {'has_guidance': False, 'source': 'unavailable'}
++
++
+ # =====================================================================
+ # HELPER FUNCTIONS
+ # =====================================================================
+@@ -1496,6 +1866,210 @@ def _build_peer_context(peer_data):
+     return "\n".join(lines) if lines else "No peer comparison data available."
+ 
+ 
++# =====================================================================
++# DETERMINISTIC PEER MEDIANS & OWN-HISTORY FALLBACK
++# The Screener peer table only carries P/E and P/B (plus ROE/ROCE). EV/EBITDA
++# and MCap/Sales are NOT in that table, so for those we fall back to the
++# company's OWN "Valuation & Margin History" (target medians + latest snapshot).
++# =====================================================================
++
++def _median(vals):
++    """Median of a non-empty list of numbers."""
++    s = sorted(vals)
++    n = len(s)
++    mid = n // 2
++    return s[mid] if n % 2 == 1 else (s[mid - 1] + s[mid]) / 2.0
++
++
++def compute_peer_medians(peer_data):
++    """
++    Compute real peer medians from the scraped peer table.
++    Only P/E and P/B are available from Screener's peer comparison table.
++    Returns {'pe', 'pb', 'n_pe', 'n_pb'} (values None if no valid data).
++    """
++    out = {'pe': None, 'pb': None, 'n_pe': 0, 'n_pb': 0}
++    if not isinstance(peer_data, dict):
++        return out
++    peers = peer_data.get('peers') or []
++    pe_vals, pb_vals = [], []
++    for p in peers:
++        pe = _safe_float(p.get('pe_ratio'))
++        if pe is not None and pe > 0:
++            pe_vals.append(pe)
++        pb = _safe_float(p.get('pb_ratio'))
++        if pb is not None and pb > 0:
++            pb_vals.append(pb)
++    if pe_vals:
++        out['pe'] = round(_median(pe_vals), 2)
++        out['n_pe'] = len(pe_vals)
++    if pb_vals:
++        out['pb'] = round(_median(pb_vals), 2)
++        out['n_pb'] = len(pb_vals)
++    return out
++
++
++def _own_history_multiples(target_meds, target_snapshot):
++    """
++    Pull the company's OWN historical multiples (P/E, P/B, EV/EBITDA, MCap/Sales)
++    from the Valuation & Margin History medians, preferring the 3yr median and
++    falling back to 5yr/1yr, then the latest snapshot.
++    """
++    out = {'pe': None, 'pb': None, 'ev_ebitda': None, 'mcap_sales': None}
++    target_meds = target_meds or {}
++    target_snapshot = target_snapshot or {}
++
++    def pick(label, prefix):
++        d = target_meds.get(label) or {}
++        for suffix in ('_3yr', '_5yr', '_1yr'):
++            v = _safe_float(d.get(prefix + suffix))
++            if v is not None and v > 0:
++                return round(v, 2)
++        return None
++
++    out['pe'] = pick('PE Ratio', 'PE') or target_snapshot.get('pe')
++    out['pb'] = pick('PB Ratio', 'Price to BV') or target_snapshot.get('pb')
++    out['ev_ebitda'] = pick('EV / EBITDA', 'EV / EBITDA') or target_snapshot.get('ev_ebitda')
++    out['mcap_sales'] = pick('Market Cap / Sales', 'Market Cap / Sales') or target_snapshot.get('mcap_sales')
++    return out
++
++
++def _clamp_multiple_to_authoritative(ai_val, auth, band=0.30):
++    """
++    Make the code-computed `auth` median authoritative while preserving the AI's
++    justified premium/discount and bull/base/bear spread — clamped to ±band of auth.
++    Returns a {'bull','base','bear'} dict (or scalar if AI gave a scalar).
++    """
++    lo, hi = auth * (1 - band), auth * (1 + band)
++
++    def cl(x):
++        x = _safe_float(x)
++        if x is None or x <= 0:
++            return round(auth, 2)
++        return round(min(hi, max(lo, x)), 2)
++
++    if isinstance(ai_val, dict):
++        out = {}
++        for scen in ('bull', 'base', 'bear'):
++            if scen in ai_val:
++                out[scen] = cl(ai_val.get(scen))
++        if 'base' not in out:
++            out['base'] = round(auth, 2)
++        # carry through any non-scenario keys (e.g. a pre-existing guidance value)
++        for k, v in ai_val.items():
++            if k not in ('bull', 'base', 'bear'):
++                out[k] = v
++        return out
++    if ai_val is None:
++        return {'bull': round(auth * 1.1, 2), 'base': round(auth, 2), 'bear': round(auth * 0.9, 2)}
++    return cl(ai_val)
++
++
++def apply_authoritative_peer_medians(assumptions, peer_data, target_meds, target_snapshot, source='screener', recenter=False):
++    """
++    Override the AI's peer multiples with deterministic, authoritative values.
++      - P/E and P/B: real peer-table median when >=3 valid peers, else the
++        company's own historical multiple.
++      - EV/EBITDA and MCap/Sales: always the company's own historical multiple
++        (not available in Screener's peer table).
++    On the first pipeline pass the AI's chosen value is kept as a premium/discount
++    clamped to ±30%. When `recenter=True` (a user-curated peer set), the multiple
++    is re-centered directly on the new computed median (the user is the authority).
++    Returns a `peer_confidence` dict describing what was used per multiple.
++    """
++    rel = assumptions.setdefault('relative_valuation', {})
++    peer_med = compute_peer_medians(peer_data)
++    own = _own_history_multiples(target_meds, target_snapshot)
++    peers = (peer_data.get('peers') or []) if isinstance(peer_data, dict) else []
++    target_identified = peer_data.get('target_identified', True) if isinstance(peer_data, dict) else True
++    MIN_PEERS = 3
++    sources = {}
++
++    def resolve(metric_key, peer_val, peer_n):
++        if peer_val is not None and peer_n >= MIN_PEERS:
++            return peer_val, 'peer'
++        own_val = own.get(metric_key)
++        if own_val is not None and own_val > 0:
++            return own_val, 'own_history'
++        if peer_val is not None and peer_n > 0:
++            return peer_val, 'peer_thin'
++        return None, 'default'
++
++    plan = [
++        ('pe', 'peer_median_pe', peer_med.get('pe'), peer_med.get('n_pe', 0)),
++        ('pb', 'peer_median_pb', peer_med.get('pb'), peer_med.get('n_pb', 0)),
++        ('ev_ebitda', 'peer_median_ev_ebitda', None, 0),
++        ('mcap_sales', 'peer_median_mcap_sales', None, 0),
++    ]
++    for metric_key, rel_key, pv, pn in plan:
++        auth, src = resolve(metric_key, pv, pn)
++        sources[metric_key] = src
++        if auth is None:
++            continue  # leave AI / default value untouched
++        if recenter:
++            rel[rel_key] = {'bull': round(auth * 1.1, 2), 'base': round(auth, 2), 'bear': round(auth * 0.9, 2)}
++        else:
++            rel[rel_key] = _clamp_multiple_to_authoritative(rel.get(rel_key), auth)
++
++    return {
++        'n_peers': len(peers),
++        'target_identified': target_identified,
++        'match_method': peer_data.get('match_method', 'unknown') if isinstance(peer_data, dict) else 'unknown',
++        'source': source,
++        'peer_median_pe': peer_med.get('pe'),
++        'peer_median_pb': peer_med.get('pb'),
++        'own_history': own,
++        'per_multiple_source': sources,
++    }
++
++
++def _compute_target_snapshot_and_std(valuation_history):
++    """
++    From the Valuation & Margin History timeseries, return:
++      - snapshot: latest value per multiple {'pe','pb','ev_ebitda','mcap_sales'}
++      - pe_std: std-dev of the historical P/E (for the statistical band)
++    """
++    snapshot = {}
++    pe_std = None
++    if not valuation_history:
++        return snapshot, pe_std
++    try:
++        import pandas as pd
++    except Exception:
++        return snapshot, pe_std
++
++    label_map = {
++        'PE Ratio': ('pe', 'PE'),
++        'PB Ratio': ('pb', 'Price to BV'),
++        'EV / EBITDA': ('ev_ebitda', 'EV / EBITDA'),
++        'Market Cap / Sales': ('mcap_sales', 'Market Cap / Sales'),
++    }
++    for label, (key, col) in label_map.items():
++        rows = valuation_history.get(label)
++        if not rows:
++            continue
++        try:
++            df = pd.DataFrame(rows)
++            if 'date' in df.columns:
++                df['date'] = pd.to_datetime(df['date'], errors='coerce')
++                df = df.dropna(subset=['date']).sort_values('date')
++            if col not in df.columns:
++                cand = [c for c in df.columns if c != 'date']
++                if not cand:
++                    continue
++                col = cand[0]
++            s = pd.to_numeric(df[col], errors='coerce').dropna()
++            if s.empty:
++                continue
++            snapshot[key] = round(float(s.iloc[-1]), 2)
++            if key == 'pe' and len(s) >= 3:
++                std_val = float(s.std())
++                if std_val == std_val:  # not NaN
++                    pe_std = round(std_val, 2)
++        except Exception:
++            continue
++    return snapshot, pe_std
++
++
+ def _build_financial_context(ticker, company_name, fundamentals, key_metrics, target_meds=None):
+     """Build a comprehensive financial data context string for AI prompts."""
+     sections = []
+diff --git a/agents/prompts/forecasting_prompts.py b/agents/prompts/forecasting_prompts.py
+index 2e79dc50..27ce5b7a 100644
+--- a/agents/prompts/forecasting_prompts.py
++++ b/agents/prompts/forecasting_prompts.py
+@@ -28,6 +28,8 @@ Your job is to synthesize ALL THREE data sources into a coherent, conviction-dri
+ 3. All monetary values should be in ₹ Crores (Indian Rupees). Per-share values in ₹.
+ 4. Growth rates, margins, and returns should be in percentages.
+ 5. Be conservative but realistic. Use the company's trailing 3-5 year trends as a baseline.
++6. **Peer multiples are AUTHORITATIVE and computed for you.** The `peer_median_pe`, `peer_median_pb`, `peer_median_ev_ebitda`, and `peer_median_mcap_sales` you output will be OVERRIDDEN/CLAMPED by the system using the real peer medians supplied in the "PEER COMPARISON DATA" section (or, when peers are unavailable, the company's own historical multiples). Therefore, DO NOT invent absolute multiples from thin air — set each peer_median_* to the supplied peer/own-history median, then apply at most a justified premium or discount (roughly within ±30%) reflecting the company's ROE, growth, market-share, or leverage advantage versus peers. Explain the premium/discount in your reasoning.
++7. **Trailing anchors:** You MUST also output the company's latest ACTUAL trailing values (`trailing_revenue_cr`, `trailing_eps`, `trailing_ebitda_cr`, `trailing_bvps`) read directly from the financial data. These are the base off which forward figures are projected — getting them right prevents double-counting of growth.
+ 
+ ## REASONING QUALITY — THIS IS THE MOST IMPORTANT PART:
+ Each `"reasoning"` field must read like a **mini equity research note** — a clear narrative that convinces the reader WHY these assumptions are correct. Follow this mandatory structure for EVERY reasoning field:
+@@ -84,6 +86,10 @@ Return ONLY a valid JSON object with this exact structure. No markdown fences ar
+     }},
+     
+     "relative_valuation": {{
++        "trailing_revenue_cr": 158000,
++        "trailing_eps": 98,
++        "trailing_ebitda_cr": 29000,
++        "trailing_bvps": 430,
+         "forward_eps": {{"bull": 120, "base": 108, "bear": 95}},
+         "forward_bvps": {{"bull": 500, "base": 450, "bear": 400}},
+         "forward_ebitda_cr": {{"bull": 35000, "base": 32000, "bear": 28000}},
+@@ -94,7 +100,7 @@ Return ONLY a valid JSON object with this exact structure. No markdown fences ar
+         "peer_median_mcap_sales": {{"bull": 3.5, "base": 2.8, "bear": 2.2}},
+         "net_debt_cr": 50000,
+         "shares_outstanding_cr": 675,
+-        "reasoning": "Follow the 4-step structure. Step 1: Table showing the actual peer multiples from the Peer Data section (use the REAL numbers provided, do not fabricate). Include a row for the peer median/mean. Step 2: Narrative explaining (a) how you derived the forward EPS estimate — reference trailing EPS, recent quarterly run-rate, and growth assumptions, (b) why the target P/E multiple is set at this level — is it a premium or discount to peers and why (cite ROE advantage, market share, parent backing, etc.). Step 3: Cross-reference your chosen multiples against the sector medians from Market Research. Step 4: Bull requires multiple re-rating from [X]; Bear assumes de-rating to [Y] due to [specific reason]."
++        "reasoning": "Follow the 4-step structure. Step 1: Table showing the actual peer multiples from the Peer Data section (use the REAL numbers provided, do not fabricate). Include a row for the peer median/mean. Step 2: Narrative explaining (a) the trailing anchors (trailing_revenue_cr, trailing_eps, trailing_ebitda_cr, trailing_bvps) read from the latest actuals, and how you projected forward EPS/revenue/EBITDA from them using the growth assumptions, (b) why the target P/E multiple is set at a premium or discount to the supplied peer median and why (cite ROE advantage, market share, parent backing, etc.) — remember the absolute peer median is supplied; you only justify the premium/discount. Step 3: Cross-reference against the sector medians from Market Research. Step 4: Bull requires multiple re-rating from [X]; Bear assumes de-rating to [Y] due to [specific reason]."
+     }},
+     
+     "residual_income_assumptions": {{
+@@ -306,6 +312,44 @@ Below is the full valuation analysis and underlying data. Use it to answer the u
+ """
+ 
+ 
++# =====================================================================
++# PROMPT 5: MANAGEMENT GUIDANCE EXTRACTION (Gemini Flash)
++# Parses the latest earnings-call transcript / concall analysis into a
++# small, strict JSON of quantitative forward guidance the valuation models
++# can consume directly. Used to build the "Guidance" scenario.
++# =====================================================================
++
++FORECAST_GUIDANCE_EXTRACTION_PROMPT = """You are an equity research analyst extracting MANAGEMENT'S OWN forward guidance from the latest earnings conference call of {company_name} ({ticker}).
++
++From the transcript/analysis below, extract ONLY explicit or clearly-implied forward-looking guidance that management themselves stated. Do NOT substitute your own forecasts, sell-side estimates, or historical figures. If a figure was not guided by management, return null for it.
++
++## RULES:
++1. Numbers only — strip ₹, %, "crore", commas. Growth/margins as plain percentages (e.g. 15 for 15%). Absolute monetary figures in ₹ Crore. Per-share in ₹.
++2. Each extracted field MUST carry a short verbatim `quote` (≤ 240 chars) from the transcript and a `confidence` of "explicit" (management stated a specific number/range) or "implied" (management gave qualitative direction you converted to a number — be conservative).
++3. For a range (e.g. "12-14% growth"), use the midpoint as `value`.
++4. If the text contains NO usable forward guidance at all, set "has_guidance": false and all fields null.
++5. Output ONLY the JSON object, no markdown fences, no commentary.
++
++## OUTPUT (strict JSON):
++{{
++  "has_guidance": true,
++  "guidance_horizon": "e.g. FY25 / FY25-FY27 / next 2-3 years",
++  "management_tone": "bullish|neutral|cautious",
++  "revenue_growth_pct": {{"value": 15, "quote": "...", "confidence": "explicit"}},
++  "ebitda_margin_pct": {{"value": 22, "quote": "...", "confidence": "explicit"}},
++  "ebit_margin_pct": null,
++  "capex_cr": {{"value": 5000, "quote": "...", "confidence": "explicit"}},
++  "revenue_cr": null,
++  "ebitda_cr": null,
++  "eps": null,
++  "notes": "1-2 sentence summary of the overall guidance posture."
++}}
++
++## LATEST CONCALL TRANSCRIPT / ANALYSIS FOR {company_name} ({ticker}):
++{transcript_text}
++"""
++
++
+ # =====================================================================
+ # FALLBACK MESSAGE
+ # =====================================================================
+diff --git a/fetchers/screener_fetcher.py b/fetchers/screener_fetcher.py
+index 34c65db9..620876ef 100644
+--- a/fetchers/screener_fetcher.py
++++ b/fetchers/screener_fetcher.py
+@@ -2843,10 +2843,11 @@ def _parse_peer_table(soup, ticker: str, company_name: str = None) -> dict:
+         # 3. Fallback to first row (legacy behavior)
+         
+         company_index = None
++        match_method = 'none'
+         best_match_score = 0.0
+         MATCH_THRESHOLD = 0.5  # Minimum similarity to consider a match
+         ticker_upper = ticker.upper()
+-        
++
+         # STRATEGY 1: Fuzzy match using company_name (if provided)
+         if company_name and company_index is None:
+             for i, record_name in record_names:
+@@ -2857,27 +2858,34 @@ def _parse_peer_table(soup, ticker: str, company_name: str = None) -> dict:
+                     best_match_score = score
+                     if score >= MATCH_THRESHOLD:
+                         company_index = i
+-            
++
+             if company_index is not None:
+-                print(f"DEBUG: Found company by fuzzy match: '{record_names[company_index][1]}' " 
++                match_method = 'fuzzy'
++                print(f"DEBUG: Found company by fuzzy match: '{record_names[company_index][1]}' "
+                       f"matches '{company_name}' (score: {best_match_score:.2f})")
+-        
++
+         # STRATEGY 2: Ticker substring match (fallback)
+         if company_index is None:
+             for i, record_name in record_names:
+                 if not record_name:
+                     continue
+                 record_name_upper = record_name.upper()
+-                # Check if ticker appears in the name (e.g., "INFY" in "Infosys Ltd")  
++                # Check if ticker appears in the name (e.g., "INFY" in "Infosys Ltd")
+                 if ticker_upper in record_name_upper:
+                     company_index = i
++                    match_method = 'ticker'
+                     print(f"DEBUG: Found company by ticker match: '{record_name}' contains '{ticker_upper}'")
+                     break
+-        
+-        # STRATEGY 3: Fallback to first row (legacy behavior)
++
++        # STRATEGY 3: No reliable match — do NOT fabricate a target from row 0.
++        # Previously we defaulted company_index=0, which silently presented a
++        # DIFFERENT company's metrics as the target. Instead, leave the target
++        # unidentified: every (non-median) row becomes a peer and the caller is
++        # told via target_identified=False so it can fall back to the company's
++        # own historical multiples rather than a wrong peer's numbers.
+         if company_index is None:
+-            company_index = 0
+-            print(f"WARN: Could not find {ticker} in peer table by name, using first row as fallback")
++            print(f"WARN: Could not confidently identify {ticker} in peer table — "
++                  f"treating all rows as peers (target_identified=False)")
+         
+         # Now process records with proper company identification
+         industry_avg = {}
+@@ -2930,7 +2938,9 @@ def _parse_peer_table(soup, ticker: str, company_name: str = None) -> dict:
+         return {
+             'company': company_data,
+             'peers': peers_data,
+-            'industry_avg': industry_avg
++            'industry_avg': industry_avg,
++            'target_identified': company_index is not None,
++            'match_method': match_method
+         }
+         
+     except Exception as e:

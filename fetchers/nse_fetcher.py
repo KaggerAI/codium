@@ -37,6 +37,79 @@ NSE_HEADERS = {
 # schedule, transcript, or generic intimation).
 _REC_KEYWORDS = ("link of recording", "audio recording", "recording of the")
 
+# NSE states transcripts tersely — the live text is literally
+# "...has informed the Exchange about Transcript" — so match the bare word and
+# exclude the meeting types that also produce transcripts but are not concalls.
+_TRANSCRIPT_MARKER = "transcript"
+_TRANSCRIPT_EXCLUDE = ("agm", "annual general meeting", "egm", "postal ballot",
+                       "extraordinary general meeting", "court convened")
+
+# "Q1FY27", "Q4 FY 2026", "Q3-FY26" as stated in the filing subject. Preferred
+# over inferring from the filing date, which is only ever an approximation.
+_QFY_RE = re.compile(r'\bq\s*-?\s*([1-4])\s*[-/ ]?\s*fy\s*-?\s*(\d{2,4})\b', re.IGNORECASE)
+
+
+def _quarter_from_text(text: str) -> str:
+    """'link of Q4FY2026 earnings call' -> 'Mar 2026'. '' when not stated."""
+    m = _QFY_RE.search(text or '')
+    if not m:
+        return ''
+    qn = int(m.group(1))
+    fy_end_year = 2000 + int(m.group(2)[-2:])
+    if qn == 4:
+        return f"Mar {fy_end_year}"
+    return f"{ {1: 'Jun', 2: 'Sep', 3: 'Dec'}[qn]} {fy_end_year - 1}"
+
+
+# NSE attachment names look like  SYMBOL_ddmmyyyyhhmmss_Human_Readable_Part.pdf
+_FNAME_PREFIX_RE = re.compile(r'^[A-Za-z0-9]+(?:_[A-Za-z]+)?_\d{14}_')
+_FNAME_DATE_RE = re.compile(r'(\d{2})(\d{2})(20\d{2})')
+
+# Filenames run words together, so the word-boundary form used for subject text
+# misses them ("...TranscriptQ3FY26PEL"). This variant drops the leading
+# boundary, accepts "Qtr", and tolerates a short run between the quarter and the
+# fiscal year ("Qtr2H1FY26" -> Q2 FY26).
+_FNAME_QFY_RE = re.compile(r'(?:qtr|q)\s*-?\s*([1-4]).{0,8}?fy\s*-?\s*(\d{2,4})', re.IGNORECASE)
+
+
+def _quarter_from_filename(pdf_url: str) -> str:
+    """
+    Quarter inferred from an NSE attachment filename.
+
+    Worth doing because the filing date alone is unreliable for transcripts:
+    they are submitted about a week after the call, so a Q4 call held on 30 May
+    can have its transcript filed on 2 June and be misread as a Q1 document.
+    Filenames carry better evidence — either the quarter outright
+    ('..._Q4FY26_Transcript...') or the CALL date
+    ('...ConcallTranscript30052026.pdf'). Returns '' when neither is present.
+    """
+    name = (pdf_url or '').rsplit('/', 1)[-1]
+    # Drop the symbol + filing-timestamp prefix so its date isn't mistaken for
+    # the call date.
+    body = _FNAME_PREFIX_RE.sub('', name)
+
+    m = _FNAME_QFY_RE.search(body)
+    if m:
+        qn = int(m.group(1))
+        fy_end_year = 2000 + int(m.group(2)[-2:])
+        if qn == 4:
+            return f"Mar {fy_end_year}"
+        return f"{ {1: 'Jun', 2: 'Sep', 3: 'Dec'}[qn]} {fy_end_year - 1}"
+
+    from datetime import datetime as _dtm
+    for m in _FNAME_DATE_RE.finditer(body):
+        dd, mm, yyyy = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        try:
+            called = _dtm(yyyy, mm, dd)
+        except ValueError:
+            continue
+        q_month = _MONTH_TO_QUARTER[called.month]
+        q_year = called.year
+        if called.month in (1, 2) and q_month == 'Dec':
+            q_year -= 1
+        return f"{q_month} {q_year}"
+    return ''
+
 _AUDIO_EXT = {'.mp3', '.wav', '.m4a', '.ogg', '.aac', '.flac', '.wma', '.opus'}
 _VIDEO_EXT = {'.mp4', '.webm', '.mkv', '.avi', '.mov', '.flv', '.wmv'}
 
@@ -142,6 +215,17 @@ def _extract_pdf_hyperlinks(pdf_bytes: bytes) -> set:
     return {_unwrap_safelink(u) for u in links}
 
 
+def _row_quarter(row: dict) -> str:
+    """
+    Best available quarter for an announcement row, most reliable evidence first:
+    the subject line, then the attachment filename (which often carries the
+    quarter or the call date), and only then the filing date.
+    """
+    return (_quarter_from_text(str(row.get("attchmntText", "")))
+            or _quarter_from_filename(str(row.get("attchmntFile", "")))
+            or _andt_to_quarter(row.get("an_dt", "")))
+
+
 async def _nse_get_json(params: dict):
     """GET the NSE announcements API as JSON. Tries httpx (with cookie priming),
     then falls back to curl_cffi + residential proxy (NSE blocks datacenter IPs).
@@ -179,6 +263,64 @@ async def _nse_get_json(params: dict):
         return None
 
 
+async def fetch_nse_concall_transcript_async(ticker: str, results_quarter: str = '') -> dict:
+    """
+    Find the latest *written* earnings-call transcript a company filed with NSE.
+
+    This is the cheapest and most reliable concall source available: the PDF is
+    the transcript itself, so there is no audio to download and no AI
+    transcription to pay for, and it is exact-company by construction (filed
+    under the NSE symbol) with a filing date to pin the quarter.
+
+    Returns ``{pdf_url, date, quarter}`` or ``{}`` when nothing is filed.
+    Note transcripts typically appear about a week AFTER the call, so this comes
+    up empty in the days right after results — the audio sources cover that gap.
+    """
+    sym = (ticker or '').strip().upper()
+    if not sym:
+        return {}
+    try:
+        data = await _nse_get_json({"index": "equities", "symbol": sym})
+        if not isinstance(data, list) or not data:
+            return {}
+
+        transcripts = []
+        for row in data[:120]:
+            text = str(row.get("attchmntText", "")).lower()
+            pdf = (row.get("attchmntFile", "") or "")
+            if _TRANSCRIPT_MARKER not in text:
+                continue
+            if any(x in text for x in _TRANSCRIPT_EXCLUDE):
+                continue
+            if not pdf.lower().endswith(".pdf"):
+                continue
+            transcripts.append(row)
+
+        if not transcripts:
+            print(f"NSE_FETCHER: no transcript filing for {sym}", file=sys.stderr)
+            return {}
+
+        chosen = None
+        if results_quarter:
+            for row in transcripts:
+                row_q = _row_quarter(row)
+                if row_q == results_quarter:
+                    chosen = row
+                    break
+        if chosen is None:
+            chosen = transcripts[0]
+
+        an_dt = chosen.get("an_dt", "")
+        quarter = _row_quarter(chosen)
+        result = {"pdf_url": chosen["attchmntFile"], "date": an_dt[:11], "quarter": quarter}
+        print(f"NSE_FETCHER: {sym} transcript filing [{an_dt[:11]}] quarter={quarter or '?'} "
+              f"-> {result['pdf_url']}", file=sys.stderr)
+        return result
+    except Exception as e:
+        print(f"NSE_FETCHER: transcript lookup error for {sym}: {e}", file=sys.stderr)
+        return {}
+
+
 async def fetch_nse_concall_recording_async(ticker: str, results_quarter: str = '') -> dict:
     """
     Find the latest earnings-call audio recording a company filed with NSE.
@@ -210,7 +352,8 @@ async def fetch_nse_concall_recording_async(ticker: str, results_quarter: str = 
         chosen = None
         if results_quarter:
             for row in recordings:
-                if _andt_to_quarter(row.get("an_dt", "")) == results_quarter:
+                row_q = _row_quarter(row)
+                if row_q == results_quarter:
                     chosen = row
                     break
         if chosen is None:
@@ -218,7 +361,9 @@ async def fetch_nse_concall_recording_async(ticker: str, results_quarter: str = 
 
         pdf_url = chosen["attchmntFile"]
         an_dt = chosen.get("an_dt", "")
-        quarter = _andt_to_quarter(an_dt)
+        # The subject often names the quarter outright ("link of Q4FY2026
+        # earnings call"); trust that over inferring it from the filing date.
+        quarter = _row_quarter(chosen)
         print(f"NSE_FETCHER: {sym} recording filing [{an_dt[:11]}] quarter={quarter or '?'} -> {pdf_url}", file=sys.stderr)
 
         # Download the intimation PDF and resolve its embedded link.

@@ -1720,7 +1720,16 @@ async def fetch_upcoming_concalls_screener_async(lookahead_days: int = 10, max_p
     return results
 
 
-async def fetch_latest_documents_async(ticker: str, html_content: str = None) -> list[dict]:
+async def fetch_latest_documents_async(ticker: str, html_content: str = None,
+                                       include_presentation: bool = True) -> list[dict]:
+    """
+    Latest Concall + Results Presentation documents from Screener.
+
+    `include_presentation=False` skips summarising the results-presentation PDF.
+    That summary costs one Gemini request, and callers that only want the
+    concall transcript (the Concall Agent) never read it — so paying for it
+    doubles their quota usage for nothing.
+    """
     try:
         if html_content is not None and len(html_content) > 500:
             text = html_content
@@ -1768,7 +1777,7 @@ async def fetch_latest_documents_async(ticker: str, html_content: str = None) ->
                     doc_infos.append(doc_info)
                     found_types.add('Concall')
 
-            if 'Presentation' not in found_types:
+            if include_presentation and 'Presentation' not in found_types:
                 ppt_link = item.find('a', string='PPT', href=True)
                 if ppt_link:
                     doc_info = {"type": "Presentation", "text": f"Results Presentation {date_text}", "link": ppt_link['href'], "date": raw_date}
@@ -2559,7 +2568,7 @@ def fetch_peer_comparison_from_screener(ticker: str, company_name: str = None) -
         return asyncio.run(fetch_peer_comparison_from_screener_async(ticker, company_name))
     except Exception as e:
         print(f"ERROR: Sync wrapper for peer comparison failed: {e}")
-        return {'company': {}, 'peers': []}
+        return {'company': {}, 'peers': [], 'target_identified': False, 'match_method': 'none'}
 
 
 async def fetch_peer_comparison_from_screener_async(ticker: str, company_name: str = None) -> dict:
@@ -2698,12 +2707,12 @@ async def fetch_peer_comparison_from_screener_async(ticker: str, company_name: s
             return _parse_peer_table(soup, ticker, company_name)
         except Exception as pw_err:
             log_progress(f"Stage 3 Playwright fallback also failed for {ticker}: {pw_err}")
-            return {'company': {}, 'peers': []}
+            return {'company': {}, 'peers': [], 'target_identified': False, 'match_method': 'none'}
         
     except Exception as e:
         print(f"ERROR: Async peer comparison fetch failed for {ticker}: {e}")
         traceback.print_exc()
-        return {'company': {}, 'peers': []}
+        return {'company': {}, 'peers': [], 'target_identified': False, 'match_method': 'none'}
 
 
 def _parse_peer_table(soup, ticker: str, company_name: str = None) -> dict:
@@ -2720,23 +2729,23 @@ def _parse_peer_table(soup, ticker: str, company_name: str = None) -> dict:
         peers_section = soup.select_one("#peers")
         if not peers_section:
             print(f"WARN: No #peers section found for {ticker}")
-            return {'company': {}, 'peers': []}
+            return {'company': {}, 'peers': [], 'target_identified': False, 'match_method': 'none'}
         
         table = peers_section.select_one("table")
         if not table:
             print(f"WARN: No peer comparison table found for {ticker}")
-            return {'company': {}, 'peers': []}
+            return {'company': {}, 'peers': [], 'target_identified': False, 'match_method': 'none'}
         
         # Parse the table using pandas
         try:
             import io
             df_list = pd.read_html(io.StringIO(str(table)))
             if not df_list:
-                return {'company': {}, 'peers': []}
+                return {'company': {}, 'peers': [], 'target_identified': False, 'match_method': 'none'}
             df = df_list[0]
         except Exception as e:
             print(f"ERROR: Failed to parse peer comparison table: {e}")
-            return {'company': {}, 'peers': []}
+            return {'company': {}, 'peers': [], 'target_identified': False, 'match_method': 'none'}
         
         # Clean up the DataFrame
         df = clean_df(df)
@@ -2808,7 +2817,7 @@ def _parse_peer_table(soup, ticker: str, company_name: str = None) -> dict:
         records = df.to_dict('records')
         
         if not records:
-            return {'company': {}, 'peers': []}
+            return {'company': {}, 'peers': [], 'target_identified': False, 'match_method': 'none'}
         
         # =====================================================================
         # IMPROVED: Two-pass company identification with fuzzy name matching
@@ -2843,10 +2852,11 @@ def _parse_peer_table(soup, ticker: str, company_name: str = None) -> dict:
         # 3. Fallback to first row (legacy behavior)
         
         company_index = None
+        match_method = 'none'
         best_match_score = 0.0
         MATCH_THRESHOLD = 0.5  # Minimum similarity to consider a match
         ticker_upper = ticker.upper()
-        
+
         # STRATEGY 1: Fuzzy match using company_name (if provided)
         if company_name and company_index is None:
             for i, record_name in record_names:
@@ -2857,27 +2867,34 @@ def _parse_peer_table(soup, ticker: str, company_name: str = None) -> dict:
                     best_match_score = score
                     if score >= MATCH_THRESHOLD:
                         company_index = i
-            
+
             if company_index is not None:
-                print(f"DEBUG: Found company by fuzzy match: '{record_names[company_index][1]}' " 
+                match_method = 'fuzzy'
+                print(f"DEBUG: Found company by fuzzy match: '{record_names[company_index][1]}' "
                       f"matches '{company_name}' (score: {best_match_score:.2f})")
-        
+
         # STRATEGY 2: Ticker substring match (fallback)
         if company_index is None:
             for i, record_name in record_names:
                 if not record_name:
                     continue
                 record_name_upper = record_name.upper()
-                # Check if ticker appears in the name (e.g., "INFY" in "Infosys Ltd")  
+                # Check if ticker appears in the name (e.g., "INFY" in "Infosys Ltd")
                 if ticker_upper in record_name_upper:
                     company_index = i
+                    match_method = 'ticker'
                     print(f"DEBUG: Found company by ticker match: '{record_name}' contains '{ticker_upper}'")
                     break
-        
-        # STRATEGY 3: Fallback to first row (legacy behavior)
+
+        # STRATEGY 3: No reliable match — do NOT fabricate a target from row 0.
+        # Previously we defaulted company_index=0, which silently presented a
+        # DIFFERENT company's metrics as the target. Instead, leave the target
+        # unidentified: every (non-median) row becomes a peer and the caller is
+        # told via target_identified=False so it can fall back to the company's
+        # own historical multiples rather than a wrong peer's numbers.
         if company_index is None:
-            company_index = 0
-            print(f"WARN: Could not find {ticker} in peer table by name, using first row as fallback")
+            print(f"WARN: Could not confidently identify {ticker} in peer table — "
+                  f"treating all rows as peers (target_identified=False)")
         
         # Now process records with proper company identification
         industry_avg = {}
@@ -2930,10 +2947,12 @@ def _parse_peer_table(soup, ticker: str, company_name: str = None) -> dict:
         return {
             'company': company_data,
             'peers': peers_data,
-            'industry_avg': industry_avg
+            'industry_avg': industry_avg,
+            'target_identified': company_index is not None,
+            'match_method': match_method
         }
         
     except Exception as e:
         print(f"ERROR: Failed to parse peer table: {e}")
         traceback.print_exc()
-        return {'company': {}, 'peers': []}
+        return {'company': {}, 'peers': [], 'target_identified': False, 'match_method': 'none'}
