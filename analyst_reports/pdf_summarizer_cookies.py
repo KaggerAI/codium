@@ -51,12 +51,27 @@ def load_cookies_from_file():
 
 
 async def download_analyst_pdf_with_cookies(pdf_url: str) -> bytes:
-    """Download PDF using browser cookies"""
+    """Download PDF using browser cookies.
+
+    Prefers trendlyne_auth, which logs in with TRENDLYNE_USERNAME/PASSWORD and
+    refreshes the session automatically when the stored cookies expire. Falls
+    back to the raw cookie jar if that path is unavailable.
+    """
+    try:
+        from analyst_reports.trendlyne_auth import download_pdf as _auth_download
+    except ImportError:
+        from trendlyne_auth import download_pdf as _auth_download
+
+    try:
+        return await _auth_download(pdf_url)
+    except Exception as e:
+        print(f"WARN: trendlyne_auth download failed ({e}); falling back to raw cookies")
+
     load_cookies_from_file()
-    
+
     if not TRENDLYNE_COOKIES:
         raise Exception("No cookies configured. Please export cookies from your browser.")
-    
+
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Referer': 'https://trendlyne.com/',
@@ -219,11 +234,14 @@ Create a table with quarterly/annual financial metrics:
 """
             
             response = genai_client.models.generate_content(
-                model='gemini-3-flash-preview', # Standardizing to the model used in handler.py and screens_fetcher
+                model='gemini-3.5-flash-lite', # Standardizing to the model used in handler.py and screens_fetcher
                 contents=[
                     types.Part.from_text(text=prompt),
                     pdf_file
-                ]
+                ],
+                config=types.GenerateContentConfig(
+                    thinking_config=types.ThinkingConfig(thinking_level="MEDIUM")
+                )
             )
             
             genai_client.files.delete(name=pdf_file.name)

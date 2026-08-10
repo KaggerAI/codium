@@ -28,8 +28,9 @@ from google.genai import types
 
 # Configuration
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
-TRANSCRIPTION_MODEL = "gemini-3-flash-preview"
-ANALYSIS_MODEL = "gemini-3-flash-preview"
+TRANSCRIPTION_MODEL = "gemini-3.5-flash-lite"
+ANALYSIS_MODEL = "gemini-3.5-flash-lite"
+THINKING_LEVEL = "MEDIUM"
 
 # Configure Gemini on module load
 genai_client = None
@@ -186,7 +187,8 @@ class BudgetLiveSession:
                 config=types.GenerateContentConfig(
                     system_instruction=BUDGET_SYSTEM_INSTRUCTION,
                     temperature=0.0,
-                    max_output_tokens=1500
+                    max_output_tokens=1500,
+                    thinking_config=types.ThinkingConfig(thinking_level=THINKING_LEVEL)
                 )
             )
             
@@ -296,7 +298,8 @@ Extract and return as a single JSON object (Be extremely thorough, identify at l
                 config=types.GenerateContentConfig(
                     system_instruction=BUDGET_SYSTEM_INSTRUCTION,
                     temperature=0.3,
-                    response_mime_type="application/json"
+                    response_mime_type="application/json",
+                    thinking_config=types.ThinkingConfig(thinking_level=THINKING_LEVEL)
                 )
             )
             
@@ -458,7 +461,10 @@ def transcribe_audio_simple(audio_bytes: bytes, mime_type: str = "audio/webm") -
             contents=[
                 types.Part.from_bytes(data=audio_bytes, mime_type=mime_type),
                 types.Part.from_text(text="Transcribe this audio accurately. Output only the spoken words.")
-            ]
+            ],
+            config=types.GenerateContentConfig(
+                thinking_config=types.ThinkingConfig(thinking_level=THINKING_LEVEL)
+            )
         )
         
         return response.text if response.text else ""
@@ -495,7 +501,8 @@ def analyze_budget_text(text: str) -> Dict[str, Any]:
             contents=prompt,
             config=types.GenerateContentConfig(
                 temperature=0.2,
-                response_mime_type="application/json"
+                response_mime_type="application/json",
+                thinking_config=types.ThinkingConfig(thinking_level=THINKING_LEVEL)
             )
         )
         

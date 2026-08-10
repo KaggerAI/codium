@@ -1342,11 +1342,14 @@ Return ONLY the extracted transcript text, nothing else."""
 
             # New SDK generation syntax
             response = genai_client.models.generate_content(
-                model='gemini-3-flash-preview',
+                model='gemini-3.5-flash-lite',
                 contents=[
                     types.Part.from_text(text=prompt),
                     pdf_file
-                ]
+                ],
+                config=types.GenerateContentConfig(
+                    thinking_config=types.ThinkingConfig(thinking_level="MEDIUM")
+                )
             )
             
             # Clean up uploaded file
@@ -1470,15 +1473,18 @@ async def summarize_presentation_with_gemini_async(pdf_url: str) -> str:
 
             Do not summarize aggressively. The goal is a comprehensive, data-rich extraction of all relevant information from the document."""
 
-            log_progress("Calling Gemini 3 Flash to extract insights from Investor Presentation...")
-            
+            log_progress("Calling Gemini 3.5 Flash-Lite to extract insights from Investor Presentation...")
+
             # New SDK generation syntax
             response = genai_client.models.generate_content(
-                model='gemini-3-flash-preview',
+                model='gemini-3.5-flash-lite',
                 contents=[
                     types.Part.from_text(text=prompt),
                     pdf_file
-                ]
+                ],
+                config=types.GenerateContentConfig(
+                    thinking_config=types.ThinkingConfig(thinking_level="MEDIUM")
+                )
             )
 
             # Clean up uploaded file
@@ -1567,11 +1573,14 @@ def summarize_presentation_with_gemini(pdf_url: str) -> str:
         
         # New SDK generation syntax
         response = genai_client.models.generate_content(
-            model='gemini-3-flash-preview',
+            model='gemini-3.5-flash-lite',
             contents=[
                 types.Part.from_text(text=prompt),
                 pdf_file
-            ]
+            ],
+            config=types.GenerateContentConfig(
+                thinking_config=types.ThinkingConfig(thinking_level="MEDIUM")
+            )
         )
 
         genai_client.files.delete(name=pdf_file.name)
@@ -2235,11 +2244,14 @@ async def fetch_segment_data_from_document_async(pdf_url: str, doc_type: str) ->
                     raise ValueError("GenAI client not initialized")
                 
                 response = genai_client.models.generate_content(
-                    model='gemini-3-flash-preview',
+                    model='gemini-3.5-flash-lite',
                     contents=[
                         types.Part.from_text(text=SEGMENT_EXTRACTION_PROMPT),
                         types.Part.from_text(text=f"Here is the concall transcript text:\n\n{extracted_text}")
-                    ]
+                    ],
+                    config=types.GenerateContentConfig(
+                        thinking_config=types.ThinkingConfig(thinking_level="MEDIUM")
+                    )
                 )
                 return response.text
             
@@ -2266,11 +2278,14 @@ async def fetch_segment_data_from_document_async(pdf_url: str, doc_type: str) ->
             log_progress("Extracting segment and geography data with AI...")
             
             response = genai_client.models.generate_content(
-                model='gemini-3-flash-preview',
+                model='gemini-3.5-flash-lite',
                 contents=[
                     types.Part.from_text(text=SEGMENT_EXTRACTION_PROMPT),
                     pdf_file
-                ]
+                ],
+                config=types.GenerateContentConfig(
+                    thinking_config=types.ThinkingConfig(thinking_level="MEDIUM")
+                )
             )
             
             # Clean up uploaded file

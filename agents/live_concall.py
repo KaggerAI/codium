@@ -337,6 +337,34 @@ def load_concall_schedule(days: int = 5) -> List[Dict]:
     return out
 
 
+def load_raw_concall_calls() -> List[Dict]:
+    """
+    Every call in the persisted snapshot, with NO date window and NO status
+    recomputation. Never scrapes.
+
+    load_concall_schedule() cannot be used to find *completed* calls: it filters
+    to today..+days and drops everything earlier, so a call that already
+    finished is invisible to it. The watchlist warmer needs exactly those
+    entries (to re-run the Concall Agent once a call is over), so it reads the
+    raw snapshot through here.
+    """
+    global _schedule_mem
+
+    if _schedule_mem.get("calls"):
+        return list(_schedule_mem["calls"])
+
+    try:
+        if os.path.exists(SCHEDULE_CACHE_FILE):
+            with open(SCHEDULE_CACHE_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            _schedule_mem = data
+            return list(data.get("calls", []))
+    except Exception as e:
+        print(f"LIVE_CONCALL: failed to read raw schedule snapshot: {e}", file=sys.stderr)
+
+    return []
+
+
 async def fetch_concall_schedule(days: int = 5, include_past: bool = False) -> List[Dict]:
     """Backward-compatible async shim. Serves the persisted snapshot filtered to
     `days` — it does NOT scrape (scraping happens once daily via

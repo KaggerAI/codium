@@ -246,11 +246,14 @@ async def summarize_analyst_pdf_async(pdf_url: str) -> str:
             print("INFO: Calling Gemini to summarize analyst report...")
             
             response = genai_client.models.generate_content(
-                model='gemini-3-flash-preview',
+                model='gemini-3.5-flash-lite',
                 contents=[
                     types.Part.from_text(text=prompt),
                     pdf_file
-                ]
+                ],
+                config=types.GenerateContentConfig(
+                    thinking_config=types.ThinkingConfig(thinking_level="MEDIUM")
+                )
             )
             
             genai_client.files.delete(name=pdf_file.name)

@@ -127,6 +127,7 @@ def run_results_watch_cycle(
     run_batch_precache_fn,
     csv_path: str = "trendlyne_all_stocks_master.csv",
     max_refresh_per_cycle: int = 50,
+    exclude_tickers=None,
 ):
     """
     Main orchestrator. Called by the scheduler daemon at 8am / 5pm IST.
@@ -136,6 +137,12 @@ def run_results_watch_cycle(
     3. Map filed scrip codes → NSE tickers
     4. Intersect with cached tickers in Redis
     5. Trigger light cache refresh for the intersection
+
+    exclude_tickers: tickers this cycle must not touch. Used for watchlist
+    tickers, which the watchlist warmer refreshes through the FULL /analyze path.
+    run_batch_precache_fn writes a light cache (no peer comparison, no ai_scores,
+    company_name left as the ticker), so refreshing them here would overwrite a
+    good full payload with a degraded one and make those panels slow again.
     """
     now_ist = datetime.utcnow() + timedelta(hours=5, minutes=30)
     print(f"\n{'=' * 60}")
@@ -192,6 +199,18 @@ def run_results_watch_cycle(
     print(f"RESULTS_WATCHER: {len(cached_tickers)} tickers in Redis cache")
 
     stale_tickers = list(filed_tickers & set(cached_tickers))
+
+    # Hand watchlist tickers off to the watchlist warmer (full /analyze path).
+    excluded = {str(t).upper() for t in (exclude_tickers or set())}
+    if excluded:
+        handed_off = [t for t in stale_tickers if t.upper() in excluded]
+        if handed_off:
+            stale_tickers = [t for t in stale_tickers if t.upper() not in excluded]
+            print(
+                f"RESULTS_WATCHER: {len(handed_off)} watchlist ticker(s) left to "
+                f"the watchlist warmer (full refresh): {', '.join(sorted(handed_off)[:20])}"
+            )
+
     stale_tickers.sort()  # Deterministic order
 
     print(f"RESULTS_WATCHER: {len(stale_tickers)} cached tickers have new results")

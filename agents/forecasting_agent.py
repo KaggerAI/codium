@@ -1185,7 +1185,7 @@ def register_forecasting_routes(app, call_gemini_api_fn, call_perplexity_api_fn,
 
             answer = call_gemini_api_fn(
                 messages,
-                model="gemini-3-flash-preview",
+                model="gemini-3.5-flash-lite",
                 temperature=1,
                 thinking_level='HIGH'
             )
@@ -1690,7 +1690,8 @@ def _extract_guidance(text, ticker, company_name, call_gemini_api_fn):
         )
         raw = call_gemini_api_fn(
             [{"role": "user", "content": prompt}],
-            model="gemini-3-flash-preview", temperature=0.2
+            model="gemini-3.5-flash-lite", temperature=0.2,
+            thinking_level='HIGH'
         )
         cleaned = (raw or '').strip()
         if cleaned.startswith('```json'):

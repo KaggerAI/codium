@@ -3878,6 +3878,46 @@
       background: rgba(255, 255, 255, 0.03)
     }
 
+    /* ---- AI-summary "Note" callout: dark-theme remap ----
+       The company summary embeds this callout with inline styles tuned for the
+       light Company Analysis page (handler.py:9151):
+         background:#fff3cd; border-left:4px solid #ffc107
+       It sets no text colour, so in this dark modal it inherits .wl-md's light
+       text (and `.wl-md strong` is near-white) and renders cream-on-cream.
+       Remapped here to a dark amber callout. Scoped to .wl-md -- used only by
+       the two watchlist modals -- so the Company Analysis page, which renders
+       the same HTML on a light background, is untouched. !important is required
+       because the source styles are inline. */
+    .wl-md div[style*="#fff3cd"],
+    .wl-md div[style*="#FFF3CD"],
+    .wl-md div[style*="#fef3c7"],
+    .wl-md div[style*="#fffbeb"],
+    .wl-md div[style*="#fff8e1"],
+    .wl-md div[style*="#ffc107"] {
+      background: rgba(245, 158, 11, 0.10) !important;
+      border: 1px solid rgba(245, 158, 11, 0.30) !important;
+      border-left: 3px solid #f59e0b !important;
+      border-radius: .65rem !important;
+      padding: .85rem 1.1rem !important;
+      margin: .25rem 0 1.5rem !important;
+      color: #fde68a !important;
+      font-size: .85rem;
+      line-height: 1.65;
+      /* the panel sets pre-wrap for the plain-text summary; inside this HTML
+         block it produces ragged gaps, so wrap normally */
+      white-space: normal !important;
+    }
+
+    .wl-md div[style*="#fff3cd"] strong,
+    .wl-md div[style*="#FFF3CD"] strong,
+    .wl-md div[style*="#fef3c7"] strong,
+    .wl-md div[style*="#fffbeb"] strong,
+    .wl-md div[style*="#fff8e1"] strong,
+    .wl-md div[style*="#ffc107"] strong {
+      color: #fcd34d !important;
+      font-weight: 700;
+    }
+
     .nav-btn-watchlist {
       color: white !important;
       background: linear-gradient(135deg, #f59e0b, #d97706) !important;
@@ -3886,6 +3926,106 @@
 
     .nav-btn-watchlist:hover {
       box-shadow: 0 4px 12px rgba(245, 158, 11, 0.25);
+    }
+
+    /* ---- Warm readiness strip on each card (read-only status) ---- */
+    .wl-ready {
+      display: flex;
+      align-items: center;
+      gap: .3rem;
+      margin: .5rem 0 .1rem;
+      min-height: 1rem;
+    }
+
+    .wl-ready-label {
+      font-size: .6rem;
+      color: #4b5563;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+      margin-right: .1rem;
+    }
+
+    .wl-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: #374151;
+      border: 1px solid transparent;
+      cursor: help;
+      flex-shrink: 0;
+      transition: background .2s, box-shadow .2s;
+    }
+
+    .wl-dot-ready {
+      background: #10b981;
+      box-shadow: 0 0 5px rgba(16, 185, 129, .55);
+    }
+
+    .wl-dot-stale {
+      background: #f59e0b;
+    }
+
+    .wl-dot-warming {
+      background: #3b82f6;
+      animation: wlPulse 1.2s ease-in-out infinite;
+    }
+
+    .wl-dot-awaiting {
+      background: transparent;
+      border-color: #f59e0b;
+    }
+
+    .wl-dot-failed {
+      background: #ef4444;
+    }
+
+    @keyframes wlPulse {
+      0%, 100% { opacity: 1 }
+      50% { opacity: .3 }
+    }
+
+    /* ---- Per-panel as-of line + refresh control ---- */
+    .wl-modal-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: .75rem;
+      padding: .45rem 1.25rem .55rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      background: rgba(139, 92, 246, 0.04);
+      flex-wrap: wrap;
+    }
+
+    .wl-modal-asof {
+      font-size: .72rem;
+      color: #6b7280;
+    }
+
+    .wl-modal-asof b {
+      color: #a78bfa;
+      font-weight: 600;
+    }
+
+    .wl-refresh-btn {
+      background: rgba(139, 92, 246, 0.12);
+      border: 1px solid rgba(139, 92, 246, 0.3);
+      color: #a78bfa;
+      border-radius: .5rem;
+      padding: .25rem .7rem;
+      font-size: .72rem;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background .15s, opacity .15s;
+    }
+
+    .wl-refresh-btn:hover:not(:disabled) {
+      background: rgba(139, 92, 246, 0.25);
+    }
+
+    .wl-refresh-btn:disabled {
+      opacity: .45;
+      cursor: not-allowed;
     }
   </style>
   <div id="watchlistSection"
@@ -3951,6 +4091,11 @@
         <h2 id="wlFinTitle">🏦 Financials Agent</h2>
         <button class="wl-modal-close" onclick="wlCloseFinancialsModal()">✕</button>
       </div>
+      <div class="wl-modal-meta">
+        <span class="wl-modal-asof" id="wlFinAsOf"></span>
+        <button class="wl-refresh-btn" id="wlFinRefreshBtn" onclick="wlRefreshPanel('financials')"
+          title="Force a fresh pull of the financials">↻ Refresh</button>
+      </div>
       <div class="wl-fin-tabs" id="wlFinTabs"></div>
       <div id="wlFinBody" class="wl-modal-body"></div>
     </div>
@@ -3961,6 +4106,11 @@
       <div class="wl-modal-header">
         <h2 id="wlAgentTitle">🎤 Agent</h2>
         <button class="wl-modal-close" onclick="wlCloseAgentModal()">✕</button>
+      </div>
+      <div class="wl-modal-meta">
+        <span class="wl-modal-asof" id="wlAgentAsOf"></span>
+        <button class="wl-refresh-btn" id="wlAgentRefreshBtn" onclick="wlRefreshPanel(_wlAgentType)"
+          title="Force a fresh run of this agent">↻ Refresh</button>
       </div>
       <div id="wlAgentBody" class="wl-modal-body wl-md">
         <div id="wlAgentProgress" class="hidden">
@@ -3984,6 +4134,23 @@
     // =======================================================================
     window._launchedFromWatchlist = false;
     let _wlAgentType = null, _wlAgentTicker = null, _wlAgentJobId = null, _wlAgentPollTimer = null;
+    // Completed payload of the open agent panel — the follow-up chat needs it as
+    // context, and every /agent/*/chat route rejects a request without it.
+    let _wlAgentResult = null, _wlFinTicker = null, _wlFinName = null;
+    let _wlReadiness = {}, _wlReadyPollTimer = null, _wlWarmPollTimer = null;
+
+    // Panels, in the order they appear on a card's readiness strip.
+    const WL_PANELS = [
+      { key: 'financials', icon: '🏦', label: 'Financials' },
+      { key: 'concall', icon: '🎤', label: 'Concall Agent' },
+      { key: 'forensic', icon: '🔍', label: 'Forensic Agent' },
+      { key: 'analyst', icon: '📄', label: 'Analyst Agent' }
+    ];
+
+    function wlEsc(s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
+        ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+    }
 
     // --- CORE: Load, Add, Remove ---
     async function wlLoadWatchlist() {
@@ -3997,7 +4164,60 @@
         loading.classList.add('hidden');
         if (!d.items || d.items.length === 0) { empty.classList.remove('hidden'); return; }
         wlRenderCards(d.items, grid);
+        wlLoadReadiness();
       } catch (e) { loading.classList.add('hidden'); empty.classList.remove('hidden'); console.error('WL load error:', e); }
+    }
+
+    // --- WARM READINESS ---
+    // Read-only status so a card can say which panels open instantly. Failures
+    // are silent: the dots are a nicety and must never break the grid.
+    async function wlLoadReadiness() {
+      try {
+        const r = await fetch('/api/watchlist/readiness');
+        if (!r.ok) return;
+        const d = await r.json();
+        _wlReadiness = d.items || {};
+        Object.keys(_wlReadiness).forEach(wlPaintReadiness);
+        // Keep polling only while something is actually being warmed.
+        const warming = Object.values(_wlReadiness).some(t =>
+          Object.values(t.agents || {}).some(a => a.state === 'warming'));
+        if (_wlReadyPollTimer) { clearTimeout(_wlReadyPollTimer); _wlReadyPollTimer = null; }
+        if (warming) _wlReadyPollTimer = setTimeout(wlLoadReadiness, 15000);
+      } catch (e) { /* non-critical */ }
+    }
+
+    function wlReadyClass(state) {
+      return {
+        ready: 'wl-dot wl-dot-ready', stale: 'wl-dot wl-dot-stale',
+        warming: 'wl-dot wl-dot-warming', failed: 'wl-dot wl-dot-failed',
+        awaiting_transcript: 'wl-dot wl-dot-awaiting'
+      }[state] || 'wl-dot';
+    }
+
+    function wlReadyTitle(panel, slot, quarter) {
+      const state = slot.state || 'none';
+      const words = {
+        ready: 'ready — opens instantly', stale: 'stale — refresh for latest',
+        warming: 'being prepared right now', failed: 'could not be prepared',
+        awaiting_transcript: 'waiting for the transcript to be published',
+        none: 'not prepared yet — will run on first open'
+      }[state] || state;
+      let t = panel.label + ': ' + words;
+      if (slot.quarter || quarter) t += '\nQuarter: ' + (slot.quarter || quarter);
+      if (slot.warmed_at) t += '\nPrepared ' + wlTimeAgo(new Date(slot.warmed_at * 1000).toISOString());
+      if (slot.last_error) t += '\nLast issue: ' + slot.last_error;
+      return t;
+    }
+
+    function wlPaintReadiness(ticker) {
+      const strip = document.getElementById('wl-ready-' + ticker);
+      if (!strip) return;
+      const entry = _wlReadiness[ticker];
+      if (!entry) return;
+      strip.innerHTML = '<span class="wl-ready-label">Ready</span>' + WL_PANELS.map(p => {
+        const slot = (entry.agents || {})[p.key] || { state: 'none' };
+        return `<span class="${wlReadyClass(slot.state)}" title="${wlEsc(wlReadyTitle(p, slot, entry.quarter))}"></span>`;
+      }).join('');
     }
 
     async function wlAddStock(ticker, name) {
@@ -4036,23 +4256,27 @@
 
     function wlRenderCards(items, grid) {
       grid.innerHTML = items.map(item => {
-        const t = item.ticker;
-        const n = (item.stock_name || t).replace(/'/g, "\\'");
+        const t = wlEsc(item.ticker);
+        // JSON-encode for the JS attribute so quotes/backslashes in a company
+        // name can't break out of the handler, and escape for the HTML text.
+        const nAttr = wlEsc(JSON.stringify(item.stock_name || item.ticker));
+        const tAttr = wlEsc(JSON.stringify(item.ticker));
         return `<div class="wl-card" id="wl-card-${t}">
           <div class="flex items-center justify-between">
             <span class="wl-ticker-badge">${t}</span>
-            <button class="wl-remove-btn" onclick="wlRemoveStock('${t}')" title="Remove">✕</button>
+            <button class="wl-remove-btn" onclick="wlRemoveStock(${tAttr})" title="Remove">✕</button>
           </div>
-          <div class="wl-card-name">${item.stock_name || t}</div>
+          <div class="wl-card-name">${wlEsc(item.stock_name || item.ticker)}</div>
           <div class="wl-card-date">Added ${wlTimeAgo(item.added_at)}</div>
+          <div class="wl-ready" id="wl-ready-${t}"></div>
           <div class="wl-dock">
-            <button class="wl-dock-btn" onclick="wlLaunchFinancials('${t}','${n}')" title="Financials">🏦</button>
-            <button class="wl-dock-btn" onclick="wlLaunchChart('${t}')" title="Chart Analysis">📈</button>
-            <button class="wl-dock-btn" onclick="wlLaunchNews('${t}')" title="News Agent">📰</button>
-            <button class="wl-dock-btn" onclick="wlLaunchDeepResearch('${t}')" title="Deep Research">🌌</button>
-            <button class="wl-dock-btn" onclick="wlLaunchAgent('concall','${t}')" title="Concall Agent">🎤</button>
-            <button class="wl-dock-btn" onclick="wlLaunchAgent('forensic','${t}')" title="Forensic Agent">🔍</button>
-            <button class="wl-dock-btn" onclick="wlLaunchAgent('analyst','${t}')" title="Analyst Agent">📄</button>
+            <button class="wl-dock-btn" onclick="wlLaunchFinancials(${tAttr},${nAttr})" title="Financials">🏦</button>
+            <button class="wl-dock-btn" onclick="wlLaunchChart(${tAttr})" title="Chart Analysis">📈</button>
+            <button class="wl-dock-btn" onclick="wlLaunchNews(${tAttr})" title="News Agent">📰</button>
+            <button class="wl-dock-btn" onclick="wlLaunchDeepResearch(${tAttr})" title="Deep Research">🌌</button>
+            <button class="wl-dock-btn" onclick="wlLaunchAgent('concall',${tAttr})" title="Concall Agent">🎤</button>
+            <button class="wl-dock-btn" onclick="wlLaunchAgent('forensic',${tAttr})" title="Forensic Agent">🔍</button>
+            <button class="wl-dock-btn" onclick="wlLaunchAgent('analyst',${tAttr})" title="Analyst Agent">📄</button>
           </div>
         </div>`;
       }).join('');
@@ -4069,7 +4293,7 @@
         const ql = q.toLowerCase();
         const matches = allStocks.filter(s => s.ticker.toLowerCase().startsWith(ql) || s.name.toLowerCase().includes(ql)).slice(0, 8);
         if (!matches.length) { dd.classList.remove('show'); return; }
-        dd.innerHTML = matches.map(s => `<div class="wl-search-item" onclick="wlAddStock('${s.ticker}','${s.name.replace(/'/g, "\\'")}')"><span style="color:#e2e8f0;font-size:.85rem">${s.name}</span><span style="color:#7c3aed;font-size:.75rem;font-weight:600">${s.ticker}</span></div>`).join('');
+        dd.innerHTML = matches.map(s => `<div class="wl-search-item" onclick="wlAddStock(${wlEsc(JSON.stringify(s.ticker))},${wlEsc(JSON.stringify(s.name))})"><span style="color:#e2e8f0;font-size:.85rem">${wlEsc(s.name)}</span><span style="color:#7c3aed;font-size:.75rem;font-weight:600">${wlEsc(s.ticker)}</span></div>`).join('');
         dd.classList.add('show');
       });
       inp.addEventListener('keydown', function (e) {
@@ -4086,8 +4310,10 @@
       const title = document.getElementById('wlFinTitle');
       const tabs = document.getElementById('wlFinTabs');
       const body = document.getElementById('wlFinBody');
-      title.innerHTML = '🏦 Financials — ' + ticker;
-      tabs.innerHTML = ''; body.innerHTML = '<div class="text-center py-12"><div class="inline-block w-8 h-8 border-2 border-purple-500/30 border-t-purple-500 rounded-full animate-spin"></div><p class="text-slate-400 text-sm mt-3">Loading financial data for ' + ticker + '...</p></div>';
+      _wlFinTicker = ticker; _wlFinName = name || ticker;
+      title.innerHTML = '🏦 Financials — ' + wlEsc(ticker);
+      wlSetAsOf('wlFinAsOf', ticker, 'financials');
+      tabs.innerHTML = ''; body.innerHTML = '<div class="text-center py-12"><div class="inline-block w-8 h-8 border-2 border-purple-500/30 border-t-purple-500 rounded-full animate-spin"></div><p class="text-slate-400 text-sm mt-3">Loading financial data for ' + wlEsc(ticker) + '...</p></div>';
       modal.classList.add('active');
       try {
         const r = await fetch('/analyze', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ticker }) });
@@ -4166,7 +4392,10 @@
 
 
 
-    function wlCloseFinancialsModal() { document.getElementById('wlFinancialsModal').classList.remove('active'); }
+    function wlCloseFinancialsModal() {
+      document.getElementById('wlFinancialsModal').classList.remove('active');
+      if (_wlWarmPollTimer) { clearTimeout(_wlWarmPollTimer); _wlWarmPollTimer = null; }
+    }
 
     // --- CHART / NEWS / DEEP RESEARCH LAUNCHERS ---
     function wlLaunchChart(ticker) {
@@ -4191,25 +4420,123 @@
     }
 
     // --- ADVANCED AGENT MODAL (Concall / Forensic / Analyst) ---
-    function wlLaunchAgent(type, ticker) {
-      const icons = { concall: '🎤', forensic: '🔍', analyst: '📄' };
-      const labels = { concall: 'Concall Agent', forensic: 'Forensic Agent', analyst: 'Analyst Agent' };
-      _wlAgentType = type; _wlAgentTicker = ticker; _wlAgentJobId = null;
+    const WL_AGENT_ICONS = { concall: '🎤', forensic: '🔍', analyst: '📄', financials: '🏦' };
+    const WL_AGENT_LABELS = { concall: 'Concall Agent', forensic: 'Forensic Agent', analyst: 'Analyst Agent', financials: 'Financials' };
+
+    // "Data as of <quarter> - prepared <ago>" for a panel header.
+    function wlSetAsOf(elId, ticker, agent, ageMinutes) {
+      const el = document.getElementById(elId);
+      if (!el) return;
+      const entry = _wlReadiness[ticker];
+      const slot = entry && entry.agents ? (entry.agents[agent] || {}) : {};
+      const quarter = slot.quarter || (entry && entry.quarter) || null;
+      const bits = [];
+      if (quarter) bits.push('Data as of <b>' + wlEsc(quarter) + '</b>');
+      if (slot.warmed_at) bits.push('prepared ' + wlTimeAgo(new Date(slot.warmed_at * 1000).toISOString()));
+      else if (typeof ageMinutes === 'number') bits.push('cached ' + (ageMinutes < 1 ? 'just now' : ageMinutes + 'm ago'));
+      if (slot.state === 'stale') bits.push('<b style="color:#f59e0b">stale</b>');
+      if (slot.state === 'awaiting_transcript') bits.push('<b style="color:#f59e0b">awaiting transcript</b>');
+      el.innerHTML = bits.length ? bits.join(' &middot; ') : '';
+    }
+
+    async function wlLaunchAgent(type, ticker) {
+      _wlAgentType = type; _wlAgentTicker = ticker; _wlAgentJobId = null; _wlAgentResult = null;
       if (_wlAgentPollTimer) { clearTimeout(_wlAgentPollTimer); _wlAgentPollTimer = null; }
-      document.getElementById('wlAgentTitle').innerHTML = (icons[type] || '🤖') + ' ' + (labels[type] || type) + ' — ' + ticker;
+      const label = WL_AGENT_LABELS[type] || type;
+      document.getElementById('wlAgentTitle').innerHTML = (WL_AGENT_ICONS[type] || '🤖') + ' ' + wlEsc(label) + ' — ' + wlEsc(ticker);
       document.getElementById('wlAgentResult').innerHTML = '';
       document.getElementById('wlAgentProgress').classList.remove('hidden');
-      document.getElementById('wlAgentProgressText').textContent = 'Starting ' + (labels[type] || type) + '...';
+      document.getElementById('wlAgentProgressText').textContent = 'Loading ' + label + '...';
       document.getElementById('wlAgentChatRow').style.display = 'none';
+      wlSetAsOf('wlAgentAsOf', ticker, type);
       document.getElementById('wlAgentModal').classList.add('active');
+
+      // Pre-warmed data lives in agent_result_{type}_{TICKER} until the quarter
+      // boundary, so ask for it first. Going straight to /analyze would discard
+      // a perfectly good quarter-fresh result once it passes the endpoint's
+      // 60/120-minute window and re-run the whole pipeline.
+      try {
+        const lr = await fetch('/agent/' + type + '/latest?ticker=' + encodeURIComponent(ticker));
+        if (lr.ok) {
+          const ld = await lr.json();
+          if (ld.status === 'complete' && ld.result) {
+            wlAgentComplete(ld.result, ld.age_minutes);
+            return;
+          }
+        }
+      } catch (e) { /* fall through to a live run */ }
+
+      if (_wlAgentTicker !== ticker || _wlAgentType !== type) return; // user switched panels
+      document.getElementById('wlAgentProgressText').textContent = 'Starting ' + label + '...';
       fetch('/agent/' + type + '/analyze', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ticker })
       }).then(r => r.json()).then(data => {
-        if (data.status === 'complete') { wlAgentComplete(data.result); }
+        if (data.status === 'complete') { wlAgentComplete(data.result, data.age_minutes); }
         else if (data.job_id) { _wlAgentJobId = data.job_id; wlPollAgent(); }
-        else if (data.error) { wlAgentError(data.error); }
+        // Agents return a human-readable `message` alongside a machine `error`
+        // token (e.g. 'no_base_data'); prefer the readable one.
+        else if (data.error || data.message) { wlAgentError(data.message || data.error); }
       }).catch(e => wlAgentError(e.message));
+    }
+
+    // --- PER-PANEL FORCE REFRESH ---
+    function wlRefreshPanel(agent) {
+      const isFin = agent === 'financials';
+      const ticker = isFin ? _wlFinTicker : _wlAgentTicker;
+      if (!ticker || !agent) return;
+      const btn = document.getElementById(isFin ? 'wlFinRefreshBtn' : 'wlAgentRefreshBtn');
+      if (btn) { btn.disabled = true; btn.textContent = '↻ Refreshing...'; }
+
+      const resetBtn = () => { if (btn) { btn.disabled = false; btn.textContent = '↻ Refresh'; } };
+
+      if (isFin) {
+        document.getElementById('wlFinTabs').innerHTML = '';
+        document.getElementById('wlFinBody').innerHTML = '<div class="text-center py-12"><div class="inline-block w-8 h-8 border-2 border-purple-500/30 border-t-purple-500 rounded-full animate-spin"></div><p class="text-slate-400 text-sm mt-3">Rebuilding full financials for ' + wlEsc(ticker) + '. This takes a minute or two...</p></div>';
+      } else {
+        document.getElementById('wlAgentResult').innerHTML = '';
+        document.getElementById('wlAgentChatRow').style.display = 'none';
+        document.getElementById('wlAgentProgress').classList.remove('hidden');
+        document.getElementById('wlAgentProgressText').textContent = 'Starting refresh...';
+      }
+
+      fetch('/api/watchlist/refresh', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ticker, agent })
+      }).then(async r => {
+        const d = await r.json();
+        if (r.status === 429) { throw new Error(d.message || 'Refreshed too recently. Try again shortly.'); }
+        if (!r.ok || !d.job_id) { throw new Error(d.message || d.error || 'Refresh could not be started'); }
+        wlPollWarm(d.job_id, ticker, agent, resetBtn);
+      }).catch(e => {
+        resetBtn();
+        if (isFin) document.getElementById('wlFinBody').innerHTML = '<div class="text-center py-12"><p class="text-amber-400">' + wlEsc(e.message) + '</p></div>';
+        else wlAgentError(e.message);
+      });
+    }
+
+    function wlPollWarm(jobId, ticker, agent, resetBtn) {
+      if (_wlWarmPollTimer) { clearTimeout(_wlWarmPollTimer); _wlWarmPollTimer = null; }
+      fetch('/api/watchlist/warm/' + encodeURIComponent(jobId) + '/status')
+        .then(r => r.json()).then(async data => {
+          if (data.status === 'processing') {
+            const txt = document.getElementById('wlAgentProgressText');
+            if (agent !== 'financials' && txt) txt.textContent = data.progress || 'Refreshing...';
+            _wlWarmPollTimer = setTimeout(() => wlPollWarm(jobId, ticker, agent, resetBtn), 2000);
+            return;
+          }
+          resetBtn();
+          await wlLoadReadiness();  // pick up the new quarter / prepared-at
+          if (data.status === 'complete') {
+            if (agent === 'financials') wlLaunchFinancials(ticker, _wlFinName);
+            else if (data.result) wlAgentComplete(data.result);
+            else wlLaunchAgent(agent, ticker);
+          } else {
+            const msg = data.error || 'Refresh failed';
+            if (agent === 'financials') document.getElementById('wlFinBody').innerHTML = '<div class="text-center py-12"><p class="text-red-400">❌ ' + wlEsc(msg) + '</p></div>';
+            else wlAgentError(msg);
+          }
+        }).catch(e => { resetBtn(); wlAgentError(e.message); });
     }
 
     function wlPollAgent() {
@@ -4224,23 +4551,76 @@
         }).catch(e => wlAgentError(e.message));
     }
 
-    function wlAgentComplete(result) {
+    function wlAgentComplete(result, ageMinutes) {
       document.getElementById('wlAgentProgress').classList.add('hidden');
-      const md = result.analysis || 'No analysis available.';
-      const html = (typeof marked !== 'undefined' && marked.parse) ? marked.parse(md) : '<pre>' + md + '</pre>';
-      document.getElementById('wlAgentResult').innerHTML = html;
+      // Keep the payload: the follow-up chat has to send it back as context.
+      _wlAgentResult = result || null;
+      const md = (result && result.analysis) || 'No analysis available.';
+      const html = (typeof marked !== 'undefined' && marked.parse) ? marked.parse(md) : '<pre>' + wlEsc(md) + '</pre>';
+      document.getElementById('wlAgentResult').innerHTML = wlAgentMetaLine(result) + html;
       document.getElementById('wlAgentChatRow').style.display = 'flex';
       document.getElementById('wlAgentChatInput').value = '';
+      wlSetAsOf('wlAgentAsOf', _wlAgentTicker, _wlAgentType, ageMinutes);
+    }
+
+    // Surface the extra fields each agent returns but the modal used to drop.
+    function wlAgentMetaLine(result) {
+      if (!result) return '';
+      const bits = [];
+      if (_wlAgentType === 'concall') {
+        if (result.concall_quarter) bits.push('Transcript: <b>' + wlEsc(result.concall_quarter) + '</b>');
+        if (result.results_quarter) bits.push('Results: <b>' + wlEsc(result.results_quarter) + '</b>');
+        if (result.quarter_mismatch) bits.push('<b style="color:#f59e0b">⚠ transcript is from an older quarter</b>');
+        if (result.concall_link) bits.push('<a href="' + wlEsc(result.concall_link) + '" target="_blank" rel="noopener" style="color:#a78bfa">source ↗</a>');
+      } else if (_wlAgentType === 'forensic') {
+        const s = result.scores || {};
+        if (s.mscore !== undefined && s.mscore !== null) bits.push('Beneish M: <b>' + wlEsc(s.mscore) + '</b>');
+        if (s.zscore !== undefined && s.zscore !== null) bits.push('Altman Z: <b>' + wlEsc(s.zscore) + '</b>');
+      } else if (_wlAgentType === 'analyst') {
+        if (result.domestic_count) bits.push('Domestic reports: <b>' + wlEsc(result.domestic_count) + '</b>');
+        if (result.global_count) bits.push('Global reports: <b>' + wlEsc(result.global_count) + '</b>');
+        if (result.pdfs_analyzed) bits.push('PDFs read: <b>' + wlEsc(result.pdfs_analyzed) + '</b>');
+      }
+      if (!bits.length) return '';
+      return '<div style="font-size:.72rem;color:#6b7280;margin-bottom:.9rem;padding-bottom:.6rem;border-bottom:1px solid rgba(255,255,255,0.06)">'
+        + bits.join(' &middot; ') + '</div>';
     }
 
     function wlAgentError(msg) {
       document.getElementById('wlAgentProgress').classList.add('hidden');
-      document.getElementById('wlAgentResult').innerHTML = '<div class="text-center py-8"><p class="text-red-400">❌ ' + (msg || 'Unknown error') + '</p></div>';
+      document.getElementById('wlAgentResult').innerHTML = '<div class="text-center py-8"><p class="text-red-400">❌ ' + wlEsc(msg || 'Unknown error') + '</p></div>';
+      document.getElementById('wlAgentChatRow').style.display = 'none';
     }
 
     function wlCloseAgentModal() {
       document.getElementById('wlAgentModal').classList.remove('active');
       if (_wlAgentPollTimer) { clearTimeout(_wlAgentPollTimer); _wlAgentPollTimer = null; }
+      if (_wlWarmPollTimer) { clearTimeout(_wlWarmPollTimer); _wlWarmPollTimer = null; }
+    }
+
+    // Every /agent/*/chat route hard-requires `analysis_context` and 400s
+    // without it, plus its own agent-specific context field. Mirrors the
+    // payloads used by the Agent Marketplace page (agents.html).
+    function wlChatPayload(question) {
+      const res = _wlAgentResult || {};
+      const base = {
+        ticker: _wlAgentTicker,
+        question: question,
+        company_name: res.company_name || _wlAgentTicker,
+        analysis_context: res.analysis || ''
+      };
+      if (_wlAgentType === 'concall') {
+        base.transcript_context = res.transcript_text || '';
+      } else if (_wlAgentType === 'forensic') {
+        base.data_context = res.scores ? JSON.stringify(res.scores, null, 2) : '';
+      } else if (_wlAgentType === 'analyst') {
+        const fmt = list => (list || []).map(r =>
+          `${r.brokerage}: ${r.recommendation} | Target: ${r.target_price} | ${r.date} | ${r.summary || ''}`
+        ).join('\n');
+        base.domestic_reports_text = fmt(res.domestic_reports);
+        base.global_reports_text = fmt(res.global_reports);
+      }
+      return base;
     }
 
     async function wlAgentChat() {
@@ -4248,16 +4628,22 @@
       const btn = document.getElementById('wlAgentChatBtn');
       const q = inp.value.trim();
       if (!q || !_wlAgentType || !_wlAgentTicker) return;
-      btn.disabled = true; btn.textContent = '...';
       const resultDiv = document.getElementById('wlAgentResult');
-      resultDiv.innerHTML += '<div style="margin-top:1.5rem;padding-top:1rem;border-top:1px solid rgba(255,255,255,0.08)"><p style="color:#7c3aed;font-weight:600;font-size:.85rem;margin-bottom:.5rem">You: ' + q.replace(/</g, '&lt;') + '</p><p style="color:#6b7280;font-size:.8rem">Thinking...</p></div>';
+      if (!_wlAgentResult || !_wlAgentResult.analysis) {
+        // The chat routes reject a request with no analysis_context, so say so
+        // rather than letting the backend answer with a bare 400.
+        resultDiv.innerHTML += '<p style="color:#f59e0b;font-size:.8rem;margin-top:1rem">Run or refresh this analysis first — there is no context to ask about yet.</p>';
+        return;
+      }
+      btn.disabled = true; btn.textContent = '...';
+      resultDiv.innerHTML += '<div style="margin-top:1.5rem;padding-top:1rem;border-top:1px solid rgba(255,255,255,0.08)"><p style="color:#7c3aed;font-weight:600;font-size:.85rem;margin-bottom:.5rem">You: ' + wlEsc(q) + '</p><p style="color:#6b7280;font-size:.8rem">Thinking...</p></div>';
       try {
         const r = await fetch('/agent/' + _wlAgentType + '/chat', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ticker: _wlAgentTicker, question: q })
+          body: JSON.stringify(wlChatPayload(q))
         });
         const d = await r.json();
-        const answer = d.response || d.answer || 'No response.';
+        const answer = d.answer || d.response || d.message || d.error || 'No response.';
         const answerHtml = (typeof marked !== 'undefined' && marked.parse) ? marked.parse(answer) : '<p>' + answer + '</p>';
         const thinkingP = resultDiv.querySelector('div:last-child p:last-child');
         if (thinkingP && thinkingP.textContent === 'Thinking...') thinkingP.outerHTML = answerHtml;
@@ -7927,11 +8313,11 @@
                   <p class="text-slate-600 leading-relaxed">${r.summary}</p>
                   ${r.pdf_url ? `
                     <div class="mt-4 flex flex-col gap-2">
-                      <p class="text-xs text-slate-500 mb-1">Please click "Download PDF" to save it manually, then click "Upload for AI Summary" to generate the insights.</p>
+                      <p class="text-xs text-slate-500 mb-1">Click "Open PDF" to view the report (opens in a new tab). To get AI insights, save the PDF and click "Upload for AI Summary".</p>
                       <div class="flex gap-2">
-                        <a href="${r.pdf_url}" target="_blank" rel="noopener noreferrer" class="bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 px-4 py-2 rounded-lg flex items-center justify-center space-x-2 transition-all text-sm font-medium shadow-sm flex-1">
+                        <a href="/api/analyst-pdf?url=${encodeURIComponent(r.pdf_url)}" target="_blank" rel="noopener noreferrer" data-fallback-url="${r.pdf_url}" onclick="return handleAnalystPdfOpen(event, this)" class="bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 px-4 py-2 rounded-lg flex items-center justify-center space-x-2 transition-all text-sm font-medium shadow-sm flex-1">
                           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
-                          <span>1. Download PDF</span>
+                          <span>1. Open PDF</span>
                         </a>
                         <button onclick="triggerAnalystPdfUpload('${r.brokerage}', ${i})" class="bg-gradient-to-r from-blue-500 to-blue-600 text-white px-4 py-2 rounded-lg hover:from-blue-600 hover:to-blue-700 focus:outline-none flex items-center justify-center space-x-2 transition-all text-sm font-medium shadow-sm flex-1" id="ai-summary-btn-${i}">
                           <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M5.5 13a3.5 3.5 0 01-.369-6.98 4 4 0 117.753-1.977A4.5 4.5 0 1113.5 13H11V9.413l1.293 1.293a1 1 0 001.414-1.414l-3-3a1 1 0 00-1.414 0l-3 3a1 1 0 001.414 1.414L9 9.414V13H5.5z"></path></svg>
@@ -8111,6 +8497,65 @@
           }
 
           openAISummaryModal(r.brokerage, html, null);
+        };
+
+        // Trendlyne gates report PDFs behind a login, so linking straight at
+        // trendlyne.com bounces to their login page. Go through /api/analyst-pdf,
+        // which authenticates server-side and streams the PDF back.
+        window.handleAnalystPdfOpen = function (event, anchor) {
+          event.preventDefault();
+
+          const proxyUrl = anchor.getAttribute('href');
+          const fallbackUrl = anchor.getAttribute('data-fallback-url');
+
+          // Open the tab synchronously so it isn't caught by the popup blocker.
+          const win = window.open('', '_blank');
+          if (win) {
+            win.document.write('<title>Loading report…</title><p style="font-family:system-ui,sans-serif;padding:24px;color:#475569">Fetching the report from Trendlyne…</p>');
+          }
+
+          fetch(proxyUrl)
+            .then(async resp => {
+              if (!resp.ok) {
+                let msg = `HTTP ${resp.status}`;
+                try {
+                  const body = await resp.json();
+                  if (body && body.error) msg = body.error;
+                } catch (e) { /* non-JSON error body */ }
+                throw new Error(msg);
+              }
+              return resp.blob();
+            })
+            .then(blob => {
+              const objectUrl = URL.createObjectURL(blob);
+              if (win) {
+                win.location.href = objectUrl;
+              } else {
+                window.open(objectUrl, '_blank');
+              }
+              setTimeout(() => URL.revokeObjectURL(objectUrl), 120000);
+            })
+            .catch(err => {
+              console.error('Analyst PDF proxy failed:', err);
+              // Don't silently bounce to the raw Trendlyne URL — that just lands
+              // on their login page and hides why the proxy failed.
+              const msg = String(err && err.message ? err.message : err);
+              if (win) {
+                win.document.body.innerHTML = `
+                  <div style="font-family:system-ui,sans-serif;padding:32px;max-width:640px;color:#334155">
+                    <h2 style="color:#b91c1c;margin:0 0 12px">Could not open the report</h2>
+                    <p style="margin:0 0 16px">The server could not fetch this PDF from Trendlyne:</p>
+                    <pre style="background:#f1f5f9;padding:12px;border-radius:8px;white-space:pre-wrap;font-size:13px">${msg.replace(/</g, '&lt;')}</pre>
+                    <p style="margin:16px 0 0">You can still
+                      <a href="${fallbackUrl}" style="color:#2563eb">open it on Trendlyne</a>
+                      (requires you to be logged in there).</p>
+                  </div>`;
+              } else {
+                alert(`Could not open the report.\n\n${msg}`);
+              }
+            });
+
+          return false;
         };
 
         // AI Summary upload logic

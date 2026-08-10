@@ -882,7 +882,7 @@ def register_forensic_routes(app, call_gemini_api_fn, call_perplexity_api_fn,
 
             answer = call_gemini_api_fn(
                 messages,
-                model="gemini-3-flash-preview",
+                model="gemini-3.5-flash-lite",
                 temperature=1,
                 thinking_level='HIGH'
             )
@@ -1017,7 +1017,7 @@ def _run_forensic_analysis(job_id, ticker, cached_data, call_gemini_api_fn,
 
         analysis_result = call_gemini_api_fn(
             messages,
-            model="gemini-3-flash-preview",
+            model="gemini-3.5-flash-lite",
             temperature=1,
             thinking_level='HIGH'   # Deep reasoning for thorough forensic analysis
         )

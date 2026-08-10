@@ -3595,7 +3595,8 @@ def _gather_stock_data_for_brief(holding, brief_type='post'):
             messages=[{"role": "user", "content": news_query}],
             model="gemini-3-flash-preview",
             temperature=0.3,
-            use_google_search=True
+            use_google_search=True,
+            thinking_level="MINIMAL"
         )
         result['news'] = news_result.strip() if news_result else 'No news available.'
     except Exception as e:
@@ -3777,8 +3778,9 @@ RULES:
     try:
         briefing_html = call_gemini_api(
             messages=[{"role": "user", "content": system_prompt + "\n\n" + prompt_data}],
-            model="gemini-3-flash-preview",
-            temperature=0.6
+            model="gemini-3.5-flash-lite",
+            temperature=0.6,
+            thinking_level="MINIMAL"
         )
     except Exception as e:
         print(f"BRIEF: Post-market Gemini synthesis failed: {e}", file=sys.stderr)
@@ -3872,8 +3874,9 @@ RULES:
     try:
         briefing_html = call_gemini_api(
             messages=[{"role": "user", "content": system_prompt + "\n\n" + prompt_data}],
-            model="gemini-3-flash-preview",
-            temperature=0.5
+            model="gemini-3.5-flash-lite",
+            temperature=0.5,
+            thinking_level="MINIMAL"
         )
     except Exception as e:
         print(f"BRIEF: Pre-market Gemini synthesis failed: {e}", file=sys.stderr)
@@ -4746,6 +4749,50 @@ def api_portfolio_ai_chat_clear():
     return jsonify({'success': True})
 
 
+# Authenticated proxy for Trendlyne analyst report PDFs.
+# Trendlyne gates these PDFs behind a login, so a direct browser link bounces to
+# their login page. We fetch the bytes server-side with TRENDLYNE_USERNAME /
+# TRENDLYNE_PASSWORD and stream them back so the report opens inline.
+_TRENDLYNE_PDF_URL_RE = re.compile(
+    r'^https://trendlyne\.com/get-document/report/pdf/(\d+)/?$'
+)
+
+
+@app.route('/api/analyst-pdf', methods=['GET'])
+def api_analyst_pdf():
+    # Gated like every other data route: this serves reports fetched with our
+    # own Trendlyne account, so it must not be open to anonymous callers.
+    from flask import session as flask_session
+    if not flask_session.get('user_id'):
+        return jsonify({'error': 'Authentication required'}), 401
+
+    pdf_url = (request.args.get('url') or '').strip()
+
+    # Strict allowlist — this endpoint must not become an open proxy.
+    match = _TRENDLYNE_PDF_URL_RE.match(pdf_url)
+    if not match:
+        return jsonify({'error': 'Invalid or unsupported PDF URL.'}), 400
+    doc_id = match.group(1)
+
+    try:
+        from analyst_reports.trendlyne_auth import download_pdf_sync
+        pdf_bytes = download_pdf_sync(pdf_url)
+    except Exception as e:
+        print(f"ERROR: Analyst PDF proxy failed for {pdf_url}: {e}")
+        traceback.print_exc()
+        return jsonify({
+            'error': f'Could not fetch the report from Trendlyne: {e}',
+            'pdf_url': pdf_url,
+        }), 502
+
+    response = Response(pdf_bytes, mimetype='application/pdf')
+    # `inline` so the browser's PDF viewer opens it directly; the viewer still
+    # offers a save button, and the filename is used if the user downloads it.
+    response.headers['Content-Disposition'] = f'inline; filename="trendlyne-report-{doc_id}.pdf"'
+    response.headers['Cache-Control'] = 'private, max-age=3600'
+    return response
+
+
 # AI Summarize Analyst PDF
 @app.route('/summarize-analyst-pdf', methods=['POST'])
 def summarize_analyst_pdf():
@@ -4938,11 +4985,14 @@ Create a table with quarterly/annual financial metrics:
 **IMPORTANT:** Extract ACTUAL numbers from the PDF. If data is not available, write "Not disclosed". Use Indian number format (Crores, Lakhs) and ₹ symbol.
 """
         response = genai_client.models.generate_content(
-            model='gemini-3-flash-preview',
+            model='gemini-3.5-flash-lite',
             contents=[
                 types.Part.from_text(text=prompt),
                 gemini_file
-            ]
+            ],
+            config=types.GenerateContentConfig(
+                thinking_config=types.ThinkingConfig(thinking_level="MINIMAL")
+            )
         )
         
         # Cleanup
@@ -5067,8 +5117,8 @@ For "source_url", you MUST output the EXACT URL string from the provided Search 
 
         messages = [{"role": "user", "content": extraction_prompt}]
         
-        # Enforce HIGH thinking mode for perfect extraction
-        response_text = call_gemini_api(messages, model="gemini-3-flash-preview", temperature=0.1, thinking_level="MEDIUM")
+        # MEDIUM thinking mode for accurate extraction
+        response_text = call_gemini_api(messages, model="gemini-3.5-flash-lite", temperature=0.1, thinking_level="MEDIUM")
         
         # Clean up response text if it includes markdown formatting or conversational preamble
         cleaned_text = response_text.strip()
@@ -8053,7 +8103,7 @@ def chat():
 """
                 
                 ara_messages = [{"role": "user", "content": ara_prompt}]
-                result = await asyncio.to_thread(call_gemini_api, ara_messages, "gemini-3-flash-preview", 1, False, 'HIGH')
+                result = await asyncio.to_thread(call_gemini_api, ara_messages, "gemini-3.5-flash-lite", 1, False, 'MEDIUM')
                 elapsed = time.time() - stage3_start_time
                 print(f"INFO: ✓ ARA (Analyst) completed in {elapsed:.1f}s ({len(result)} chars)", file=sys.stderr)
                 log_progress(f"✓ Analyst insights ready ({elapsed:.1f}s)")
@@ -12803,6 +12853,18 @@ def api_watchlist_add():
 
     added = Watchlist.add_item(user_id, ticker, stock_name)
     if added:
+        # First time this ticker enters anyone's watchlist -> warm all four
+        # panels now. force=False so a ticker another user already watches
+        # reuses the existing quarter-fresh results instead of paying twice.
+        try:
+            # globals() lookup: this route is defined above the warmer block.
+            _warmer = globals().get('watchlist_warmer')
+            if globals().get('WATCHLIST_WARMER_READY') and _warmer:
+                _warmer.enqueue(ticker, force=False, priority=0)
+        except Exception as warm_err:
+            # Never let warming break the add itself.
+            print(f"WARN: watchlist warm enqueue failed for {ticker}: {warm_err}",
+                  file=sys.stderr)
         return jsonify({'success': True, 'message': f'{ticker} added to watchlist'})
     else:
         return jsonify({'success': False, 'message': f'{ticker} is already in your watchlist'}), 409
@@ -12838,6 +12900,290 @@ def api_watchlist_check(ticker):
 
 # =====================================================================
 # END: Watchlist API
+# =====================================================================
+
+# =====================================================================
+# START: Watchlist Warmer (pre-run Financials / Concall / Forensic / Analyst)
+# =====================================================================
+
+def _read_stock_cache(ticker):
+    """Read the payload /analyze itself would find on the next open.
+
+    Checks the same Flask-Caching store /analyze reads at its cache-check step,
+    then falls back to get_any_cache (local + raw Redis). Needed because the
+    FULL analyze path writes only via cache.set() -- it never calls
+    set_local_cache -- so get_any_cache alone can miss a good warm.
+    """
+    key = f"stock_analysis_{ticker.upper().strip()}"
+    try:
+        blob = cache.get(key)
+        if blob:
+            if isinstance(blob, bytes):
+                return pickle.loads(zlib.decompress(blob))
+            return blob
+    except Exception as e:
+        print(f"WL_WARMER: stock cache read failed for {ticker}: {e}", file=sys.stderr)
+    try:
+        return get_any_cache(ticker)
+    except Exception:
+        return None
+
+
+def _warm_financials_via_analyze(ticker):
+    """Rebuild the FULL /analyze payload for `ticker`. Returns (ok, error).
+
+    Goes through the real endpoint on purpose. get_analysis_for_ticker and
+    run_batch_precache both stamp light_cache=True, and /analyze answers a light
+    payload by re-fetching TradingView + yfinance + Trendlyne and rebuilding
+    every chart (~30-45s) while KEEPING it light — so a light warm would leave
+    the panel slow forever. Only this path writes a payload that later returns
+    via FULL CACHE HIT.
+    """
+    global last_analysis
+    previous_analysis = last_analysis  # /analyze clobbers this process-global
+    resp = None
+    try:
+        with app.test_client() as client:
+            resp = client.post(
+                '/analyze',
+                json={'ticker': ticker, 'force_refresh': True},
+                headers={'Content-Type': 'application/json'},
+            )
+            status = resp.status_code
+            # /analyze reports the real reason in the body (handler.py:10644),
+            # e.g. "No or insufficient historical data found for X". Surface that
+            # instead of a bare status code, which tells the user nothing.
+            body = resp.get_json(silent=True) if status != 200 else None
+        if status != 200:
+            detail = (body or {}).get('error') or (body or {}).get('message')
+            return False, detail or f"analysis failed (HTTP {status})"
+
+        # Trust the cache, not the response body: confirm a non-light payload landed.
+        cached = _read_stock_cache(ticker)
+        if not isinstance(cached, dict) or not cached.get('fundamentals'):
+            return False, "analyze completed but no fundamentals were cached"
+        if cached.get('light_cache'):
+            return False, "analyze produced a light cache (charts would rebuild on open)"
+
+        # The full analyze path doesn't populate the local cache, but the
+        # Forensic step reads its base data through get_any_cache. Seed it so
+        # forensic never falls back to its synchronous 40-60s rebuild. Only when
+        # empty, so a richer existing entry is never downgraded.
+        try:
+            if not get_local_cache(ticker.upper().strip()):
+                set_local_cache(ticker.upper().strip(), cached)
+        except Exception as seed_err:
+            print(f"WL_WARMER: local cache seed failed for {ticker}: {seed_err}",
+                  file=sys.stderr)
+        return True, None
+    except Exception as e:
+        print(f"WL_WARMER: /analyze loopback failed for {ticker}: {e}", file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
+        return False, str(e)
+    finally:
+        # Don't let a background warm hijack the most-recent-analysis global.
+        last_analysis = previous_analysis
+        try:
+            if resp is not None:
+                resp.close()
+        except Exception:
+            pass
+
+
+try:
+    from calculations import watchlist_warmer
+
+    watchlist_warmer.configure(
+        redis_client=DIRECT_REDIS_CLIENT,
+        run_full_analyze_fn=_warm_financials_via_analyze,
+        get_any_cache_fn=get_any_cache,
+        read_stock_cache_fn=_read_stock_cache,
+        call_gemini_api_fn=call_gemini_api,
+        call_perplexity_api_fn=call_perplexity_api,
+        call_perplexity_search_api_fn=call_perplexity_search_api,
+        fetch_forensic_documents_async_fn=fetch_forensic_documents_async,
+        fetch_analyst_reports_async_fn=fetch_analyst_reports_async,
+        fetch_latest_documents_async_fn=fetch_latest_documents_async,
+        get_text_from_pdf_url_async_fn=get_text_from_pdf_url_async,
+    )
+    watchlist_warmer.start_worker()
+    WATCHLIST_WARMER_READY = True
+    print("INFO: Watchlist warmer configured and worker started.", file=sys.stderr)
+except Exception as _wl_warm_err:
+    WATCHLIST_WARMER_READY = False
+    watchlist_warmer = None
+    print(f"WARN: Watchlist warmer NOT started: {_wl_warm_err}", file=sys.stderr)
+    traceback.print_exc(file=sys.stderr)
+
+
+def _wl_warmer():
+    """The warmer module, or None when it failed to start."""
+    return watchlist_warmer if WATCHLIST_WARMER_READY else None
+
+
+def _watchlist_warm_cycle(is_night=True):
+    """Scheduled pass: quarter probe + post-concall sweep (+ nightly retries)."""
+    warmer = _wl_warmer()
+    if not warmer:
+        return
+    try:
+        warmer.run_full_cycle(is_night=is_night)
+    except Exception as e:
+        print(f"WL_WARMER: scheduled cycle failed: {e}", file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
+
+
+_WL_WARM_LAST_FIRE = {'key': None}
+
+
+def _watchlist_warm_cycle_scheduled(time_str, day_key):
+    """Fire the cycle at most once per scheduled slot.
+
+    The scheduler loop ticks every 30s, so a bare `time_str == "23:00"` check
+    matches twice. The other jobs dodge this with `sleep(65); continue`, but the
+    15:00 slot must fall through to the screener scan, so guard explicitly.
+    """
+    fire_key = f"{day_key}_{time_str}"
+    if _WL_WARM_LAST_FIRE['key'] == fire_key:
+        return
+    _WL_WARM_LAST_FIRE['key'] = fire_key
+    is_night = time_str == '23:00'
+    print(f"WL_WARMER: scheduled cycle firing at {time_str} IST "
+          f"(concall retries={is_night})", file=sys.stderr)
+    threading.Thread(target=_watchlist_warm_cycle, args=(is_night,),
+                     daemon=True, name='wl-warm-cycle').start()
+
+
+@app.route('/api/watchlist/readiness', methods=['GET'])
+def api_watchlist_readiness():
+    """Per-agent readiness for every ticker on the caller's watchlist."""
+    from flask import session as flask_session
+    user_id = flask_session.get('user_id')
+    if not user_id:
+        return jsonify({'error': 'Authentication required'}), 401
+
+    warmer = _wl_warmer()
+    if not warmer:
+        return jsonify({'items': {}, 'warmer': 'unavailable'})
+
+    try:
+        tickers = [i.ticker for i in Watchlist.get_by_user(user_id)]
+        return jsonify({
+            'items': warmer.readiness_for(tickers),
+            'agents': list(warmer.WARM_AGENTS),
+            'queue_depth': warmer.queue_depth(),
+        })
+    except Exception as e:
+        print(f"WATCHLIST_READINESS ERROR: {e}", file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
+        return jsonify({'items': {}, 'error': str(e)}), 500
+
+
+@app.route('/api/watchlist/refresh', methods=['POST'])
+def api_watchlist_refresh():
+    """Force-refresh one panel for one ticker. Returns a job_id to poll."""
+    from flask import session as flask_session
+    user_id = flask_session.get('user_id')
+    if not user_id:
+        return jsonify({'error': 'Authentication required'}), 401
+
+    warmer = _wl_warmer()
+    if not warmer:
+        return jsonify({'error': 'Warmer unavailable'}), 503
+
+    data = request.get_json(force=True, silent=True) or {}
+    ticker = (data.get('ticker') or '').strip().upper()
+    agent = (data.get('agent') or '').strip().lower()
+
+    if not ticker:
+        return jsonify({'error': 'Ticker is required'}), 400
+    if agent not in warmer.WARM_AGENTS:
+        return jsonify({'error': f"agent must be one of {list(warmer.WARM_AGENTS)}"}), 400
+
+    # One forced refresh per user+ticker+agent per 10 minutes, so the button
+    # can't be used to hammer Screener/Gemini/Perplexity.
+    if DIRECT_REDIS_CLIENT:
+        try:
+            gate = f"wl_refresh_gate:{user_id}:{ticker}:{agent}"
+            if not DIRECT_REDIS_CLIENT.set(gate, '1', nx=True, ex=600):
+                ttl = DIRECT_REDIS_CLIENT.ttl(gate)
+                return jsonify({
+                    'error': 'rate_limited',
+                    'message': f'{agent.title()} for {ticker} was just refreshed. '
+                               f'Try again in {max(1, int((ttl or 0) / 60))} minute(s).',
+                    'retry_after_seconds': int(ttl or 600),
+                }), 429
+        except Exception as e:
+            print(f"WARN: refresh rate-limit check failed: {e}", file=sys.stderr)
+
+    try:
+        job_id = warmer.refresh_agent_now(ticker, agent, force=True)
+        return jsonify({'job_id': job_id, 'status': 'processing',
+                        'ticker': ticker, 'agent': agent})
+    except Exception as e:
+        print(f"WATCHLIST_REFRESH ERROR: {e}", file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/watchlist/warm/<job_id>/status', methods=['GET'])
+def api_watchlist_warm_status(job_id):
+    """Poll a warm job. Mirrors the /agent/*/status response shape."""
+    from flask import session as flask_session
+    if not flask_session.get('user_id'):
+        return jsonify({'error': 'Authentication required'}), 401
+
+    from agents.base import get_agent_job
+    job = get_agent_job(job_id)
+    if not job:
+        return jsonify({'status': 'error', 'error': 'Job not found or expired'})
+
+    if job['status'] == 'processing':
+        return jsonify({
+            'status': 'processing',
+            'progress': job.get('progress') or 'Refreshing...',
+            'elapsed_seconds': int(time.time() - job['started_at']),
+        })
+    if job['status'] == 'complete':
+        return jsonify({'status': 'complete', 'result': job.get('result')})
+    return jsonify({'status': 'error', 'error': job.get('error') or 'Refresh failed'})
+
+
+@app.route('/api/admin/watchlist-warmer/status', methods=['GET'])
+@admin_required
+def api_admin_watchlist_warmer_status():
+    """Last cycle summary + per-ticker warm state, for admin visibility."""
+    warmer = _wl_warmer()
+    if not warmer:
+        return jsonify({'error': 'Warmer unavailable'}), 503
+    tickers = warmer._all_watchlist_tickers()
+    return jsonify({
+        'last_run': warmer.last_run_summary(),
+        'queue_depth': warmer.queue_depth(),
+        'watchlist_tickers': len(tickers),
+        'items': warmer.readiness_for(tickers),
+    })
+
+
+@app.route('/api/admin/watchlist-warmer/run', methods=['POST'])
+@admin_required
+def api_admin_watchlist_warmer_run():
+    """Kick a full warm cycle immediately (admin only)."""
+    warmer = _wl_warmer()
+    if not warmer:
+        return jsonify({'error': 'Warmer unavailable'}), 503
+    data = request.get_json(force=True, silent=True) or {}
+    is_night = bool(data.get('include_concall_retries', True))
+    threading.Thread(target=_watchlist_warm_cycle, args=(is_night,),
+                     daemon=True).start()
+    return jsonify({'success': True, 'message': 'Watchlist warm cycle started.'})
+
+
+print("INFO: Watchlist warmer routes registered (readiness, refresh, warm status)",
+      file=sys.stderr)
+
+# =====================================================================
+# END: Watchlist Warmer
 # =====================================================================
 
 # Mount Azure-Safe Scheduled Screener Daemon
@@ -12898,13 +13244,28 @@ def screener_daily_scheduler():
                 # ── Live Concall schedule: 8:00 AM IST — scrape once, serve all day ──
                 threading.Thread(target=_concall_morning_refresh, daemon=True).start()
 
+            # ── Watchlist Warmer: 11:00 PM and 3:00 PM IST ──
+            # Probes each watchlist ticker's latest quarter and re-warms only
+            # what actually moved. Dispatched on its own thread because the
+            # 15:00 slot below runs execute_daily_screener_scan() synchronously.
+            if time_str in ["23:00", "15:00"]:
+                _watchlist_warm_cycle_scheduled(time_str, now_ist.strftime("%Y%m%d"))
+
             # ── Quarterly Results Watcher: 8:00 AM and 5:00 PM IST ──
             if time_str in ["08:00", "17:00"]:
                 try:
                     print(f"SCHEDULER: Triggering Results Watcher at {time_str} IST")
+                    # Watchlist tickers are excluded: the warmer refreshes them
+                    # through the full /analyze path, and run_batch_precache
+                    # would overwrite that with a degraded light payload.
+                    try:
+                        _wl_exclude = set(Watchlist.get_all_tickers())
+                    except Exception:
+                        _wl_exclude = set()
                     run_results_watch_cycle(
                         redis_client=DIRECT_REDIS_CLIENT,
                         run_batch_precache_fn=run_batch_precache,
+                        exclude_tickers=_wl_exclude,
                     )
                 except Exception as e:
                     print(f"RESULTS_WATCHER: Cycle failed: {e}")

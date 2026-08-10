@@ -512,6 +512,18 @@ class Watchlist:
             return [cls(**dict(row)) for row in rows]
 
     @classmethod
+    def get_all_tickers(cls):
+        """Distinct tickers across every user's watchlist.
+
+        Used by the watchlist warmer: the analysis/agent caches are keyed by
+        ticker alone, so a stock watched by three users is warmed once.
+        """
+        with get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute('SELECT DISTINCT ticker FROM watchlist_items ORDER BY ticker')
+            return [row[0].upper() for row in cursor.fetchall() if row[0]]
+
+    @classmethod
     def add_item(cls, user_id, ticker, stock_name=''):
         """Add a ticker to the user's watchlist. Returns True if added, False if already exists."""
         with get_db() as conn:

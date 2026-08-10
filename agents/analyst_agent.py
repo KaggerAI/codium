@@ -66,11 +66,14 @@ def _summarise_pdf_bytes(pdf_bytes: bytes, brokerage: str, ticker: str) -> str:
         )
 
         response = client.models.generate_content(
-            model="gemini-3-flash-preview",
+            model="gemini-3.5-flash-lite",
             contents=[
                 types.Part.from_text(text=ANALYST_PDF_SUMMARY_PROMPT),
                 uploaded,
             ],
+            config=types.GenerateContentConfig(
+                thinking_config=types.ThinkingConfig(thinking_level="MEDIUM")
+            ),
         )
 
         # Clean up
@@ -178,7 +181,7 @@ For "source_url", use the EXACT URL from the search results."""
 
         messages = [{"role": "user", "content": extraction_prompt}]
         response_text = call_gemini_api_fn(
-            messages, model="gemini-3-flash-preview",
+            messages, model="gemini-3.5-flash-lite",
             temperature=0.1, thinking_level="MEDIUM",
         )
 
@@ -438,8 +441,8 @@ def _run_analyst_analysis(
 
         messages = [{"role": "user", "content": synthesis_input}]
         analysis_result = call_gemini_api_fn(
-            messages, model="gemini-3-flash-preview",
-            temperature=1, thinking_level="HIGH",
+            messages, model="gemini-3.5-flash-lite",
+            temperature=1, thinking_level="MEDIUM",
         )
 
         elapsed_total = int(time.time() - start_time)
@@ -631,8 +634,8 @@ def register_analyst_routes(
             ]
 
             answer = call_gemini_api_fn(
-                messages, model="gemini-3-flash-preview",
-                temperature=1, thinking_level="HIGH",
+                messages, model="gemini-3.5-flash-lite",
+                temperature=1, thinking_level="MEDIUM",
             )
 
             return jsonify({"answer": answer, "status": "success"})

@@ -1644,11 +1644,14 @@ Return ONLY the transcript text."""
 
                 print(f"CONCALL_AGENT: Transcribing YouTube audio with Gemini...", file=sys.stderr)
                 response = _genai_client.models.generate_content(
-                    model='gemini-3-flash-preview',
+                    model='gemini-3.5-flash-lite',
                     contents=[
                         types.Part.from_text(text=prompt),
                         uploaded
-                    ]
+                    ],
+                    config=types.GenerateContentConfig(
+                        thinking_config=types.ThinkingConfig(thinking_level="MEDIUM")
+                    )
                 )
 
                 try:
@@ -1820,11 +1823,14 @@ Return ONLY the transcript text."""
 
             print(f"CONCALL_AGENT: Sending {media_type} to Gemini for transcription...", file=sys.stderr)
             response = _genai_client.models.generate_content(
-                model='gemini-3-flash-preview',
+                model='gemini-3.5-flash-lite',
                 contents=[
                     types.Part.from_text(text=prompt),
                     uploaded
-                ]
+                ],
+                config=types.GenerateContentConfig(
+                    thinking_config=types.ThinkingConfig(thinking_level="MEDIUM")
+                )
             )
 
             # Clean up uploaded file
@@ -1995,7 +2001,7 @@ def register_concall_routes(app, call_gemini_api_fn, fetch_documents_fn, get_pdf
             # Call Gemini Flash for fast response
             answer = call_gemini_api_fn(
                 messages,
-                model="gemini-3-flash-preview",
+                model="gemini-3.5-flash-lite",
                 temperature=1,
                 thinking_level='HIGH'
             )
@@ -2513,9 +2519,9 @@ def _run_concall_analysis(job_id, ticker, call_gemini_api_fn, fetch_documents_fn
 
         analysis_result = call_gemini_api_fn(
             messages,
-            model="gemini-3-flash-preview",
+            model="gemini-3.5-flash-lite",
             temperature=1,
-            thinking_level='HIGH'
+            thinking_level='MEDIUM'
         )
 
         elapsed_total = int(time.time() - start_time)
@@ -2639,9 +2645,9 @@ def _run_concall_url_analysis(job_id, ticker, url, results_quarter,
 
         analysis_result = call_gemini_api_fn(
             messages,
-            model="gemini-3-flash-preview",
+            model="gemini-3.5-flash-lite",
             temperature=1,
-            thinking_level='HIGH'
+            thinking_level='MEDIUM'
         )
 
         elapsed_total = int(time.time() - start_time)
