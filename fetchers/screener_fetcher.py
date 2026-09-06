@@ -1730,7 +1730,8 @@ async def fetch_upcoming_concalls_screener_async(lookahead_days: int = 10, max_p
 
 
 async def fetch_latest_documents_async(ticker: str, html_content: str = None,
-                                       include_presentation: bool = True) -> list[dict]:
+                                       include_presentation: bool = True,
+                                       max_transcript_chars: int = 20000) -> list[dict]:
     """
     Latest Concall + Results Presentation documents from Screener.
 
@@ -1738,6 +1739,13 @@ async def fetch_latest_documents_async(ticker: str, html_content: str = None,
     That summary costs one Gemini request, and callers that only want the
     concall transcript (the Concall Agent) never read it — so paying for it
     doubles their quota usage for nothing.
+
+    `max_transcript_chars` caps the concall transcript text. The 20k default
+    suits callers that paste this into an already-large prompt (the company
+    analysis), but it is far SHORTER than a real transcript — a full call runs
+    80k-120k characters, and 20k stops somewhere in the opening remarks. Any
+    caller that actually analyses the call itself (the Concall Agent) must
+    raise this, or the Q&A section it is asked to dissect was never read.
     """
     try:
         if html_content is not None and len(html_content) > 500:
@@ -1777,7 +1785,8 @@ async def fetch_latest_documents_async(ticker: str, html_content: str = None,
                     print(f"CONCALL_AGENT: Found Concall doc — transcript_link={'YES' if transcript_link else 'NO'}, rec_link={'YES' if rec_link else 'NO'}, pdf={link or 'NONE'}", file=sys.stderr)
                     
                     if link:
-                        tasks_to_run.append(get_text_from_pdf_url_async(doc_info['link']))
+                        tasks_to_run.append(get_text_from_pdf_url_async(
+                            doc_info['link'], max_chars_to_return=max_transcript_chars))
                     else:
                         # Dummy task if only REC link exists so it still gets returned
                         async def dummy_task(*args, **kwargs): return ""
@@ -1839,6 +1848,92 @@ async def fetch_latest_documents_async(ticker: str, html_content: str = None,
     except Exception as e:
         print(f"Error fetching latest documents for {ticker}: {e}")
         return []
+
+def parse_concall_history(html_or_soup, date_to_quarter=None) -> list[dict]:
+    """
+    Every past conference call Screener lists, newest first.
+
+    Screener's `div.concalls` carries the company's WHOLE history in the page we
+    already download - 44 quarters for Genus Power, 47 for Reliance - and until
+    now everything after the first row was discarded.
+
+    Returns [{quarter, date, transcript_url, ppt_url, rec_url}], one row per
+    quarter. Two details the raw markup forces:
+
+      * Rows are duplicated per quarter (Genus Power lists "Nov 2025" twice, and
+        only one of the two carries the Transcript link), so rows are merged per
+        quarter and the links unioned - otherwise picking the first row loses a
+        transcript that is right there in the second.
+      * Plenty of rows are PPT-only, especially older ones. Those are kept with
+        an empty transcript_url rather than dropped, so a caller can tell "no
+        transcript published" apart from "quarter not covered".
+
+    `date_to_quarter` maps 'May 2026' -> 'Mar 2026'. Injected rather than
+    imported to keep this module free of an agents-layer dependency.
+    """
+    if date_to_quarter is None:
+        return []
+
+    soup = (html_or_soup if isinstance(html_or_soup, BeautifulSoup)
+            else BeautifulSoup(html_or_soup or '', 'html.parser'))
+    section = soup.find('div', class_='concalls')
+    if not section:
+        return []
+
+    by_quarter = {}
+    order = []
+    for item in section.find_all('li'):
+        date_el = item.find('div', class_='nowrap')
+        raw_date = date_el.get_text(strip=True) if date_el else ''
+        quarter = date_to_quarter(raw_date)
+        if not quarter:
+            continue
+
+        links = {}
+        for a in item.find_all('a', href=True):
+            label = a.get_text(strip=True)
+            href = (a['href'] or '').strip()
+            if label and href:
+                links.setdefault(label, href)
+
+        row = by_quarter.get(quarter)
+        if row is None:
+            row = {'quarter': quarter, 'date': raw_date, 'transcript_url': '',
+                   'ppt_url': '', 'rec_url': ''}
+            by_quarter[quarter] = row
+            order.append(quarter)
+
+        # First non-empty wins: rows are newest-first, so the most recently
+        # filed version of a document is the one kept.
+        for label, key in (('Transcript', 'transcript_url'),
+                           ('PPT', 'ppt_url'), ('REC', 'rec_url')):
+            if not row[key] and links.get(label):
+                row[key] = links[label]
+
+    return [by_quarter[q] for q in order]
+
+
+async def fetch_concall_history_async(ticker: str, html_content: str = None,
+                                      date_to_quarter=None) -> list[dict]:
+    """
+    Screener's concall history for `ticker`. Pass `html_content` when the page
+    has already been fetched - the caller then pays nothing for this.
+    """
+    try:
+        text = html_content
+        if not text or len(text) < 500:
+            url = BASE_URL.format(ticker=ticker)
+            text, _final_url, status = await _stealth_get_html_async(url, follow_redirects=True)
+            if status != 200 or not text:
+                return []
+        rows = parse_concall_history(text, date_to_quarter=date_to_quarter)
+        print(f"CONCALL_AGENT: concall history for {ticker}: {len(rows)} quarter(s), "
+              f"{sum(1 for r in rows if r['transcript_url'])} with transcripts", file=sys.stderr)
+        return rows
+    except Exception as e:
+        print(f"CONCALL_AGENT: concall history fetch failed for {ticker}: {e}", file=sys.stderr)
+        return []
+
 
 async def fetch_concall_rec_url_async(ticker: str) -> dict:
     """

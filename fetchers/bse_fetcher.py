@@ -60,11 +60,18 @@ _REC_KEYWORDS = (
 _AUDIO_EXT = {'.mp3', '.wav', '.m4a', '.ogg', '.aac', '.flac', '.wma', '.opus'}
 _VIDEO_EXT = {'.mp4', '.webm', '.mkv', '.avi', '.mov', '.flv', '.wmv'}
 
-# Publication month → financial quarter-end month (mirrors concall_agent and
-# nse_fetcher; duplicated to avoid a circular import).
+# Publication month -> the financial quarter such a document discusses.
+#
+# Keyed on the LAST QUARTER THAT HAD ALREADY ENDED when the document appeared.
+# A quarter-end month belongs to the PREVIOUS quarter, not its own: a call held
+# on 4 September is about the June quarter, because the September quarter does
+# not close until the 30th. Months 3, 6, 9 and 12 used to map to their own
+# quarter and were wrong for exactly that reason.
+# (Mirrors concall_agent and nse_fetcher; duplicated to avoid a circular
+# import — keep all three in step.)
 _MONTH_TO_QUARTER = {
-    1: 'Dec', 2: 'Dec', 3: 'Mar', 4: 'Mar', 5: 'Mar', 6: 'Jun',
-    7: 'Jun', 8: 'Jun', 9: 'Sep', 10: 'Sep', 11: 'Sep', 12: 'Dec',
+    1: 'Dec', 2: 'Dec', 3: 'Dec', 4: 'Mar', 5: 'Mar', 6: 'Mar',
+    7: 'Jun', 8: 'Jun', 9: 'Jun', 10: 'Sep', 11: 'Sep', 12: 'Sep',
 }
 
 # "Q1FY27", "Q4 FY 26", "Q3-FY2026"
@@ -137,7 +144,7 @@ def _quarter_from_call_date(text: str) -> str:
             continue
         year = int(m.group(3) or m.group(6))
         q_month = _MONTH_TO_QUARTER[month]
-        if month in (1, 2) and q_month == 'Dec':
+        if month in (1, 2, 3) and q_month == 'Dec':
             year -= 1
         return f"{q_month} {year}"
     return ''
@@ -150,7 +157,7 @@ def _quarter_from_date(news_dt: str) -> str:
         return ''
     year, month = int(m.group(1)), int(m.group(2))
     q_month = _MONTH_TO_QUARTER[month]
-    if month in (1, 2) and q_month == 'Dec':
+    if month in (1, 2, 3) and q_month == 'Dec':
         year -= 1
     return f"{q_month} {year}"
 

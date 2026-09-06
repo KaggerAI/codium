@@ -4115,6 +4115,99 @@
             </div>
 
             <!-- Analysis Results -->
+            <style>
+                /* Chrome-style quarter tabs.
+                   The strip is a recessed plane (--bg-secondary); the active tab
+                   is punched out of the content plane (--bg-card) so it reads as
+                   physically continuous with the analysis below it. The two
+                   pseudo-elements are the outward corner flares that make a tab
+                   look joined to its page rather than parked on top of it. */
+                .concall-qtabs {
+                    display: flex;
+                    align-items: stretch;
+                    padding: .45rem .5rem 0;
+                    background: var(--bg-secondary);
+                    /* Inset rather than a real border: the active tab has to be
+                       able to paint over the baseline to break the line. */
+                    box-shadow: inset 0 -1px 0 var(--border-color);
+                }
+                .concall-qtab {
+                    position: relative;
+                    flex: 1 1 0;            /* every tab shares the width equally */
+                    min-width: 0;
+                    padding: .45rem .5rem .5rem;
+                    border: 0;
+                    background: transparent;
+                    color: var(--text-muted);
+                    font-family: inherit;
+                    font-size: .8rem;
+                    line-height: 1.25;
+                    text-align: center;
+                    cursor: pointer;
+                    border-radius: .5rem .5rem 0 0;
+                    transition: background .15s ease, color .15s ease;
+                }
+                .concall-qtab .qtab-label {
+                    display: block;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    white-space: nowrap;
+                    font-weight: 500;
+                }
+                .concall-qtab .qtab-sub {
+                    display: block;
+                    font-size: .65rem;
+                    opacity: .75;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    white-space: nowrap;
+                }
+                /* Hairline between neighbouring inactive tabs, as Chrome does.
+                   Suppressed next to the active tab, whose flare fills that gap. */
+                .concall-qtab:not(.active):not(:last-child)::after {
+                    content: '';
+                    position: absolute;
+                    right: 0;
+                    top: 28%;
+                    height: 44%;
+                    width: 1px;
+                    background: var(--border-color);
+                }
+                .concall-qtab:not(.active):hover {
+                    background: rgba(255, 255, 255, .045);
+                    color: var(--text-secondary);
+                }
+                .concall-qtab.active {
+                    background: var(--bg-card);
+                    color: var(--text-primary);
+                    z-index: 2;
+                }
+                .concall-qtab.active .qtab-sub { color: var(--accent-violet); opacity: 1; }
+                .concall-qtab.active::before,
+                .concall-qtab.active::after {
+                    content: '';
+                    position: absolute;
+                    bottom: 0;
+                    width: .5rem;
+                    height: .5rem;
+                    background: transparent;
+                }
+                .concall-qtab.active::before {
+                    left: -.5rem;
+                    border-bottom-right-radius: .5rem;
+                    box-shadow: .25rem .25rem 0 .25rem var(--bg-card);
+                }
+                .concall-qtab.active::after {
+                    right: -.5rem;
+                    border-bottom-left-radius: .5rem;
+                    box-shadow: -.25rem .25rem 0 .25rem var(--bg-card);
+                }
+                /* Too little width for two lines of text on a phone. */
+                @media (max-width: 640px) {
+                    .concall-qtab { font-size: .72rem; padding: .4rem .3rem .45rem; }
+                    .concall-qtab .qtab-sub { display: none; }
+                }
+            </style>
             <div class="analysis-card" id="concallAnalysis">
                 <div class="analysis-header">
                     <div class="analysis-header-left">
@@ -4133,7 +4226,13 @@
                             ↗</a>
                     </div>
                 </div>
+                <!-- Past-quarter tabs. The latest tab holds the analysis this
+                     page just produced; the others are lazy - a transcript link
+                     and an Analyze button, so a past call costs nothing until
+                     it is asked for. -->
+                <div id="concallQuarterTabs" class="concall-qtabs" style="display:none;"></div>
                 <div class="analysis-body" id="concallAnalysisBody"></div>
+                <div class="analysis-body" id="concallQuarterBody" style="display:none;"></div>
             </div>
 
             <!-- Chat -->
@@ -4999,6 +5098,11 @@
         let concallStartTime = null;
         let concallTimerInterval = null;
         let currentConcallData = null;  // Persisted analysis data
+        // Conversation so far, sent with each question. Without it every
+        // follow-up ("and what about next year?") reached the model with no idea
+        // what it referred to. Trimmed server-side; kept whole here so the
+        // on-screen thread and the model stay in step.
+        let concallChatHistory = [];
 
         function startConcallAnalysis(forceRefresh = false) {
             // Determine ticker
@@ -5099,7 +5203,14 @@
             // Build meta text with quarter info
             let metaText = `${result.concall_label || 'Latest Concall'} · Analyzed in ${result.analysis_time_seconds || '?'}s`;
             if (result.concall_quarter) {
-                metaText = `Quarter: ${result.concall_quarter} · ${metaText}`;
+                // Say whether the quarter was read off the transcript itself or
+                // merely inferred from a filing date or a filename. Both used to
+                // print identically, so a guess looked exactly like a fact.
+                const unverified = result.verification && !result.quarter_confirmed;
+                const qLabel = unverified
+                    ? `Quarter: ${result.concall_quarter} (unverified)`
+                    : `Quarter: ${result.concall_quarter}`;
+                metaText = `${qLabel} · ${metaText}`;
             }
             document.getElementById('concallAnalysisMeta').textContent = metaText;
 
@@ -5129,7 +5240,15 @@
                 mismatchNotice.classList.remove('show');
             }
 
+            // Past-quarter tabs for this ticker
+            concallQuarterCache = {};
+            concallActiveQuarter = result.concall_quarter || null;
+            document.getElementById('concallQuarterBody').style.display = 'none';
+            document.getElementById('concallAnalysisBody').style.display = '';
+            renderConcallQuarterTabs();
+
             // Reset chat
+            concallChatHistory = [];
             const chatMessages = document.getElementById('concallChatMessages');
             chatMessages.innerHTML = `
         <div class="chat-message assistant">
@@ -5187,6 +5306,178 @@
             }
         }
 
+        // =====================================================
+        // PAST-QUARTER TABS
+        // =====================================================
+        // Five tabs: the latest call (whose analysis is already on screen) plus
+        // the four before it. The older ones stay unanalysed until clicked -
+        // each analysis is a full model call, so doing all five up front would
+        // cost five times as much for something the user may never open.
+        const CONCALL_TAB_COUNT = 5;
+        let concallQuarterCache = {};   // quarter -> analysis result
+        let concallQuarterJob = null;
+        let concallQuarterPollTimer = null;
+        let concallActiveQuarter = null;
+
+        function renderConcallQuarterTabs() {
+            const el = document.getElementById('concallQuarterTabs');
+            if (!el) return;
+            const hist = (currentConcallData && currentConcallData.concall_history) || [];
+            const latest = currentConcallData && currentConcallData.concall_quarter;
+
+            // Only quarters that actually have a transcript are offerable.
+            const rows = hist.filter(r => r.transcript_url || r.quarter === latest)
+                             .slice(0, CONCALL_TAB_COUNT);
+            if (rows.length < 2) { el.style.display = 'none'; return; }
+
+            el.style.display = 'flex';
+            el.innerHTML = rows.map(r => {
+                const isLatest = r.quarter === latest;
+                const active = (concallActiveQuarter || latest) === r.quarter;
+                const sub = isLatest ? 'analysed' :
+                    (concallQuarterCache[r.quarter] ? 'analysed' : 'transcript');
+                return `<button class="concall-qtab${active ? ' active' : ''}"
+                          title="${escapeHtml(r.quarter)} concall${r.date ? ' \u00b7 published ' + escapeHtml(r.date) : ''}"
+                          onclick="selectConcallQuarter('${escapeHtml(r.quarter)}')">
+                          <span class="qtab-label">${escapeHtml(r.quarter)}</span>
+                          <span class="qtab-sub">${sub}</span>
+                        </button>`;
+            }).join('');
+        }
+
+        function selectConcallQuarter(quarter) {
+            // The tab strip is rendered from currentConcallData, but a restored
+            // session can put markup on screen before that variable is set.
+            if (!currentConcallData) return;
+            const latest = currentConcallData.concall_quarter;
+            concallActiveQuarter = quarter;
+            renderConcallQuarterTabs();
+
+            const mainBody = document.getElementById('concallAnalysisBody');
+            const qBody = document.getElementById('concallQuarterBody');
+            const srcLink = document.getElementById('concallSourceLink');
+
+            if (quarter === latest) {
+                mainBody.style.display = '';
+                qBody.style.display = 'none';
+                if (currentConcallData.concall_link) {
+                    srcLink.href = currentConcallData.concall_link;
+                    srcLink.style.display = 'inline-block';
+                }
+                return;
+            }
+
+            mainBody.style.display = 'none';
+            qBody.style.display = '';
+
+            const hist = (currentConcallData.concall_history || []);
+            const row = hist.find(r => r.quarter === quarter) || {};
+            if (row.transcript_url) {
+                srcLink.href = row.transcript_url;
+                srcLink.style.display = 'inline-block';
+            } else {
+                srcLink.style.display = 'none';
+            }
+
+            const cached = concallQuarterCache[quarter];
+            if (cached) {
+                qBody.innerHTML = marked.parse(cached.analysis || '');
+                return;
+            }
+
+            qBody.innerHTML = `
+              <div style="padding:1rem 0;">
+                <p style="margin:0 0 .5rem;">
+                  <strong>${escapeHtml(quarter)}</strong> concall
+                  ${row.date ? `<span style="opacity:.7;">\u00b7 published ${escapeHtml(row.date)}</span>` : ''}
+                </p>
+                <p style="opacity:.8;margin:0 0 1rem;font-size:.85rem;">
+                  This call has not been analysed yet.
+                  ${row.transcript_url
+                     ? `<a href="${escapeHtml(row.transcript_url)}" target="_blank"
+                          rel="noopener" style="color:#60a5fa;">Open the transcript \u2197</a>`
+                     : 'No transcript is published for this quarter.'}
+                </p>
+                ${row.transcript_url
+                  ? `<button class="analyze-btn" id="concallQuarterAnalyzeBtn"
+                       onclick="analyzeConcallQuarter('${escapeHtml(quarter)}')">
+                       Analyze ${escapeHtml(quarter)}
+                     </button>`
+                  : ''}
+                <div id="concallQuarterStatus" style="margin-top:.75rem;font-size:.85rem;opacity:.85;"></div>
+              </div>`;
+        }
+
+        function analyzeConcallQuarter(quarter) {
+            if (!currentConcallData) return;
+            const btn = document.getElementById('concallQuarterAnalyzeBtn');
+            const status = document.getElementById('concallQuarterStatus');
+            if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Analyzing...'; }
+            if (status) status.textContent = 'Fetching the transcript...';
+
+            fetch('/agent/concall/analyze-quarter', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    ticker: currentConcallData.ticker,
+                    quarter: quarter,
+                    company_name: concallSelectedName || currentConcallData.ticker,
+                    concall_history: currentConcallData.concall_history || []
+                })
+            })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.status === 'complete') {
+                        onConcallQuarterComplete(quarter, data.result);
+                    } else if (data.job_id) {
+                        concallQuarterJob = data.job_id;
+                        pollConcallQuarter(quarter);
+                    } else {
+                        onConcallQuarterError(data.error || 'Could not start the analysis.');
+                    }
+                })
+                .catch(err => onConcallQuarterError(`Network error: ${err.message}`));
+        }
+
+        function pollConcallQuarter(quarter) {
+            if (!concallQuarterJob) return;
+            fetch(`/agent/concall/${concallQuarterJob}/status`)
+                .then(r => r.json())
+                .then(data => {
+                    const status = document.getElementById('concallQuarterStatus');
+                    if (data.status === 'processing') {
+                        if (status) status.textContent = data.progress || 'Analyzing...';
+                        concallQuarterPollTimer = setTimeout(() => pollConcallQuarter(quarter), 2000);
+                    } else if (data.status === 'complete') {
+                        onConcallQuarterComplete(quarter, data.result);
+                    } else {
+                        onConcallQuarterError(data.error || 'Analysis failed.');
+                    }
+                })
+                .catch(err => onConcallQuarterError(`Polling error: ${err.message}`));
+        }
+
+        function onConcallQuarterComplete(quarter, result) {
+            if (concallQuarterPollTimer) clearTimeout(concallQuarterPollTimer);
+            concallQuarterJob = null;
+            concallQuarterCache[quarter] = result;
+            renderConcallQuarterTabs();
+            if (concallActiveQuarter === quarter) {
+                document.getElementById('concallQuarterBody').innerHTML =
+                    marked.parse(result.analysis || '');
+            }
+        }
+
+        function onConcallQuarterError(msg) {
+            if (concallQuarterPollTimer) clearTimeout(concallQuarterPollTimer);
+            concallQuarterJob = null;
+            const status = document.getElementById('concallQuarterStatus');
+            const btn = document.getElementById('concallQuarterAnalyzeBtn');
+            if (btn) { btn.disabled = false; btn.textContent = 'Retry'; }
+            if (status) status.innerHTML =
+                `<span style="color:#f87171;">${escapeHtml(String(msg))}</span>`;
+        }
+
         // Per-source attempt log — turns "couldn't find one" into something
         // diagnosable (which source failed, and how).
         const CONCALL_SOURCE_LABELS = {
@@ -5204,6 +5495,9 @@
             found: ['✓', '#4ade80'],
             not_found: ['—', '#94a3b8'],
             wrong_quarter: ['≠', '#fbbf24'],
+            // Found and transcribed, but the transcript turned out to be a
+            // different company's call — caught by the post-transcription check.
+            wrong_company: ['≠', '#fbbf24'],
             transcription_failed: ['✗', '#f87171'],
             parse_error: ['✗', '#f87171'],
             blocked: ['⛔', '#f87171'],
@@ -5343,6 +5637,26 @@
             }
         });
 
+        // Footnote under a chat answer naming the transcripts it was based on.
+        function renderChatSourceNote(fetched, unavailable) {
+            const parts = [];
+            (fetched || []).forEach(q => {
+                parts.push(`<span style="display:inline-block;padding:.1rem .45rem;`
+                    + `margin:.15rem .25rem .15rem 0;border-radius:4px;`
+                    + `background:rgba(74,222,128,.14);color:#4ade80;">`
+                    + `\u2713 read ${escapeHtml(q)} transcript</span>`);
+            });
+            (unavailable || []).forEach(p => {
+                parts.push(`<span style="display:inline-block;padding:.1rem .45rem;`
+                    + `margin:.15rem .25rem .15rem 0;border-radius:4px;`
+                    + `background:rgba(251,191,36,.14);color:#fbbf24;">`
+                    + `${escapeHtml(String(p).split(':')[0])} unavailable</span>`);
+            });
+            if (!parts.length) return '';
+            return `<div style="margin-top:.5rem;font-size:.75rem;opacity:.9;">`
+                 + parts.join('') + `</div>`;
+        }
+
         function sendConcallChatMessage() {
             if (concallChatLoading) return;
             const input = document.getElementById('concallChatInput');
@@ -5351,6 +5665,7 @@
 
             concallChatLoading = true;
             document.getElementById('concallChatSendBtn').disabled = true;
+            concallChatHistory.push({ role: 'user', content: question });
 
             // Add user message
             const chatMessages = document.getElementById('concallChatMessages');
@@ -5382,7 +5697,10 @@
                     question: question,
                     company_name: concallSelectedName || currentConcallData.ticker,
                     analysis_context: currentConcallData.analysis,
-                    transcript_context: currentConcallData.transcript_text || ''
+                    transcript_context: currentConcallData.transcript_text || '',
+                    history: concallChatHistory,
+                    concall_quarter: currentConcallData.concall_quarter || '',
+                    concall_history: currentConcallData.concall_history || []
                 })
             })
                 .then(r => r.json())
@@ -5391,10 +5709,16 @@
                     if (loadingEl) loadingEl.remove();
 
                     if (data.answer) {
+                        concallChatHistory.push({ role: 'assistant', content: data.answer });
                         const answerHtml = marked.parse(data.answer);
+                        // Show which calls were actually read. Without this the
+                        // user cannot tell an answer grounded in the older
+                        // transcript from a paraphrase of the current one.
+                        const sourceNote = renderChatSourceNote(
+                            data.fetched_quarters, data.unavailable_quarters);
                         chatMessages.innerHTML += `
             <div class="chat-message assistant">
-              <div class="chat-bubble">${answerHtml}</div>
+              <div class="chat-bubble">${answerHtml}${sourceNote}</div>
             </div>
           `;
                     } else if (data.error) {
@@ -5902,6 +6226,7 @@
             };
 
             // Reset chat
+            concallChatHistory = [];
             document.getElementById('concallChatMessages').innerHTML = `
               <div class="chat-message assistant">
                 <div class="chat-bubble">
@@ -6564,6 +6889,11 @@
                 if (concallChatMsgs && concallChatMsgs.innerHTML.trim() && concallChatCard && concallChatCard.classList.contains('show')) {
                     sessionStorage.setItem('kagger_agents_concall_chat', concallChatMsgs.innerHTML);
                     sessionStorage.setItem('kagger_agents_concall_chat_visible', '1');
+                    // Saved alongside the rendered thread so the two cannot drift:
+                    // restoring the messages without the history would show the
+                    // user a conversation the model has no memory of.
+                    sessionStorage.setItem('kagger_agents_concall_chat_history',
+                        JSON.stringify(concallChatHistory));
                 }
 
                 // Save forensic analysis body + visibility + chat + meta
@@ -6623,6 +6953,13 @@
                     if (cMeta) { const m = document.getElementById('concallAnalysisMeta'); if (m) m.innerHTML = cMeta; }
                 }
                 if (sessionStorage.getItem('kagger_agents_concall_chat_visible') === '1') {
+                    try {
+                        const savedHistory = sessionStorage.getItem('kagger_agents_concall_chat_history');
+                        concallChatHistory = savedHistory ? JSON.parse(savedHistory) : [];
+                        if (!Array.isArray(concallChatHistory)) concallChatHistory = [];
+                    } catch (e) {
+                        concallChatHistory = [];
+                    }
                     const cChat = sessionStorage.getItem('kagger_agents_concall_chat');
                     if (cChat) { const el = document.getElementById('concallChatMessages'); if (el) el.innerHTML = cChat; }
                     showEl('concallChat');

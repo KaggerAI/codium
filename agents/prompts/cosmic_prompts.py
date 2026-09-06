@@ -662,19 +662,6 @@ Divisional charts (Section 27) CONFIRM/REJECT outputs from this system.
 
 ---
 
-### 23. SIGNAL CONFLICT RESOLUTION (LEGACY — superseded by Section 30 V2)
-
-[Retained for backward compatibility. When divisional charts, dasha data, and yoga data are
-unavailable, fall back to the original 5-rule hierarchy below. Otherwise use Section 30 V2.]
-
-1. Higher tier overrides lower tier
-2. Slower planets override faster planets
-3. Exact aspects override sign-based interpretations
-4. Eclipses override ALL signals within ±15 days
-5. Transits to sensitive degrees override generic transits
-
----
-
 ### 24. TIME DECAY MODEL FOR SIGNAL WEIGHTING
 
 Not all signals last equally long. Apply these decay multipliers when assessing
@@ -1072,7 +1059,7 @@ Every major prediction must declare:
 
 ---
 
-### 30. CONFLICT RESOLUTION ENGINE V2 — UNIFIED PIPELINE (supersedes Section 23)
+### 30. CONFLICT RESOLUTION ENGINE V2 — UNIFIED PIPELINE
 
 The V2 engine treats signal arbitration as a **5-stage pipeline**, not a flat hierarchy.
 Each stage is processed in order. Earlier stages can BLOCK or MODIFY later stages.
@@ -1171,22 +1158,12 @@ The pipeline produces these output classes:
 
 
 # =====================================================================
-# BUILT-IN ASTROLOGICAL-FINANCIAL CORRELATION FRAMEWORK
-# Content merged into the unified Vedic Mundane Astrology Framework above.
-# Kept empty for backward compatibility.
-# =====================================================================
-COSMIC_ASTRO_FRAMEWORK = ""
-
-
-# =====================================================================
-# MASTER SYNTHESIS PROMPT (sent to GPT-5.4)
+# MASTER SYNTHESIS PROMPT
 # Returns STRICT JSON for structured UI rendering.
 # =====================================================================
 COSMIC_SYNTHESIS_PROMPT = """You are the **Cosmic Financial Oracle** — an elite intelligence system that combines Vedic mundane astrology, Western astrology, planetary science, macroeconomic analysis, and geopolitical intelligence to produce **bold, conviction-driven global market predictions**.
 
 You are a CRYSTAL BALL, not a hedge fund disclaimer. Your users expect **specific, dated, directional predictions** backed by planetary mechanics and economic logic. Vague statements like "markets may be volatile" or "there could be some pressure" are STRICTLY PROHIBITED — UNLESS you explicitly express probabilistic uncertainty with a defined invalidation condition.
-
-{astro_framework}
 
 {pdf_augmentation}
 
@@ -1533,77 +1510,6 @@ COSMIC_GEOPOLITICAL_QUERY = """Comprehensive summary of ALL major geopolitical e
 Focus on events that directly impact: US, EU, China, India, Japan, Russia, Middle East economies.
 Provide specific dates, data points, and market-moving details."""
 
-COSMIC_ASTRO_QUERY = """Complete analysis of current and upcoming astronomical and astrological events for {date_range}:
-
-1. CURRENT PLANETARY POSITIONS (SIDEREAL / Lahiri Ayanamsa):
-   - Exact zodiac sign AND DEGREE for: Sun, Moon, Mercury, Venus, Mars, Jupiter, Saturn, Rahu (North Node), Ketu (South Node), Uranus, Neptune, Pluto
-   - Specify BOTH tropical (Western) and sidereal (Vedic/Lahiri) positions
-
-2. NAKSHATRA AND PADA POSITIONS (Vedic — REQUIRED FOR V2 PIPELINE):
-   - Current Nakshatra AND PADA (1/2/3/4) for ALL major planets — exact pada within nakshatra is mandatory
-   - The pada determines sub-sector activation in the V2 Depth Pipeline
-   - Provide the navamsa sign each planet falls into (derived from pada)
-
-3. DIVISIONAL CHART POSITIONS (REQUIRED FOR V2 PIPELINE):
-   - D9 (Navamsa) sign for each major planet
-   - D10 (Dashamsa) sign for each major planet
-   - Note any planets that are VARGOTTAMA (same sign in D1 and D9)
-   - Note any planets in D1/D9/D10 dustana (6/8/12) positions
-
-4. ACTIVE RETROGRADES:
-   - Which planets are currently retrograde? Start/end dates
-   - Upcoming retrograde periods for Mercury, Venus, Mars, Jupiter, Saturn
-
-5. MAJOR CONJUNCTIONS:
-   - Any planet-planet conjunctions active or upcoming
-   - Degree of conjunction and exact dates
-   - Planetary war (Graha Yuddha) — when two planets within 1° of each other
-
-6. ECLIPSES:
-   - Next solar and lunar eclipses: dates, types, zodiac positions (sidereal)
-   - Eclipse nakshatra AND PADA
-   - Duration in hours
-   - North nodal (Rahu) vs South nodal (Ketu)
-
-7. SIGN CHANGES (TRANSITS/INGRESSES):
-   - Upcoming planetary sign changes with exact dates
-   - Jupiter and Saturn sign changes (most market-impactful)
-   - Sun's entry into each zodiac sign for next 6 months
-   - Note any planet within ±1° of a pada or decanate boundary (rotation triggers)
-
-8. INDIA VIMSHOTTARI DASHA STATUS (REQUIRED FOR V2 PIPELINE — STAGE 0 GATE):
-   - Current Mahadasha lord for India (independence chart: 15 Aug 1947 00:00 IST, New Delhi)
-   - Current Antardasha (Bhukti) lord
-   - Current Pratyantardasha (sub-sub-period) lord if available
-   - Date of next AD or MD juncture
-   - Confirm: as of May 2026, India should be in Mars Mahadasha (~Feb 2025 to ~Feb 2032)
-   - Confirm current Antardasha: Mars-Rahu (until ~Jul 2026) → Mars-Jupiter (Jul 2026 → Jun 2027)
-
-9. ACTIVE MUNDANE YOGAS (REQUIRED FOR V2 PIPELINE — STAGE 5):
-   - Is Kala Sarpa Yoga currently active in any mundane chart?
-   - Is Gajakesari Yoga active (Jupiter in kendra from Moon)?
-   - Is Kemadruma, Chandra-Mangal, Lakshmi, Daridra, Vipreet Raja, Adhi, Shakata, Graha Malika active?
-   - List all yogas active in: current Aries ingress chart, current lunation chart, India independence chart progressed
-
-10. COMBUSTION STATUS:
-    - Which planets currently combust (too close to Sun)?
-    - Upcoming combustion periods with dates
-
-11. VEDIC CALENDAR (PANCHANG):
-    - Current Vikrami/Saka Samvat year number and name
-    - Current Hindu month (Masa), Paksha, Tithi
-    - Current Samvatsar name
-    - Weekday lord of Chaitra Shukla Pratipada (for King determination)
-    - Weekday lord of Sun's Aries ingress (for Minister determination)
-
-12. SPECIAL CONFIGURATIONS:
-    - Grand crosses, grand trines, T-squares, stelliums
-    - Multiple planets in one sign (stellium)
-    - Planets at gandanta points (sign junctions between water and fire signs)
-    - Any planet currently transiting within ±1° of a pada boundary OR decanate boundary
-
-Provide exact dates and degrees. Use Lahiri ayanamsa for sidereal positions. Pada and divisional positions are MANDATORY for the V2 pipeline to function."""
-
 COSMIC_ECONOMIC_QUERY = """Latest economic indicators and market data for major global economies:
 
 GLOBAL:
@@ -1652,8 +1558,6 @@ Include month-over-month and year-over-year changes where available. For commodi
 COSMIC_MICRO_SYNTHESIS_PROMPT = """You are the **Cosmic Stock Oracle** — an elite financial intelligence agent that combines Vedic mundane astrology, Western astrology, planetary science, and company fundamental data to produce **bold, conviction-driven, single-stock and industry cosmic analysis**.
 
 You are a CRYSTAL BALL, not a hedge fund disclaimer. Your users expect **specific, dated, directional predictions** for the target stock or industry, backed by planetary mechanics and financial logic. Vague statements like "markets may be volatile" or "there could be some pressure" are STRICTLY PROHIBITED — UNLESS you explicitly express probabilistic uncertainty with a defined invalidation condition.
-
-{astro_framework}
 
 {pdf_augmentation}
 
@@ -1817,6 +1721,11 @@ Return a single JSON object with this EXACT schema:
 
 COSMIC_MICRO_CHAT_PROMPT = """You are the Cosmic Stock Oracle. You have just produced a detailed Cosmic Micro Intelligence Report for the target stock/industry.
 
+Here is the full astrological rulebook:
+{pdf_augmentation}
+
+---
+
 Here is the complete analysis report you generated:
 {analysis}
 
@@ -1825,9 +1734,6 @@ Here is the raw fundamental financial context used:
 
 Here is the raw astronomical/cosmic data used:
 {astro_context}
-
-Here is the full astrological rulebook:
-{pdf_augmentation}
 
 The user will now ask follow-up questions about this specific company, sector, or industry, and its upcoming days (e.g. bullish/bearish windows, earnings triggers, pada rotations, or peer comparison). Answer with conviction and specificity, tracing your reasoning through the astrological rulebook.
 

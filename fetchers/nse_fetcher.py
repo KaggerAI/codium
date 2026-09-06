@@ -105,7 +105,7 @@ def _quarter_from_filename(pdf_url: str) -> str:
             continue
         q_month = _MONTH_TO_QUARTER[called.month]
         q_year = called.year
-        if called.month in (1, 2) and q_month == 'Dec':
+        if called.month in (1, 2, 3) and q_month == 'Dec':
             q_year -= 1
         return f"{q_month} {q_year}"
     return ''
@@ -117,11 +117,18 @@ _VIDEO_EXT = {'.mp4', '.webm', '.mkv', '.avi', '.mov', '.flv', '.wmv'}
 _LINK_BLOCKLIST = ("mailto:", "nseindia.com", "bseindia.com", "sebi.gov", "mca.gov",
                    "linkedin.com", "twitter.com", "x.com", "facebook.com", "instagram.com")
 
-# Publication month → financial quarter-end month (mirror of concall_agent's
-# _MONTH_TO_QUARTER; duplicated here to avoid a circular import).
+# Publication month -> the financial quarter such a document discusses.
+#
+# Keyed on the LAST QUARTER THAT HAD ALREADY ENDED when the document appeared.
+# A quarter-end month belongs to the PREVIOUS quarter, not its own: a call held
+# on 4 September is about the June quarter, because the September quarter does
+# not close until the 30th. Months 3, 6, 9 and 12 used to map to their own
+# quarter and were wrong for exactly that reason.
+# (Mirror of concall_agent's _MONTH_TO_QUARTER; duplicated here to avoid a
+# circular import — keep all three in step.)
 _MONTH_TO_QUARTER = {
-    1: 'Dec', 2: 'Dec', 3: 'Mar', 4: 'Mar', 5: 'Mar', 6: 'Jun',
-    7: 'Jun', 8: 'Jun', 9: 'Sep', 10: 'Sep', 11: 'Sep', 12: 'Dec',
+    1: 'Dec', 2: 'Dec', 3: 'Dec', 4: 'Mar', 5: 'Mar', 6: 'Mar',
+    7: 'Jun', 8: 'Jun', 9: 'Jun', 10: 'Sep', 11: 'Sep', 12: 'Sep',
 }
 
 
@@ -140,7 +147,7 @@ def _andt_to_quarter(an_dt: str) -> str:
         return ''
     q_month = _MONTH_TO_QUARTER[d.month]
     q_year = d.year
-    if d.month in (1, 2) and q_month == 'Dec':
+    if d.month in (1, 2, 3) and q_month == 'Dec':
         q_year -= 1
     return f"{q_month} {q_year}"
 

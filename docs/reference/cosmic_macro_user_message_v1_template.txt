@@ -1,0 +1,31 @@
+==============================================================================
+COSMIC MACRO AGENT - user message template (feeds interpolated raw, uncapped)
+ARCHIVE - verbatim pre-migration text. Do not edit; do not import.
+Source commit 102261aef834, agents/prompts/cosmic_prompts.py
+Size: 517 chars (~129 tokens at chars/4)
+==============================================================================
+
+## REPORT DATE: {current_date}
+## REGION FOCUS: {region_focus}
+
+---
+
+## FEED 1: GEOPOLITICAL INTELLIGENCE
+
+{geopolitical_context}
+
+---
+
+## FEED 2: COSMIC/ASTROLOGICAL DATA
+
+{astro_context}
+
+---
+
+## FEED 3: ECONOMIC INDICATORS
+
+{economic_context}
+
+---
+
+Now produce the complete Cosmic Macro Intelligence Report as a single JSON object following the exact schema specified in your instructions. Be comprehensive, data-driven, and blend astrological reasoning with macroeconomic logic throughout. Return ONLY valid JSON.

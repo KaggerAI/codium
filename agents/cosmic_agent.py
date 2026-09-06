@@ -20,17 +20,18 @@ import json
 import datetime
 from agents.utils.ephemeris import generate_cosmic_data_report
 from agents.utils.market_data import get_live_market_data
+from agents import cosmic_engine
 
 from flask import request, jsonify
 
 from agents.base import (
     create_agent_job, update_agent_job, get_agent_job,
-    store_latest_result, get_latest_result,
+    store_latest_result, get_latest_result, cosmic_model_config,
 )
 from agents.prompts.cosmic_prompts import (
     COSMIC_SYNTHESIS_PROMPT, COSMIC_CHAT_PROMPT,
-    COSMIC_ASTRO_FRAMEWORK, COSMIC_PDF_AUGMENTATION_TEXT,
-    COSMIC_GEOPOLITICAL_QUERY, COSMIC_ASTRO_QUERY, COSMIC_ECONOMIC_QUERY,
+    COSMIC_PDF_AUGMENTATION_TEXT,
+    COSMIC_GEOPOLITICAL_QUERY, COSMIC_ECONOMIC_QUERY,
 )
 
 
@@ -39,6 +40,19 @@ from agents.prompts.cosmic_prompts import (
 # =====================================================================
 COSMIC_CACHE_TTL_HOURS = 16  # Cache results for 16 hours
 COSMIC_CACHE_KEY = "GLOBAL"  # Non-ticker agent uses a fixed key
+
+# Synthesis model / reasoning effort, shared with the micro agent via agents/base.py so the two
+# cannot drift apart. Defaults are gpt-5.4 at xhigh effort — see the rationale in base.py, in
+# short: gpt-5.4 is covered by the complimentary daily token allowance and gpt-5.5 is not.
+# Overridable with COSMIC_SYNTHESIS_MODEL / COSMIC_REASONING_EFFORT.
+COSMIC_SYNTHESIS_MODEL, COSMIC_REASONING_EFFORT = cosmic_model_config()
+
+# Prompt-path caps for the two live feeds. Without these the user message is unbounded:
+# the Perplexity /search economic feed alone can reach ~60k chars at max_tokens_per_page
+# =1024 across 15 results, which is the main source of run-to-run token variance. The
+# [:50000] slices further down apply only to the STORED copy, not to the prompt.
+COSMIC_GEOPOLITICAL_PROMPT_CAP = 12000
+COSMIC_ECONOMIC_PROMPT_CAP = 24000
 
 
 def _extract_json_object(text):
@@ -99,42 +113,6 @@ def _fetch_geopolitical_intelligence(call_perplexity_api_fn):
         traceback.print_exc(file=sys.stderr)
 
     return "Geopolitical data temporarily unavailable. Use your training knowledge for current events."
-
-
-def _fetch_astrological_data(call_perplexity_api_fn):
-    """
-    Step 2: Fetch current astrological/cosmic alignments via Perplexity sonar-pro with Pro Search.
-    Returns the raw text response.
-    """
-    now = datetime.datetime.now()
-    # Build date range: current month to +6 months
-    end_date = now + datetime.timedelta(days=180)
-    date_range = f"{now.strftime('%B %Y')} to {end_date.strftime('%B %Y')}"
-
-    query = COSMIC_ASTRO_QUERY.format(date_range=date_range)
-
-    messages = [
-        {"role": "system", "content": "You are an expert astrologer and astronomer. Provide precise planetary positions, transits, retrogrades, eclipses, and astrological events with exact dates and zodiac degrees. Cover both Western and Vedic (sidereal) astrology perspectives."},
-        {"role": "user", "content": query}
-    ]
-
-    try:
-        result = call_perplexity_api_fn(
-            messages,
-            model="sonar-pro",
-            temperature=0.3,
-            timeout=180,
-            use_streaming=True,
-            enable_pro_search=True,
-        )
-        if result:
-            print(f"COSMIC_AGENT: Astrological data fetched ({len(result)} chars)", file=sys.stderr)
-            return result
-    except Exception as e:
-        print(f"COSMIC_AGENT: Astrological fetch error: {e}", file=sys.stderr)
-        traceback.print_exc(file=sys.stderr)
-
-    return "Astrological data temporarily unavailable. Use your training knowledge for current planetary positions."
 
 
 def _fetch_economic_indicators(call_perplexity_search_api_fn):
@@ -214,6 +192,12 @@ def _run_cosmic_analysis(
 
         astro_context = generate_cosmic_data_report()
 
+        # Shadow engine: compute the deterministic chart alongside the existing feed. This does
+        # NOT touch the prompt — it exists so we can measure how often the model's asserted
+        # D9/D10/pada/sub-sector values were right before anything depends on the engine.
+        # See docs/COSMIC_ENGINE_MIGRATION.md section 4.0.1. Disable with COSMIC_ENGINE_MODE=off.
+        engine_state = cosmic_engine.run_shadow(datetime.datetime.now(datetime.timezone.utc))
+
         step2_time = int(time.time() - start_time)
         print(f"COSMIC_AGENT: Step 2 done in {step2_time}s", file=sys.stderr)
 
@@ -230,9 +214,11 @@ def _run_cosmic_analysis(
         step3_time = int(time.time() - start_time)
         print(f"COSMIC_AGENT: Step 3 done in {step3_time}s", file=sys.stderr)
 
-        # ── Step 4: GPT-5.5 Synthesis ─────────────────────────────
-        update_agent_job(job_id, {"progress": "🌌 GPT-5.5 synthesizing Cosmic Macro Intelligence Report..."})
-        print(f"COSMIC_AGENT: Step 4 — GPT-5.5 synthesis", file=sys.stderr)
+        # ── Step 4: Synthesis ─────────────────────────────────────
+        update_agent_job(job_id, {"progress": "🌌 Synthesizing Cosmic Macro Intelligence Report..."})
+        print(f"COSMIC_AGENT: Step 4 — synthesis "
+              f"(model={COSMIC_SYNTHESIS_MODEL}, effort={COSMIC_REASONING_EFFORT or 'default'})",
+              file=sys.stderr)
 
         # Build the PDF augmentation section
         pdf_section = ""
@@ -242,14 +228,14 @@ def _run_cosmic_analysis(
 {COSMIC_PDF_AUGMENTATION_TEXT}
 """
 
-        # Build the system prompt with framework + PDF augmentation
+        # Build the system prompt with the PDF augmentation
         system_prompt = COSMIC_SYNTHESIS_PROMPT.format(
-            astro_framework=COSMIC_ASTRO_FRAMEWORK,
             pdf_augmentation=pdf_section,
             region_focus=region_focus,
         )
 
-        # Build the user message with all gathered data
+        # Build the user message with all gathered data. Both live feeds are capped here —
+        # see COSMIC_*_PROMPT_CAP above for why.
         current_date = datetime.datetime.now().strftime("%B %d, %Y")
         user_message = f"""## REPORT DATE: {current_date}
 ## REGION FOCUS: {region_focus}
@@ -258,7 +244,7 @@ def _run_cosmic_analysis(
 
 ## FEED 1: GEOPOLITICAL INTELLIGENCE
 
-{geopolitical_context}
+{geopolitical_context[:COSMIC_GEOPOLITICAL_PROMPT_CAP]}
 
 ---
 
@@ -270,7 +256,7 @@ def _run_cosmic_analysis(
 
 ## FEED 3: ECONOMIC INDICATORS
 
-{economic_context}
+{economic_context[:COSMIC_ECONOMIC_PROMPT_CAP]}
 
 ---
 
@@ -281,16 +267,23 @@ Now produce the complete Cosmic Macro Intelligence Report as a single JSON objec
             {"role": "user", "content": user_message},
         ]
 
-        # Call GPT-5.5 for synthesis (temperature 1 for bold crystal ball predictions)
+        # Token accounting for the migration (docs/COSMIC_ENGINE_MIGRATION.md section 7.3):
+        # every phase must move this number in the intended direction.
+        print(f"COSMIC_AGENT: prompt size — system={len(system_prompt)} ch, "
+              f"user={len(user_message)} ch, total={len(system_prompt) + len(user_message)} ch",
+              file=sys.stderr)
+
+        # temperature 1 for bold crystal ball predictions.
         # use_streaming=True keeps the connection active so Azure's SNAT ~4-min idle
         # timeout doesn't silently drop this long-running call (it otherwise hangs
         # forever on Azure while working fine on localhost).
         analysis_result = call_openai_api_fn(
             messages,
-            model="gpt-5.5",
+            model=COSMIC_SYNTHESIS_MODEL,
             temperature=1,
             timeout=420,  # 7 minutes — this is a massive synthesis
             use_streaming=True,
+            reasoning_effort=COSMIC_REASONING_EFFORT,
         )
 
         elapsed_total = int(time.time() - start_time)
@@ -319,6 +312,10 @@ Now produce the complete Cosmic Macro Intelligence Report as a single JSON objec
                   file=sys.stderr)
             structured_data = None
 
+        # Shadow comparison: how much of what the model just asserted was actually correct?
+        # Logs a one-line scorecard per run; never raises.
+        engine_comparison = cosmic_engine.log_shadow_comparison(engine_state, structured_data)
+
         # ── Store result ────────────────────────────────────────────
         result_data = {
             "structured": structured_data,  # Parsed JSON (or None)
@@ -329,7 +326,13 @@ Now produce the complete Cosmic Macro Intelligence Report as a single JSON objec
             "economic_context": economic_context[:50000],
             "analyzed_at": time.time(),
             "analysis_time_seconds": elapsed_total,
-            "model_used": "gpt-5.5",
+            "model_used": COSMIC_SYNTHESIS_MODEL,
+            "reasoning_effort": COSMIC_REASONING_EFFORT,
+            # Shadow-mode only; nothing in the UI reads these. They persist the comparison
+            # corpus and let chat reuse the computed state after the Deploy 2 cutover.
+            "engine_mode": cosmic_engine.ENGINE_MODE,
+            "engine_state": engine_state,
+            "engine_comparison": engine_comparison,
         }
 
         store_latest_result("cosmic", COSMIC_CACHE_KEY, result_data)
@@ -494,9 +497,10 @@ def register_cosmic_routes(
 
             answer = call_openai_api_fn(
                 messages,
-                model="gpt-5.5",
+                model=COSMIC_SYNTHESIS_MODEL,
                 temperature=1,
                 timeout=180,
+                reasoning_effort=COSMIC_REASONING_EFFORT,
             )
 
             return jsonify({"answer": answer, "status": "success"})

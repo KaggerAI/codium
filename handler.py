@@ -1116,10 +1116,18 @@ def generate_slug(title):
     slug = slug.strip('-')
     return slug[:80]  # Limit length
 
-def call_openai_responses_api(instructions, user_input, use_web_search=True, model="gpt-5.2-pro"):
+def call_openai_responses_api(instructions, user_input, use_web_search=True, model="gpt-5.4",
+                              reasoning_effort="xhigh"):
     """
     Call OpenAI Responses API with optional web search.
     Uses streaming to prevent Azure SNAT TCP idle timeout (4 min).
+
+    Model default is gpt-5.4, changed from gpt-5.2-pro: the complimentary daily token allowance
+    (Data controls -> Sharing) covers gpt-5.4, while gpt-5.2-pro is a separate model that is not on
+    that list and bills at standard rates.
+
+    reasoning_effort is a parameter rather than a literal so a caller can dial it down; the Responses
+    API takes it as reasoning={"effort": ...} rather than as a top-level field.
     """
     import openai as _openai
     if not _openai.api_key and not os.environ.get('OPENAI_API_KEY'):
@@ -1136,7 +1144,7 @@ def call_openai_responses_api(instructions, user_input, use_web_search=True, mod
             "model": model,
             "instructions": instructions,
             "input": user_input,
-            "reasoning": {"effort": "high"},
+            "reasoning": {"effort": reasoning_effort},
             "stream": True
         }
         if tools:
@@ -13226,6 +13234,62 @@ def _concall_morning_refresh():
         traceback.print_exc(file=sys.stderr)
 
 
+def _reload_stock_master_caches():
+    """Re-read trendlyne_all_stocks_master.csv into every in-process cache.
+
+    STOCKS_LIST and NSE_TO_BSE_MAP are built once at import; without this a
+    newly listed stock would stay invisible until the next redeploy.
+    """
+    global STOCKS_LIST, NSE_TO_BSE_MAP
+    try:
+        stocks, bse_map = [], {}
+        with open('trendlyne_all_stocks_master.csv', 'r', encoding='utf-8') as f:
+            for row in csv.DictReader(f):
+                stocks.append({'name': row.get('Stock Name', ''),
+                               'ticker': row.get('Ticker', '')})
+                nse = str(row.get('Ticker', '')).strip().upper()
+                bse = str(row.get('BSE Ticker', '')).strip()
+                if nse and bse:
+                    bse_map[nse] = bse
+        # Rebuilt then swapped so readers never see a partial list.
+        STOCKS_LIST, NSE_TO_BSE_MAP = stocks, bse_map
+        print(f"STOCK_MASTER: reloaded {len(stocks)} stocks / "
+              f"{len(bse_map)} BSE mappings in-process.", file=sys.stderr)
+    except Exception as e:
+        print(f"STOCK_MASTER: in-process reload failed: {e}", file=sys.stderr)
+
+    try:
+        from analyst_reports import trendlyne_fetcher
+        trendlyne_fetcher.load_url_mapping()
+    except Exception as e:
+        print(f"STOCK_MASTER: trendlyne_fetcher reload failed: {e}", file=sys.stderr)
+
+    try:
+        from agents import cosmic_micro_agent
+        cosmic_micro_agent.reload_trendlyne_cache()
+    except Exception as e:
+        print(f"STOCK_MASTER: cosmic_micro_agent reload failed: {e}", file=sys.stderr)
+
+
+def _stock_master_daily_update():
+    """Append newly listed stocks from Trendlyne's sitemap to the master CSV.
+
+    Also applies Trendlyne's ticker/name changes to rows we already hold, so a
+    rebrand (Akzo Nobel India -> JSW Dulux) does not leave a dead symbol behind.
+    Runs at 7:30 AM IST, ahead of the 8 AM agents and well clear of the 3/4 PM
+    screener scan (enrich_market_caps rewrites the same file there).
+    See fetchers/stock_master_updater.py.
+    """
+    try:
+        from fetchers.stock_master_updater import update_stock_master
+        summary = update_stock_master()
+        if summary.get('added') or summary.get('updated'):
+            _reload_stock_master_caches()
+    except Exception as e:
+        print(f"STOCK_MASTER: daily update failed: {e}", file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
+
+
 def screener_daily_scheduler():
     from datetime import datetime, timedelta
     from calculations.screener_background import execute_daily_screener_scan
@@ -13237,6 +13301,14 @@ def screener_daily_scheduler():
             # Shift UTC to IST rigidly mapping to Azure's clock
             now_ist = datetime.utcnow() + timedelta(hours=5, minutes=30)
             time_str = now_ist.strftime("%H:%M")
+
+            # ── Stock master: 7:30 AM IST — append newly listed stocks ──
+            if time_str == "07:30":
+                threading.Thread(target=_stock_master_daily_update, daemon=True,
+                                 name='stock-master-update').start()
+                # Exhaust window to block duplicate minute-shots
+                time.sleep(65)
+                continue
 
             # ── Cosmic Macro Report: 8:00 AM IST — pre-cache for instant user load ──
             if time_str == "08:00":
@@ -13366,6 +13438,63 @@ def _prime_concall_schedule_on_startup():
         print(f"CONCALL_SCHEDULER: startup prime failed: {e}", file=sys.stderr)
 
 threading.Thread(target=_prime_concall_schedule_on_startup, daemon=True).start()
+
+
+def _prime_stock_master_on_startup():
+    """The container ships the CSV baked into the image, so a fresh deploy is
+    only as current as the last commit. Catch up once on startup when the last
+    check is missing or older than 24h, then leave it to the 7:30 AM slot."""
+    try:
+        from fetchers.stock_master_updater import is_stale
+        if is_stale(24):
+            print("STOCK_MASTER: last check missing/stale - priming on startup...",
+                  file=sys.stderr)
+            _stock_master_daily_update()
+        else:
+            print("STOCK_MASTER: checked within 24h - skipping startup prime.",
+                  file=sys.stderr)
+    except Exception as e:
+        print(f"STOCK_MASTER: startup prime failed: {e}", file=sys.stderr)
+
+threading.Thread(target=_prime_stock_master_on_startup, daemon=True).start()
+
+
+@app.route('/api/admin/stock-master/status', methods=['GET'])
+@admin_required
+def api_admin_stock_master_status():
+    """Last stock-master update summary (added tickers, skipped renames, errors)."""
+    try:
+        from fetchers.stock_master_updater import load_status, MASTER_CSV_PATH
+        return jsonify({
+            'last_run': load_status(),
+            'rows': len(STOCKS_LIST),
+            'csv_path': MASTER_CSV_PATH,
+        })
+    except Exception as e:
+        print(f"STOCK_MASTER status error: {e}", file=sys.stderr)
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/stock-master/refresh', methods=['POST'])
+@admin_required
+def api_admin_stock_master_refresh():
+    """Admin-only: run the sitemap diff now instead of waiting for 7:30 AM IST.
+
+    POST {"dry_run": true} reports what would be appended without writing.
+    """
+    try:
+        data = request.get_json(force=True, silent=True) or {}
+        if data.get('dry_run'):
+            from fetchers.stock_master_updater import update_stock_master
+            return jsonify({'success': True, 'dry_run': True,
+                            'result': update_stock_master(dry_run=True)})
+        threading.Thread(target=_stock_master_daily_update, daemon=True,
+                         name='stock-master-update').start()
+        return jsonify({'success': True, 'message': 'Stock master update dispatched.'})
+    except Exception as e:
+        print(f"ERROR dispatching stock master update: {e}", file=sys.stderr)
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/api/admin/live-concall/force_refresh', methods=['POST'])

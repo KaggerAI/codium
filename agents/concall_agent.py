@@ -27,11 +27,153 @@ from agents.base import (
     store_latest_result, get_latest_result
 )
 from agents.prompts.concall_prompts import (
-    CONCALL_ANALYSIS_PROMPT, CONCALL_CHAT_PROMPT, build_concall_fetch_error
+    CONCALL_ANALYSIS_PROMPT, CONCALL_CHAT_PROMPT, build_concall_fetch_error,
+    build_loaded_summary
 )
 
 import csv
 import os
+
+# Upper bound on transcript text handed to the analysis model.
+#
+# A full Indian earnings call runs 80k-120k characters. Every fetch path in this
+# agent is pinned to this one number so none of them can quietly clip the call
+# somewhere in the opening remarks and leave the Q&A — the part the analysis
+# prompt is built around — unread.
+TRANSCRIPT_MAX_CHARS = 80000
+
+# The chat prompt already carries the analysis and the full transcript, so the
+# conversation itself is the cheap part. These caps exist to stop a very long
+# session growing without bound, not to save tokens on a few follow-ups.
+CHAT_ANALYSIS_MAX_CHARS = 40000
+# Total raw transcript characters in one chat prompt, across every call loaded.
+CHAT_TRANSCRIPT_BUDGET = 120000
+CHAT_HISTORY_MAX_TURNS = 12
+CHAT_HISTORY_MAX_CHARS = 16000
+
+
+def _sanitize_chat_history(history):
+    """
+    Client-supplied conversation turns -> a clean message list.
+
+    The history comes from the browser, so nothing in it can be trusted to have
+    the right shape: roles are coerced to user/assistant, non-strings dropped,
+    and the whole thing trimmed from the OLDEST end so the most recent context
+    (which is what a follow-up actually depends on) is the last to go.
+    """
+    if not isinstance(history, list):
+        return []
+
+    cleaned = []
+    for turn in history[-CHAT_HISTORY_MAX_TURNS:]:
+        if not isinstance(turn, dict):
+            continue
+        content = turn.get('content')
+        if not isinstance(content, str) or not content.strip():
+            continue
+        role = 'assistant' if turn.get('role') in ('assistant', 'model') else 'user'
+        cleaned.append({'role': role, 'content': content.strip()})
+
+    total = 0
+    kept = []
+    for turn in reversed(cleaned):
+        total += len(turn['content'])
+        if total > CHAT_HISTORY_MAX_CHARS:
+            break
+        kept.append(turn)
+    kept.reverse()
+    return kept
+
+
+# =====================================================================
+# MODEL CONFIGURATION
+# =====================================================================
+# Transcription and analysis are different jobs and are tuned separately.
+#
+# TRANSCRIPTION is perception, not reasoning: the model hears audio and types
+# what was said. Thinking budget does not help it hear — a model that mishears
+# "140 crores" as "140 grows" mishears it just as badly at HIGH. What helps is a
+# stronger base model. So this tier pays for the FULL Flash model and spends
+# almost nothing on thinking, which is close to pure waste on a 45-minute file.
+#
+# ANALYSIS is the opposite: the transcript is already in the prompt, and the work
+# is connecting figures, noticing evasion, weighing guidance against results.
+# Thinking budget is exactly what buys that, so the cheap model runs at HIGH.
+#
+# Worth stating plainly, because it drove the split: no amount of thinking on the
+# analysis side can recover a number the transcription side got wrong. It only
+# produces a more confident, better-argued wrong answer.
+TRANSCRIPTION_MODEL = os.getenv("CONCALL_TRANSCRIPTION_MODEL", "gemini-3-flash-preview").strip()
+TRANSCRIPTION_THINKING = os.getenv("CONCALL_TRANSCRIPTION_THINKING", "MINIMAL").strip()
+# Used only when TRANSCRIPTION_MODEL errors — these calls bypass call_gemini_api
+# (they carry an uploaded file handle) and so get none of its retry/fallback.
+TRANSCRIPTION_FALLBACK_MODEL = os.getenv(
+    "CONCALL_TRANSCRIPTION_FALLBACK_MODEL", "gemini-3.5-flash-lite").strip()
+
+ANALYSIS_MODEL = os.getenv("CONCALL_ANALYSIS_MODEL", "gemini-3.5-flash-lite").strip()
+ANALYSIS_THINKING = os.getenv("CONCALL_ANALYSIS_THINKING", "HIGH").strip()
+
+# Chat answers questions against a transcript already in the prompt — same shape
+# of work as the analysis, and latency matters more, so it stays on the cheap
+# model at HIGH.
+CHAT_MODEL = os.getenv("CONCALL_CHAT_MODEL", ANALYSIS_MODEL).strip()
+CHAT_THINKING = os.getenv("CONCALL_CHAT_THINKING", "HIGH").strip()
+
+# Tiny classification call (pick one of N YouTube candidates). Deliberately the
+# cheapest thing available — it is choosing between short strings.
+TIEBREAK_MODEL = os.getenv("CONCALL_TIEBREAK_MODEL", "gemini-3.1-flash-lite").strip()
+
+
+_TRANSCRIPTION_PROMPT = """You are a financial transcription specialist. This {media_label} is an earnings conference call (concall) for a publicly traded company.
+
+Your task:
+1. Transcribe ALL spoken words accurately and completely
+2. Preserve speaker attributions where possible (e.g. "Management:", "Analyst:", "Moderator:")
+3. Focus especially on the Q&A session
+4. Capture all financial figures, percentages, and guidance numbers precisely
+5. Output the transcript as clean, readable text
+
+DO NOT summarize or analyze — just transcribe the spoken content as accurately as possible.
+Return ONLY the transcript text."""
+
+
+def _gemini_transcribe(client, uploaded, media_label: str = 'audio') -> str:
+    """
+    Run the transcription prompt over an already-uploaded Gemini file handle.
+
+    Blocking — call from a worker thread. Falls back to
+    TRANSCRIPTION_FALLBACK_MODEL on error: these calls cannot go through
+    call_gemini_api (which is text-only), so without this a hiccup on one model
+    throws away a recording that was already found and downloaded.
+    """
+    prompt = _TRANSCRIPTION_PROMPT.format(media_label=media_label)
+    models = [TRANSCRIPTION_MODEL]
+    if TRANSCRIPTION_FALLBACK_MODEL and TRANSCRIPTION_FALLBACK_MODEL != TRANSCRIPTION_MODEL:
+        models.append(TRANSCRIPTION_FALLBACK_MODEL)
+
+    last_err = None
+    for model in models:
+        try:
+            print(f"CONCALL_AGENT: Transcribing with {model} "
+                  f"(thinking={TRANSCRIPTION_THINKING})...", file=sys.stderr)
+            response = client.models.generate_content(
+                model=model,
+                contents=[types.Part.from_text(text=prompt), uploaded],
+                config=types.GenerateContentConfig(
+                    thinking_config=types.ThinkingConfig(
+                        thinking_level=TRANSCRIPTION_THINKING)
+                ),
+            )
+            text = response.text if response.text else ''
+            if text:
+                return text
+            print(f"CONCALL_AGENT: {model} returned empty transcript", file=sys.stderr)
+            last_err = 'empty response'
+        except Exception as e:
+            last_err = e
+            print(f"CONCALL_AGENT: transcription via {model} failed: {e}", file=sys.stderr)
+    print(f"CONCALL_AGENT: all transcription models failed ({last_err})", file=sys.stderr)
+    return ''
 
 def _get_company_name_from_ticker(ticker: str) -> str:
     """Read the stock master to get the full company name."""
@@ -223,6 +365,621 @@ def _expected_results_quarters(as_of=None):
     else:
         primary, prev = f"Sep {y}", f"Jun {y}"
     return primary, prev
+
+# =====================================================================
+# PAST-QUARTER TRANSCRIPT ACCESS
+# =====================================================================
+# Screener's concalls block lists a company's entire call history, and the
+# transcript of a quarter that has already happened never changes. That makes
+# these safe to cache by (ticker, quarter) with none of the staleness risk of a
+# ticker-level cache: a newly published call is a new quarter, so it is a new
+# key and always a miss.
+
+# Bounded, because a long-lived worker answering questions across many tickers
+# would otherwise hold every transcript it ever read.
+_PAST_TRANSCRIPT_CACHE = {}
+_PAST_TRANSCRIPT_CACHE_MAX = 24
+_PAST_TRANSCRIPT_LOCK = threading.Lock()
+
+# Injected at route registration; needed outside the route closures.
+_get_pdf_text_fn = None
+
+
+def _normalize_quarter_label(label: str) -> str:
+    """
+    Any quarter spelling -> Screener's 'Mon YYYY' form. '' when unrecognisable.
+
+    Accepts 'Q4 FY26', 'Mar 2026', 'q1 fy2027', 'March 2026'.
+    """
+    raw = (label or '').strip()
+    if not raw:
+        return ''
+    converted = _q_fy_to_quarter_end(raw)
+    if converted:
+        return converted
+    m = re.match(r'^([A-Za-z]{3,9})\s+(\d{4})$', raw)
+    if m:
+        mon = m.group(1)[:3].title()
+        if mon in ('Mar', 'Jun', 'Sep', 'Dec'):
+            return f"{mon} {m.group(2)}"
+        # A publication month rather than a quarter end ('May 2026').
+        return _date_to_quarter(f"{mon} {m.group(2)}")
+    return ''
+
+
+def _cache_get_transcript(ticker: str, quarter: str):
+    key = f"{ticker.upper()}|{quarter}"
+    with _PAST_TRANSCRIPT_LOCK:
+        hit = _PAST_TRANSCRIPT_CACHE.get(key)
+    if hit:
+        return hit
+    stored = get_latest_result('concall_transcript', key)
+    if stored:
+        payload = stored.get('result')
+        if payload:
+            with _PAST_TRANSCRIPT_LOCK:
+                _PAST_TRANSCRIPT_CACHE[key] = payload
+            return payload
+    return None
+
+
+def _cache_put_transcript(ticker: str, quarter: str, payload: dict):
+    key = f"{ticker.upper()}|{quarter}"
+    with _PAST_TRANSCRIPT_LOCK:
+        if len(_PAST_TRANSCRIPT_CACHE) >= _PAST_TRANSCRIPT_CACHE_MAX:
+            _PAST_TRANSCRIPT_CACHE.pop(next(iter(_PAST_TRANSCRIPT_CACHE)), None)
+        _PAST_TRANSCRIPT_CACHE[key] = payload
+    try:
+        store_latest_result('concall_transcript', key, payload)
+    except Exception as e:
+        print(f"CONCALL_AGENT: could not persist transcript cache: {e}", file=sys.stderr)
+
+
+async def fetch_past_concall_transcript(ticker: str, quarter: str,
+                                        history: list = None,
+                                        company_name: str = '') -> dict:
+    """
+    The transcript of one past quarter.
+
+    Returns {quarter, text, url, source, verified} on success, or
+    {quarter, error} describing precisely why not. The error path matters as
+    much as the success path: answering from the current call while sounding
+    like the older one was consulted is the exact failure this feature exists to
+    remove, so a caller must always be able to tell that it got nothing.
+
+    Order: Screener's own transcript link first (it reaches back years), then
+    NSE and BSE for that quarter. The exchange fetchers only scan recent filings
+    (NSE the last ~120 announcements, BSE ~150 days), so they cover the previous
+    quarter or two and nothing older - which is fine, because that is exactly
+    where Screener occasionally has a gap.
+    """
+    quarter = _normalize_quarter_label(quarter) or quarter
+    if not quarter:
+        return {'quarter': quarter, 'error': 'could not understand which quarter was meant'}
+
+    cached = _cache_get_transcript(ticker, quarter)
+    if cached:
+        print(f"CONCALL_AGENT: past transcript cache hit {ticker} {quarter}", file=sys.stderr)
+        return cached
+
+    if _get_pdf_text_fn is None:
+        return {'quarter': quarter, 'error': 'transcript reader not configured'}
+
+    if not history:
+        try:
+            from fetchers.screener_fetcher import fetch_concall_history_async
+            history = await fetch_concall_history_async(
+                ticker, date_to_quarter=_date_to_quarter)
+        except Exception as e:
+            print(f"CONCALL_AGENT: history fetch failed: {e}", file=sys.stderr)
+            history = []
+
+    row = next((r for r in (history or []) if r.get('quarter') == quarter), None)
+
+    attempts = []
+    if row and row.get('transcript_url'):
+        attempts.append(('screener', row['transcript_url']))
+
+    if not attempts:
+        for src, fn in (('nse', _fetch_nse_transcript_candidate),
+                        ('bse', _fetch_bse_transcript_candidate)):
+            try:
+                cand = await fn(ticker, quarter)
+            except Exception:
+                continue
+            if cand.get('url') and cand.get('quarter') == quarter:
+                attempts.append((src, cand['url']))
+
+    if not attempts:
+        known = [r['quarter'] for r in (history or []) if r.get('transcript_url')]
+        if row is not None:
+            detail = (f"Screener lists the {quarter} call but has no transcript for it "
+                      f"(presentation only), and it is not filed with NSE or BSE either")
+        elif known:
+            detail = (f"no {quarter} call found; transcripts are available for "
+                      f"{', '.join(known[:8])}")
+        else:
+            detail = f"no transcript found for {quarter}"
+        return {'quarter': quarter, 'error': detail}
+
+    for source, url in attempts:
+        try:
+            text = await _get_pdf_text_fn(url, max_chars_to_return=TRANSCRIPT_MAX_CHARS)
+        except Exception as e:
+            print(f"CONCALL_AGENT: [{source}] {quarter} transcript read failed: {e}",
+                  file=sys.stderr)
+            continue
+        if not text or len(text.strip()) < 200:
+            continue
+
+        verdict = _verify_transcript_identity(
+            text, company_name or ticker, ticker, quarter, allow_model=False)
+        if verdict['quarter'] == 'contradicted':
+            # Screener's row said one quarter, the document says another. Using
+            # it would answer a question about Q4 with the Q3 call.
+            print(f"CONCALL_AGENT: [{source}] {quarter} transcript REJECTED - "
+                  f"document states {verdict.get('found_quarter')}", file=sys.stderr)
+            continue
+
+        payload = {
+            'quarter': quarter, 'text': text, 'url': url, 'source': source,
+            'verified': verdict['quarter'] == 'confirmed',
+        }
+        print(f"CONCALL_AGENT: fetched {quarter} transcript from {source} "
+              f"({len(text)} chars, quarter {verdict['quarter']})", file=sys.stderr)
+        _cache_put_transcript(ticker, quarter, payload)
+        return payload
+
+    return {'quarter': quarter,
+            'error': f'found a {quarter} transcript but could not read it'}
+
+
+# =====================================================================
+# WHICH QUARTER IS THE QUESTION ABOUT?
+# =====================================================================
+# Two stages, because the cost profile matters. Most questions are about the
+# call already in the prompt and must add nothing: a plain-text pre-filter
+# answers those for free. Only a question that actually reaches for another
+# period pays for the model call - and that call is given the REAL list of
+# quarters, so it cannot ask for one that does not exist.
+
+# Any hint that a question reaches outside the current call. Deliberately broad:
+# a false positive costs one cheap model call, a false negative silently answers
+# the wrong question.
+_TEMPORAL_HINT_RE = re.compile(
+    r'\b('
+    r'previous|prior|last(?:\s+(?:quarter|call|time|year))?|earlier|'
+    r'before|back\s+then|past\s+(?:call|quarter|year)s?|'
+    r'q[1-4]\s*(?:and\s+|&\s+)?fy\s*\d{2,4}|fy\s*\d{2,4}|'
+    r'(?:first|second|third|fourth)\s+quarter|'
+    r'year[\s-]?(?:on|over)[\s-]?year|yoy|'
+    r'a\s+year\s+ago|same\s+quarter\s+last\s+year|'
+    r'compare[ds]?|comparison|versus|vs\.?|trend|'
+    r'promised|guided|guidance\s+(?:given|made)|committed|'
+    r'deliver(?:ed)?\s+on|follow(?:ed)?\s+through|track\s+record'
+    r')\b',
+    re.IGNORECASE)
+
+# Loading more than this many extra calls makes the prompt huge and the answer
+# vague. Two covers "the previous call" and "the same quarter a year ago".
+MAX_EXTRA_TRANSCRIPTS = 2
+
+
+def _needs_other_quarters(question: str) -> bool:
+    """Cheap gate: might this question reach beyond the loaded call?"""
+    return bool(_TEMPORAL_HINT_RE.search(question or ''))
+
+
+def _resolve_requested_quarters(question, current_quarter, history, chat_history=None):
+    """
+    Which past quarters must be loaded to answer `question`. [] for none.
+
+    Given the real available quarters, so it can only choose ones that exist.
+    Falls back to "the quarter immediately before the current one" when the
+    model is unavailable and the question clearly points backwards - that covers
+    "what did they promise last quarter?", which is the common case.
+    """
+    available = [r['quarter'] for r in (history or []) if r.get('transcript_url')]
+    available = [q for q in available if q != current_quarter]
+    if not available:
+        return []
+
+    def _fallback():
+        return available[:1]
+
+    try:
+        api_key = os.getenv("GOOGLE_API_KEY")
+        if not api_key:
+            return _fallback()
+
+        recent = ''
+        for turn in (chat_history or [])[-2:]:
+            recent += f"{turn.get('role', 'user')}: {turn.get('content', '')[:300]}\n"
+
+        prompt = (
+            "An investor is asking about a company's earnings calls.\n\n"
+            f"The call already loaded is: {current_quarter}\n"
+            f"Other calls available (newest first): {', '.join(available[:12])}\n\n"
+            + (f"Recent conversation:\n{recent}\n" if recent else "")
+            + f"Question: {question}\n\n"
+            "Which of the OTHER calls must be read to answer this? Usually none -"
+            " most questions are about the loaded call.\n"
+            "Answer with ONLY a comma-separated list of quarters copied exactly "
+            "from the available list, or the single word NONE.\n"
+            f"Never list more than {MAX_EXTRA_TRANSCRIPTS}."
+        )
+        client = genai.Client(api_key=api_key)
+        response = client.models.generate_content(
+            model=TIEBREAK_MODEL,
+            contents=[types.Part.from_text(text=prompt)],
+        )
+        answer = (response.text or '').strip()
+        if not answer or answer.upper().startswith('NONE'):
+            return []
+
+        picked = []
+        for part in answer.replace('\n', ',').split(','):
+            label = _normalize_quarter_label(part.strip().strip('.*"\''))
+            if label and label in available and label not in picked:
+                picked.append(label)
+        return picked[:MAX_EXTRA_TRANSCRIPTS] or _fallback()
+
+    except Exception as e:
+        print(f"CONCALL_AGENT_CHAT: quarter resolver failed ({e}); "
+              f"falling back to the previous call", file=sys.stderr)
+        return _fallback()
+
+
+def _fetch_history_sync(ticker: str) -> list:
+    """Screener's concall history, from a synchronous (Flask) context."""
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        from fetchers.screener_fetcher import fetch_concall_history_async
+        return loop.run_until_complete(
+            fetch_concall_history_async(ticker, date_to_quarter=_date_to_quarter))
+    except Exception as e:
+        print(f"CONCALL_AGENT_CHAT: history fetch failed: {e}", file=sys.stderr)
+        return []
+    finally:
+        loop.close()
+
+
+def _load_quarters_for_chat(ticker, quarters, history, company_name):
+    """
+    Fetch each requested quarter. Returns (loaded, problems) where `loaded` is
+    a list of transcript payloads and `problems` is a list of human-readable
+    strings for the ones that could not be read - those go into the prompt too,
+    so the model states what was unavailable instead of quietly answering from
+    the call it does have.
+    """
+    loaded, problems = [], []
+    if not quarters:
+        return loaded, problems
+
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        for q in quarters:
+            try:
+                got = loop.run_until_complete(
+                    fetch_past_concall_transcript(ticker, q, history, company_name))
+            except Exception as e:
+                problems.append(f"{q}: could not be retrieved ({str(e)[:120]})")
+                continue
+            if got.get('error'):
+                problems.append(f"{q}: {got['error']}")
+            elif got.get('text'):
+                loaded.append(got)
+    finally:
+        loop.close()
+    return loaded, problems
+
+
+def _build_transcript_blocks(current_quarter, current_transcript, loaded, problems):
+    """
+    The transcript section of the chat prompt, within a fixed character budget.
+
+    When a past call is loaded the current call's RAW text is trimmed first: its
+    analysis is already in the prompt and is a faithful summary of it, whereas a
+    past call has no summary anywhere and is useless truncated to nothing.
+    """
+    budget = CHAT_TRANSCRIPT_BUDGET
+    blocks = []
+
+    per_past = 0
+    if loaded:
+        per_past = max(12000, (budget * 2 // 3) // len(loaded))
+        for item in loaded:
+            text = (item.get('text') or '')[:per_past]
+            note = '' if item.get('verified') else ' (quarter not independently confirmed)'
+            blocks.append(
+                f"## Transcript - {item['quarter']}{note}\n"
+                f"Fetched from {item.get('source', 'screener')} to answer this question.\n"
+                f"{text}"
+            )
+
+    used = sum(len(b) for b in blocks)
+    current_share = max(8000, budget - used)
+    current_text = (current_transcript or '')[:current_share]
+    header = f"## Transcript - {current_quarter} (the call this analysis covers)"
+    blocks.insert(0, f"{header}\n{current_text}"
+                  if current_text else f"{header}\nOriginal transcript not available.")
+
+    if problems:
+        blocks.append("## Calls that could NOT be loaded\n"
+                      + "\n".join(f"- {p}" for p in problems)
+                      + "\nSay so plainly if the question depends on one of these.")
+
+    return "\n\n".join(blocks)
+
+
+# =====================================================================
+# POST-TRANSCRIPTION IDENTITY CHECK
+# =====================================================================
+# Everything upstream works to guarantee the recording belongs to this company
+# and this quarter — exchange symbols, strict title matching, quarter gating.
+# None of that inspects the finished transcript. This does, and it is the only
+# check that sees what was actually said rather than what a filename, a video
+# title or a filing index claimed.
+#
+# Cheap to run, and it catches the one failure mode the rest of the cascade
+# cannot: a source that passed every structural test and is still the wrong
+# call. It also supplies the honest answer to "which quarter is this?" — before
+# this, an unverifiable source was labelled with the target quarter and shown to
+# the user in the same confident type as a confirmed one.
+
+# The claim we care about is made in the opening minute ("Welcome to the Q1 FY27
+# earnings call of ..."). Scanning the whole transcript instead would pick up
+# every passing reference to another period — "back in Q3 we guided to..." — and
+# read them as contradictions.
+_IDENTITY_WINDOW_CHARS = 8000
+
+_ORDINAL_QUARTERS = {
+    'first': '1', 'second': '2', 'third': '3', 'fourth': '4',
+    '1st': '1', '2nd': '2', '3rd': '3', '4th': '4',
+}
+
+# A quarter label as a transcript actually writes it, with the quarter and the
+# fiscal year ADJACENT: "Q4 FY26", "Q4 and FY26", "Q4 & FY26", "Q1FY2027",
+# "Q3 FY2025-26", "fourth quarter of FY26". The connective list comes from real
+# transcripts: Genus Power writes "Q4 and FY26", Honasa writes "Q4 & FY26".
+#
+# Adjacency is the whole point. Scanning for quarter numbers and fiscal years
+# separately and pairing every combination fabricates labels that were never
+# said: a Q4 FY26 call that gives FY27 guidance yields the pair ("1","27") the
+# moment the words "first quarter" appear anywhere in the window. Measured on
+# Genus Power's May 2026 call, that made the check confirm Q1 FY27 AND Q4 FY26
+# for the same transcript.
+_Q_FY_PAIR_RE = re.compile(
+    r'(?:q\s*-?\s*([1-4])|\b(first|second|third|fourth)\s+quarter)'
+    r'[\s,]*(?:and|&|of|,)?[\s,]*'
+    r'fy\s*-?\s*(\d{2,4})(?:\s*[-/]\s*(\d{2,4}))?',
+    re.IGNORECASE)
+
+_QUARTER_ENDED_RE = re.compile(
+    r'quarter\s+(?:\w+\s+){0,3}?ended\s+(?:on\s+)?'
+    r'(?:\d{1,2}(?:st|nd|rd|th)?\s+)?'
+    r'([a-z]+)[\s,]+(?:\d{1,2}[\s,]+)?(\d{4})', re.IGNORECASE)
+_MONTH_TO_QUARTER_END = {
+    'mar': 'Mar', 'march': 'Mar', 'jun': 'Jun', 'june': 'Jun',
+    'sep': 'Sep', 'sept': 'Sep', 'september': 'Sep', 'dec': 'Dec', 'december': 'Dec',
+}
+
+# The moderator names the quarter in the first breath of the call. A label found
+# this early is the call's own; anything later may be a comparison or guidance.
+_QUARTER_LABEL_WINDOW_CHARS = 2500
+
+
+def _fy_two_digits(first: str, second: str) -> str:
+    """
+    Fiscal-year digits from a matched FY token -> the year the FY ENDS in.
+
+    "FY26" -> 26, "FY2027" -> 27, and for a span the second half is the one that
+    matters: "FY2025-26" and "FY25-26" are both FY26, not FY25.
+    """
+    return (second or first)[-2:]
+
+
+def _quarters_claimed_in_text(window: str):
+    """
+    Quarter labels a transcript states about itself, in order of appearance.
+
+    Returns (pairs, quarter_end_labels):
+      * pairs              -- [(position, q, fy), ...] from adjacent "Q4 FY26" forms
+      * quarter_end_labels -- {'Jun 2026', ...} from "quarter ended June 30, 2026"
+
+    Both are best-effort. Empty means the transcript never states its period
+    plainly, which is common and must not be read as a contradiction.
+    """
+    low = (window or '').lower()
+
+    pairs = []
+    for m in _Q_FY_PAIR_RE.finditer(low):
+        q = m.group(1) or _ORDINAL_QUARTERS.get((m.group(2) or '').lower(), '')
+        if not q:
+            continue
+        pairs.append((m.start(), q, _fy_two_digits(m.group(3), m.group(4))))
+
+    quarter_ends = set()
+    for m in _QUARTER_ENDED_RE.finditer(low):
+        month = _MONTH_TO_QUARTER_END.get(m.group(1).lower())
+        if month:
+            quarter_ends.add(f"{month} {m.group(2)}")
+
+    return pairs, quarter_ends
+
+
+def _classify_quarter_claim(window: str, target_quarter: str):
+    """
+    'confirmed' | 'contradicted' | 'unconfirmed' for the quarter, plus what was
+    found. `target_quarter` is Screener's 'Mon YYYY' form, e.g. 'Jun 2026'.
+    """
+    if not target_quarter:
+        return 'unconfirmed', ''
+
+    pairs, quarter_ends = _quarters_claimed_in_text(window)
+
+    # "quarter ended <month> <year>" is the plainest statement there is.
+    if quarter_ends:
+        if target_quarter in quarter_ends:
+            return 'confirmed', target_quarter
+        return 'contradicted', sorted(quarter_ends)[0]
+
+    if not pairs:
+        return 'unconfirmed', ''
+
+    m = re.search(r'Q([1-4])\s*FY(\d{2})', _get_q_fy_from_quarter(target_quarter) or '',
+                  re.IGNORECASE)
+    if not m:
+        return 'unconfirmed', ''
+    want = (m.group(1), m.group(2))
+
+    # The label from the opening line, where the moderator states it. Falling
+    # back to the most-repeated label covers a transcript whose opening was cut
+    # off by PDF extraction: a call says its own quarter far more often than any
+    # other, since every figure is quoted against it.
+    opening = [(q, fy) for pos, q, fy in pairs if pos < _QUARTER_LABEL_WINDOW_CHARS]
+    if opening:
+        label = opening[0]
+    else:
+        counts = {}
+        for _pos, q, fy in pairs:
+            counts[(q, fy)] = counts.get((q, fy), 0) + 1
+        label = max(counts.items(), key=lambda kv: kv[1])[0]
+
+    found = f"Q{label[0]} FY{label[1]}"
+    return ('confirmed' if label == want else 'contradicted'), found
+
+
+def _q_fy_to_quarter_end(label: str) -> str:
+    """'Q4 FY26' -> 'Mar 2026'. Inverse of _get_q_fy_from_quarter; '' if unparseable."""
+    m = re.match(r'\s*Q([1-4])\s*FY\s*(\d{2,4})\s*$', label or '', re.IGNORECASE)
+    if not m:
+        return ''
+    qn, fy = int(m.group(1)), int(m.group(2)[-2:])
+    month = {1: 'Jun', 2: 'Sep', 3: 'Dec', 4: 'Mar'}[qn]
+    year = 2000 + fy if qn == 4 else 2000 + fy - 1
+    return f"{month} {year}"
+
+
+def _ask_model_who_and_when(window: str, company_name: str, ticker: str):
+    """
+    Ask the cheap model whether a transcript belongs to this company, and which
+    quarter it covers. Returns {'same_company': 'YES'|'NO'|'UNCLEAR',
+    'company': str, 'quarter': str}; {} when unavailable.
+
+    It is asked for a VERDICT rather than a name on purpose. Comparing a name it
+    reads off the transcript against ours by token would have to get both of
+    these right, and no simple rule does:
+      * "Divis Labs" IS "Divi S Laboratories Ltd" — same company, barely any
+        tokens in common.
+      * "Premier Energies" is NOT "Premier Explosives" — different company,
+        sharing the more prominent token.
+    Judging that is exactly what the model is good at, so let it judge.
+
+    Only called when the plain-text scan could not find the company name at all,
+    which is rare — a rare extra call, not a per-run cost. Never raises: an
+    unavailable model must leave the verdict at 'unconfirmed', not fail the run.
+    """
+    try:
+        api_key = os.getenv("GOOGLE_API_KEY")
+        if not api_key:
+            return {}
+        prompt = (
+            "Below is the opening of an earnings conference call transcript.\n\n"
+            f"Expected company: {company_name} (NSE ticker: {ticker})\n\n"
+            "Decide whether this transcript is that company's own earnings call.\n"
+            "A company may be referred to by a short or informal form of its name "
+            "(e.g. 'Divis Labs' for 'Divi S Laboratories Ltd') — that is still the "
+            "SAME company. But a DIFFERENT company that merely shares a word or "
+            "prefix (e.g. 'Premier Energies' vs 'Premier Explosives') is NOT the "
+            "same company. If you genuinely cannot tell, say UNCLEAR.\n\n"
+            "Answer with ONLY these three lines, no explanation:\n"
+            "SAME_COMPANY: YES or NO or UNCLEAR\n"
+            "COMPANY: <company named in the transcript, or UNKNOWN>\n"
+            "QUARTER: <quarter it covers, e.g. Q1 FY27, or UNKNOWN>\n\n"
+            f"Transcript opening:\n{window[:4000]}"
+        )
+        client = genai.Client(api_key=api_key)
+        response = client.models.generate_content(
+            model=TIEBREAK_MODEL,
+            contents=[types.Part.from_text(text=prompt)],
+        )
+        text = (response.text or '').strip()
+        out = {}
+        for line in text.splitlines():
+            if ':' not in line:
+                continue
+            key, _, val = line.partition(':')
+            key = key.strip().upper().replace(' ', '_')
+            val = val.strip().strip('*').strip()
+            if key == 'SAME_COMPANY':
+                verdict = val.upper()
+                if verdict in ('YES', 'NO', 'UNCLEAR'):
+                    out['same_company'] = verdict
+            elif key in ('COMPANY', 'QUARTER') and val and val.upper() != 'UNKNOWN':
+                out[key.lower()] = val
+        return out
+    except Exception as e:
+        print(f"CONCALL_AGENT: identity model check failed: {e}", file=sys.stderr)
+        return {}
+
+
+def _verify_transcript_identity(text: str, company_name: str, ticker: str,
+                                target_quarter: str = '', allow_model: bool = True) -> dict:
+    """
+    Does this transcript actually belong to this company and this quarter?
+
+    Returns {company, quarter, found_quarter, detail} where the two verdicts are
+    'confirmed' | 'unconfirmed' | 'contradicted'.
+
+    The three-way split is the point. 'unconfirmed' means the transcript simply
+    never says — common, and not grounds to throw away a real call. Only
+    'contradicted' is positive evidence of the wrong call, and only that should
+    make a caller reject a source.
+    """
+    verdict = {'company': 'unconfirmed', 'quarter': 'unconfirmed',
+               'found_quarter': '', 'detail': ''}
+    if not text or len(text.strip()) < 200:
+        verdict['detail'] = 'transcript too short to verify'
+        return verdict
+
+    window = text[:_IDENTITY_WINDOW_CHARS]
+    low = window.lower()
+
+    # ── Company ──
+    if _company_title_match(low, company_name, ticker):
+        verdict['company'] = 'confirmed'
+    elif _company_title_match(text[:60000].lower(), company_name, ticker):
+        # Named later than the introduction — still this company's call.
+        verdict['company'] = 'confirmed'
+
+    # ── Quarter ──
+    q_status, found = _classify_quarter_claim(window, target_quarter)
+    verdict['quarter'] = q_status
+    verdict['found_quarter'] = found
+
+    # ── Escalate only the genuinely ambiguous company case ──
+    if verdict['company'] == 'unconfirmed' and allow_model:
+        answer = _ask_model_who_and_when(window, company_name, ticker)
+        same = answer.get('same_company', '')
+        said_company = answer.get('company', '')
+        if same == 'YES':
+            verdict['company'] = 'confirmed'
+        elif same == 'NO':
+            verdict['company'] = 'contradicted'
+            verdict['detail'] = (f"transcript appears to be for '{said_company}'"
+                                 if said_company else 'transcript is for another company')
+        # UNCLEAR, or no answer at all, leaves it 'unconfirmed'.
+        if verdict['quarter'] == 'unconfirmed' and answer.get('quarter'):
+            verdict['found_quarter'] = answer['quarter']
+
+    if not verdict['detail']:
+        verdict['detail'] = (f"company {verdict['company']}, quarter {verdict['quarter']}"
+                             + (f" ({verdict['found_quarter']})" if verdict['found_quarter'] else ''))
+    return verdict
+
 
 def _parse_iso_duration(duration_str: str) -> int:
     """Parse ISO 8601 duration (e.g. PT48M39S) to seconds."""
@@ -789,7 +1546,7 @@ def _search_youtube_concall(company_name: str, ticker: str, quarter: str = '') -
 
         _genai_client = genai.Client(api_key=GOOGLE_API_KEY)
         response = _genai_client.models.generate_content(
-            model='gemini-3.1-flash-lite',
+            model=TIEBREAK_MODEL,
             contents=[types.Part.from_text(text=gemini_prompt)],
         )
 
@@ -1158,12 +1915,18 @@ async def _web_search_concall_media(ticker: str, company_name: str = '',
 # QUARTER MAPPING HELPERS
 # =====================================================================
 
-# Maps publication month → financial quarter end month
-# e.g., results published in Nov are for the Sep quarter
+# Publication month -> the financial quarter such a document discusses.
+#
+# Keyed on the LAST QUARTER THAT HAD ALREADY ENDED when the document appeared.
+# A quarter-end month belongs to the PREVIOUS quarter, not its own: a call held
+# on 4 September is about the June quarter, because the September quarter does
+# not close until the 30th. Months 3, 6, 9 and 12 used to map to their own
+# quarter and were wrong for exactly that reason.
+# e.g. results published in Nov are for the Sep quarter.
 _MONTH_TO_QUARTER = {
-    1: 'Dec', 2: 'Dec', 3: 'Mar', 4: 'Mar',
-    5: 'Mar', 6: 'Jun', 7: 'Jun', 8: 'Jun',
-    9: 'Sep', 10: 'Sep', 11: 'Sep', 12: 'Dec'
+    1: 'Dec', 2: 'Dec', 3: 'Dec', 4: 'Mar',
+    5: 'Mar', 6: 'Mar', 7: 'Jun', 8: 'Jun',
+    9: 'Jun', 10: 'Sep', 11: 'Sep', 12: 'Sep'
 }
 
 
@@ -1181,9 +1944,10 @@ def _date_to_quarter(date_str: str) -> str:
         try:
             parsed = _dt.strptime(clean, fmt)
             q_month = _MONTH_TO_QUARTER[parsed.month]
-            # If the quarter month is Dec but pub month is Jan/Feb, it's the previous year
+            # A Dec quarter reached from Jan/Feb/Mar belongs to the previous
+            # calendar year.
             q_year = parsed.year
-            if parsed.month in (1, 2) and q_month == 'Dec':
+            if parsed.month in (1, 2, 3) and q_month == 'Dec':
                 q_year -= 1
             return f"{q_month} {q_year}"
         except ValueError:
@@ -1205,7 +1969,10 @@ async def _fetch_screener_quarter_and_name(ticker: str):
     renders them cleanly ("Divis Laboratories Ltd") — and since this page is
     being fetched anyway, the better name is free.
 
-    Returns (quarter, company_name); either may be '' on failure.
+    Returns (quarter, company_name, concall_history); any may be empty on
+    failure. The history comes free: `div.concalls` carries every past call and
+    is already inside the page being parsed here, so listing past quarters costs
+    no extra request.
     """
     try:
         from fetchers.screener_fetcher import _stealth_get_html_async
@@ -1215,7 +1982,7 @@ async def _fetch_screener_quarter_and_name(ticker: str):
         quarter_pattern = re.compile(r'^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{4}$', re.IGNORECASE)
 
         async def _parse_page(url):
-            """-> (quarter, company_name), both '' on failure."""
+            """-> (quarter, company_name, history); empty values on failure."""
             try:
                 # Screener sits behind Cloudflare; the stealth ladder
                 # (httpx -> curl_cffi -> curl_cffi+proxy) is what every other
@@ -1224,7 +1991,7 @@ async def _fetch_screener_quarter_and_name(ticker: str):
                 # into a wrong derived quarter downstream.
                 text, _final_url, status = await _stealth_get_html_async(url)
                 if status != 200 or not text:
-                    return "", ""
+                    return "", "", []
                 soup = BeautifulSoup(text, 'html.parser')
 
                 name = ""
@@ -1242,16 +2009,21 @@ async def _fetch_screener_quarter_and_name(ticker: str):
                         quarter_headers = [h for h in headers_list if quarter_pattern.match(h.strip())]
                         if quarter_headers:
                             quarter = quarter_headers[-1].strip()
-                return quarter, name
+                from fetchers.screener_fetcher import parse_concall_history
+                history = parse_concall_history(soup, date_to_quarter=_date_to_quarter)
+                return quarter, name, history
             except Exception:
-                return "", ""
+                return "", "", []
 
         # Fetch both in parallel for speed
-        (consol_q, consol_name), (standalone_q, standalone_name) = await asyncio.gather(
-            _parse_page(consolidated_url),
-            _parse_page(standalone_url)
-        )
+        (consol_q, consol_name, consol_hist), (standalone_q, standalone_name, standalone_hist) = \
+            await asyncio.gather(
+                _parse_page(consolidated_url),
+                _parse_page(standalone_url)
+            )
 
+        # The concalls block is identical on both pages; take whichever parsed.
+        history = consol_hist or standalone_hist
         company_name = consol_name or standalone_name
         if company_name:
             print(f"CONCALL_AGENT: Screener company name for {ticker}: {company_name}", file=sys.stderr)
@@ -1275,13 +2047,18 @@ async def _fetch_screener_quarter_and_name(ticker: str):
         else:
             print(f"CONCALL_AGENT: Could not determine latest results quarter for {ticker}", file=sys.stderr)
 
-        return best, company_name
+        if history:
+            print(f"CONCALL_AGENT: concall history for {ticker}: {len(history)} quarter(s), "
+                  f"{sum(1 for r in history if r['transcript_url'])} with transcripts",
+                  file=sys.stderr)
+
+        return best, company_name, history
     except Exception as e:
         print(f"CONCALL_AGENT: _fetch_screener_quarter_and_name failed for {ticker}: {e}", file=sys.stderr)
-        return '', ''
+        return '', '', []
 
 
-async def _extract_text_from_webpage(url: str, max_chars: int = 80000) -> str:
+async def _extract_text_from_webpage(url: str, max_chars: int = TRANSCRIPT_MAX_CHARS) -> str:
     """
     Extract text content from a webpage URL (for concall transcripts
     hosted on sites like Trendlyne, MoneyControl, etc.).
@@ -1496,12 +2273,79 @@ def _wait_for_gemini_file_active(client, uploaded, label: str = ''):
     return None
 
 
-async def _extract_youtube_transcript(url: str, max_chars: int = 80000) -> str:
+def _yt_caption_track(video_id: str, proxy_config=None):
+    """
+    Best available caption track for a video -> (text, is_generated).
+
+    The distinction matters more than it looks. YouTube serves two very
+    different things under one name:
+
+      * HUMAN-WRITTEN captions — someone typed or corrected them. For an
+        earnings call these are excellent and free, and beat any model.
+      * AUTO-GENERATED captions — Google's general-purpose speech recogniser.
+        It is not domain-tuned, transcribes in a forward-only stream (so it
+        cannot use the end of the call to fix a mishearing at the start), and
+        emits no speaker labels. Its weakest area is numbers, which is the
+        entire substance of an earnings call: "140 crores" comes back as
+        "140 grows", and nothing downstream can tell that it happened.
+
+    Returns ('', None) when the video has no captions at all.
+    """
+    from youtube_transcript_api import YouTubeTranscriptApi
+
+    ytt_api = (YouTubeTranscriptApi(proxy_config=proxy_config)
+               if proxy_config else YouTubeTranscriptApi())
+
+    def _join(fetched):
+        lines = []
+        for snippet in fetched:
+            text = (getattr(snippet, 'text', None) or '').strip()
+            if text:
+                lines.append(text)
+        return '\n'.join(lines)
+
+    def _prefers_english(tracks):
+        """English first — an auto-translated track is worse than the original."""
+        return sorted(tracks, key=lambda t: 0 if str(
+            getattr(t, 'language_code', '')).lower().startswith('en') else 1)
+
+    try:
+        tracks = list(ytt_api.list(video_id))
+    except AttributeError:
+        # Older youtube-transcript-api without .list(): we cannot tell the two
+        # kinds apart, so assume the pessimistic case (auto-generated) and let
+        # the caller decide. Mislabelling human captions as generated only costs
+        # us one transcription; the reverse would silently degrade the analysis.
+        print("CONCALL_AGENT: youtube-transcript-api has no .list() - "
+              "treating captions as auto-generated", file=sys.stderr)
+        return _join(ytt_api.fetch(video_id)), True
+
+    manual = _prefers_english(
+        [t for t in tracks if not getattr(t, 'is_generated', True)])
+    if manual:
+        return _join(manual[0].fetch()), False
+
+    generated = _prefers_english(
+        [t for t in tracks if getattr(t, 'is_generated', True)])
+    if generated:
+        return _join(generated[0].fetch()), True
+
+    return '', None
+
+
+async def _extract_youtube_transcript(url: str, max_chars: int = TRANSCRIPT_MAX_CHARS) -> str:
     """
     Extract transcript from a YouTube video.
-    Strategy:
-      1. Try youtube-transcript-api (fast, uses existing captions)
-      2. Fallback: yt-dlp to download audio → Gemini transcription
+
+    Strategy, in quality order:
+      1. Human-written captions — best available, and free.
+      2. yt-dlp audio download -> Gemini transcription.
+      3. Auto-generated captions, only if (2) could not run or produced nothing.
+
+    Auto-generated captions used to win by default simply because they were
+    tried first and came back longer than 200 characters. That is not a quality
+    test — a wall of misheard numbers passes it easily. They are now a fallback
+    rather than the preferred source.
 
     Args:
         url: YouTube video URL
@@ -1516,11 +2360,10 @@ async def _extract_youtube_transcript(url: str, max_chars: int = 80000) -> str:
         print(f"CONCALL_AGENT: Could not extract YouTube video ID from {url}", file=sys.stderr)
         return ''
 
-    # ── Strategy 1: Try captions via youtube-transcript-api ──
+    # ── Strategy 1: captions, but only trust the human-written ones ──
+    auto_captions = ''          # held back as a last resort
     try:
-        from youtube_transcript_api import YouTubeTranscriptApi
-
-        print(f"CONCALL_AGENT: Trying YouTube captions for {video_id}...", file=sys.stderr)
+        print(f"CONCALL_AGENT: Checking YouTube caption tracks for {video_id}...", file=sys.stderr)
 
         def _fetch_captions():
             proxy_url = _os.environ.get("RESIDENTIAL_PROXY_URL")
@@ -1535,24 +2378,22 @@ async def _extract_youtube_transcript(url: str, max_chars: int = 80000) -> str:
                     print(f"CONCALL_AGENT: Using residential proxy for YouTube captions", file=sys.stderr)
                 except ImportError:
                     print(f"CONCALL_AGENT: GenericProxyConfig not available, fetching captions without proxy", file=sys.stderr)
+            return _yt_caption_track(video_id, proxy_config)
 
-            ytt_api = YouTubeTranscriptApi(proxy_config=proxy_config) if proxy_config else YouTubeTranscriptApi()
-            transcript_list = ytt_api.fetch(video_id)
-            # Join all caption snippets into a single transcript
-            lines = []
-            for snippet in transcript_list:
-                text = snippet.text.strip()
-                if text:
-                    lines.append(text)
-            return '\n'.join(lines)
+        captions, is_generated = await asyncio.to_thread(_fetch_captions)
+        usable = bool(captions) and len(captions.strip()) > 200
 
-        captions = await asyncio.to_thread(_fetch_captions)
-
-        if captions and len(captions.strip()) > 200:
-            print(f"CONCALL_AGENT: Got {len(captions)} chars from YouTube captions", file=sys.stderr)
+        if usable and is_generated is False:
+            print(f"CONCALL_AGENT: OK - human-written captions ({len(captions)} chars), using them",
+                  file=sys.stderr)
             return captions[:max_chars]
+        if usable:
+            auto_captions = captions
+            print(f"CONCALL_AGENT: Only auto-generated captions ({len(captions)} chars) - "
+                  f"preferring Gemini audio transcription instead", file=sys.stderr)
         else:
-            print(f"CONCALL_AGENT: Captions too short ({len(captions) if captions else 0} chars), trying audio fallback", file=sys.stderr)
+            print(f"CONCALL_AGENT: No usable caption track "
+                  f"({len(captions) if captions else 0} chars)", file=sys.stderr)
 
     except Exception as e:
         print(f"CONCALL_AGENT: YouTube captions failed ({e}), trying audio fallback", file=sys.stderr)
@@ -1561,7 +2402,7 @@ async def _extract_youtube_transcript(url: str, max_chars: int = 80000) -> str:
     GOOGLE_API_KEY = _os.getenv("GOOGLE_API_KEY")
     if not GOOGLE_API_KEY:
         print("CONCALL_AGENT: No API key for Gemini transcription fallback", file=sys.stderr)
-        return ''
+        return auto_captions[:max_chars] if auto_captions else ''
 
     try:
         import tempfile
@@ -1630,51 +2471,39 @@ async def _extract_youtube_transcript(url: str, max_chars: int = 80000) -> str:
                 if uploaded is None:
                     return ''
 
-                prompt = """You are a financial transcription specialist. This audio is from an earnings conference call (concall) for a publicly traded company.
-
-Your task:
-1. Transcribe ALL spoken words accurately and completely
-2. Preserve speaker attributions where possible
-3. Focus especially on the Q&A session
-4. Capture all financial figures, percentages, and guidance numbers precisely
-5. Output the transcript as clean, readable text
-
-DO NOT summarize or analyze — just transcribe accurately.
-Return ONLY the transcript text."""
-
-                print(f"CONCALL_AGENT: Transcribing YouTube audio with Gemini...", file=sys.stderr)
-                response = _genai_client.models.generate_content(
-                    model='gemini-3.5-flash-lite',
-                    contents=[
-                        types.Part.from_text(text=prompt),
-                        uploaded
-                    ],
-                    config=types.GenerateContentConfig(
-                        thinking_config=types.ThinkingConfig(thinking_level="MEDIUM")
-                    )
-                )
+                text = _gemini_transcribe(_genai_client, uploaded, media_label='audio')
 
                 try:
                     _genai_client.files.delete(name=uploaded.name)
                 except Exception:
                     pass
 
-                return response.text if response.text else ''
+                return text
 
         transcript = await asyncio.to_thread(_download_and_transcribe)
 
         if transcript:
             print(f"CONCALL_AGENT: Transcribed {len(transcript)} chars from YouTube audio", file=sys.stderr)
-        return transcript[:max_chars] if transcript else ''
+            return transcript[:max_chars]
 
     except Exception as e:
         print(f"CONCALL_AGENT: YouTube audio fallback failed: {e}", file=sys.stderr)
         traceback.print_exc(file=sys.stderr)
-        return ''
+
+    # ── Strategy 3: the auto-generated captions we set aside ──
+    # Only reached when Gemini could not transcribe the audio at all. Weak
+    # source, but a weak transcript beats telling the user we found nothing
+    # when a recording demonstrably exists.
+    if auto_captions:
+        print(f"CONCALL_AGENT: Falling back to auto-generated captions "
+              f"({len(auto_captions)} chars) - numbers in this transcript are "
+              f"less reliable", file=sys.stderr)
+        return auto_captions[:max_chars]
+    return ''
 
 
 async def _transcribe_audio_video_from_url(url: str, media_type: str = 'audio',
-                                           max_chars: int = 80000) -> str:
+                                           max_chars: int = TRANSCRIPT_MAX_CHARS) -> str:
     """
     Download an audio/video file from a URL, upload to Gemini Files API,
     and transcribe it. Cleans up the uploaded file afterwards.
@@ -1809,29 +2638,8 @@ async def _transcribe_audio_video_from_url(url: str, media_type: str = 'audio',
             if uploaded is None:
                 return ''
 
-            prompt = f"""You are a financial transcription specialist. This {media_type} contains an earnings conference call (concall) for a publicly traded company.
-
-Your task:
-1. Transcribe ALL spoken words accurately and completely
-2. Preserve speaker attributions where possible (e.g., "Management:", "Analyst:", "Moderator:")
-3. Focus especially on the Q&A session
-4. Capture all financial figures, percentages, and guidance numbers precisely
-5. Output the transcript as clean, readable text
-
-DO NOT summarize or analyze — just transcribe the spoken content as accurately as possible.
-Return ONLY the transcript text."""
-
             print(f"CONCALL_AGENT: Sending {media_type} to Gemini for transcription...", file=sys.stderr)
-            response = _genai_client.models.generate_content(
-                model='gemini-3.5-flash-lite',
-                contents=[
-                    types.Part.from_text(text=prompt),
-                    uploaded
-                ],
-                config=types.GenerateContentConfig(
-                    thinking_config=types.ThinkingConfig(thinking_level="MEDIUM")
-                )
-            )
+            text = _gemini_transcribe(_genai_client, uploaded, media_label=media_type)
 
             # Clean up uploaded file
             try:
@@ -1840,7 +2648,7 @@ Return ONLY the transcript text."""
             except Exception as cleanup_err:
                 print(f"CONCALL_AGENT: Warning - failed to clean up file {uploaded.name}: {cleanup_err}", file=sys.stderr)
 
-            return response.text if response.text else ''
+            return text
 
         filename = url.split('/')[-1].split('?')[0] or f'concall.{media_type}'
         transcript = await asyncio.to_thread(
@@ -1874,8 +2682,9 @@ def register_concall_routes(app, call_gemini_api_fn, fetch_documents_fn, get_pdf
             Only used for the last-resort, domain-restricted media search; when
             omitted that step is skipped rather than run unrestricted.
     """
-    global _call_perplexity_search_fn
+    global _call_perplexity_search_fn, _get_pdf_text_fn
     _call_perplexity_search_fn = call_perplexity_search_fn
+    _get_pdf_text_fn = get_pdf_text_fn
 
     @app.route('/agent/concall/analyze', methods=['POST'])
     def agent_concall_analyze():
@@ -1976,6 +2785,10 @@ def register_concall_routes(app, call_gemini_api_fn, fetch_documents_fn, get_pdf
             analysis_context = data.get('analysis_context', '').strip()
             transcript_context = data.get('transcript_context', '').strip()
             company_name = data.get('company_name', ticker)
+            history_turns = _sanitize_chat_history(data.get('history') or [])
+            # Which call is actually in the prompt. Without it the model cannot
+            # tell the investor which quarter it is (and is not) able to answer for.
+            quarter = (data.get('concall_quarter') or '').strip() or 'the latest quarter'
 
             if not question:
                 return jsonify({'error': 'Question is required'}), 400
@@ -1983,32 +2796,63 @@ def register_concall_routes(app, call_gemini_api_fn, fetch_documents_fn, get_pdf
             if not analysis_context:
                 return jsonify({'error': 'Analysis context is required. Run the analysis first.'}), 400
 
-            print(f"CONCALL_AGENT_CHAT: Question for {ticker}: {question[:80]}...", file=sys.stderr)
+            print(f"CONCALL_AGENT_CHAT: Question for {ticker}: {question[:80]}... "
+                  f"({len(history_turns)} prior turn(s))", file=sys.stderr)
 
-            # Build the chat prompt
+            # Does this question reach past the loaded call? The pre-filter is
+            # free and true of only a minority of questions, so the resolver and
+            # the fetch below cost nothing on the common path.
+            history = data.get('concall_history') or []
+            requested, loaded, problems = [], [], []
+            if _needs_other_quarters(question) and not history:
+                # Results analysed before this feature shipped carry no history.
+                # One Screener request rather than refusing to look back.
+                history = _fetch_history_sync(ticker)
+            if _needs_other_quarters(question) and history:
+                requested = _resolve_requested_quarters(
+                    question, quarter, history, history_turns)
+                if requested:
+                    print(f"CONCALL_AGENT_CHAT: question needs {', '.join(requested)}",
+                          file=sys.stderr)
+                    loaded, problems = _load_quarters_for_chat(
+                        ticker, requested, history, company_name)
+
+            transcripts = _build_transcript_blocks(
+                quarter, transcript_context, loaded, problems)
+
             chat_prompt = CONCALL_CHAT_PROMPT.format(
                 company_name=company_name,
                 ticker=ticker,
-                analysis=analysis_context[:40000],  # Limit context size
-                transcript=transcript_context[:50000] if transcript_context else "Original transcript not available."
+                quarter=quarter,
+                loaded_summary=build_loaded_summary(
+                    quarter, [x['quarter'] for x in loaded], problems),
+                analysis=analysis_context[:CHAT_ANALYSIS_MAX_CHARS],
+                transcripts=transcripts,
             )
 
-            messages = [
-                {"role": "system", "content": chat_prompt},
-                {"role": "user", "content": question}
-            ]
+            # Prior turns, so a follow-up like "and what about next year?" still
+            # knows what "that" refers to. Without this every question arrived as
+            # if it were the first one in the conversation.
+            messages = [{"role": "system", "content": chat_prompt}]
+            messages.extend(history_turns)
+            messages.append({"role": "user", "content": question})
 
             # Call Gemini Flash for fast response
             answer = call_gemini_api_fn(
                 messages,
-                model="gemini-3.5-flash-lite",
+                model=CHAT_MODEL,
                 temperature=1,
-                thinking_level='HIGH'
+                thinking_level=CHAT_THINKING
             )
 
             return jsonify({
                 'answer': answer,
-                'status': 'success'
+                'status': 'success',
+                # So the UI can show which calls were read. Without it a user
+                # cannot tell an answer grounded in the older transcript from a
+                # paraphrase of the current one.
+                'fetched_quarters': [x['quarter'] for x in loaded],
+                'unavailable_quarters': problems,
             })
 
         except Exception as e:
@@ -2034,6 +2878,57 @@ def register_concall_routes(app, call_gemini_api_fn, fetch_documents_fn, get_pdf
             })
 
         return jsonify({'status': 'none', 'message': 'No cached result found'})
+
+    @app.route('/agent/concall/analyze-quarter', methods=['POST'])
+    def agent_concall_analyze_quarter():
+        """
+        Analyse ONE past quarter's call. Takes { ticker, quarter, concall_history? }.
+
+        Kept separate from /analyze because it must not disturb the latest
+        analysis: results are stored under a quarter-scoped key, so opening the
+        Q3 FY26 tab never overwrites the current quarter the user came for.
+        """
+        try:
+            data = request.get_json(force=True)
+            ticker = data.get('ticker', '').strip().upper()
+            quarter = _normalize_quarter_label(data.get('quarter', '').strip())
+            history = data.get('concall_history') or []
+            company_name = data.get('company_name', '') or ticker
+
+            if not ticker:
+                return jsonify({'error': 'Ticker is required'}), 400
+            if not quarter:
+                return jsonify({'error': 'A recognisable quarter is required'}), 400
+
+            cached = get_latest_result('concall_quarter', f"{ticker}|{quarter}")
+            if cached and data.get('force_refresh') is not True:
+                print(f"CONCALL_AGENT: cached {quarter} analysis for {ticker}",
+                      file=sys.stderr)
+                return jsonify({'status': 'complete', 'result': cached['result'],
+                                'cached': True})
+
+            job_id = create_agent_job('concall', ticker, metadata={'quarter': quarter})
+            thread = threading.Thread(
+                target=_run_concall_quarter_analysis,
+                args=(job_id, ticker, quarter, history, company_name, call_gemini_api_fn)
+            )
+            thread.daemon = True
+            thread.start()
+            return jsonify({'job_id': job_id, 'status': 'processing',
+                            'message': f'Analyzing the {quarter} call for {ticker}.'})
+
+        except Exception as e:
+            print(f"CONCALL_AGENT_QUARTER ERROR: {e}", file=sys.stderr)
+            traceback.print_exc(file=sys.stderr)
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/agent/concall/history', methods=['GET'])
+    def agent_concall_history():
+        """Screener's concall history for a ticker, for the past-quarter tabs."""
+        ticker = request.args.get('ticker', '').strip().upper()
+        if not ticker:
+            return jsonify({'error': 'Ticker is required'}), 400
+        return jsonify({'ticker': ticker, 'history': _fetch_history_sync(ticker)})
 
     # =================================================================
     # ANALYZE FROM USER-PROVIDED URL
@@ -2103,19 +2998,25 @@ def _run_concall_analysis(job_id, ticker, call_gemini_api_fn, fetch_documents_fn
         # costs a Gemini request and this agent never reads it — it only ever
         # looks at the doc whose type is 'Concall'.
         try:
-            docs_coro = fetch_documents_fn(ticker, include_presentation=False)
+            docs_coro = fetch_documents_fn(ticker, include_presentation=False,
+                                           max_transcript_chars=TRANSCRIPT_MAX_CHARS)
         except TypeError:
-            # Older/other injected fetcher without the flag — still works.
-            docs_coro = fetch_documents_fn(ticker)
+            # Older/other injected fetcher without the flags — still works, but
+            # note the transcript then arrives clipped to the fetcher's default.
+            try:
+                docs_coro = fetch_documents_fn(ticker, include_presentation=False)
+            except TypeError:
+                docs_coro = fetch_documents_fn(ticker)
 
         try:
             # Run both fetches concurrently for speed
-            documents, (results_quarter, screener_name) = loop.run_until_complete(
-                asyncio.gather(
-                    docs_coro,
-                    _fetch_screener_quarter_and_name(ticker)
+            documents, (results_quarter, screener_name, concall_history) = \
+                loop.run_until_complete(
+                    asyncio.gather(
+                        docs_coro,
+                        _fetch_screener_quarter_and_name(ticker)
+                    )
                 )
-            )
         finally:
             loop.close()
 
@@ -2161,6 +3062,11 @@ def _run_concall_analysis(job_id, ticker, call_gemini_api_fn, fetch_documents_fn
 
         auto_fetch_failed = False
         auto_fetch_source = None
+
+        # Identity verdict for whichever transcript ends up being analysed.
+        # Starts empty: the Screener path below fills it in, and the discovery
+        # cascade overwrites it with the verdict for the source that won.
+        verification = {}
 
         # Per-source attempt log. Every discovery step appends exactly one entry
         # so a failure can be diagnosed from the result instead of from stderr.
@@ -2210,7 +3116,8 @@ def _run_concall_analysis(job_id, ticker, call_gemini_api_fn, fetch_documents_fn
                 text = ""
                 if is_yt:
                     print("CONCALL_AGENT: Trying _extract_youtube_transcript", file=sys.stderr)
-                    text = await _extract_youtube_transcript(audio_url, max_chars=80000)
+                    text = await _extract_youtube_transcript(
+                        audio_url, max_chars=TRANSCRIPT_MAX_CHARS)
 
                 if not text or text.startswith("Error"):
                     print(f"CONCALL_AGENT: Falling back to _transcribe_audio_video_from_url via Gemini for {audio_url}", file=sys.stderr)
@@ -2238,6 +3145,45 @@ def _run_concall_analysis(job_id, ticker, call_gemini_api_fn, fetch_documents_fn
             # One event loop for the whole discovery cascade.
             loop3 = asyncio.new_event_loop()
             asyncio.set_event_loop(loop3)
+
+            def _accept(source, url, label, quarter, text, kind='transcribed'):
+                """
+                Verify a transcript's identity, then commit it if it holds up.
+
+                This is the only check that reads what was actually SAID rather
+                than trusting a filename, a video title or a filing index. A
+                source that contradicts the company or the quarter is rejected
+                here and the cascade continues to the next one — previously it
+                would have been analysed and presented as this company's call.
+
+                Returns True when the transcript was accepted.
+                """
+                nonlocal verification
+                verdict = _verify_transcript_identity(
+                    text, company_name, ticker, results_quarter)
+
+                if verdict['company'] == 'contradicted':
+                    print(f"CONCALL_AGENT: [{source}] REJECTED - {verdict['detail']}",
+                          file=sys.stderr)
+                    _log_source(source, 'wrong_company', url=url,
+                                quarter=quarter, detail=verdict['detail'])
+                    return False
+
+                if verdict['quarter'] == 'contradicted':
+                    found = verdict.get('found_quarter') or 'another quarter'
+                    print(f"CONCALL_AGENT: [{source}] REJECTED - transcript says {found}",
+                          file=sys.stderr)
+                    _log_source(source, 'wrong_quarter', url=url, quarter=found,
+                                detail=f'transcript itself states {found}')
+                    return False
+
+                verification = verdict
+                print(f"CONCALL_AGENT: [{source}] identity check - {verdict['detail']}",
+                      file=sys.stderr)
+                _commit(source, url, label, quarter, text)
+                _log_source(source, 'found', url=url, quarter=concall_quarter,
+                            detail=f'{len(text)} chars {kind}; {verdict["detail"]}')
+                return True
 
             def _commit(source, url, label, quarter, text):
                 """Accept a transcript and record it as the winning source."""
@@ -2268,10 +3214,7 @@ def _run_concall_analysis(job_id, ticker, call_gemini_api_fn, fetch_documents_fn
                                 quarter=quarter, detail=str(e)[:200])
                     return False
                 if text and not text.startswith("Error") and len(text.strip()) >= 200:
-                    _commit(source, url, label, quarter, text)
-                    _log_source(source, 'found', url=url, quarter=concall_quarter,
-                                detail=f'transcribed {len(text)} chars')
-                    return True
+                    return _accept(source, url, label, quarter, text)
                 _log_source(source, 'transcription_failed', url=url, quarter=quarter,
                             detail='transcription returned nothing usable')
                 return False
@@ -2318,15 +3261,14 @@ def _run_concall_analysis(job_id, ticker, call_gemini_api_fn, fetch_documents_fn
                         continue
                     try:
                         text = loop3.run_until_complete(
-                            get_pdf_text_fn(cand['url'], max_chars_to_return=80000))
+                            get_pdf_text_fn(cand['url'],
+                                            max_chars_to_return=TRANSCRIPT_MAX_CHARS))
                     except Exception as e:
                         _log_source(src_name, 'blocked', url=cand['url'], detail=str(e)[:200])
                         continue
                     if text and len(text.strip()) >= 200:
-                        _commit(src_name, cand['url'], 'Exchange-Filed Concall Transcript',
-                                cand.get('quarter'), text)
-                        _log_source(src_name, 'found', url=cand['url'],
-                                    quarter=concall_quarter, detail=f'{len(text)} chars from PDF')
+                        _accept(src_name, cand['url'], 'Exchange-Filed Concall Transcript',
+                                cand.get('quarter'), text, kind='from PDF')
                     else:
                         _log_source(src_name, 'parse_error', url=cand['url'],
                                     detail='transcript PDF yielded no text')
@@ -2473,6 +3415,26 @@ def _run_concall_analysis(job_id, ticker, call_gemini_api_fn, fetch_documents_fn
                 if not new_audio_url:
                     auto_fetch_failed = True
 
+        # The cascade verifies whatever it commits. A transcript that came
+        # straight from Screener and never triggered the cascade has been
+        # checked by nothing at all, so check it here.
+        if concall_text and len(concall_text.strip()) >= 200 and not verification:
+            verification = _verify_transcript_identity(
+                concall_text, company_name, ticker, results_quarter)
+            print(f"CONCALL_AGENT: Screener transcript identity - {verification['detail']}",
+                  file=sys.stderr)
+            if verification['quarter'] == 'contradicted':
+                # The transcript states its own period, which beats the quarter
+                # we inferred from Screener's publication date. Trust it, and
+                # let the UI offer the "paste the latest call" path.
+                stated = verification.get('found_quarter') or ''
+                print(f"CONCALL_AGENT: WARNING - Screener transcript states {stated}, "
+                      f"not {results_quarter}; flagging as a mismatch", file=sys.stderr)
+                # found_quarter is in "Q4 FY26" form; concall_quarter is 'Mon YYYY'
+                # everywhere else, and the UI and the mismatch notice both read it.
+                concall_quarter = _q_fy_to_quarter_end(stated) or stated or concall_quarter
+                quarter_mismatch = True
+
         if not concall_text or len(concall_text.strip()) < 200:
             elapsed = int(time.time() - start_time)
             print(f"CONCALL_AGENT: No concall transcript found for {ticker} after {elapsed}s", file=sys.stderr)
@@ -2519,9 +3481,9 @@ def _run_concall_analysis(job_id, ticker, call_gemini_api_fn, fetch_documents_fn
 
         analysis_result = call_gemini_api_fn(
             messages,
-            model="gemini-3.5-flash-lite",
+            model=ANALYSIS_MODEL,
             temperature=1,
-            thinking_level='MEDIUM'
+            thinking_level=ANALYSIS_THINKING
         )
 
         elapsed_total = int(time.time() - start_time)
@@ -2539,6 +3501,15 @@ def _run_concall_analysis(job_id, ticker, call_gemini_api_fn, fetch_documents_fn
             'auto_fetch_source': auto_fetch_source,
             'quarter_source': quarter_source,
             'sources_tried': sources_tried,
+            # What the transcript itself confirms, as opposed to what the source
+            # claimed. 'quarter_confirmed' False means the quarter shown to the
+            # user is an inference, and the UI must not present it as a fact.
+            # Every past call Screener lists, so the chat and the UI can reach an
+            # earlier quarter without re-scraping.
+            'concall_history': concall_history,
+            'verification': verification,
+            'quarter_confirmed': verification.get('quarter') == 'confirmed',
+            'company_confirmed': verification.get('company') == 'confirmed',
             'transcript_text': concall_text,
             'analyzed_at': time.time(),
             'analysis_time_seconds': elapsed_total
@@ -2568,6 +3539,82 @@ def _run_concall_analysis(job_id, ticker, call_gemini_api_fn, fetch_documents_fn
         })
 
 
+def _run_concall_quarter_analysis(job_id, ticker, quarter, history,
+                                  company_name, call_gemini_api_fn):
+    """
+    Fetch and analyse one past quarter's transcript.
+
+    Same analysis prompt as the main pipeline, so a past quarter reads exactly
+    like the current one; only the retrieval differs, and it reuses the cached
+    transcript when the chat has already pulled that quarter.
+    """
+    start_time = time.time()
+    try:
+        update_agent_job(job_id, {'progress': f'Fetching the {quarter} transcript...'})
+
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            got = loop.run_until_complete(
+                fetch_past_concall_transcript(ticker, quarter, history, company_name))
+        finally:
+            loop.close()
+
+        if got.get('error') or not got.get('text'):
+            update_agent_job(job_id, {
+                'status': 'error',
+                'error': got.get('error') or f'No transcript found for {quarter}.',
+            })
+            return
+
+        text = got['text']
+        update_agent_job(job_id, {
+            'progress': f'Analyzing the {quarter} transcript ({len(text)} chars)...'})
+
+        analysis_prompt = f"""{CONCALL_ANALYSIS_PROMPT}
+
+## Company: {ticker}
+## Transcript Source: Concall Transcript ({quarter})
+
+## Quarter: {quarter}
+
+## Full Transcript:
+{text}
+"""
+        analysis_result = call_gemini_api_fn(
+            [{"role": "user", "content": analysis_prompt}],
+            model=ANALYSIS_MODEL, temperature=1, thinking_level=ANALYSIS_THINKING)
+
+        elapsed = int(time.time() - start_time)
+        result_data = {
+            'analysis': analysis_result,
+            'ticker': ticker,
+            'concall_label': f'Concall Transcript ({quarter})',
+            'concall_link': got.get('url', ''),
+            'concall_quarter': quarter,
+            'results_quarter': quarter,
+            'quarter_mismatch': False,
+            'quarter_confirmed': bool(got.get('verified')),
+            'transcript_text': text,
+            'source': f"past_quarter:{got.get('source', 'screener')}",
+            'analyzed_at': time.time(),
+            'analysis_time_seconds': elapsed,
+        }
+        store_latest_result('concall_quarter', f"{ticker}|{quarter}", result_data)
+        update_agent_job(job_id, {
+            'status': 'complete', 'progress': 'Analysis complete!',
+            'result': result_data, 'completed_at': time.time(), 'total_time': elapsed,
+        })
+        print(f"CONCALL_AGENT: {quarter} analysis complete for {ticker} in {elapsed}s",
+              file=sys.stderr)
+
+    except Exception as e:
+        print(f"CONCALL_AGENT_QUARTER ERROR: job {job_id}: {e}", file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
+        update_agent_job(job_id, {'status': 'error',
+                                  'error': f'Analysis failed: {str(e)}'})
+
+
 def _run_concall_url_analysis(job_id, ticker, url, results_quarter,
                               call_gemini_api_fn, get_pdf_text_fn):
     """
@@ -2590,7 +3637,8 @@ def _run_concall_url_analysis(job_id, ticker, url, results_quarter,
 
             if url_type == 'pdf':
                 update_agent_job(job_id, {'progress': 'Extracting text from PDF...'})
-                concall_text = loop.run_until_complete(get_pdf_text_fn(url))
+                concall_text = loop.run_until_complete(
+                    get_pdf_text_fn(url, max_chars_to_return=TRANSCRIPT_MAX_CHARS))
             elif url_type == 'youtube':
                 update_agent_job(job_id, {'progress': 'Extracting transcript from YouTube video...'})
                 concall_text = loop.run_until_complete(_extract_youtube_transcript(url))
@@ -2645,9 +3693,9 @@ def _run_concall_url_analysis(job_id, ticker, url, results_quarter,
 
         analysis_result = call_gemini_api_fn(
             messages,
-            model="gemini-3.5-flash-lite",
+            model=ANALYSIS_MODEL,
             temperature=1,
-            thinking_level='MEDIUM'
+            thinking_level=ANALYSIS_THINKING
         )
 
         elapsed_total = int(time.time() - start_time)

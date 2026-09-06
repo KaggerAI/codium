@@ -83,3 +83,6 @@ gevent-websocket>=0.10.1
 
 # --- Cosmic Ephemeris Engine ---
 pyswisseph
+
+# --- Test tooling (cosmic engine migration; see docs/COSMIC_ENGINE_MIGRATION.md) ---
+pytest

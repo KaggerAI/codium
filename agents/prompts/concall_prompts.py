@@ -72,26 +72,56 @@ Extract 5-8 of the most important direct quotes from the transcript, with brief 
 - If you cannot find information for a section, say "Not discussed in this transcript" rather than making things up
 """
 
-CONCALL_CHAT_PROMPT = """You are the **Concall Analysis Agent** for {company_name} ({ticker}). You have just completed an in-depth analysis of the company's latest conference call transcript.
+CONCALL_CHAT_PROMPT = """You are the **Concall Analysis Agent** for {company_name} ({ticker}). You have analysed the company's conference call for **{quarter}**, and you can also be given the transcripts of earlier calls when a question needs them.
 
-Your role is to answer the investor's follow-up questions about the concall. You have access to:
-1. The **full analysis** you generated (provided below)
-2. The **original transcript text** (provided below)
+## What you are holding right now
+{loaded_summary}
 
-## Your Concall Analysis:
+Answer only from the transcripts listed above. If a question depends on a call
+that is NOT listed, say so plainly first — do not imply you read it. Writing
+"the previous call did not mention X" is a claim about a document you were not
+given; "I don't have the Q3 FY26 call, but on this call management said X" is
+honest, and is what you should write instead.
+
+When you DO have an earlier call, use it directly: quote what management said
+then, compare it with what they say now, and be specific about which call each
+figure comes from. Management restating old guidance on the current call is also
+fair to report — just attribute it as "referenced during the {quarter} call"
+rather than as the earlier call's own words.
+
+## Your Concall Analysis ({quarter}):
 {analysis}
 
-## Original Transcript:
-{transcript}
+{transcripts}
 
 ## Rules:
-- Answer questions based ONLY on what was discussed in the concall
-- If something wasn't discussed, say so clearly — don't fabricate
-- Cite specific quotes from the transcript when relevant
-- If asked for opinions, ground them in facts from the transcript
+- Ground every claim in the transcripts above; never invent figures
+- Label which call a number came from whenever more than one is loaded
+- Cite specific quotes when relevant
+- If something wasn't discussed, say so clearly
 - Be concise but thorough
 - Use markdown formatting for readability
 """
+
+
+def build_loaded_summary(current_quarter, loaded_quarters, problems=None):
+    """
+    The "what you are holding" block.
+
+    Stated explicitly because the model cannot otherwise tell the difference
+    between "the previous quarter's call says nothing about this" and "I was
+    never given the previous quarter's call" — and it answered as though it had
+    read a call it had never seen.
+    """
+    lines = [f"- The **{current_quarter}** call: full transcript and your own analysis of it."]
+    for q in (loaded_quarters or []):
+        lines.append(f"- The **{q}** call: full transcript, fetched to answer this question.")
+    if not loaded_quarters:
+        lines.append("- No other quarter's transcript is loaded.")
+    for p in (problems or []):
+        lines.append(f"- NOT available — {p}")
+    return "\n".join(lines)
+
 
 CONCALL_FETCH_ERROR_MSG = """I was unable to fetch the conference call transcript for this company.
 I also automatically searched for the concall recording on Screener.in and YouTube, but couldn't find one.
@@ -140,6 +170,7 @@ def build_concall_fetch_error(sources_tried, target_quarter=''):
                             if e.get('status') in ('transcription_failed', 'parse_error')]
     blocked = [e for e in sources_tried if e.get('status') in ('blocked', 'timeout', 'error')]
     stale = [e for e in sources_tried if e.get('status') == 'wrong_quarter']
+    wrong_company = [e for e in sources_tried if e.get('status') == 'wrong_company']
 
     quarter_note = f" for {target_quarter}" if target_quarter else ""
     lines = []
@@ -147,7 +178,20 @@ def build_concall_fetch_error(sources_tried, target_quarter=''):
     # Strict priority, most specific and most actionable first. Note a
     # wrong_quarter entry carries a URL but is NOT a usable find, so
     # "did we find something" cannot be tested by URL presence alone.
-    if transcription_failed:
+    if wrong_company:
+        # Ranked above everything else because it is the one outcome the user
+        # would never guess: a recording WAS found and transcribed, and it was
+        # somebody else's call. Silence about that is how a confusable
+        # neighbour's numbers end up in an analysis.
+        srcs = ', '.join(sorted({_label(e) for e in wrong_company}))
+        lines.append(
+            f"I found a recording{quarter_note} ({srcs}), but the transcript turned out "
+            f"to be a different company's earnings call, so I discarded it rather than "
+            f"analyse the wrong business."
+        )
+        lines.append("")
+        lines.append("If you have a link to this company's own call, paste it below.")
+    elif transcription_failed:
         srcs = ', '.join(sorted({_label(e) for e in transcription_failed}))
         lines.append(
             f"I found the earnings call recording{quarter_note} ({srcs}) but could not "

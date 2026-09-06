@@ -18,12 +18,17 @@ from flask import request, jsonify
 from agents.utils.ephemeris import generate_cosmic_data_report
 from agents.base import (
     create_agent_job, update_agent_job, get_agent_job,
-    store_latest_result, get_latest_result,
+    store_latest_result, get_latest_result, cosmic_model_config,
 )
 from agents.prompts.cosmic_prompts import (
     COSMIC_MICRO_SYNTHESIS_PROMPT, COSMIC_MICRO_CHAT_PROMPT,
-    COSMIC_ASTRO_FRAMEWORK, COSMIC_PDF_AUGMENTATION_TEXT,
+    COSMIC_PDF_AUGMENTATION_TEXT,
 )
+
+# Model / reasoning effort, shared with the macro agent via agents/base.py. Both call sites below
+# previously hardcoded gpt-5.5, which is outside the complimentary daily token allowance and silently
+# ignored the macro agent's override. See the rationale in base.py.
+COSMIC_MICRO_MODEL, COSMIC_MICRO_REASONING_EFFORT = cosmic_model_config()
 
 # =====================================================================
 # CSV LAZY LOADING & LOOKUP
@@ -32,15 +37,15 @@ _TRENDLYNE_CACHE = {}
 _TRENDLYNE_INDUSTRIES = {}
 _CSV_LOAD_LOCK = threading.Lock()
 
-def _load_trendlyne_csv():
+def _load_trendlyne_csv(force=False):
     global _TRENDLYNE_CACHE, _TRENDLYNE_INDUSTRIES
-    if _TRENDLYNE_CACHE:
+    if _TRENDLYNE_CACHE and not force:
         return
-    
+
     with _CSV_LOAD_LOCK:
-        if _TRENDLYNE_CACHE:
+        if _TRENDLYNE_CACHE and not force:
             return
-            
+
         paths_to_try = [
             "trendlyne_all_stocks_master.csv",
             os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "trendlyne_all_stocks_master.csv")
@@ -57,6 +62,10 @@ def _load_trendlyne_csv():
             return
             
         try:
+            # Built into fresh dicts and swapped in at the end, so a reload
+            # never exposes a half-filled cache to a concurrent lookup.
+            new_cache = {}
+            new_industries = {}
             with open(csv_path, mode="r", encoding="utf-8-sig") as f:
                 reader = csv.DictReader(f)
                 for row in reader:
@@ -68,16 +77,27 @@ def _load_trendlyne_csv():
                             "industry": (row.get("Industry Name") or "").strip(),
                             "sector": (row.get("Sector Name") or "").strip()
                         }
-                        _TRENDLYNE_CACHE[ticker] = stock_info
-                        
+                        new_cache[ticker] = stock_info
+
                         ind = stock_info["industry"]
                         if ind:
-                            if ind not in _TRENDLYNE_INDUSTRIES:
-                                _TRENDLYNE_INDUSTRIES[ind] = []
-                            _TRENDLYNE_INDUSTRIES[ind].append(stock_info)
+                            if ind not in new_industries:
+                                new_industries[ind] = []
+                            new_industries[ind].append(stock_info)
+            _TRENDLYNE_CACHE = new_cache
+            _TRENDLYNE_INDUSTRIES = new_industries
             print(f"COSMIC_MICRO_AGENT: Loaded {len(_TRENDLYNE_CACHE)} stocks from CSV", file=sys.stderr)
         except Exception as e:
             print(f"ERROR reading trendlyne_all_stocks_master.csv: {e}", file=sys.stderr)
+
+
+def reload_trendlyne_cache():
+    """Re-read the master CSV in place.
+
+    Called after the daily stock-master update appends newly listed stocks, so
+    a long-running process sees them without a restart.
+    """
+    _load_trendlyne_csv(force=True)
 
 
 def _lookup_trendlyne_sector(ticker: str) -> dict:
@@ -363,7 +383,6 @@ def _run_cosmic_micro_analysis(
 """
             
         system_prompt = COSMIC_MICRO_SYNTHESIS_PROMPT.format(
-            astro_framework=COSMIC_ASTRO_FRAMEWORK,
             pdf_augmentation=pdf_section,
         )
         
@@ -374,9 +393,10 @@ def _run_cosmic_micro_analysis(
         
         result_str = call_openai_api_fn(
             messages,
-            model="gpt-5.5",
+            model=COSMIC_MICRO_MODEL,
             temperature=1.0,
             timeout=300,
+            reasoning_effort=COSMIC_MICRO_REASONING_EFFORT,
         )
         
         # Clean and parse JSON
@@ -626,9 +646,10 @@ Quarterly Results:
             
             answer = call_openai_api_fn(
                 messages,
-                model="gpt-5.5",
+                model=COSMIC_MICRO_MODEL,
                 temperature=1.0,
                 timeout=180,
+                reasoning_effort=COSMIC_MICRO_REASONING_EFFORT,
             )
             
             return jsonify({"answer": answer, "status": "success"})

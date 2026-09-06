@@ -5,12 +5,40 @@ Provides common patterns for agent registration, job management, and responses.
 """
 
 import uuid
+import os
 import time
 import threading
 import sys
 import json
 import zlib
 import datetime
+
+# =====================================================================
+# COSMIC AGENT MODEL CONFIGURATION (shared by the macro and micro agents)
+# =====================================================================
+# Both cosmic agents read the same two settings, defined here rather than in either agent so they
+# cannot drift apart. Before this existed the micro agent hardcoded its model at two call sites and
+# silently ignored the macro agent's override.
+#
+# WHY gpt-5.4 IS THE DEFAULT, NOT gpt-5.5:
+# The OpenAI complimentary-daily-token programme (Data controls -> Sharing) covers gpt-5.4 at up to
+# 1M tokens/day. gpt-5.5 is NOT on that list, so every gpt-5.5 call was billed at standard rates -
+# which is what produced a `credit_balance_exhausted` 429 on an account that had never knowingly
+# spent anything. Keeping the free-tier-eligible model as the DEFAULT rather than as an env override
+# means the agents stay inside the allowance by design instead of by remembering a flag.
+#
+# COST NOTE ON xhigh: reasoning tokens count against that same 1M/day allowance, and xhigh on a
+# large prompt is close to the worst case for them. It is the right setting for a verification
+# baseline (docs/COSMIC_ENGINE_MIGRATION.md section 7.1) and for the post-cutover narration load.
+# It is expensive for high-volume chat; override per-surface with the env vars below if that bites.
+COSMIC_MODEL = os.getenv("COSMIC_SYNTHESIS_MODEL", "gpt-5.4").strip() or "gpt-5.4"
+COSMIC_REASONING_EFFORT = os.getenv("COSMIC_REASONING_EFFORT", "xhigh").strip() or None
+
+
+def cosmic_model_config():
+    """(model, reasoning_effort) for any cosmic agent call. effort may be None."""
+    return COSMIC_MODEL, COSMIC_REASONING_EFFORT
+
 
 # =====================================================================
 # REDIS PERSISTENCE
