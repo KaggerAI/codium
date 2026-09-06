@@ -116,7 +116,7 @@ def identify_swing_points(df, L, R, column='Close'):
             pts.append({'Index': i, 'Value': data[column].iat[i], 'Type': 'High'})
         elif is_swing_low(data, i, L, R, column):
             pts.append({'Index': i, 'Value': data[column].iat[i], 'Type': 'Low'})
-    return pd.DataFrame(pts)
+    return pd.DataFrame(pts, columns=['Index', 'Value', 'Type'])
 
 
 def identify_swing_points_high(df, L, R):
@@ -126,7 +126,7 @@ def identify_swing_points_high(df, L, R):
         v = data['High'].iat[i]
         if v >= data['High'].iloc[i-L:i+1].max() and v >= data['High'].iloc[i:i+R+1].max():
             pts.append({'Index': i, 'Value': v, 'Type': 'High'})
-    return pd.DataFrame(pts)
+    return pd.DataFrame(pts, columns=['Index', 'Value', 'Type'])
 
 
 def identify_swing_points_low(df, L, R):
@@ -136,11 +136,13 @@ def identify_swing_points_low(df, L, R):
         v = data['Low'].iat[i]
         if v <= data['Low'].iloc[i-L:i+1].min() and v <= data['Low'].iloc[i:i+R+1].min():
             pts.append({'Index': i, 'Value': v, 'Type': 'Low'})
-    return pd.DataFrame(pts)
+    return pd.DataFrame(pts, columns=['Index', 'Value', 'Type'])
 
 
 def analyze_swing_behaviour(sw):
     beh = {'HH': False, 'HL': False, 'LH': False, 'LL': False}
+    if sw is None or len(sw) == 0 or 'Type' not in sw.columns:
+        return beh
     highs = sw[sw['Type'] == 'High']
     lows  = sw[sw['Type'] == 'Low']
     if len(highs) >= 2:

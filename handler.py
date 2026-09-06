@@ -9582,6 +9582,8 @@ async def get_analysis_for_ticker_async(tick, skip_ai_summary=False):
     for task_name, result in results_dict.items():
         if task_name in critical_tasks and isinstance(result, Exception):
             log_progress(f"Critical error during initial data fetch: {task_name} failed.")
+            print(f"ERROR: {task_name} failed for {tick}: {type(result).__name__}: {result}", file=sys.stderr)
+            traceback.print_exception(type(result), result, result.__traceback__, file=sys.stderr)
             return ({'error': f'Failed to fetch critical data: {task_name}. Reason: {result}'}, 500)
 
     company_name = results_dict["yfinance_name"]

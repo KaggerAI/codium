@@ -772,13 +772,16 @@ def register_forensic_routes(app, call_gemini_api_fn, call_perplexity_api_fn,
                     # Run full analysis synchronously (this might take 40-60s)
                     # We do this here because the background pipeline needs the data
                     # --- MODIFIED: Skip AI Summary for Forensic Agent to save cost/time ---
-                    _, cached_data = get_full_analysis_fn(ticker, skip_ai_summary=True)
-                    
-                    if not cached_data:
-                        print(f"FORENSIC_AGENT: Full analysis fallback failed for {ticker}", file=sys.stderr)
+                    fallback_result, cached_data = get_full_analysis_fn(ticker, skip_ai_summary=True)
+
+                    # get_analysis_for_ticker returns ({'error': ...}, 500) when a critical
+                    # fetch fails, so cached_data is an HTTP status code, not a dict.
+                    if not isinstance(cached_data, dict) or not cached_data:
+                        reason = fallback_result.get('error', '') if isinstance(fallback_result, dict) else ''
+                        print(f"FORENSIC_AGENT: Full analysis fallback failed for {ticker}: {reason or 'no data returned'}", file=sys.stderr)
                         return jsonify({
                             'error': 'no_base_data',
-                            'message': FORENSIC_NO_DATA_MSG
+                            'message': f"{FORENSIC_NO_DATA_MSG} (Reason: {reason})" if reason else FORENSIC_NO_DATA_MSG
                         }), 400
                     
                     print(f"FORENSIC_AGENT: Full analysis fallback successful for {ticker}", file=sys.stderr)
@@ -789,8 +792,8 @@ def register_forensic_routes(app, call_gemini_api_fn, call_perplexity_api_fn,
                         'message': f"Could not pull financial data for {ticker}. Error: {str(fe)}"
                     }), 500
 
-            if not cached_data:
-                print(f"FORENSIC_AGENT: No cached data found for {ticker} and no fallback available", file=sys.stderr)
+            if not isinstance(cached_data, dict) or not cached_data:
+                print(f"FORENSIC_AGENT: No usable base data for {ticker} (type={type(cached_data).__name__})", file=sys.stderr)
                 return jsonify({
                     'error': 'no_base_data',
                     'message': FORENSIC_NO_DATA_MSG
@@ -939,6 +942,12 @@ def _run_forensic_analysis(job_id, ticker, cached_data, call_gemini_api_fn,
         # =====================================================
         update_agent_job(job_id, {'progress': f'Reading cached financial data for {ticker}...'})
         print(f"FORENSIC_AGENT: Step 1 — Reading cached data for {ticker}", file=sys.stderr)
+
+        if not isinstance(cached_data, dict):
+            raise ValueError(
+                f"Base financial data for {ticker} is unavailable "
+                f"(got {type(cached_data).__name__} instead of a data dict)."
+            )
 
         fundamentals = cached_data.get('fundamentals', {})
         key_metrics = cached_data.get('key_metrics', {})

@@ -1026,11 +1026,15 @@ def register_forecasting_routes(app, call_gemini_api_fn, call_perplexity_api_fn,
             if not cached_data and get_full_analysis_fn:
                 print(f"FORECASTING_AGENT: No cache. Running full analysis fallback for {ticker}...", file=sys.stderr)
                 try:
-                    _, cached_data = get_full_analysis_fn(ticker, skip_ai_summary=True)
-                    if not cached_data:
+                    fallback_result, cached_data = get_full_analysis_fn(ticker, skip_ai_summary=True)
+                    # On a critical fetch failure get_analysis_for_ticker returns
+                    # ({'error': ...}, 500), i.e. cached_data is a status code, not a dict.
+                    if not isinstance(cached_data, dict) or not cached_data:
+                        reason = fallback_result.get('error', '') if isinstance(fallback_result, dict) else ''
+                        print(f"FORECASTING_AGENT: Fallback failed for {ticker}: {reason or 'no data returned'}", file=sys.stderr)
                         return jsonify({
                             'error': 'no_base_data',
-                            'message': FORECAST_NO_DATA_MSG
+                            'message': f"{FORECAST_NO_DATA_MSG} (Reason: {reason})" if reason else FORECAST_NO_DATA_MSG
                         }), 400
                 except Exception as fe:
                     print(f"FORECASTING_AGENT ERROR during fallback: {fe}", file=sys.stderr)
@@ -1039,7 +1043,7 @@ def register_forecasting_routes(app, call_gemini_api_fn, call_perplexity_api_fn,
                         'message': f"Could not pull financial data for {ticker}."
                     }), 500
 
-            if not cached_data:
+            if not isinstance(cached_data, dict) or not cached_data:
                 return jsonify({
                     'error': 'no_base_data',
                     'message': FORECAST_NO_DATA_MSG
