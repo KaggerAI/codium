@@ -8224,8 +8224,18 @@
             .then(r => r.json())
             .then(data => {
                 if (data.status === 'complete' && data.result) {
-                    currentCosmicData = data.result;
                     console.log(`Cosmic: Loaded cached result (${data.age_minutes}m old)`);
+                    // Render it, don't just hold it. Assigning currentCosmicData alone left the
+                    // report body empty on every page load and tab switch even when a fresh
+                    // report was cached, so the only way to see one was to press Generate --
+                    // which re-runs the ~14-minute pipeline for a report we already have.
+                    // Guarded because this resolves asynchronously: fall back to the old
+                    // behaviour if the panel markup somehow isn't in the DOM yet.
+                    if (document.getElementById('cosmicReportContainer')) {
+                        onCosmicComplete(data.result, true);
+                    } else {
+                        currentCosmicData = data.result;
+                    }
                 }
             })
             .catch(() => { });

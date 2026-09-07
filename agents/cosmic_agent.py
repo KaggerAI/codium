@@ -82,6 +82,58 @@ def _extract_json_object(text):
     return s
 
 
+def _repair_truncated_json(text):
+    """
+    Salvage a JSON object that the model stopped writing mid-way.
+
+    A synthesis that runs out of output budget ends mid-token - an unterminated string plus a
+    couple of unclosed containers - which fails json.loads outright and drops the entire report
+    to the raw-text fallback even though almost all of it arrived intact. One observed run lost
+    52 characters of 89,456 and still rendered nothing but a wall of raw JSON.
+
+    This rewinds to the last position at which every open container held only complete values,
+    then closes the containers that were open there. Commas and braces inside string literals
+    are ignored, as are escaped quotes.
+
+    Returns "" when nothing is salvageable, so the caller falls back to raw text as before.
+    """
+    if not text:
+        return ""
+
+    stack = []
+    in_string = False
+    escape = False
+    cut = -1          # slice end of the last known-complete state
+    cut_stack = None  # containers open at that point
+
+    for i, ch in enumerate(text):
+        if in_string:
+            if escape:
+                escape = False
+            elif ch == "\\":
+                escape = True
+            elif ch == '"':
+                in_string = False
+            continue
+        if ch == '"':
+            in_string = True
+        elif ch == "{":
+            stack.append("}")
+        elif ch == "[":
+            stack.append("]")
+        elif ch in "}]":
+            if stack:
+                stack.pop()
+            cut, cut_stack = i + 1, list(stack)
+        elif ch == ",":
+            # Everything before a comma is a complete element of the current container.
+            cut, cut_stack = i, list(stack)
+
+    if cut <= 0 or not cut_stack:
+        return ""
+    return text[:cut].rstrip().rstrip(",") + "".join(reversed(cut_stack))
+
+
 # =====================================================================
 # DATA FETCHING HELPERS
 # =====================================================================
@@ -273,18 +325,63 @@ Now produce the complete Cosmic Macro Intelligence Report as a single JSON objec
               f"user={len(user_message)} ch, total={len(system_prompt) + len(user_message)} ch",
               file=sys.stderr)
 
+        # The synthesis is the long pole of the whole run, and almost all of it is silent:
+        # gpt-5.4 at xhigh reasoning sits on a ~138k-char prompt and emits NOTHING for minutes
+        # before the first content token, then streams the ~92k-char report in about three.
+        # Two consequences, both of which bit us:
+        #
+        #   1. timeout=420 was cutting it far too fine. A measured run went 413s from request
+        #      to first token — inside a 420s read timeout by seven seconds. Anything slower
+        #      raises APITimeoutError and throws away ~10 minutes of completed work, which is
+        #      the intermittent "cosmic agent is broken" failure. 900s restores real headroom;
+        #      it costs nothing when the model is quick, since this is a read timeout.
+        #   2. Nothing moved in the UI during that silence. The progress line sat frozen on
+        #      "Synthesizing..." for 7+ minutes, indistinguishable from a hung job, so runs were
+        #      being killed manually before they could ever finish.
+        #
+        # The ticker below fixes (2). It has to be a wall-clock thread rather than a stream
+        # callback: during the reasoning phase there is nothing on the socket at all, so a
+        # callback driven by chunk arrival cannot fire. progress_callback then supplies the
+        # character count once the model actually starts writing.
+        synth_start = time.time()
+        synth_chars = {"n": 0}
+        synth_done = threading.Event()
+
+        def _synthesis_ticker():
+            while not synth_done.wait(10):
+                mins, secs = divmod(int(time.time() - synth_start), 60)
+                if synth_chars["n"]:
+                    progress = (f"🌌 Writing the Cosmic Macro report — {synth_chars['n']:,} characters "
+                                f"so far ({mins}m {secs:02d}s)")
+                else:
+                    progress = (f"🌌 Reasoning across the knowledge base — {mins}m {secs:02d}s elapsed. "
+                                f"No output yet; this phase alone usually runs 6-8 minutes.")
+                update_agent_job(job_id, {"progress": progress})
+
+        def _synthesis_progress(elapsed_seconds, chars_generated):
+            synth_chars["n"] = chars_generated
+
+        threading.Thread(target=_synthesis_ticker, daemon=True,
+                         name="cosmic-synthesis-ticker").start()
+
         # temperature 1 for bold crystal ball predictions.
         # use_streaming=True keeps the connection active so Azure's SNAT ~4-min idle
         # timeout doesn't silently drop this long-running call (it otherwise hangs
         # forever on Azure while working fine on localhost).
-        analysis_result = call_openai_api_fn(
-            messages,
-            model=COSMIC_SYNTHESIS_MODEL,
-            temperature=1,
-            timeout=420,  # 7 minutes — this is a massive synthesis
-            use_streaming=True,
-            reasoning_effort=COSMIC_REASONING_EFFORT,
-        )
+        try:
+            analysis_result = call_openai_api_fn(
+                messages,
+                model=COSMIC_SYNTHESIS_MODEL,
+                temperature=1,
+                timeout=900,  # 15 minutes — see the headroom note above; 420s was marginal
+                use_streaming=True,
+                reasoning_effort=COSMIC_REASONING_EFFORT,
+                progress_callback=_synthesis_progress,
+            )
+        finally:
+            # Stop the ticker on the error path too, so a failed synthesis doesn't leave a
+            # thread overwriting the error status with stale progress text.
+            synth_done.set()
 
         elapsed_total = int(time.time() - start_time)
         print(f"COSMIC_AGENT: Step 4 done — {len(analysis_result)} chars in {elapsed_total}s total", file=sys.stderr)
@@ -308,9 +405,23 @@ Now produce the complete Cosmic Macro Intelligence Report as a single JSON objec
             head = full[:300].replace("\n", "\\n")
             tail = full[-300:].replace("\n", "\\n")
             print(f"COSMIC_AGENT: ⚠ JSON parse failed ({jde}) at pos {pos}; "
-                  f"raw_len={len(full)}. HEAD={head!r} TAIL={tail!r}. Falling back to raw text.",
+                  f"raw_len={len(full)}. HEAD={head!r} TAIL={tail!r}. Attempting repair.",
                   file=sys.stderr)
             structured_data = None
+
+            # A truncated response still carries almost the whole report, and the raw-text
+            # fallback renders it as an unreadable wall of JSON. Close the dangling containers
+            # and keep everything that arrived complete rather than losing the lot.
+            repaired = _repair_truncated_json(clean)
+            if repaired:
+                try:
+                    structured_data = json.loads(repaired, strict=False)
+                    print("COSMIC_AGENT: recovered truncated JSON - %d top-level keys "
+                          "from a %d-char truncated response"
+                          % (len(structured_data), len(clean)), file=sys.stderr)
+                except (json.JSONDecodeError, TypeError) as rde:
+                    print("COSMIC_AGENT: truncation repair did not parse either (%s); "
+                          "falling back to raw text" % rde, file=sys.stderr)
 
         # Shadow comparison: how much of what the model just asserted was actually correct?
         # Logs a one-line scorecard per run; never raises.

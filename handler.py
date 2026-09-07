@@ -5254,7 +5254,7 @@ def convert_to_gemini_format(messages):
             gemini_messages.append({'role': role, 'parts': [msg["content"]]})
     return gemini_messages
 
-def call_openai_api(messages, model="gpt-5.4-mini", expect_json_format_flag=False, temperature=1, timeout=180, max_tokens=None, use_streaming=False, reasoning_effort=None):
+def call_openai_api(messages, model="gpt-5.4-mini", expect_json_format_flag=False, temperature=1, timeout=180, max_tokens=None, use_streaming=False, reasoning_effort=None, progress_callback=None):
     """
     Call OpenAI API with configurable timeout.
     Default timeout is 180 seconds (3 minutes) for slower models like gpt-5.4-mini.
@@ -5268,6 +5268,13 @@ def call_openai_api(messages, model="gpt-5.4-mini", expect_json_format_flag=Fals
     as the Chat Completions `reasoning_effort` param (e.g. "low"/"medium"/"high"/"xhigh").
     It is only added to the request when explicitly provided, so existing callers that
     omit it are completely unaffected.
+
+    progress_callback (optional, streaming only) is function(elapsed_seconds, chars_generated),
+    called at most every 20s, mirroring call_perplexity_api's callback. It fires before the
+    empty-choices skip so the caller hears from us on every chunk, not only content-bearing
+    ones. NOTE it cannot fire during a reasoning model's pre-token silence, because we are
+    blocked reading the socket: a caller that must keep a UI alive across that gap needs its
+    own wall-clock ticker (see agents/cosmic_agent.py step 4).
     """
     if not openai.api_key:
         raise ValueError("OpenAI API key is not configured.")
@@ -5310,8 +5317,21 @@ def call_openai_api(messages, model="gpt-5.4-mini", expect_json_format_flag=Fals
             parts = []
             chunk_count = 0
             finish_reason = None
+            chars = 0
+            stream_start = time.time()
+            last_cb_time = stream_start
             for chunk in stream:
                 chunk_count += 1
+                # Heartbeat first, ahead of the empty-choices skip below, so the caller hears
+                # from us on usage-only chunks too rather than mistaking them for silence.
+                if progress_callback:
+                    now = time.time()
+                    if now - last_cb_time >= 20:
+                        last_cb_time = now
+                        try:
+                            progress_callback(int(now - stream_start), chars)
+                        except Exception as cb_error:
+                            print(f"API_WARN: OpenAI progress callback failed: {cb_error}", file=sys.stderr)
                 if not chunk.choices:
                     continue  # e.g. usage-only chunk
                 if chunk.choices[0].finish_reason:
@@ -5320,8 +5340,9 @@ def call_openai_api(messages, model="gpt-5.4-mini", expect_json_format_flag=Fals
                 content = getattr(delta, "content", None) if delta else None
                 if content:
                     parts.append(content)
+                    chars += len(content)
                 if chunk_count % 200 == 0:
-                    print(f"API_DEBUG: OpenAI stream progress (model={model}) — {chunk_count} chunks, {sum(len(p) for p in parts)} chars", file=sys.stderr)
+                    print(f"API_DEBUG: OpenAI stream progress (model={model}) — {chunk_count} chunks, {chars} chars", file=sys.stderr)
                     sys.stderr.flush()
             result = "".join(parts)
             # finish_reason='length' means the model was cut off → JSON will be truncated.
