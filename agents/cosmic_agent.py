@@ -13,6 +13,7 @@ Pipeline:
 
 import sys
 import os
+import re
 import time
 import threading
 import traceback
@@ -39,7 +40,35 @@ from agents.prompts.cosmic_prompts import (
 # CONSTANTS
 # =====================================================================
 COSMIC_CACHE_TTL_HOURS = 16  # Cache results for 16 hours
-COSMIC_CACHE_KEY = "GLOBAL"  # Non-ticker agent uses a fixed key
+COSMIC_CACHE_KEY = "GLOBAL"  # Slot for the default focus; other regions get their own (below)
+
+COSMIC_DEFAULT_FOCUS = "All Regions (Global + India)"
+
+# Every focus the UI can ask for. Only used to scan for the newest cached report when /latest
+# is called without a region, so a report built for either region can be restored on page load.
+COSMIC_REGION_FOCUSES = (
+    COSMIC_DEFAULT_FOCUS,
+    "India Focus",
+)
+
+
+def _cache_key_for(region_focus):
+    """
+    Cache slot for one region focus.
+
+    Both focuses used to share the single "GLOBAL" slot, and since store_latest_result overwrites
+    by key, generating one report evicted the other. The effect was that whichever region ran
+    last answered instantly from cache while the other paid the full ~15-minute pipeline on
+    EVERY request - which reads as "the India report never finishes" when Global is the one
+    that happens to be cached. Keying by region lets both live at once.
+
+    The default focus keeps the "GLOBAL" key so an already-cached report is not orphaned.
+    """
+    focus = (region_focus or "").strip()
+    if not focus or focus == COSMIC_DEFAULT_FOCUS:
+        return COSMIC_CACHE_KEY
+    slug = re.sub(r"[^A-Za-z0-9]+", "_", focus).strip("_").upper()
+    return slug or COSMIC_CACHE_KEY
 
 # Synthesis model / reasoning effort, shared with the micro agent via agents/base.py so the two
 # cannot drift apart. Defaults are gpt-5.4 at xhigh effort — see the rationale in base.py, in
@@ -446,7 +475,7 @@ Now produce the complete Cosmic Macro Intelligence Report as a single JSON objec
             "engine_comparison": engine_comparison,
         }
 
-        store_latest_result("cosmic", COSMIC_CACHE_KEY, result_data)
+        store_latest_result("cosmic", _cache_key_for(region_focus), result_data)
 
         update_agent_job(job_id, {
             "status": "complete",
@@ -502,7 +531,7 @@ def register_cosmic_routes(
 
             # Check cached result (6-hour TTL)
             if not force_refresh:
-                existing = get_latest_result("cosmic", COSMIC_CACHE_KEY)
+                existing = get_latest_result("cosmic", _cache_key_for(region_focus))
                 if existing:
                     age_hours = (time.time() - existing["stored_at"]) / 3600
                     if age_hours < COSMIC_CACHE_TTL_HOURS:
@@ -518,7 +547,7 @@ def register_cosmic_routes(
                                 "age_minutes": age_minutes,
                             })
 
-            job_id = create_agent_job("cosmic", COSMIC_CACHE_KEY)
+            job_id = create_agent_job("cosmic", _cache_key_for(region_focus))
 
             thread = threading.Thread(
                 target=_run_cosmic_analysis,
@@ -626,13 +655,35 @@ def register_cosmic_routes(
     # =================================================================
     @app.route("/agent/cosmic/latest", methods=["GET"])
     def agent_cosmic_latest():
-        """Get the latest cached result for persistence across tab switches."""
-        result = get_latest_result("cosmic", COSMIC_CACHE_KEY)
-        if result:
+        """
+        Latest cached result, for persistence across tab switches.
+
+        With ?region_focus= it answers for that region only. Without one - which is what the
+        page-load fetch sends - it returns whichever region was generated most recently, rather
+        than assuming the default focus and hiding a freshly built India report.
+        """
+        requested = (request.args.get("region_focus") or "").strip()
+        if requested:
+            keys = [_cache_key_for(requested)]
+        else:
+            keys = []
+            for focus in COSMIC_REGION_FOCUSES:
+                key = _cache_key_for(focus)
+                if key not in keys:
+                    keys.append(key)
+
+        newest = None
+        for key in keys:
+            candidate = get_latest_result("cosmic", key)
+            if candidate and (newest is None
+                              or candidate["stored_at"] > newest["stored_at"]):
+                newest = candidate
+
+        if newest:
             return jsonify({
                 "status": "complete",
-                "result": result["result"],
-                "age_minutes": round((time.time() - result["stored_at"]) / 60),
+                "result": newest["result"],
+                "age_minutes": round((time.time() - newest["stored_at"]) / 60),
             })
 
         return jsonify({"status": "none", "message": "No cached result found"})

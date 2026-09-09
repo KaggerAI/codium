@@ -5098,6 +5098,29 @@
         let concallStartTime = null;
         let concallTimerInterval = null;
         let currentConcallData = null;  // Persisted analysis data
+        // Consecutive unreadable poll responses tolerated before a run is declared
+        // dead. A worker recycle, an Azure 502/504, or a socket.io long-poll holding
+        // the last gthread slot all reach the browser as an empty or truncated body
+        // -- and JSON.parse of that is exactly what "Unexpected end of JSON input"
+        // means. The background job survives all three, so aborting on the first blip
+        // threw away a run that was still going to finish. The cosmic and technical
+        // pollers were hardened for this; the three concall ones were left behind.
+        const CONCALL_MAX_POLL_ERRORS = 8;   // ~16s of blips at the 2s poll interval
+        let concallPollErrors = 0;
+        let concallQuarterPollErrors = 0;
+        let concallUrlPollErrors = 0;
+
+        // Read the body as text first, then parse defensively. Resolves to
+        // { ok, httpStatus, data } with data === null when the body was empty,
+        // truncated, or not JSON at all (an Azure HTML error page, say).
+        function fetchConcallStatus(jobId) {
+            return fetch(`/agent/concall/${jobId}/status`)
+                .then(r => r.text().then(text => {
+                    let data = null;
+                    if (text) { try { data = JSON.parse(text); } catch (e) { data = null; } }
+                    return { ok: r.ok, httpStatus: r.status, data };
+                }));
+        }
         // Conversation so far, sent with each question. Without it every
         // follow-up ("and what about next year?") reached the model with no idea
         // what it referred to. Trimmed server-side; kept whole here so the
@@ -5126,6 +5149,7 @@
             renderConcallHistory();
 
             // Start timer
+            concallPollErrors = 0;
             concallStartTime = Date.now();
             if (concallTimerInterval) clearInterval(concallTimerInterval);
             concallTimerInterval = setInterval(() => {
@@ -5159,9 +5183,20 @@
         function pollConcallStatus() {
             if (!concallJobId) return;
 
-            fetch(`/agent/concall/${concallJobId}/status`)
-                .then(r => r.json())
-                .then(data => {
+            fetchConcallStatus(concallJobId)
+                .then(({ ok, httpStatus, data }) => {
+                    if (!ok || !data) {
+                        concallPollErrors++;
+                        if (concallPollErrors <= CONCALL_MAX_POLL_ERRORS) {
+                            concallPollTimer = setTimeout(pollConcallStatus, 2000);
+                            return;
+                        }
+                        onConcallError(`Polling error: server returned ${ok ? 'an unreadable' : 'HTTP ' + httpStatus} response`);
+                        return;
+                    }
+
+                    concallPollErrors = 0;  // healthy response -- reset the transient counter
+
                     if (data.status === 'processing') {
                         document.getElementById('concallProgressText').textContent = data.progress || 'Analyzing...';
                         concallPollTimer = setTimeout(pollConcallStatus, 2000);
@@ -5174,6 +5209,13 @@
                     }
                 })
                 .catch(err => {
+                    // Genuine network failure (offline, DNS, connection reset). Transient
+                    // far more often than not, so retry on the same budget.
+                    concallPollErrors++;
+                    if (concallPollErrors <= CONCALL_MAX_POLL_ERRORS) {
+                        concallPollTimer = setTimeout(pollConcallStatus, 2000);
+                        return;
+                    }
                     onConcallError(`Polling error: ${err.message}`);
                 });
         }
@@ -5414,6 +5456,7 @@
             const status = document.getElementById('concallQuarterStatus');
             if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Analyzing...'; }
             if (status) status.textContent = 'Fetching the transcript...';
+            concallQuarterPollErrors = 0;
 
             fetch('/agent/concall/analyze-quarter', {
                 method: 'POST',
@@ -5441,9 +5484,24 @@
 
         function pollConcallQuarter(quarter) {
             if (!concallQuarterJob) return;
-            fetch(`/agent/concall/${concallQuarterJob}/status`)
-                .then(r => r.json())
-                .then(data => {
+            const retry = () => {
+                concallQuarterPollErrors++;
+                if (concallQuarterPollErrors <= CONCALL_MAX_POLL_ERRORS) {
+                    concallQuarterPollTimer = setTimeout(() => pollConcallQuarter(quarter), 2000);
+                    return true;
+                }
+                return false;
+            };
+            fetchConcallStatus(concallQuarterJob)
+                .then(({ ok, httpStatus, data }) => {
+                    if (!ok || !data) {
+                        if (retry()) return;
+                        onConcallQuarterError(`Polling error: server returned ${ok ? 'an unreadable' : 'HTTP ' + httpStatus} response`);
+                        return;
+                    }
+
+                    concallQuarterPollErrors = 0;
+
                     const status = document.getElementById('concallQuarterStatus');
                     if (data.status === 'processing') {
                         if (status) status.textContent = data.progress || 'Analyzing...';
@@ -5454,7 +5512,10 @@
                         onConcallQuarterError(data.error || 'Analysis failed.');
                     }
                 })
-                .catch(err => onConcallQuarterError(`Polling error: ${err.message}`));
+                .catch(err => {
+                    if (retry()) return;
+                    onConcallQuarterError(`Polling error: ${err.message}`);
+                });
         }
 
         function onConcallQuarterComplete(quarter, result) {
@@ -5561,6 +5622,7 @@
             document.getElementById('concallProgressText').textContent = 'Analyzing concall from provided URL...';
 
             // Restart timer
+            concallUrlPollErrors = 0;
             concallStartTime = Date.now();
             if (concallTimerInterval) clearInterval(concallTimerInterval);
             concallTimerInterval = setInterval(() => {
@@ -5604,9 +5666,25 @@
         function pollConcallUrlStatus() {
             if (!concallUrlJobId) return;
 
-            fetch(`/agent/concall/${concallUrlJobId}/status`)
-                .then(r => r.json())
-                .then(data => {
+            const retry = () => {
+                concallUrlPollErrors++;
+                if (concallUrlPollErrors <= CONCALL_MAX_POLL_ERRORS) {
+                    concallUrlPollTimer = setTimeout(pollConcallUrlStatus, 2000);
+                    return true;
+                }
+                return false;
+            };
+
+            fetchConcallStatus(concallUrlJobId)
+                .then(({ ok, httpStatus, data }) => {
+                    if (!ok || !data) {
+                        if (retry()) return;
+                        onConcallError(`Polling error: server returned ${ok ? 'an unreadable' : 'HTTP ' + httpStatus} response`);
+                        return;
+                    }
+
+                    concallUrlPollErrors = 0;
+
                     if (data.status === 'processing') {
                         document.getElementById('concallProgressText').textContent = data.progress || 'Analyzing...';
                         concallUrlPollTimer = setTimeout(pollConcallUrlStatus, 2000);
@@ -5621,6 +5699,7 @@
                     }
                 })
                 .catch(err => {
+                    if (retry()) return;
                     onConcallError(`Polling error: ${err.message}`);
                 });
         }
@@ -7311,6 +7390,15 @@
             const model = result.model_used || 'GPT-5.4';
             const cacheLabel = cached ? ' (cached)' : '';
             meta.textContent = `Model: ${model} | Time: ${elapsed}${cacheLabel} | Focus: ${result.region_focus || 'Global'}`;
+
+            // Keep the dropdown honest. /agent/cosmic/latest restores whichever region was
+            // generated most recently, which is not necessarily the one currently selected, so
+            // without this the panel can show the India report while the selector reads Global.
+            const regionSelect = document.getElementById('cosmicRegionSelect');
+            if (regionSelect && result.region_focus
+                && Array.from(regionSelect.options).some(o => o.value === result.region_focus)) {
+                regionSelect.value = result.region_focus;
+            }
 
             // Render structured or markdown fallback
             const container = document.getElementById('cosmicReportContainer');

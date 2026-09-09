@@ -72,10 +72,23 @@ AGENT_JOBS = {}
 AGENT_JOBS_LOCK = threading.Lock()
 AGENT_JOB_TTL = 7200  # 2 hours
 
+# When this worker process came up. A job whose Redis snapshot was last written
+# BEFORE this timestamp was owned by a process that no longer exists, so the
+# background thread driving it died with that process and its status can never
+# change again. Used by get_agent_job() to fail such a job instead of handing
+# the browser a 'processing' status it would poll forever.
+#
+# Assumes one gunicorn worker (which is what the Dockerfile and startup.sh both
+# pin). Under multiple workers a job owned by a live sibling would still be safe
+# -- that sibling keeps stamping updated_at -- but a worker that restarts while a
+# sibling's job is mid-flight could briefly misread it as orphaned.
+PROCESS_START_TIME = time.time()
+
 
 def create_agent_job(agent_type, ticker, metadata=None):
     """Create a new background agent job and return the job_id."""
     job_id = str(uuid.uuid4())
+    now = time.time()
     job_data = {
         'job_id': job_id,
         'agent_type': agent_type,
@@ -84,7 +97,8 @@ def create_agent_job(agent_type, ticker, metadata=None):
         'progress': 'Starting analysis...',
         'result': None,
         'error': None,
-        'started_at': time.time(),
+        'started_at': now,
+        'updated_at': now,
         'metadata': metadata or {}
     }
     with AGENT_JOBS_LOCK:
@@ -101,6 +115,10 @@ def create_agent_job(agent_type, ticker, metadata=None):
 
 def update_agent_job(job_id, updates):
     """Update fields of an existing agent job."""
+    # Stamped on every write so a job orphaned by a worker restart can be told
+    # apart from one that is simply slow. See PROCESS_START_TIME.
+    updates = dict(updates)
+    updates['updated_at'] = time.time()
     job_data = None
     with AGENT_JOBS_LOCK:
         if job_id in AGENT_JOBS:
@@ -139,6 +157,17 @@ def get_agent_job(job_id):
                 if time.time() - job_data['started_at'] > AGENT_JOB_TTL:
                     AGENT_REDIS_CLIENT.delete(f"agent_job_{job_id}")
                     return None
+                # Reaching Redis at all means this process has no local copy, so it
+                # is not the process that started the job. If the snapshot predates
+                # this process, the worker that owned it was recycled mid-run and
+                # its thread is gone -- the job is orphaned, not in progress.
+                if (job_data.get('status') == 'processing'
+                        and job_data.get('updated_at', job_data['started_at']) < PROCESS_START_TIME):
+                    print(f"WARN: Agent job {job_id} orphaned by a worker restart "
+                          f"(last update predates this process)", file=sys.stderr)
+                    job_data['status'] = 'error'
+                    job_data['error'] = ('The server restarted while this analysis was '
+                                         'running. Please run it again.')
                 return job_data
         except Exception as e:
             print(f"WARN: Failed to retrieve agent job from Redis: {e}", file=sys.stderr)

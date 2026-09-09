@@ -43,6 +43,16 @@ COPY . .
 # 6. Expose the port Azure expects
 EXPOSE 8000
 
-# 7. Start the app using the timeout settings from your startup.txt
-# We increase timeout to 600s because financial analysis takes time
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--timeout", "600", "handler:app"]
+# 7. Start the app. Flags mirror startup.sh so the container and the Azure
+# startup command cannot drift apart.
+#
+# --worker-class gthread --threads 16 is NOT optional. Socket.IO here runs in
+# async_mode='threading' over the polling transport only, so every open browser
+# tab parks a long-poll request on the server for up to ping_timeout (60s).
+# Gunicorn's default sync worker serves ONE request at a time, so a single tab's
+# long-poll blocks every other request behind it -- agent status polls included,
+# which then time out at the Azure front end and reach the browser as an empty
+# or truncated body ("Unexpected end of JSON input" in the client).
+#
+# --timeout 600 because financial analysis takes time.
+CMD ["gunicorn", "--worker-class", "gthread", "--workers", "1", "--threads", "16", "--bind", "0.0.0.0:8000", "--timeout", "600", "handler:app"]
