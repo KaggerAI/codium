@@ -26,6 +26,7 @@ from agents.base import (
     create_agent_job, update_agent_job, get_agent_job,
     store_latest_result, get_latest_result
 )
+from agents.llm_usage import log_gemini_usage
 from agents.prompts.concall_prompts import (
     CONCALL_ANALYSIS_PROMPT, CONCALL_CHAT_PROMPT, build_concall_fetch_error,
     build_loaded_summary
@@ -164,6 +165,7 @@ def _gemini_transcribe(client, uploaded, media_label: str = 'audio') -> str:
                         thinking_level=TRANSCRIPTION_THINKING)
                 ),
             )
+            log_gemini_usage(response, model, 'concall.transcription', media=media_label)
             text = response.text if response.text else ''
             if text:
                 return text
@@ -613,6 +615,7 @@ def _resolve_requested_quarters(question, current_quarter, history, chat_history
             model=TIEBREAK_MODEL,
             contents=[types.Part.from_text(text=prompt)],
         )
+        log_gemini_usage(response, TIEBREAK_MODEL, 'concall.resolve_quarters')
         answer = (response.text or '').strip()
         if not answer or answer.upper().startswith('NONE'):
             return []
@@ -906,6 +909,7 @@ def _ask_model_who_and_when(window: str, company_name: str, ticker: str):
             model=TIEBREAK_MODEL,
             contents=[types.Part.from_text(text=prompt)],
         )
+        log_gemini_usage(response, TIEBREAK_MODEL, 'concall.verify_transcript', ticker=ticker)
         text = (response.text or '').strip()
         out = {}
         for line in text.splitlines():
@@ -1549,6 +1553,7 @@ def _search_youtube_concall(company_name: str, ticker: str, quarter: str = '') -
             model=TIEBREAK_MODEL,
             contents=[types.Part.from_text(text=gemini_prompt)],
         )
+        log_gemini_usage(response, TIEBREAK_MODEL, 'concall.youtube_pick', ticker=ticker)
 
         answer = (response.text.strip() if response.text else "").upper()
         print(f"CONCALL_AGENT: Gemini picked: '{answer}'", file=sys.stderr)
@@ -2842,7 +2847,8 @@ def register_concall_routes(app, call_gemini_api_fn, fetch_documents_fn, get_pdf
                 messages,
                 model=CHAT_MODEL,
                 temperature=1,
-                thinking_level=CHAT_THINKING
+                thinking_level=CHAT_THINKING,
+                usage_tag='concall.chat'
             )
 
             return jsonify({
@@ -3483,7 +3489,8 @@ def _run_concall_analysis(job_id, ticker, call_gemini_api_fn, fetch_documents_fn
             messages,
             model=ANALYSIS_MODEL,
             temperature=1,
-            thinking_level=ANALYSIS_THINKING
+            thinking_level=ANALYSIS_THINKING,
+            usage_tag='concall.analysis'
         )
 
         elapsed_total = int(time.time() - start_time)
@@ -3583,7 +3590,8 @@ def _run_concall_quarter_analysis(job_id, ticker, quarter, history,
 """
         analysis_result = call_gemini_api_fn(
             [{"role": "user", "content": analysis_prompt}],
-            model=ANALYSIS_MODEL, temperature=1, thinking_level=ANALYSIS_THINKING)
+            model=ANALYSIS_MODEL, temperature=1, thinking_level=ANALYSIS_THINKING,
+            usage_tag='concall.analysis_quarter')
 
         elapsed = int(time.time() - start_time)
         result_data = {
@@ -3695,7 +3703,8 @@ def _run_concall_url_analysis(job_id, ticker, url, results_quarter,
             messages,
             model=ANALYSIS_MODEL,
             temperature=1,
-            thinking_level=ANALYSIS_THINKING
+            thinking_level=ANALYSIS_THINKING,
+            usage_tag='concall.analysis_url'
         )
 
         elapsed_total = int(time.time() - start_time)

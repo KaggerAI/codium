@@ -1453,7 +1453,8 @@ Now, do your job as the Head Editor and output the finalized, publication-ready 
                 model="gemini-3.1-pro-preview",
                 temperature=1.0,
                 use_google_search=True,
-                thinking_level="HIGH"
+                thinking_level="HIGH",
+                usage_tag="blog.generate"
             )
             print(f"INFO: [Checker Phase] Editorial review complete.", file=sys.stderr)
             
@@ -1787,7 +1788,8 @@ Now, do your job as the Head Editor and output the finalized, publication-ready 
                 model="gemini-3.1-pro-preview",
                 temperature=1.0,
                 use_google_search=True,
-                thinking_level="HIGH"
+                thinking_level="HIGH",
+                usage_tag="blog.regenerate"
             )
             print(f"INFO: [Checker Phase] Editorial review complete.", file=sys.stderr)
             
@@ -3471,6 +3473,88 @@ def api_market_indices():
 
 
 # --- Parallel Per-Stock Data Gathering ---
+# Brief news is grounded with Google Search, which is billed separately from
+# tokens and was most of the Gemini bill. Two levers:
+#
+# MODEL: Gemini 3.x bills every search query the model runs ($14/1k after 5k
+# free per MONTH); 2.5 Flash bills once per grounded prompt with 1,500 free per
+# DAY (shared with 2.5 Flash-Lite). Past that allowance 2.5 costs $35/1k
+# prompts, about the same as 3.x at 2-3 queries a prompt — so the saving holds
+# only while grounded prompts stay under ~1,500/day. Check with
+# `python -m agents.llm_usage brief` (the grounded column).
+#
+# SHARING: news is about the stock, not the holder, so it is looked up once per
+# (ticker, brief type, day) and reused for every user who holds it.
+BRIEF_NEWS_MODEL = "gemini-2.5-flash"
+BRIEF_NEWS_TTL = {'pre': 9000, 'post': 43200}  # matches the on-demand brief TTLs
+BRIEF_NEWS_REDIS_PREFIX = "portfolio_brief_news:"
+LOCAL_BRIEF_NEWS_CACHE = {}
+_BRIEF_NEWS_LOCKS = {}
+_BRIEF_NEWS_LOCKS_GUARD = threading.Lock()
+
+
+def _get_brief_news(ticker, stock_name, brief_type):
+    """News summary for one stock, fetched at most once per type per day."""
+    today = datetime.now().strftime('%Y-%m-%d')
+    cache_key = f"{brief_type}:{ticker.upper()}:{today}"
+
+    # Per-key lock: a user can hold the same ticker in several lots, gathered
+    # in parallel, and two users can open briefs at once — only one fetches.
+    with _BRIEF_NEWS_LOCKS_GUARD:
+        if len(_BRIEF_NEWS_LOCKS) > 2000:
+            # Keys are per day; drop earlier days so a long-lived process doesn't accumulate them.
+            for d in (_BRIEF_NEWS_LOCKS, LOCAL_BRIEF_NEWS_CACHE):
+                for k in [k for k in d if not k.endswith(today)]:
+                    d.pop(k, None)
+        lock = _BRIEF_NEWS_LOCKS.setdefault(cache_key, threading.Lock())
+    with lock:
+        entry = LOCAL_BRIEF_NEWS_CACHE.get(cache_key)
+        if entry and time.time() < entry['expires']:
+            return entry['news']
+        if DIRECT_REDIS_CLIENT:
+            try:
+                raw = DIRECT_REDIS_CLIENT.get(f"{BRIEF_NEWS_REDIS_PREFIX}{cache_key}")
+                if raw:
+                    news = raw.decode('utf-8') if isinstance(raw, bytes) else str(raw)
+                    ttl = DIRECT_REDIS_CLIENT.ttl(f"{BRIEF_NEWS_REDIS_PREFIX}{cache_key}")
+                    LOCAL_BRIEF_NEWS_CACHE[cache_key] = {
+                        'news': news, 'expires': time.time() + max(int(ttl or 0), 0)}
+                    return news
+            except Exception as e:
+                print(f"WARN: Redis brief news read failed: {e}", file=sys.stderr)
+
+        if brief_type == 'post':
+            news_query = f"What are the latest major news, developments, analyst upgrades/downgrades, and corporate announcements about {stock_name} ({ticker}) Indian stock market in the last 24 hours? Be concise and factual. If there are no significant developments, just say 'No major news today.'"
+        else:
+            news_query = f"What happened with {stock_name} ({ticker}) since yesterday 3:30 PM IST? Cover any corporate announcements, global news impacting the stock, analyst upgrades/downgrades. Be concise. If nothing significant, say 'No overnight developments.'"
+
+        try:
+            news_result = call_gemini_api(
+                messages=[{"role": "user", "content": news_query}],
+                model=BRIEF_NEWS_MODEL,
+                temperature=0.3,
+                use_google_search=True,
+                thinking_level="MINIMAL",
+                usage_tag=f"brief.news.{brief_type}"
+            )
+        except Exception as e:
+            # Not cached: a failure should be retried by the next brief.
+            print(f"BRIEF: News fetch failed for {ticker}: {e}", file=sys.stderr)
+            return 'News fetch failed.'
+        if not news_result or not news_result.strip():
+            return 'No news available.'
+
+        news = news_result.strip()
+        ttl = BRIEF_NEWS_TTL.get(brief_type, 9000)
+        LOCAL_BRIEF_NEWS_CACHE[cache_key] = {'news': news, 'expires': time.time() + ttl}
+        if DIRECT_REDIS_CLIENT:
+            try:
+                DIRECT_REDIS_CLIENT.setex(f"{BRIEF_NEWS_REDIS_PREFIX}{cache_key}", ttl, news)
+            except Exception as e:
+                print(f"WARN: Redis brief news write failed: {e}", file=sys.stderr)
+        return news
+
+
 def _gather_stock_data_for_brief(holding, brief_type='post'):
     """
     Gather all data for a single stock. Designed to run in ThreadPoolExecutor.
@@ -3592,24 +3676,8 @@ def _gather_stock_data_for_brief(holding, brief_type='post'):
         result['rsi'] = None
         result['trend'] = 'N/A'
 
-    # --- News via Gemini Google Search ---
-    try:
-        if brief_type == 'post':
-            news_query = f"What are the latest major news, developments, analyst upgrades/downgrades, and corporate announcements about {stock_name} ({ticker}) Indian stock market in the last 24 hours? Be concise and factual. If there are no significant developments, just say 'No major news today.'"
-        else:
-            news_query = f"What happened with {stock_name} ({ticker}) since yesterday 3:30 PM IST? Cover any corporate announcements, global news impacting the stock, analyst upgrades/downgrades. Be concise. If nothing significant, say 'No overnight developments.'"
-
-        news_result = call_gemini_api(
-            messages=[{"role": "user", "content": news_query}],
-            model="gemini-3-flash-preview",
-            temperature=0.3,
-            use_google_search=True,
-            thinking_level="MINIMAL"
-        )
-        result['news'] = news_result.strip() if news_result else 'No news available.'
-    except Exception as e:
-        print(f"BRIEF: News fetch failed for {ticker}: {e}", file=sys.stderr)
-        result['news'] = 'News fetch failed.'
+    # --- News via Gemini Google Search (shared across users) ---
+    result['news'] = _get_brief_news(ticker, stock_name, brief_type)
 
     # --- Quarterly Results (post-market only) ---
     if brief_type == 'post':
@@ -3788,7 +3856,8 @@ RULES:
             messages=[{"role": "user", "content": system_prompt + "\n\n" + prompt_data}],
             model="gemini-3.5-flash-lite",
             temperature=0.6,
-            thinking_level="MINIMAL"
+            thinking_level="MINIMAL",
+            usage_tag="brief.synthesis.post"
         )
     except Exception as e:
         print(f"BRIEF: Post-market Gemini synthesis failed: {e}", file=sys.stderr)
@@ -3884,7 +3953,8 @@ RULES:
             messages=[{"role": "user", "content": system_prompt + "\n\n" + prompt_data}],
             model="gemini-3.5-flash-lite",
             temperature=0.5,
-            thinking_level="MINIMAL"
+            thinking_level="MINIMAL",
+            usage_tag="brief.synthesis.pre"
         )
     except Exception as e:
         print(f"BRIEF: Pre-market Gemini synthesis failed: {e}", file=sys.stderr)
@@ -5677,16 +5747,20 @@ def get_stock_research(ticker: str) -> str:
     return "\n\n".join(result_parts)
 
 
-def call_gemini_api(messages, model="gemini-3-flash-preview", temperature=1, use_google_search=False, thinking_level=None, tools=None):
+def call_gemini_api(messages, model="gemini-3-flash-preview", temperature=1, use_google_search=False, thinking_level=None, tools=None, usage_tag=None):
     """
     Call the Gemini API with optional thinking mode for deeper reasoning.
     Includes exponential backoff retries for 503/429 errors and model fallback.
+
+    usage_tag: label for token-usage logging (e.g. 'concall.analysis'); see
+    agents/llm_usage.py.
     """
     global genai_client
     if not genai_client:
         raise ValueError("Google Gemini API client is not initialized (check GOOGLE_API_KEY).")
-        
+
     from google.genai.errors import ServerError, APIError
+    from agents.llm_usage import log_gemini_usage
     import time
     
     models_to_try = [model]
@@ -5722,6 +5796,10 @@ def call_gemini_api(messages, model="gemini-3-flash-preview", temperature=1, use
                 if thinking_level and "gemini-3" in current_model:
                     config_args["thinking_config"] = types.ThinkingConfig(thinking_level=thinking_level)
                     print(f"DEBUG: Gemini thinking mode enabled for {current_model}: {thinking_level}", file=sys.stderr)
+                elif thinking_level == "MINIMAL" and "gemini-2.5-flash" in current_model:
+                    # 2.5 takes a token budget, not a level, and thinks by
+                    # default when given neither; 0 switches thinking off.
+                    config_args["thinking_config"] = types.ThinkingConfig(thinking_budget=0)
 
                 gen_config = types.GenerateContentConfig(**config_args)
                 
@@ -5736,7 +5814,8 @@ def call_gemini_api(messages, model="gemini-3-flash-preview", temperature=1, use
                     contents=gemini_contents,
                     config=gen_config
                 )
-                
+                log_gemini_usage(response, current_model, usage_tag or 'untagged')
+
                 # Handle possible tool calls
                 if hasattr(response, 'function_calls') and response.function_calls:
                     print(f"INFO: Gemini initiated {len(response.function_calls)} function call(s).", file=sys.stderr)
@@ -5766,6 +5845,7 @@ def call_gemini_api(messages, model="gemini-3-flash-preview", temperature=1, use
                             contents=gemini_contents,
                             config=gen_config
                         )
+                        log_gemini_usage(second_response, current_model, usage_tag or 'untagged')
                         return second_response.text
 
                 return response.text
