@@ -12866,7 +12866,7 @@ register_live_concall_routes(app, socketio, call_gemini_api)
 
 # Register Forensic Agent routes
 from agents.forensic_agent import register_forensic_routes
-register_forensic_routes(app, call_gemini_api, call_perplexity_api, get_any_cache, fetch_forensic_documents_async, get_analysis_for_ticker)
+register_forensic_routes(app, call_gemini_api, call_perplexity_api, get_any_cache, fetch_forensic_documents_async, extract_key_metrics_from_fundamentals)
 
 # Register Analyst Report Agent routes
 from agents.analyst_agent import register_analyst_routes
@@ -13076,10 +13076,10 @@ def _warm_financials_via_analyze(ticker):
         if cached.get('light_cache'):
             return False, "analyze produced a light cache (charts would rebuild on open)"
 
-        # The full analyze path doesn't populate the local cache, but the
-        # Forensic step reads its base data through get_any_cache. Seed it so
-        # forensic never falls back to its synchronous 40-60s rebuild. Only when
-        # empty, so a richer existing entry is never downgraded.
+        # The full analyze path doesn't populate the local cache, but
+        # get_any_cache readers (e.g. Forensic's backup when Screener is
+        # unreachable) look there. Seed it - only when empty, so a richer
+        # existing entry is never downgraded.
         try:
             if not get_local_cache(ticker.upper().strip()):
                 set_local_cache(ticker.upper().strip(), cached)

@@ -97,12 +97,6 @@ Your role is to answer the investor's follow-up questions about the forensic fin
 - If asked for an opinion, ground it in evidence from the data
 """
 
-FORENSIC_NO_DATA_MSG = """I could not run the forensic analysis because no financial data is available for this ticker.
-
-This could be because:
-1. The stock hasn't been analyzed yet on the Company Research page
-2. The ticker may be invalid or not listed on NSE/BSE
-3. There may be a temporary data fetching issue
-
-**Please search for this stock on the Company Research page first**, then return here to run the forensic scan.
-"""
+FORENSIC_NO_DATA_MSG = ("Could not fetch financial statements for this ticker. It may be invalid or "
+                        "not listed on NSE/BSE, or the data source may be temporarily unreachable - "
+                        "please try again shortly.")

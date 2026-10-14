@@ -59,6 +59,28 @@ def _safe_float(val, default=None):
         return default
 
 
+def _record_label(row):
+    """Row label of a Screener record. reset_index() puts a RangeIndex 'index'
+    column first, so the label lives under the '' key, not the first value."""
+    if '' in row:
+        return row['']
+    return next(iter(row.values()), "")
+
+
+def _is_blank(val):
+    """None, '' or NaN - an empty Screener cell."""
+    if val is None or val == '':
+        return True
+    return isinstance(val, float) and math.isnan(val)
+
+
+def _record_period_keys(row):
+    """Period columns of a Screener record, oldest first (label/index excluded)."""
+    if '' in row:
+        return [k for k in row.keys() if k not in ('', 'index')]
+    return list(row.keys())[1:]
+
+
 def _get_table_values(fundamentals, table_name, row_name, num_years=3):
     """
     Extract values for a specific row from a fundamentals table.
@@ -91,17 +113,15 @@ def _get_table_values(fundamentals, table_name, row_name, num_years=3):
         except Exception:
             return []
 
-    # Handle list of records (records format: [{'': 'RowName', '2021': 10, '2022': 20}, ...])
+    # Handle list of records (records format: [{'index': 0, '': 'RowName', 'Mar 2024': 10, ...}, ...])
     if isinstance(table, list):
         for row in table:
             if not isinstance(row, dict):
                 continue
-            # The first value in the dict is usually the row name (index column)
-            row_label = next(iter(row.values()), "")
+            row_label = _record_label(row)
             if row_name.lower() in str(row_label).lower():
-                # Extract values from the row, skipping the label (first column)
-                val_keys = list(row.keys())[1:]
-                values = [row[k] for k in val_keys if row[k] is not None]
+                # Blank cells (e.g. a NaN TTM column) are missing, not latest
+                values = [row[k] for k in _record_period_keys(row) if not _is_blank(row[k])]
                 recent = values[-num_years:] if len(values) >= num_years else values
                 return [_safe_float(v) for v in reversed(recent)]
 
@@ -330,6 +350,8 @@ def _compute_debt_ratio(fundamentals):
     try:
         borrowings = _get_table_values(fundamentals, 'Balance Sheet', 'Borrowings', 1)
         equity_cap = _get_table_values(fundamentals, 'Balance Sheet', 'Share Capital', 1)
+        if not equity_cap:
+            equity_cap = _get_table_values(fundamentals, 'Balance Sheet', 'Equity Capital', 1)
         reserves = _get_table_values(fundamentals, 'Balance Sheet', 'Reserves', 1)
         
         if borrowings:
@@ -665,6 +687,14 @@ def _get_shareholding_row(shareholding, row_name):
         except Exception:
             pass
     
+    # Handle list of records (Screener format) - all quarters, most recent first
+    if isinstance(shareholding, list):
+        for row in shareholding:
+            if isinstance(row, dict) and row_name.lower() in str(_record_label(row)).lower():
+                vals = [row[k] for k in _record_period_keys(row)]
+                return [_safe_float(v) for v in reversed(vals) if _safe_float(v) is not None]
+        return []
+
     # Handle dict format
     if isinstance(shareholding, dict):
         for key, values in shareholding.items():
@@ -679,22 +709,206 @@ def _get_shareholding_row(shareholding, row_name):
 
 
 # =====================================================================
+# BASE DATA (financial statements) — fetched directly, cache as backup
+# =====================================================================
+
+# Set by register_forensic_routes, so the watchlist warmer's direct call into
+# _run_forensic_analysis resolves base data exactly the way the route does.
+_BASE_DATA_DEPS = {'get_cache_fn': None, 'extract_key_metrics_fn': None}
+
+# Without these two there is nothing to audit (M-Score, Z-Score, most signals).
+_REQUIRED_TABLES = ('Balance Sheet', 'Annual Results')
+
+
+def _tables_to_records(tables):
+    """Screener DataFrames -> list-of-records, identical to the AI-context
+    format get_analysis_for_ticker_async caches (handler.py fund_data_for_ai_context)."""
+    records = {}
+    for table_name, df in (tables or {}).items():
+        rows = []
+        for row_dict in df.reset_index().to_dict(orient='records'):
+            rows.append({(str(k).strip() if isinstance(k, str) else k): (str(v).strip() if isinstance(v, str) else v)
+                         for k, v in row_dict.items()})
+        records[table_name] = rows
+    return records
+
+
+def _split_json_to_records(table_json):
+    """Convert a frontend-cache table (df.reset_index().T.to_json(orient='split'))
+    back to list-of-records. Parsed by hand so period labels like 'Mar 2024' are
+    never coerced to dates."""
+    obj = json.loads(table_json)
+    columns = obj.get('index') or []   # original column names ('index', '', 'Mar 2024', ...)
+    data = obj.get('data') or []       # data[i][j] = value of column i for row j
+    if not columns or len(data) != len(columns):
+        return []
+    n_rows = len(data[0]) if data else 0
+    rows = []
+    for j in range(n_rows):
+        rows.append({str(columns[i]).strip(): (data[i][j].strip() if isinstance(data[i][j], str) else data[i][j])
+                     for i in range(len(columns))})
+    return rows
+
+
+def _has_required_tables(fundamentals):
+    if not isinstance(fundamentals, dict):
+        return False
+    for name in _REQUIRED_TABLES:
+        table = fundamentals.get(name)
+        if not isinstance(table, list) or not table or not isinstance(table[0], dict):
+            return False
+    return True
+
+
+def _normalize_base_data(cached_data):
+    """Return a copy of a cached stock payload whose fundamentals are in
+    list-of-records format, or None if it has nothing the agent can audit.
+
+    The local cache holds records already; the Redis stock_analysis_* payload
+    (and anything seeded from it) holds split-JSON strings, which every
+    forensic parser silently reads as empty.
+    """
+    if not isinstance(cached_data, dict):
+        return None
+    fundamentals = cached_data.get('fundamentals')
+    if isinstance(fundamentals, str):
+        try:
+            fundamentals = json.loads(fundamentals)
+        except json.JSONDecodeError:
+            return None
+    if not isinstance(fundamentals, dict):
+        return None
+
+    normalized = {}
+    for table_name, table in fundamentals.items():
+        if isinstance(table, str):
+            try:
+                table = _split_json_to_records(table)
+            except (json.JSONDecodeError, TypeError, AttributeError, IndexError):
+                continue
+        normalized[table_name] = table
+
+    if not _has_required_tables(normalized):
+        return None
+    data = dict(cached_data)
+    data['fundamentals'] = normalized
+    return data
+
+
+async def fetch_forensic_base_data_async(ticker):
+    """
+    Fetch only what the Forensic Agent audits: Screener's financial statements,
+    top ratios (market cap etc.), consolidation status and company name.
+
+    Deliberately independent of the Company Research pipeline — no price feed,
+    charts, peers, valuations or AI summaries — so none of those can fail it.
+    Raises ValueError when Screener returns no usable statements.
+    """
+    from fetchers.screener_fetcher import fetch_consolidated_async
+
+    tables, _description, top_ratios, is_consolidated, html = await fetch_consolidated_async(ticker, return_html=True)
+    fundamentals = _tables_to_records(tables)
+    if not _has_required_tables(fundamentals):
+        raise ValueError(f"Screener returned no financial statements for {ticker}")
+
+    company_name = None
+    if html:
+        try:
+            from bs4 import BeautifulSoup
+            h1 = BeautifulSoup(html, 'html.parser').find('h1')
+            company_name = h1.get_text(strip=True) if h1 else None
+        except Exception as e:
+            print(f"FORENSIC_AGENT: Company name parse failed for {ticker}: {e}", file=sys.stderr)
+    if not company_name:
+        company_name = await _yfinance_company_name(ticker)
+
+    extract_key_metrics_fn = _BASE_DATA_DEPS.get('extract_key_metrics_fn')
+    key_metrics = {}
+    if extract_key_metrics_fn:
+        try:
+            key_metrics = extract_key_metrics_fn(fundamentals, top_ratios=top_ratios) or {}
+        except Exception as e:
+            print(f"FORENSIC_AGENT: Key metrics extraction failed for {ticker}: {e}", file=sys.stderr)
+    if not key_metrics.get('market_cap') and top_ratios.get('Market Cap'):
+        key_metrics['market_cap'] = top_ratios['Market Cap']
+
+    return {
+        'ticker': ticker,
+        'company_name': company_name or ticker,
+        'fundamentals': fundamentals,
+        'key_metrics': key_metrics,
+        'is_consolidated': is_consolidated,
+    }
+
+
+async def _yfinance_company_name(ticker):
+    """Best-effort company name; never fails the run."""
+    def _lookup():
+        import yfinance as yf
+        for suffix in ('.NS', '.BO'):
+            info = yf.Ticker(f"{ticker}{suffix}").info or {}
+            name = (info.get('longName') or info.get('shortName') or '').strip()
+            if name:
+                return name
+        return None
+    try:
+        return await asyncio.wait_for(asyncio.to_thread(_lookup), timeout=15)
+    except Exception as e:
+        print(f"FORENSIC_AGENT: yfinance name lookup failed for {ticker}: {e}", file=sys.stderr)
+        return None
+
+
+def _resolve_base_data(ticker):
+    """
+    Return (base_data, source) where source is 'live' or 'cache'.
+
+    Live Screener fetch first, so the audit always covers the latest filing.
+    The shared stock cache is only a backup for when Screener is unreachable,
+    and is read-only here: a forensic-only payload must never overwrite the
+    richer one Company Research and the chatbot rely on.
+    """
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        return loop.run_until_complete(fetch_forensic_base_data_async(ticker)), 'live'
+    except Exception as e:
+        live_err = e
+        print(f"FORENSIC_AGENT: Live base data fetch failed for {ticker}: {e}", file=sys.stderr)
+    finally:
+        loop.close()
+
+    get_cache_fn = _BASE_DATA_DEPS.get('get_cache_fn')
+    if get_cache_fn:
+        try:
+            cached = _normalize_base_data(get_cache_fn(ticker))
+            if cached:
+                print(f"FORENSIC_AGENT: Using cached financial statements for {ticker}", file=sys.stderr)
+                return cached, 'cache'
+        except Exception as e:
+            print(f"FORENSIC_AGENT: Cache lookup failed for {ticker}: {e}", file=sys.stderr)
+
+    raise ValueError(f"{FORENSIC_NO_DATA_MSG} (Reason: {live_err})")
+
+
+# =====================================================================
 # ROUTE REGISTRATION
 # =====================================================================
 
 def register_forensic_routes(app, call_gemini_api_fn, call_perplexity_api_fn,
-                              get_cache_fn, fetch_forensic_docs_fn, get_full_analysis_fn=None):
+                              get_cache_fn, fetch_forensic_docs_fn, extract_key_metrics_fn=None):
     """
     Register all Forensic Agent API routes with the Flask app.
-    
+
     Args:
         app: Flask app instance
         call_gemini_api_fn: Reference to call_gemini_api from handler.py
         call_perplexity_api_fn: Reference to call_perplexity_api from handler.py
-        get_cache_fn: Reference to get_any_cache from handler.py (checks local + Redis)
+        get_cache_fn: Reference to get_any_cache from handler.py (backup when Screener is unreachable)
         fetch_forensic_docs_fn: Reference to fetch_forensic_documents_async from screener_fetcher
-        get_full_analysis_fn: Reference to get_analysis_for_ticker from handler.py (for fallback)
+        extract_key_metrics_fn: Reference to extract_key_metrics_from_fundamentals from handler.py
     """
+    _BASE_DATA_DEPS['get_cache_fn'] = get_cache_fn
+    _BASE_DATA_DEPS['extract_key_metrics_fn'] = extract_key_metrics_fn
 
     @app.route('/agent/forensic/analyze', methods=['POST'])
     def agent_forensic_analyze():
@@ -725,87 +939,15 @@ def register_forensic_routes(app, call_gemini_api_fn, call_perplexity_api_fn,
                         'age_minutes': round(age_minutes)
                     })
 
-            # Check that we have base data to work with (checks Local + Redis)
-            cached_data = get_cache_fn(ticker)
-            
-            # --- QUARTERLY FRESHNESS CHECK ---
-            # If cache exists, verify it has the latest quarterly results.
-            # If stale, invalidate cache to trigger the full analysis fallback below.
-            if cached_data and get_full_analysis_fn:
-                try:
-                    from fetchers.screener_fetcher import fetch_latest_quarter_header_async
-                    cached_fund = cached_data.get('fundamentals', {})
-                    cached_is_consolidated = cached_data.get('is_consolidated', False)
-                    
-                    # Extract latest quarter from cached data
-                    q_results_json = cached_fund.get('Quarterly Results')
-                    if q_results_json:
-                        if isinstance(q_results_json, str):
-                            q_data = json.loads(q_results_json)
-                            q_headers = [str(h).strip() for h in q_data.get('index', []) if h and str(h).strip()]
-                        elif isinstance(q_results_json, list):
-                            # Records format — extract column headers
-                            if q_results_json:
-                                q_headers = [str(k).strip() for k in q_results_json[0].keys() if k and str(k).strip()]
-                                q_headers = q_headers[1:]  # Skip label column
-                        else:
-                            q_headers = []
-                        
-                        if q_headers:
-                            cached_latest_q = q_headers[-1]
-                            live_latest_q = asyncio.run(fetch_latest_quarter_header_async(ticker, consolidated=cached_is_consolidated))
-                            
-                            print(f"FORENSIC_AGENT: Quarter check for {ticker}: Cached='{cached_latest_q}' vs Live='{live_latest_q}' (Consolidated={cached_is_consolidated})", file=sys.stderr)
-                            
-                            if live_latest_q and live_latest_q != cached_latest_q:
-                                print(f"FORENSIC_AGENT: STALE DATA — new quarter {live_latest_q} detected. Invalidating cache for {ticker}.", file=sys.stderr)
-                                cached_data = None  # Trigger full analysis fallback
-                            else:
-                                print(f"FORENSIC_AGENT: Cache is fresh for {ticker} (latest: {cached_latest_q}).", file=sys.stderr)
-                except Exception as qcheck_err:
-                    print(f"FORENSIC_AGENT: Quarter check failed for {ticker} (using cached data): {qcheck_err}", file=sys.stderr)
-            
-            # --- NEW: FALLBACK TO FULL ANALYSIS IF NO CACHE FOUND ---
-            if not cached_data and get_full_analysis_fn:
-                print(f"FORENSIC_AGENT: No cached data found for {ticker}. Running full analysis fallback...", file=sys.stderr)
-                try:
-                    # Run full analysis synchronously (this might take 40-60s)
-                    # We do this here because the background pipeline needs the data
-                    # --- MODIFIED: Skip AI Summary for Forensic Agent to save cost/time ---
-                    fallback_result, cached_data = get_full_analysis_fn(ticker, skip_ai_summary=True)
-
-                    # get_analysis_for_ticker returns ({'error': ...}, 500) when a critical
-                    # fetch fails, so cached_data is an HTTP status code, not a dict.
-                    if not isinstance(cached_data, dict) or not cached_data:
-                        reason = fallback_result.get('error', '') if isinstance(fallback_result, dict) else ''
-                        print(f"FORENSIC_AGENT: Full analysis fallback failed for {ticker}: {reason or 'no data returned'}", file=sys.stderr)
-                        return jsonify({
-                            'error': 'no_base_data',
-                            'message': f"{FORENSIC_NO_DATA_MSG} (Reason: {reason})" if reason else FORENSIC_NO_DATA_MSG
-                        }), 400
-                    
-                    print(f"FORENSIC_AGENT: Full analysis fallback successful for {ticker}", file=sys.stderr)
-                except Exception as fe:
-                    print(f"FORENSIC_AGENT ERROR during fallback for {ticker}: {fe}", file=sys.stderr)
-                    return jsonify({
-                        'error': 'fallback_failed',
-                        'message': f"Could not pull financial data for {ticker}. Error: {str(fe)}"
-                    }), 500
-
-            if not isinstance(cached_data, dict) or not cached_data:
-                print(f"FORENSIC_AGENT: No usable base data for {ticker} (type={type(cached_data).__name__})", file=sys.stderr)
-                return jsonify({
-                    'error': 'no_base_data',
-                    'message': FORENSIC_NO_DATA_MSG
-                }), 400
-
-            # Create background job
+            # Create background job. Financial statements are fetched inside the
+            # job (live from Screener, cache as backup), so no prior Company
+            # Research run or cache is needed and this request returns at once.
             job_id = create_agent_job('forensic', ticker)
 
             # Start background analysis thread
             thread = threading.Thread(
                 target=_run_forensic_analysis,
-                args=(job_id, ticker, cached_data, call_gemini_api_fn,
+                args=(job_id, ticker, None, call_gemini_api_fn,
                       call_perplexity_api_fn, fetch_forensic_docs_fn)
             )
             thread.daemon = True
@@ -928,7 +1070,7 @@ def _run_forensic_analysis(job_id, ticker, cached_data, call_gemini_api_fn,
                             call_perplexity_api_fn, fetch_forensic_docs_fn):
     """
     Background function that runs the full Forensic Agent analysis pipeline:
-    1. Read cached financial data
+    1. Load financial statements (cached_data if given, else live fetch / cache backup)
     2. Fetch fresh data in parallel (news, analyst recs, credit ratings, annual report)
     3. Compute quantitative scores (M-Score, Z-Score, signals)
     4. Send everything to Gemini for structured analysis
@@ -938,16 +1080,18 @@ def _run_forensic_analysis(job_id, ticker, cached_data, call_gemini_api_fn,
 
     try:
         # =====================================================
-        # STEP 1: Extract data from cache
+        # STEP 1: Load financial statements
         # =====================================================
-        update_agent_job(job_id, {'progress': f'Reading cached financial data for {ticker}...'})
-        print(f"FORENSIC_AGENT: Step 1 — Reading cached data for {ticker}", file=sys.stderr)
+        update_agent_job(job_id, {'progress': 'Fetching financial statements...'})
+        print(f"FORENSIC_AGENT: Step 1 - Loading financial statements for {ticker}", file=sys.stderr)
 
-        if not isinstance(cached_data, dict):
-            raise ValueError(
-                f"Base financial data for {ticker} is unavailable "
-                f"(got {type(cached_data).__name__} instead of a data dict)."
-            )
+        if cached_data is None:
+            cached_data, base_source = _resolve_base_data(ticker)
+        else:
+            base_source = 'cache'
+            cached_data = _normalize_base_data(cached_data)
+            if cached_data is None:
+                raise ValueError(FORENSIC_NO_DATA_MSG)
 
         fundamentals = cached_data.get('fundamentals', {})
         key_metrics = cached_data.get('key_metrics', {})
@@ -961,7 +1105,7 @@ def _run_forensic_analysis(job_id, ticker, cached_data, call_gemini_api_fn,
                 fundamentals = {}
 
         elapsed_step1 = int(time.time() - start_time)
-        print(f"FORENSIC_AGENT: Step 1 complete — Cached data loaded in {elapsed_step1}s", file=sys.stderr)
+        print(f"FORENSIC_AGENT: Step 1 complete - Financial statements ({base_source}) loaded in {elapsed_step1}s", file=sys.stderr)
 
         # =====================================================
         # STEP 2: Fetch fresh data in parallel (async)
@@ -1051,7 +1195,8 @@ def _run_forensic_analysis(job_id, ticker, cached_data, call_gemini_api_fn,
                 'negative_news': negative_news[:2000] if negative_news else None,
                 'credit_ratings_count': len(forensic_docs.get('credit_ratings', [])),
                 'has_annual_report': forensic_docs.get('annual_report') is not None,
-                'sebi_filings_len': len(sebi_filings) if sebi_filings else 0
+                'sebi_filings_len': len(sebi_filings) if sebi_filings else 0,
+                'financials_source': base_source
             },
             'analyzed_at': time.time(),
             'analysis_time_seconds': elapsed_step4
@@ -1185,6 +1330,19 @@ Be factual and cite sources."""
     return analyst_recs, negative_news, forensic_docs, sebi_filings
 
 
+def _records_to_text(rows):
+    """Render a list-of-records table as compact pipe-separated rows."""
+    rows = [r for r in rows if isinstance(r, dict)]
+    if not rows:
+        return "No data"
+    periods = _record_period_keys(rows[0])
+    lines = [" | ".join(["Metric"] + [str(p) for p in periods])]
+    for row in rows:
+        values = ["" if _is_blank(row.get(p)) else str(row.get(p)) for p in periods]
+        lines.append(" | ".join([str(_record_label(row))] + values))
+    return "\n".join(lines)
+
+
 def _build_gemini_context(ticker, company_name, fundamentals, key_metrics,
                            mscore, zscore, signals, analyst_recs, negative_news, forensic_docs, sebi_filings):
     """Build the comprehensive data context string for the Gemini prompt."""
@@ -1213,7 +1371,7 @@ def _build_gemini_context(ticker, company_name, fundamentals, key_metrics,
             sections.append(f"- {k}: {v}")
     
     # --- Financial Statements Summary ---
-    sections.append("\n### FINANCIAL STATEMENTS (from cache)")
+    sections.append("\n### FINANCIAL STATEMENTS")
     if fundamentals:
         for table_name in ['Annual Results', 'Profit & Loss', 'Balance Sheet', 'Cash Flow', 
                           'Financial Ratios', 'Quarterly Results', 'Quarterly Shareholding Pattern',
@@ -1226,6 +1384,8 @@ def _build_gemini_context(ticker, company_name, fundamentals, key_metrics,
                         # DataFrame — convert to string (limit size)
                         table_str = table.to_string()
                         sections.append(table_str[:5000])
+                    elif isinstance(table, list):
+                        sections.append(_records_to_text(table)[:5000])
                     elif isinstance(table, dict):
                         sections.append(json.dumps(table, indent=2, default=str)[:5000])
                     elif isinstance(table, str):

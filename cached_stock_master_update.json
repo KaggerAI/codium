@@ -1,141 +1,58 @@
 {
   "success": true,
-  "ran_at": "2026-10-03 19:02:40 IST",
+  "ran_at": "2026-10-14 13:02:20 IST",
   "dry_run": false,
-  "sitemap_entries": 5921,
-  "rows_before": 6026,
-  "rows_after": 6096,
-  "added": 70,
+  "sitemap_entries": 5941,
+  "rows_before": 6096,
+  "rows_after": 6112,
+  "added": 16,
   "added_tickers": [
-    "MAGANTR",
-    "HARIGOV",
-    "JIYAECO",
-    "NAVIGANT",
-    "FRANKLIN",
-    "ZSWASTSA",
-    "VIKSHEN",
-    "526331",
-    "522150",
-    "JAKHARIA",
-    "INTERISE",
-    "890188",
-    "544907",
-    "HEROMOTORS",
-    "16130032",
-    "17023929",
-    "KHERIAAUTO",
-    "SPECTRAA",
-    "10760043",
-    "AONESTEELS",
-    "17080279",
-    "17180153",
-    "12542145",
-    "16020210",
-    "VARMORA",
-    "ARMEE",
-    "15570008",
-    "16692008",
-    "12160036",
-    "ADROITIND",
-    "SWASTIKAIN",
-    "POOJALOGIS",
-    "ELEVATE",
-    "11290726",
-    "MONEYVIEW",
-    "15620068",
-    "COREIN",
-    "JAYKAYPP",
-    "GSPLTRANS",
-    "15131355",
-    "GREENASIA",
-    "BMISL",
-    "HIMALAYAN",
-    "10780065",
-    "RUNWALENTR",
-    "ORIENTCABL",
-    "GERMAN",
-    "16620838",
-    "ACEVECTOR",
-    "11290727",
-    "12070209",
-    "12190061",
-    "SRIT",
-    "13193326",
-    "SHAHINVEST",
-    "14095856",
-    "17210210",
-    "PAPADMALJI",
-    "13193305",
-    "15150303",
-    "16050103",
-    "13110377",
-    "13510412",
-    "NITYAS",
-    "16491150",
-    "EVENTIONS",
-    "17400002",
-    "VNL",
-    "10780066",
-    "1218"
+    "PRISMFN",
+    "SIENERGY",
+    "GRADIENTE",
+    "ZNEWSAGA",
+    "DHARTI",
+    "541196",
+    "TRIVENIPT",
+    "HDFIRE",
+    "LOANFRONT",
+    "RAVITA",
+    "FUSIONCX",
+    "11290731",
+    "BONFIG",
+    "TONBO",
+    "SMT",
+    "17156915"
   ],
-  "updated": 14,
+  "updated": 7,
   "updates": [
     {
-      "trendlyne_id": "535",
-      "Ticker": "HEG -> HEGAM",
-      "Stock Name": "Heg Ltd -> Heg Advanced Materials Ltd"
+      "trendlyne_id": "4714",
+      "Stock Name": "Icici Prudential Life Insurance Company Ltd -> Icici Life Insurance Ltd"
     },
     {
-      "trendlyne_id": "3370",
-      "Stock Name": "Lykis Ltd -> Krowniq Ltd"
+      "trendlyne_id": "212",
+      "Stock Name": "Bodhtree Consulting Ltd -> Datakosa Ltd"
     },
     {
-      "trendlyne_id": "4454",
-      "Stock Name": "Sarda Proteins Ltd -> Fresita Proteins Ltd"
+      "trendlyne_id": "2595",
+      "Stock Name": "Manbro Industries Ltd -> Kd Green Industries Ltd"
     },
     {
-      "trendlyne_id": "82620",
-      "Stock Name": "Shentracon Chemicals Ltd -> Midaas Fashions Ltd"
+      "trendlyne_id": "2618",
+      "Ticker": "SYNTHFO -> BELDING"
     },
     {
-      "trendlyne_id": "87737",
-      "Ticker": "SANGINITA -> AGASTYAEN"
+      "trendlyne_id": "82681",
+      "Stock Name": "Grand Foundry Ltd -> Tikona Communication Ltd"
     },
     {
-      "trendlyne_id": "87880",
-      "Ticker": "SILLYMONKS -> CRESTO"
+      "trendlyne_id": "133757",
+      "Ticker": "542579 -> AGOL"
     },
     {
-      "trendlyne_id": "61514",
-      "Stock Name": "Rotographics India Ltd -> Novalum Materials Ltd"
-    },
-    {
-      "trendlyne_id": "2160196",
-      "Stock Name": "Naman In Store India Ltd -> Naman Industries Proxima Ltd"
-    },
-    {
-      "trendlyne_id": "2946",
-      "Stock Name": "Sharp India Ltd -> Smaart Tech Services Ltd"
-    },
-    {
-      "trendlyne_id": "1050",
-      "Stock Name": "Pritish Nandy Communications Ltd -> Pnc Media And Entertainment Ltd"
-    },
-    {
-      "trendlyne_id": "3659257",
-      "Ticker": "15510876 -> JSIPL"
-    },
-    {
-      "trendlyne_id": "3659962",
-      "Ticker": "10740015 -> SSRETAIL"
-    },
-    {
-      "trendlyne_id": "3659965",
-      "Ticker": "13521358 -> AXIOMGAS"
-    },
-    {
-      "trendlyne_id": "3659966",
-      "Ticker": "16070399 -> SONA"
+      "trendlyne_id": "3684136",
+      "Ticker": "10780066 -> RKFAL"
     }
   ],
   "ambiguous": [
@@ -231,6 +148,13 @@
       "sitemap_name": "Rnit Ai Solutions Ltd"
     },
     {
+      "trendlyne_id": "87738",
+      "ticker": "DRL",
+      "name": "Dhanuka Realty Ltd",
+      "sitemap_ticker": "DIRL",
+      "sitemap_name": "Dhanuka Infra Realty Ltd"
+    },
+    {
       "trendlyne_id": "113089",
       "ticker": "542057",
       "name": "Bcpl Railway Infrastructure Ltd",
@@ -303,5 +227,5 @@
   ],
   "conflicts": [],
   "error": null,
-  "duration_seconds": 0.5
+  "duration_seconds": 0.9
 }

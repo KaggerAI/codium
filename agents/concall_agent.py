@@ -2527,6 +2527,14 @@ async def _transcribe_audio_video_from_url(url: str, media_type: str = 'audio',
         print("CONCALL_AGENT: GOOGLE_API_KEY not set, cannot transcribe audio/video", file=sys.stderr)
         return ''
 
+    # A YouTube watch URL is a web page, not a media file: downloading it yields
+    # ~1 MB of HTML that Gemini rejects with 400 INVALID_ARGUMENT after a wasted
+    # upload. YouTube audio is only reachable through _extract_youtube_transcript.
+    if _get_url_type(url) == 'youtube':
+        print(f"CONCALL_AGENT: {url} is a YouTube page, not a media file - "
+              f"skipping direct download", file=sys.stderr)
+        return ''
+
     import shutil as _shutil
     import tempfile as _tempfile
 
@@ -2583,13 +2591,21 @@ async def _transcribe_audio_video_from_url(url: str, media_type: str = 'audio',
                         with open(dest, 'wb') as fh:
                             fh.write(r.content)
                         return True
+                    print(f"CONCALL_AGENT: curl_cffi {'proxy' if use_proxy else 'direct'} "
+                          f"audio download got HTTP {r.status_code}", file=sys.stderr)
                     return False
 
                 # Attempt 1: Direct (no proxy)
                 ok = await asyncio.to_thread(_cffi_audio_download, url, src_path, False)
                 if not ok:
-                    # Attempt 2: With proxy
-                    ok = await asyncio.to_thread(_cffi_audio_download, url, src_path, True)
+                    # Attempt 2: With proxy. A 407 here means the proxy rejected
+                    # RESIDENTIAL_PROXY_URL's credentials, not that the file is gone.
+                    try:
+                        ok = await asyncio.to_thread(_cffi_audio_download, url, src_path, True)
+                    except Exception as proxy_err:
+                        print(f"CONCALL_AGENT: curl_cffi proxy audio download failed: {proxy_err}",
+                              file=sys.stderr)
+                        ok = False
                 if ok:
                     print(f"CONCALL_AGENT: ✓ curl_cffi audio download succeeded ({_downloaded_bytes()} bytes)", file=sys.stderr)
             except Exception as cffi_err:
@@ -2597,6 +2613,15 @@ async def _transcribe_audio_video_from_url(url: str, media_type: str = 'audio',
 
         if _downloaded_bytes() <= 0:
             print(f"CONCALL_AGENT: ❌ All audio download methods failed for {url}", file=sys.stderr)
+            return ''
+
+        # A block page, login wall or player page served with 200 is HTML, not
+        # media; uploading it as audio only earns a 400 from Gemini.
+        with open(src_path, 'rb') as fh:
+            head = fh.read(512).lstrip().lower()
+        if head.startswith((b'<!doctype', b'<html', b'<?xml', b'<head', b'<body')):
+            print(f"CONCALL_AGENT: ❌ {url} returned an HTML page, not {media_type} - "
+                  f"not uploading", file=sys.stderr)
             return ''
 
         file_size_mb = _downloaded_bytes() / (1024 * 1024)

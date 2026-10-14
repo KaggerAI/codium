@@ -38,15 +38,15 @@ import asyncio
 from datetime import datetime, timedelta
 
 # -- Agents, in warm order --------------------------------------------------
-# financials first: forensic reads the base data it produces, so ordering this
-# way keeps forensic off its synchronous 40-60s fallback path.
+# financials first so the Company Research cache is warm earliest.
 # concall last: slowest and flakiest, so a failure there cannot block the rest.
 WARM_AGENTS = ("financials", "forensic", "analyst", "concall")
 
-# Forensic audits the financial statements the financials step caches, so it must
-# never run before that succeeded. Enforced in warm_one(), not just implied by
-# the order above -- a panel refresh or a gap-fill can request forensic alone.
-AGENT_DEPENDS_ON = {"forensic": "financials"}
+# agent -> agent whose data it needs first; enforced in warm_one() and
+# warm_ticker(). Forensic used to need financials, but now fetches its own
+# financial statements, so a failed financials warm (e.g. a cold price feed)
+# no longer takes forensic down with it.
+AGENT_DEPENDS_ON = {}
 
 # -- Tunables --------------------------------------------------------------
 WARM_CYCLE_TIMES_IST = ("23:00", "15:00")  # quarter probe + concall sweep
@@ -419,8 +419,7 @@ def _cached_is_consolidated(ticker):
 def probe_latest_quarter(ticker):
     """Live Screener latest-quarter header, or '' when the fetch failed.
 
-    '' means 'unknown', never 'new quarter' - same guard the Forensic Agent
-    uses (agents/forensic_agent.py:760). Callers must not invalidate on ''.
+    '' means 'unknown', never 'new quarter'. Callers must not invalidate on ''.
     """
     try:
         from fetchers.screener_fetcher import fetch_latest_quarter_header_async
@@ -534,28 +533,17 @@ def _warm_financials(ticker, job_id):
 
 
 def _warm_forensic(ticker, job_id):
-    get_cache = _dep("get_any_cache_fn")
     gemini = _dep("call_gemini_api_fn")
     perplexity = _dep("call_perplexity_api_fn")
     docs = _dep("fetch_forensic_documents_async_fn")
-    if not all([get_cache, gemini, perplexity, docs]):
+    if not all([gemini, perplexity, docs]):
         return "failed", "forensic dependencies not configured"
 
-    cached_data = None
-    try:
-        cached_data = get_cache(ticker)
-    except Exception as e:
-        return "failed", f"base data lookup failed: {e}"
-
-    if not cached_data:
-        # Financials runs first, so this only happens when that step failed.
-        # Deliberately NOT falling back to get_analysis_for_ticker: it stamps
-        # light_cache=True and would downgrade the financials payload.
-        return "failed", ("no financial data cached yet - the Financials step "
-                          "has to succeed first")
-
+    # cached_data=None: the agent fetches its own financial statements (live
+    # Screener, shared cache as backup) - read-only, so the financials payload
+    # is never downgraded.
     from agents.forensic_agent import _run_forensic_analysis
-    _run_forensic_analysis(job_id, ticker, cached_data, gemini, perplexity, docs)
+    _run_forensic_analysis(job_id, ticker, None, gemini, perplexity, docs)
     return _job_outcome(job_id)
 
 
@@ -632,7 +620,7 @@ def warm_one(ticker, agent, force=False, job_id=None, quarter=None, auto_dep=Tru
     Returns (state, error). state is one of ready / failed /
     awaiting_transcript / skipped.
 
-    auto_dep: when this agent declares a dependency (forensic -> financials) and
+    auto_dep: when this agent declares a dependency (AGENT_DEPENDS_ON) and
     that dependency has no usable data, warm it first. warm_ticker passes False
     because it already runs the agents in dependency order and reports the skip
     itself, rather than retrying a step that just failed.
@@ -652,7 +640,7 @@ def warm_one(ticker, agent, force=False, job_id=None, quarter=None, auto_dep=Tru
         if quarter is None:
             quarter = (registry_get(ticker).get("quarter"))
 
-        # --- dependency gate: forensic only runs once financials has data ---
+        # --- dependency gate: an agent only runs once its dependency has data ---
         dep = AGENT_DEPENDS_ON.get(agent)
         if dep and not _dependency_ready(dep, ticker):
             if not auto_dep:
@@ -749,7 +737,7 @@ def warm_ticker(ticker, agents=None, force=False):
                 continue
 
             # auto_dep is on for agents whose dependency wasn't part of this
-            # pass, so a gap-fill of ['forensic'] alone still gets its base data.
+            # pass, so a gap-fill of a dependant alone still gets its base data.
             state, err = warm_one(ticker, agent, force=force, quarter=quarter,
                                   auto_dep=True)
             outcomes[agent] = state
