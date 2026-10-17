@@ -471,11 +471,11 @@ _PRIME_LOCK = threading.Lock()
 def _prime_price_feed(ticker):
     """Establish the TradingView session before /analyze needs it.
 
-    The first tvDatafeed call in a fresh process fails ("Connection to remote
-    host was lost"), which makes /analyze answer 404 "No or insufficient
-    historical data" for a perfectly valid ticker. A direct
-    evaluate_ticker_signal call establishes the session -- it retries three
-    times and falls back to yfinance -- after which /analyze succeeds.
+    TradingView rate-limits bursts of websocket handshakes (HTTP 429) and
+    sometimes drops a fresh process's first connection, which made /analyze
+    answer 404 "No or insufficient historical data" for a valid ticker.
+    fetch_histogram now caps concurrency and backs off between attempts
+    (calculations/tech_calculations.py); priming stays as cheap insurance.
 
     The warmer is the code most exposed to this, because it is usually the first
     thing to touch the price feed after a restart or a fresh deploy. Priming is

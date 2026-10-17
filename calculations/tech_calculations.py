@@ -2,7 +2,10 @@
 """
 tech_calculations.py — All technical analysis and charting functions
 """
+import sys
 import time
+import random
+import threading
 from datetime import datetime
 import pandas as pd
 import numpy as np
@@ -22,6 +25,17 @@ if _tv_user and _tv_pass:
 else:
     tv = TvDatafeed()
     print("INFO: TvDatafeed initialized as guest (set TV_USERNAME & TV_PASSWORD for stable connection)")
+
+# TradingView answers a burst of websocket handshakes with HTTP 429, and
+# tvDatafeed opens a new socket per get_hist call. Parallel callers (Portfolio
+# Brief's 8 threads x stock+NIFTY, Technical Agent, startup jobs) used to burst
+# past that limit, typically right after a restart. Cap concurrent fetches on
+# the shared instance, and back off between failed attempts.
+_TV_CONNECTION_SLOTS = threading.BoundedSemaphore(4)
+_TV_RETRY_BACKOFF_SECONDS = 1.5
+# A real history response has hundreds of bars. Fewer means a partial parse;
+# a genuinely new listing just falls through to yfinance with the same bars.
+_TV_MIN_FULL_RESPONSE_BARS = 50
 
 # -------------------------------------------------------------------
 # 1) Data Fetching and Technical Calculation Helpers
@@ -46,17 +60,38 @@ def fetch_histogram(symbol, exchange, start_date, end_date, max_retries=3, inter
         n_bars = max(1100, (end_date - start_date).days + 5)
     
     raw = None
+    tv_partial = None  # last-resort data if yfinance also fails (e.g. a new listing)
     if not force_yf:
         tv_symbol = symbol.replace('-', '_')
-        for _ in range(max_retries):
+        last_err = None
+        for attempt in range(max_retries):
+            if attempt:
+                # Back off on empty results too: tvDatafeed swallows connection
+                # errors and returns nothing, so without this every retry fired
+                # instantly inside the same rate-limited window.
+                time.sleep(_TV_RETRY_BACKOFF_SECONDS * attempt + random.uniform(0, 1))
             try:
-                raw = tv.get_hist(symbol=tv_symbol, exchange=exchange,
-                                  interval=tv_interval, n_bars=n_bars)
-                if raw is not None and not raw.empty:
+                with _TV_CONNECTION_SLOTS:
+                    raw = tv.get_hist(symbol=tv_symbol, exchange=exchange,
+                                      interval=tv_interval, n_bars=n_bars)
+                if raw is not None and len(raw) >= min(n_bars, _TV_MIN_FULL_RESPONSE_BARS):
                     break
-            except Exception:
-                time.sleep(1)
-                
+                if raw is not None and not raw.empty:
+                    # tvDatafeed parses the FIRST "s":[...] block it sees; in market
+                    # hours that can be a 1-bar live-tick update arriving ahead of
+                    # the history, which would otherwise pass as a full response.
+                    last_err = f"partial response ({len(raw)} bars)"
+                    if tv_partial is None or len(raw) > len(tv_partial):
+                        tv_partial = raw
+                    raw = None
+                else:
+                    last_err = "empty response"
+            except Exception as e:
+                last_err = f"{type(e).__name__}: {str(e)[:120]}".encode('ascii', 'replace').decode()
+        if raw is None or raw.empty:
+            print(f"WARN: TradingView returned no data for {tv_symbol} after {max_retries} attempts "
+                  f"({last_err}); falling back to yfinance", file=sys.stderr)
+
     if raw is None or raw.empty:
         yf_sym = '^NSEI' if symbol.upper()=='NIFTY' and exchange=='NSE' else f"{symbol}.NS"
         try:
@@ -69,12 +104,16 @@ def fetch_histogram(symbol, exchange, start_date, end_date, max_retries=3, inter
                 # Remove timezone if yfinance attached it
                 if raw.index.tz is not None:
                     raw.index = raw.index.tz_convert(None)
+            elif tv_partial is not None:
+                raw = tv_partial
             else:
                 return pd.DataFrame()
                 
         except Exception as e:
             print(f"WARN: yfinance fallback failed for {yf_sym}: {e}")
-            return pd.DataFrame()
+            if tv_partial is None:
+                return pd.DataFrame()
+            raw = tv_partial
     df = raw.copy()
     df = df[(df.index >= pd.to_datetime(start_date)) & (df.index <= pd.to_datetime(end_date))]
     df.rename(columns={'open':'Open','high':'High','low':'Low','close':'Close','volume':'Volume'}, inplace=True)
