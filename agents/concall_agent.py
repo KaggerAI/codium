@@ -2418,14 +2418,41 @@ async def _extract_youtube_transcript(url: str, max_chars: int = TRANSCRIPT_MAX_
 
                 import yt_dlp
                 import os as _os
+                import time as _time
                 proxy_url = _os.environ.get("RESIDENTIAL_PROXY_URL")
-                
+
+                # Time budget for the download. With auto captions already in
+                # hand, a slow download only delays the same fallback, so give
+                # up early; without them the audio is our only source.
+                budget_s = 120 if auto_captions else 360
+                started = _time.monotonic()
+
+                def _enforce_budget(d):
+                    if d.get('status') != 'downloading':
+                        return
+                    elapsed = _time.monotonic() - started
+                    eta = d.get('eta')
+                    if elapsed > budget_s:
+                        raise yt_dlp.utils.DownloadCancelled(
+                            f'download exceeded {budget_s}s budget')
+                    # After a short warm-up, bail if the projected finish is past the budget.
+                    if elapsed > 20 and eta is not None and elapsed + eta > budget_s:
+                        speed = (d.get('speed') or 0) / 1024
+                        raise yt_dlp.utils.DownloadCancelled(
+                            f'too slow ({speed:.0f} KiB/s, ETA {eta}s) for {budget_s}s budget')
+
                 ydl_opts = {
-                    'format': 'bestaudio[ext=m4a]/bestaudio/best',
+                    # Speech transcription doesn't need 128 kbps; a low-bitrate
+                    # track roughly halves the bytes pulled through the proxy.
+                    'format': 'bestaudio[abr<=64]/worstaudio/bestaudio/best',
                     'outtmpl': output_path,
                     'quiet': True,
                     'no_warnings': True,
                     'extract_flat': False,
+                    'socket_timeout': 15,
+                    'retries': 2,
+                    'fragment_retries': 2,
+                    'progress_hooks': [_enforce_budget],
                 }
                 if proxy_url:
                     ydl_opts['proxy'] = proxy_url
@@ -2560,14 +2587,20 @@ async def _transcribe_audio_video_from_url(url: str, media_type: str = 'audio',
         def _downloaded_bytes():
             return os.path.getsize(src_path) if os.path.exists(src_path) else 0
 
+        # Connect fast, read patiently. A host that blocks datacenter IPs (e.g.
+        # tejasnetworks.com from Azure) never completes the handshake, and a
+        # single 300 s timeout let each such attempt burn minutes.
+        _http_timeout = httpx.Timeout(connect=10.0, read=60.0, write=30.0, pool=10.0)
+        host_unreachable = False
         try:
             async with httpx.AsyncClient(follow_redirects=True) as client:
-                async with client.stream('GET', url, headers=headers, timeout=300.0) as response:
+                async with client.stream('GET', url, headers=headers, timeout=_http_timeout) as response:
                     response.raise_for_status()
                     with open(src_path, 'wb') as fh:
                         async for chunk in response.aiter_bytes(1024 * 1024):
                             fh.write(chunk)
         except Exception as httpx_err:
+            host_unreachable = isinstance(httpx_err, (httpx.ConnectError, httpx.ConnectTimeout))
             print(f"CONCALL_AGENT: httpx audio download failed ({httpx_err}), trying curl_cffi...", file=sys.stderr)
             try:
                 def _cffi_audio_download(audio_url, dest, use_proxy=False):
@@ -2585,7 +2618,7 @@ async def _transcribe_audio_video_from_url(url: str, media_type: str = 'audio',
                         audio_url,
                         headers={"Referer": audio_url.rsplit('/', 1)[0] + "/",
                                  "Accept": "audio/mpeg,audio/*,*/*;q=0.8"},
-                        allow_redirects=True, timeout=300
+                        allow_redirects=True, timeout=(10, 120)
                     )
                     if r.status_code == 200 and r.content:
                         with open(dest, 'wb') as fh:
@@ -2595,8 +2628,19 @@ async def _transcribe_audio_video_from_url(url: str, media_type: str = 'audio',
                           f"audio download got HTTP {r.status_code}", file=sys.stderr)
                     return False
 
-                # Attempt 1: Direct (no proxy)
-                ok = await asyncio.to_thread(_cffi_audio_download, url, src_path, False)
+                # Attempt 1: Direct (no proxy) - pointless when httpx could not even
+                # connect, since the block is on our IP, not our TLS fingerprint.
+                # A raise here must not skip the proxy attempt below.
+                ok = False
+                if host_unreachable:
+                    print(f"CONCALL_AGENT: host unreachable directly - skipping curl_cffi direct, "
+                          f"going straight to proxy", file=sys.stderr)
+                else:
+                    try:
+                        ok = await asyncio.to_thread(_cffi_audio_download, url, src_path, False)
+                    except Exception as direct_err:
+                        print(f"CONCALL_AGENT: curl_cffi direct audio download failed: {direct_err}",
+                              file=sys.stderr)
                 if not ok:
                     # Attempt 2: With proxy. A 407 here means the proxy rejected
                     # RESIDENTIAL_PROXY_URL's credentials, not that the file is gone.
