@@ -1134,8 +1134,8 @@ def call_openai_responses_api(instructions, user_input, use_web_search=True, mod
         raise ValueError("OpenAI API key is not configured.")
     
     try:
-        client = _openai.OpenAI(timeout=600.0)
-        
+        client = _openai.OpenAI(timeout=600.0, http_client=OPENAI_HTTP_CLIENT)
+
         tools = []
         if use_web_search:
             tools.append({"type": "web_search_preview"})
@@ -5294,6 +5294,34 @@ from google import genai
 from google.genai import types
 # Securely load API keys from environment variables
 openai.api_key = os.getenv("OPENAI_API_KEY")
+
+
+def _build_openai_http_client():
+    """
+    httpx client for OpenAI with TCP keepalive switched on.
+
+    Azure App Service's outbound SNAT forgets a TCP flow that has been idle for ~4 minutes, and
+    it does so silently: no RST ever reaches us, so a blocked read just waits out its timeout.
+    Streaming does not help while a reasoning model is still thinking, because nothing is on the
+    socket until the first token, which at xhigh effort can be 6-8 minutes in. Keepalive probes
+    every 30s after 60s idle count as traffic and keep the mapping alive. With 8 failed probes
+    the kernel declares the peer dead after ~5 min, rather than leaving the read blocked forever.
+    """
+    socket_options = [(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)]
+    for name, value in (("TCP_KEEPIDLE", 60), ("TCP_KEEPINTVL", 30), ("TCP_KEEPCNT", 8)):
+        if hasattr(socket, name):
+            socket_options.append((socket.IPPROTO_TCP, getattr(socket, name), value))
+    # A custom transport carries its own pool, so restate the SDK's default limits here.
+    transport = httpx.HTTPTransport(
+        socket_options=socket_options,
+        limits=httpx.Limits(max_connections=1000, max_keepalive_connections=100),
+    )
+    return openai.DefaultHttpxClient(transport=transport)
+
+
+OPENAI_HTTP_CLIENT = _build_openai_http_client()
+# The module-level client is built lazily on first use, so this covers every openai.* call.
+openai.http_client = OPENAI_HTTP_CLIENT
 PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY")
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 
@@ -5324,15 +5352,90 @@ def convert_to_gemini_format(messages):
             gemini_messages.append({'role': role, 'parts': [msg["content"]]})
     return gemini_messages
 
-def call_openai_api(messages, model="gpt-5.4-mini", expect_json_format_flag=False, temperature=1, timeout=180, max_tokens=None, use_streaming=False, reasoning_effort=None, progress_callback=None):
+def call_openai_background(messages, model="gpt-5.4", reasoning_effort=None, deadline=1500,
+                           poll_interval=10, label="openai"):
+    """
+    Run a long reasoning call as an OpenAI Responses background job and poll it to completion.
+
+    This is the dependable way to make a call that thinks for many minutes from Azure. No socket
+    sits idle waiting on the model: each poll is a short GET, so the SNAT idle timeout (see
+    _build_openai_http_client) never comes into play, and a dropped poll is simply retried.
+
+    deadline is the wall-clock budget in seconds. When it runs out the job is cancelled
+    server-side and TimeoutError is raised, so the caller fails visibly instead of hanging.
+    Returns the output text, same as call_openai_api. Temperature is not sent; gpt-5.x only
+    accepts the default.
+    """
+    if not openai.api_key:
+        raise ValueError("OpenAI API key is not configured.")
+
+    client = openai.OpenAI(api_key=openai.api_key, http_client=OPENAI_HTTP_CLIENT, timeout=60)
+    params = {"model": model, "input": messages, "background": True, "store": True}
+    if reasoning_effort is not None:
+        params["reasoning"] = {"effort": reasoning_effort}
+
+    start = time.time()
+    resp = client.responses.create(**params)
+    response_id = resp.id
+    print(f"OPENAI_BG[{label}]: started {response_id} (model={model}, effort={reasoning_effort}, "
+          f"deadline={deadline}s)", file=sys.stderr)
+
+    last_log = start
+    poll_failures = 0
+    while resp.status in ("queued", "in_progress"):
+        elapsed = int(time.time() - start)
+        if elapsed > deadline:
+            try:
+                client.responses.cancel(response_id)
+            except Exception as cancel_error:
+                print(f"OPENAI_BG[{label}]: cancel of {response_id} failed: {cancel_error}", file=sys.stderr)
+            raise TimeoutError(f"OpenAI background job {response_id} still '{resp.status}' "
+                               f"after {elapsed}s; cancelled")
+        time.sleep(poll_interval)
+        try:
+            resp = client.responses.retrieve(response_id)
+            poll_failures = 0
+        except (openai.APIConnectionError, openai.InternalServerError, openai.RateLimitError) as poll_error:
+            # The job keeps running server-side whatever happens to one poll.
+            poll_failures += 1
+            print(f"OPENAI_BG[{label}]: poll {poll_failures} of {response_id} failed: {poll_error}", file=sys.stderr)
+            if poll_failures >= 6:
+                raise
+            continue
+        if time.time() - last_log >= 60:
+            last_log = time.time()
+            print(f"OPENAI_BG[{label}]: {response_id} {resp.status} at {int(last_log - start)}s", file=sys.stderr)
+
+    elapsed = int(time.time() - start)
+    usage = getattr(resp, "usage", None)
+    usage_note = (f", tokens in={usage.input_tokens} out={usage.output_tokens}" if usage else "")
+    if resp.status == "completed":
+        text = resp.output_text
+        print(f"OPENAI_BG[{label}]: {response_id} completed in {elapsed}s, {len(text)} chars{usage_note}",
+              file=sys.stderr)
+        return text
+    if resp.status == "incomplete":
+        # Same as finish_reason='length' on Chat Completions: keep what arrived and let the
+        # caller's truncation repair decide if it is usable.
+        reason = getattr(resp.incomplete_details, "reason", None)
+        text = resp.output_text or ""
+        print(f"OPENAI_BG[{label}]: {response_id} incomplete ({reason}) after {elapsed}s, "
+              f"{len(text)} chars{usage_note} - output may be truncated", file=sys.stderr)
+        if text:
+            return text
+    raise RuntimeError(f"OpenAI background job {response_id} ended '{resp.status}' after {elapsed}s: "
+                       f"{getattr(resp, 'error', None) or getattr(resp, 'incomplete_details', None)}")
+
+
+def call_openai_api(messages, model="gpt-5.4-mini", expect_json_format_flag=False, temperature=1, timeout=180, max_tokens=None, use_streaming=False, reasoning_effort=None, progress_callback=None, background=False):
     """
     Call OpenAI API with configurable timeout.
     Default timeout is 180 seconds (3 minutes) for slower models like gpt-5.4-mini.
 
-    use_streaming=True streams the completion and concatenates the deltas. This keeps
-    the outbound TCP connection active so it isn't killed by Azure's SNAT ~4-minute
-    idle timeout during long generations (e.g. the Cosmic GPT-5.5 synthesis). The
-    return value is identical to the non-streaming path, so callers are unaffected.
+    use_streaming=True streams the completion and concatenates the deltas, which keeps
+    the connection busy while tokens are flowing. It does NOT cover a reasoning model's
+    silent pre-token phase, where nothing is sent at all; use background=True for those.
+    The return value is identical to the non-streaming path, so callers are unaffected.
 
     reasoning_effort (optional) is forwarded to reasoning-capable models (e.g. gpt-5.x)
     as the Chat Completions `reasoning_effort` param (e.g. "low"/"medium"/"high"/"xhigh").
@@ -5345,7 +5448,15 @@ def call_openai_api(messages, model="gpt-5.4-mini", expect_json_format_flag=Fals
     ones. NOTE it cannot fire during a reasoning model's pre-token silence, because we are
     blocked reading the socket: a caller that must keep a UI alive across that gap needs its
     own wall-clock ticker (see agents/cosmic_agent.py step 4).
+
+    background=True hands the call to call_openai_background, with timeout as its overall
+    deadline. Use it for calls that reason silently for minutes; temperature, max_tokens and
+    progress_callback are ignored on that path.
     """
+    if background:
+        return call_openai_background(messages, model=model, reasoning_effort=reasoning_effort,
+                                      deadline=timeout)
+
     if not openai.api_key:
         raise ValueError("OpenAI API key is not configured.")
 

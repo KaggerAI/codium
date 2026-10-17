@@ -355,57 +355,41 @@ Now produce the complete Cosmic Macro Intelligence Report as a single JSON objec
               file=sys.stderr)
 
         # The synthesis is the long pole of the whole run, and almost all of it is silent:
-        # gpt-5.4 at xhigh reasoning sits on a ~138k-char prompt and emits NOTHING for minutes
-        # before the first content token, then streams the ~92k-char report in about three.
-        # Two consequences, both of which bit us:
+        # gpt-5.4 at xhigh reasoning sits on a ~140k-char prompt and emits NOTHING for 6-8
+        # minutes before the first content token, then writes the ~92k-char report in ~3.
         #
-        #   1. timeout=420 was cutting it far too fine. A measured run went 413s from request
-        #      to first token — inside a 420s read timeout by seven seconds. Anything slower
-        #      raises APITimeoutError and throws away ~10 minutes of completed work, which is
-        #      the intermittent "cosmic agent is broken" failure. 900s restores real headroom;
-        #      it costs nothing when the model is quick, since this is a read timeout.
-        #   2. Nothing moved in the UI during that silence. The progress line sat frozen on
-        #      "Synthesizing..." for 7+ minutes, indistinguishable from a hung job, so runs were
-        #      being killed manually before they could ever finish.
+        # That silence is why this step never finished on Azure. It used to be a streamed Chat
+        # Completions call, on the theory that streaming keeps the connection alive. It does
+        # not: with no bytes moving, Azure's outbound SNAT drops the flow at ~4 minutes without
+        # telling either end. The read then blocked for the full 900s timeout, and the SDK's two
+        # retries repeated the whole thing (45+ minutes), while the ticker below kept the job
+        # looking alive. Localhost has no SNAT, so it always worked there.
         #
-        # The ticker below fixes (2). It has to be a wall-clock thread rather than a stream
-        # callback: during the reasoning phase there is nothing on the socket at all, so a
-        # callback driven by chunk arrival cannot fire. progress_callback then supplies the
-        # character count once the model actually starts writing.
+        # Background mode removes the long-lived connection entirely: OpenAI runs the job and we
+        # poll it with short requests. timeout is now the overall deadline, after which the job
+        # is cancelled and this step fails with a real error.
+        #
+        # The ticker is a wall-clock thread because nothing comes back while the job runs.
         synth_start = time.time()
-        synth_chars = {"n": 0}
         synth_done = threading.Event()
 
         def _synthesis_ticker():
             while not synth_done.wait(10):
                 mins, secs = divmod(int(time.time() - synth_start), 60)
-                if synth_chars["n"]:
-                    progress = (f"🌌 Writing the Cosmic Macro report — {synth_chars['n']:,} characters "
-                                f"so far ({mins}m {secs:02d}s)")
-                else:
-                    progress = (f"🌌 Reasoning across the knowledge base — {mins}m {secs:02d}s elapsed. "
-                                f"No output yet; this phase alone usually runs 6-8 minutes.")
-                update_agent_job(job_id, {"progress": progress})
-
-        def _synthesis_progress(elapsed_seconds, chars_generated):
-            synth_chars["n"] = chars_generated
+                update_agent_job(job_id, {"progress": (
+                    f"🌌 Synthesizing the Cosmic Macro report — {mins}m {secs:02d}s elapsed. "
+                    f"This step usually takes 8-12 minutes.")})
 
         threading.Thread(target=_synthesis_ticker, daemon=True,
                          name="cosmic-synthesis-ticker").start()
 
-        # temperature 1 for bold crystal ball predictions.
-        # use_streaming=True keeps the connection active so Azure's SNAT ~4-min idle
-        # timeout doesn't silently drop this long-running call (it otherwise hangs
-        # forever on Azure while working fine on localhost).
         try:
             analysis_result = call_openai_api_fn(
                 messages,
                 model=COSMIC_SYNTHESIS_MODEL,
-                temperature=1,
-                timeout=900,  # 15 minutes — see the headroom note above; 420s was marginal
-                use_streaming=True,
+                timeout=1500,  # 25-minute overall deadline; a normal run takes ~10
                 reasoning_effort=COSMIC_REASONING_EFFORT,
-                progress_callback=_synthesis_progress,
+                background=True,
             )
         finally:
             # Stop the ticker on the error path too, so a failed synthesis doesn't leave a
