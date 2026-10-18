@@ -18,7 +18,10 @@ pandas
 numpy<2.0
 openpyxl
 yfinance
-TA-Lib
+# Pinned: 0.8.2 (2026-10-12) shipped as a source tarball only, with no cp310 wheel, so the image
+# tried to compile it against the old C library in the Dockerfile and every deploy failed.
+# 0.8.1's manylinux wheel bundles its own C library.
+TA-Lib==0.8.1
 tradingview-datafeed==2.1.1   # installs as tvDatafeed
 nsepython==2.97   # NSE/niftyindices direct source for Indian sector indices Yahoo lacks
 pandas-market-calendars
