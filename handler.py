@@ -5311,10 +5311,15 @@ def _build_openai_http_client():
     for name, value in (("TCP_KEEPIDLE", 60), ("TCP_KEEPINTVL", 30), ("TCP_KEEPCNT", 8)):
         if hasattr(socket, name):
             socket_options.append((socket.IPPROTO_TCP, getattr(socket, name), value))
+    # The transport must come from the same HTTP library as the SDK's client class: openai 2.x
+    # is built on httpx, but 3.x moved to httpx2, and an httpx transport inside an httpx2 client
+    # fails every request with an AssertionError. requirements.txt leaves openai unpinned, so the
+    # image and a local venv can differ. Ask the SDK which library it uses instead of assuming.
+    http_lib = sys.modules[openai.DefaultHttpxClient.__mro__[1].__module__.split(".")[0]]
     # A custom transport carries its own pool, so restate the SDK's default limits here.
-    transport = httpx.HTTPTransport(
+    transport = http_lib.HTTPTransport(
         socket_options=socket_options,
-        limits=httpx.Limits(max_connections=1000, max_keepalive_connections=100),
+        limits=http_lib.Limits(max_connections=1000, max_keepalive_connections=100),
     )
     return openai.DefaultHttpxClient(transport=transport)
 
