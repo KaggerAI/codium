@@ -1,58 +1,34 @@
 {
   "success": true,
-  "ran_at": "2026-10-14 13:02:20 IST",
+  "ran_at": "2026-10-17 23:37:11 IST",
   "dry_run": false,
-  "sitemap_entries": 5941,
-  "rows_before": 6096,
-  "rows_after": 6112,
-  "added": 16,
+  "sitemap_entries": 5944,
+  "rows_before": 6112,
+  "rows_after": 6116,
+  "added": 4,
   "added_tickers": [
-    "PRISMFN",
-    "SIENERGY",
-    "GRADIENTE",
-    "ZNEWSAGA",
-    "DHARTI",
-    "541196",
-    "TRIVENIPT",
-    "HDFIRE",
-    "LOANFRONT",
-    "RAVITA",
-    "FUSIONCX",
-    "11290731",
-    "BONFIG",
-    "TONBO",
-    "SMT",
-    "17156915"
+    "ZKHATAUE",
+    "PARASHLTH",
+    "JPL",
+    "1219"
   ],
-  "updated": 7,
+  "updated": 4,
   "updates": [
     {
-      "trendlyne_id": "4714",
-      "Stock Name": "Icici Prudential Life Insurance Company Ltd -> Icici Life Insurance Ltd"
-    },
-    {
-      "trendlyne_id": "212",
-      "Stock Name": "Bodhtree Consulting Ltd -> Datakosa Ltd"
-    },
-    {
-      "trendlyne_id": "2595",
-      "Stock Name": "Manbro Industries Ltd -> Kd Green Industries Ltd"
-    },
-    {
-      "trendlyne_id": "2618",
-      "Ticker": "SYNTHFO -> BELDING"
+      "trendlyne_id": "4231",
+      "Stock Name": "Jyotirgamya Enterprises Ltd -> Atma Industries Ltd"
     },
     {
       "trendlyne_id": "82681",
-      "Stock Name": "Grand Foundry Ltd -> Tikona Communication Ltd"
+      "Ticker": "GFSTEELS -> TIKONA"
     },
     {
-      "trendlyne_id": "133757",
-      "Ticker": "542579 -> AGOL"
+      "trendlyne_id": "806",
+      "Stock Name": "Lypsa Gems Jewellery Ltd -> Aurus Gem Corporaton Ltd"
     },
     {
-      "trendlyne_id": "3684136",
-      "Ticker": "10780066 -> RKFAL"
+      "trendlyne_id": "3696011",
+      "Ticker": "17156915 -> ZETWERK"
     }
   ],
   "ambiguous": [
@@ -227,5 +203,5 @@
   ],
   "conflicts": [],
   "error": null,
-  "duration_seconds": 0.9
+  "duration_seconds": 3.5
 }
