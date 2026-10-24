@@ -2,14 +2,14 @@
 forecasting_prompts.py — AI prompts for the Kagger Forecasting Agent.
 
 Contains prompts for:
-1. Assumption generation (Gemini 3.1 Pro)
+1. Assumption generation (Gemini 3.8 Flash)
 2. Market research (Perplexity Sonar-Pro)
 3. Triangulation synthesis (Gemini Flash)
 4. Follow-up chat (Gemini Flash)
 """
 
 # =====================================================================
-# PROMPT 1: ASSUMPTION GENERATION (Gemini 3.1 Pro with HIGH thinking)
+# PROMPT 1: ASSUMPTION GENERATION (Gemini 3.8 Flash with HIGH thinking)
 # =====================================================================
 
 FORECAST_ASSUMPTIONS_PROMPT = """You are a senior equity research analyst at a top-tier global investment bank.

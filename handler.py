@@ -1405,7 +1405,7 @@ Using the real-world data you just fetched, write the article following these st
         short_topic = ''  # will be set by checker
         
         # --- MAKER-CHECKER: CHECKER PHASE ---
-        print(f"INFO: [Checker Phase] Sending draft to Gemini 3.1 Pro for editorial review...", file=sys.stderr)
+        print(f"INFO: [Checker Phase] Sending draft to Gemini 3.8 Flash for editorial review...", file=sys.stderr)
         BLOG_GENERATION_JOBS[job_id]['phase'] = 'checker'
         
         checker_prompt = f"""You are the sharp, rigorous, and brilliant Investigative Head Editor for our premium business publication (think the absolute best editors at 'The Ken' or 'Bloomberg Businessweek'). 
@@ -1450,7 +1450,7 @@ Now, do your job as the Head Editor and output the finalized, publication-ready 
         try:
             checker_response = call_gemini_api(
                 messages=[{"role": "user", "content": checker_prompt}],
-                model="gemini-3.1-pro-preview",
+                model="gemini-3.8-flash",
                 temperature=1.0,
                 use_google_search=True,
                 thinking_level="HIGH",
@@ -1736,7 +1736,7 @@ OUTPUT FORMAT:
         raw_response = call_openai_responses_api(instructions, user_input, use_web_search=True)
         
         # --- MAKER-CHECKER: CHECKER PHASE ---
-        print(f"INFO: [Checker Phase] Sending regenerated draft to Gemini 3.1 Pro for editorial review...", file=sys.stderr)
+        print(f"INFO: [Checker Phase] Sending regenerated draft to Gemini 3.8 Flash for editorial review...", file=sys.stderr)
         BLOG_GENERATION_JOBS[job_id]['phase'] = 'checker'
         
         checker_prompt = f"""You are the sharp, rigorous, and brilliant Investigative Head Editor for our premium business publication (think the absolute best editors at 'The Ken' or 'Bloomberg Businessweek'). 
@@ -1785,7 +1785,7 @@ Now, do your job as the Head Editor and output the finalized, publication-ready 
         try:
             checker_response = call_gemini_api(
                 messages=[{"role": "user", "content": checker_prompt}],
-                model="gemini-3.1-pro-preview",
+                model="gemini-3.8-flash",
                 temperature=1.0,
                 use_google_search=True,
                 thinking_level="HIGH",
@@ -4676,7 +4676,7 @@ def api_portfolio_ai_chat():
     """
     AI Portfolio Manager chat endpoint.
     Accepts { message, history? } and returns AI response with full portfolio context.
-    Uses gemini-3.1-pro-preview with HIGH thinking and Google Search enabled.
+    Uses gpt-5.5 with Perplexity sonar-pro as its search tool.
     """
     from flask import session as flask_session
     user_id = flask_session.get('user_id')
@@ -5893,8 +5893,8 @@ def call_gemini_api(messages, model="gemini-3-flash-preview", temperature=1, use
     import time
     
     models_to_try = [model]
-    if model == "gemini-3.1-pro-preview":
-        models_to_try.append("gemini-3-flash-preview")
+    if model == "gemini-3.8-flash":
+        models_to_try.append("gemini-3.5-flash-lite")
         
     for current_model in models_to_try:
         max_retries = 3

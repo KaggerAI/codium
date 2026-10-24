@@ -1537,7 +1537,7 @@ async def _fetch_ai_research_async(ticker, company_name, financial_context,
             raw_response = await asyncio.to_thread(
                 call_gemini_api_fn,
                 [{"role": "user", "content": prompt}],
-                "gemini-3.1-pro-preview",
+                "gemini-3.8-flash",
                 0.3,
                 True,
                 'HIGH'
