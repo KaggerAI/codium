@@ -3477,15 +3477,14 @@ def api_market_indices():
 # tokens and was most of the Gemini bill. Two levers:
 #
 # MODEL: Gemini 3.x bills every search query the model runs ($14/1k after 5k
-# free per MONTH); 2.5 Flash bills once per grounded prompt with 1,500 free per
-# DAY (shared with 2.5 Flash-Lite). Past that allowance 2.5 costs $35/1k
-# prompts, about the same as 3.x at 2-3 queries a prompt — so the saving holds
-# only while grounded prompts stay under ~1,500/day. Check with
-# `python -m agents.llm_usage brief` (the grounded column).
+# free per MONTH), so the cost tracks the searches column of
+# `python -m agents.llm_usage brief`, not the call count. 2.5 Flash (billed per
+# grounded prompt, 1,500 free/day) was cheaper but is retired: it returns 404
+# "no longer available to new users".
 #
 # SHARING: news is about the stock, not the holder, so it is looked up once per
 # (ticker, brief type, day) and reused for every user who holds it.
-BRIEF_NEWS_MODEL = "gemini-2.5-flash"
+BRIEF_NEWS_MODEL = "gemini-3.5-flash-lite"
 BRIEF_NEWS_TTL = {'pre': 9000, 'post': 43200}  # matches the on-demand brief TTLs
 BRIEF_NEWS_REDIS_PREFIX = "portfolio_brief_news:"
 LOCAL_BRIEF_NEWS_CACHE = {}
@@ -3555,10 +3554,12 @@ def _get_brief_news(ticker, stock_name, brief_type):
         return news
 
 
-def _gather_stock_data_for_brief(holding, brief_type='post'):
+def _gather_stock_data_for_brief(holding, brief_type='post', include_news=False):
     """
     Gather all data for a single stock. Designed to run in ThreadPoolExecutor.
     brief_type: 'post' for post-market (full), 'pre' for pre-market (lighter).
+    include_news: news is a grounded search billed per query, so it runs only
+    when the user clicks "Load news", never for scheduled or default briefs.
     """
     ticker = holding.ticker
     stock_name = holding.stock_name
@@ -3677,7 +3678,7 @@ def _gather_stock_data_for_brief(holding, brief_type='post'):
         result['trend'] = 'N/A'
 
     # --- News via Gemini Google Search (shared across users) ---
-    result['news'] = _get_brief_news(ticker, stock_name, brief_type)
+    result['news'] = _get_brief_news(ticker, stock_name, brief_type) if include_news else None
 
     # --- Quarterly Results (post-market only) ---
     if brief_type == 'post':
@@ -3723,7 +3724,11 @@ def _gather_stock_data_for_brief(holding, brief_type='post'):
 
 
 # --- Post-Market Brief Generation ---
-def generate_post_market_brief(user_id):
+BRIEF_NO_NEWS_NOTE = ("NOTE: Stock news was not fetched for this brief. Do not say a stock "
+                      "had no news or developments; base the analysis on the data given.\n")
+
+
+def generate_post_market_brief(user_id, include_news=False):
     """Generate full post-market analysis brief for a user's portfolio."""
     from concurrent.futures import ThreadPoolExecutor
 
@@ -3734,7 +3739,7 @@ def generate_post_market_brief(user_id):
     # Parallel data gathering
     stock_data = []
     with ThreadPoolExecutor(max_workers=min(8, len(holdings))) as executor:
-        futures = {executor.submit(_gather_stock_data_for_brief, h, 'post'): h for h in holdings}
+        futures = {executor.submit(_gather_stock_data_for_brief, h, 'post', include_news): h for h in holdings}
         for future in futures:
             try:
                 stock_data.append(future.result())
@@ -3780,8 +3785,9 @@ Day Change: {s.get('day_change_pct', 0):+.2f}%
 Overall P&L: ₹{s.get('pnl', 0):+,.0f} ({s.get('pnl_pct', 0):+.2f}%)
 Candlestick Patterns: {', '.join(s.get('candlestick_patterns', [])) or 'No pattern detected'}
 Volume: {s.get('volume_signal', 'N/A')} ({s.get('volume_ratio', 1.0):.1f}x vs 20-day avg)
-Technical Signal: {s.get('tech_signal', 'N/A')} | RSI: {s.get('rsi', 'N/A')} | Trend: {s.get('trend', 'N/A')}
-News/Developments: {s.get('news', 'No news')}"""
+Technical Signal: {s.get('tech_signal', 'N/A')} | RSI: {s.get('rsi', 'N/A')} | Trend: {s.get('trend', 'N/A')}"""
+        if include_news:
+            detail += f"\nNews/Developments: {s.get('news') or 'No news'}"
 
         # Add tech summary rows
         if s.get('tech_summary'):
@@ -3798,7 +3804,7 @@ News/Developments: {s.get('news', 'No news')}"""
 
         stocks_detail.append(detail)
 
-    prompt_data = f"""Date: {today_str}
+    prompt_data = ('' if include_news else BRIEF_NO_NEWS_NOTE) + f"""Date: {today_str}
 
 MARKET CONTEXT:
 - NIFTY 50: {index_data.get('nifty_close', 'N/A')} ({nifty_change:+.2f}%)
@@ -3877,12 +3883,13 @@ RULES:
             'holding_count': len(stock_data)
         },
         'index_data': index_data,
+        'news_included': include_news,
         'generated_at': datetime.now().isoformat()
     }
 
 
 # --- Pre-Market Brief Generation ---
-def generate_pre_market_brief(user_id):
+def generate_pre_market_brief(user_id, include_news=False):
     """Generate pre-market outlook brief."""
     from concurrent.futures import ThreadPoolExecutor
 
@@ -3893,7 +3900,7 @@ def generate_pre_market_brief(user_id):
     # Parallel data gathering (lighter)
     stock_data = []
     with ThreadPoolExecutor(max_workers=min(8, len(holdings))) as executor:
-        futures = {executor.submit(_gather_stock_data_for_brief, h, 'pre'): h for h in holdings}
+        futures = {executor.submit(_gather_stock_data_for_brief, h, 'pre', include_news): h for h in holdings}
         for future in futures:
             try:
                 stock_data.append(future.result())
@@ -3911,11 +3918,12 @@ def generate_pre_market_brief(user_id):
         detail = f"""
 --- {s.get('stock_name', 'N/A')} ({s.get('ticker', 'N/A')}) ---
 Previous Close: ₹{s.get('close', 'N/A')}
-Overall P&L: ₹{s.get('pnl', 0):+,.0f} ({s.get('pnl_pct', 0):+.2f}%)
-Overnight News: {s.get('news', 'No news')}"""
+Overall P&L: ₹{s.get('pnl', 0):+,.0f} ({s.get('pnl_pct', 0):+.2f}%)"""
+        if include_news:
+            detail += f"\nOvernight News: {s.get('news') or 'No news'}"
         stocks_detail.append(detail)
 
-    prompt_data = f"""Date: {today_str} (Pre-Market)
+    prompt_data = ('' if include_news else BRIEF_NO_NEWS_NOTE) + f"""Date: {today_str} (Pre-Market)
 
 MARKET INDICATORS:
 - GIFT Nifty: {index_data.get('gift_nifty_last', 'N/A')} ({index_data.get('gift_nifty_change_pct', 'N/A')}%)
@@ -3964,6 +3972,7 @@ RULES:
         'briefing_html': briefing_html,
         'brief_type': 'pre-market',
         'index_data': index_data,
+        'news_included': include_news,
         'generated_at': datetime.now().isoformat()
     }
 
@@ -4084,13 +4093,17 @@ def api_portfolio_brief_refresh():
     brief_type = data.get('type', 'post')  # 'pre' or 'post'
 
     today = datetime.now().strftime('%Y-%m-%d')
+    # News comes from the "Load news" button; a plain Refresh keeps it if the
+    # brief already had it (the lookup is cached per ticker per day).
+    cached = get_brief_cache(brief_type, user_id, today) or {}
+    include_news = bool(data.get('include_news')) or bool(cached.get('news_included'))
     clear_brief_cache(brief_type, user_id, today)
 
     if brief_type == 'pre':
-        brief = generate_pre_market_brief(user_id)
+        brief = generate_pre_market_brief(user_id, include_news=include_news)
         ttl = 9000
     else:
-        brief = generate_post_market_brief(user_id)
+        brief = generate_post_market_brief(user_id, include_news=include_news)
         ttl = 43200
 
     if not brief:
