@@ -13592,7 +13592,7 @@ def _live_concall_notification_watcher():
     Tracks which (session_key) calls have already been notified to avoid
     duplicate emissions.
     """
-    from agents.live_concall import load_concall_schedule
+    from agents.live_concall import load_concall_schedule, now_ist
     notified = set()
 
     while True:
@@ -13601,7 +13601,8 @@ def _live_concall_notification_watcher():
             # against "now" on each read so 'starting_soon' detection stays accurate.
             calls = load_concall_schedule(days=3)
 
-            now = datetime.now()
+            # parsed_datetime is naive IST; datetime.now() is UTC on Azure.
+            now = now_ist()
             for call in calls:
                 parsed_dt_str = call.get('parsed_datetime')
                 if not parsed_dt_str:

@@ -23,11 +23,13 @@ import sys
 import json
 import time
 import asyncio
+import secrets
 import threading
 import traceback
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from io import BytesIO
+from urllib.parse import urlparse
 from dataclasses import dataclass, field
 from typing import Optional, Dict, Any, List
 
@@ -62,13 +64,47 @@ LIVE_STREAM_ENABLED = os.getenv("LIVE_CONCALL_STREAMING", "").strip().lower() in
 
 IR_PULSE_API = "https://ir-pulse-engine-production.up.railway.app/api/calls"
 
+# Dial-in extraction (text + PDF vision fallback): a short structured-extraction
+# job, so it runs on the cheapest model.
+DIALIN_MODEL = os.getenv("LIVE_CONCALL_DIALIN_MODEL", "gemini-3.1-flash-lite").strip()
+
+# Shared secret Exotel appends as ?k=... to the Passthru / Stream URLs configured
+# in the Exotel dashboard. Optional: StatusCallbacks we place ourselves carry a
+# per-session token instead, and a callback naming the session's own CallSid is
+# accepted too (see _webhook_authorized).
+WEBHOOK_SECRET = os.getenv("LIVE_CONCALL_WEBHOOK_SECRET", "").strip()
+
+# Hosts a RecordingUrl may point at. The /status webhook hands us this URL and we
+# download it (retrying with our Exotel credentials), so an unchecked URL is both
+# an SSRF vector and a credential leak. Extend via LIVE_CONCALL_RECORDING_HOSTS.
+RECORDING_HOSTS = tuple(
+    h.strip().lower() for h in
+    ("exotel.com,exotel.in," + os.getenv("LIVE_CONCALL_RECORDING_HOSTS", "")).split(",")
+    if h.strip()
+)
+
+# Each dial is a paid phone call; admins are exempt.
+DAILY_DIALS_PER_USER = int(os.getenv("LIVE_CONCALL_DAILY_DIALS_PER_USER", "5"))
+
+# Session lifecycle (enforced by _reap_sessions).
+SESSION_RETENTION_SECS = 3600      # keep finished sessions this long for UI catch-up
+RECORDING_WAIT_SECS = 900          # give up on a recording that never arrives
+MAX_SESSION_SECS = 3 * 3600        # hard stop for a call that never ends
+
+LIVE_STATES = ("created", "dialing", "connected", "recording")
+TERMINAL_STATES = ("complete", "error")
+
+# Schedule times are naive IST wall-clock strings. IST has no DST, so a fixed
+# offset is exact and needs no tz database (zoneinfo has none on Windows).
+IST = timezone(timedelta(hours=5, minutes=30))
+
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 # Persisted daily schedule snapshot: scraped ONCE per day (8 AM IST) and served
 # all day from disk, so opening the Live Concall section never re-scrapes.
 # Stored at repo root alongside the other cached_*_results.json files.
-SCHEDULE_CACHE_FILE = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "cached_concall_schedule.json",
-)
+SCHEDULE_CACHE_FILE = os.path.join(_REPO_ROOT, "cached_concall_schedule.json")
+STOCK_MASTER_CSV = os.path.join(_REPO_ROOT, "trendlyne_all_stocks_master.csv")
 _schedule_mem: Dict[str, Any] = {"calls": [], "generated_at": None}  # in-memory mirror
 
 # Active live sessions (keyed by session_id)
@@ -76,6 +112,16 @@ _active_sessions: Dict[str, "LiveConcallSession"] = {}
 
 # Module-level reference to the Gemini API function (set during route registration)
 _call_gemini_api_fn = None
+
+
+def now_ist() -> datetime:
+    """
+    Current IST wall-clock time as a naive datetime, comparable with
+    _parse_call_dt(). Use this instead of datetime.now(): the Azure container
+    runs in UTC, where datetime.now() is 5h30m behind IST and every call status
+    and starting-soon toast would be computed against the wrong clock.
+    """
+    return datetime.now(IST).replace(tzinfo=None)
 
 
 def _gemini_file_state(uploaded) -> str:
@@ -110,7 +156,7 @@ def _await_gemini_file(client, uploaded, max_wait_secs: int, poll_secs: int = 2)
     if state in ("ACTIVE", ""):
         return uploaded
 
-    print(f"LIVE_CONCALL: Gemini file is {state} after {waited}s — aborting", file=sys.stderr)
+    print(f"LIVE_CONCALL: Gemini file is {state} after {waited}s - aborting", file=sys.stderr)
     try:
         client.files.delete(name=uploaded.name)
     except Exception:
@@ -144,6 +190,59 @@ def _parse_call_dt(call_date: str, call_time: str):
         except ValueError:
             continue
     return None
+
+
+# Normalised stock-master name -> ticker, rebuilt when the CSV changes (the
+# stock master updater appends new listings daily).
+_ticker_map_cache: Dict[str, Any] = {"mtime": None, "map": {}}
+_ticker_map_lock = threading.Lock()
+_MIN_PREFIX_MATCH_LEN = 6
+
+
+def _company_ticker_map() -> Dict[str, str]:
+    try:
+        mtime = os.path.getmtime(STOCK_MASTER_CSV)
+    except OSError:
+        return _ticker_map_cache["map"]
+    with _ticker_map_lock:
+        if _ticker_map_cache["mtime"] == mtime:
+            return _ticker_map_cache["map"]
+        mapping: Dict[str, str] = {}
+        try:
+            import csv
+            with open(STOCK_MASTER_CSV, "r", encoding="utf-8") as f:
+                for row in csv.DictReader(f):
+                    norm = _norm_company_name(row.get("Stock Name") or "")
+                    tick = (row.get("Ticker") or "").strip().upper()
+                    if norm and tick and norm not in mapping:
+                        mapping[norm] = tick
+        except Exception as e:
+            print(f"LIVE_CONCALL: ticker map build failed: {e}", file=sys.stderr)
+            return _ticker_map_cache["map"]
+        _ticker_map_cache.update(mtime=mtime, map=mapping)
+        return mapping
+
+
+def _resolve_ticker(company_name: str) -> str:
+    """
+    Map a schedule company name onto an NSE ticker, or '' when unsure.
+
+    Exact normalised match first; sources truncate names ("Godrej Propert."),
+    so fall back to a prefix match only when exactly one stock-master name
+    extends it. Never guesses between candidates: the ticker decides which
+    company's Concall Agent result a live analysis is stored under.
+    """
+    norm = _norm_company_name(company_name or "")
+    if not norm:
+        return ""
+    mapping = _company_ticker_map()
+    exact = mapping.get(norm)
+    if exact:
+        return exact
+    if len(norm) < _MIN_PREFIX_MATCH_LEN:
+        return ""
+    candidates = {t for name, t in mapping.items() if name.startswith(norm)}
+    return next(iter(candidates)) if len(candidates) == 1 else ""
 
 
 async def _fetch_ir_pulse(days: int = 7, include_past: bool = False) -> List[Dict]:
@@ -219,21 +318,43 @@ async def refresh_concall_schedule_cache() -> List[Dict]:
     )
     names = ("ir_pulse", "screener", "scanx")
     src = {}
+    source_errors = {}
     for name, res in zip(names, results):
         if isinstance(res, Exception):
             print(f"LIVE_CONCALL: source '{name}' failed: {res}", file=sys.stderr)
+            source_errors[name] = str(res)[:300]
             src[name] = []
         else:
             src[name] = res or []
+    source_counts = {name: len(src[name]) for name in names}
+    for name in names:
+        if not src[name] and name not in source_errors:
+            # The fetchers swallow their own errors and return [], so an empty
+            # source is the only signal that one of them has broken.
+            print(f"LIVE_CONCALL: WARNING source '{name}' returned 0 calls",
+                  file=sys.stderr)
 
     # ScanX first (it carries exact times), then Screener, then IR Pulse.
     merged = _merge_calls(src["scanx"] + src["screener"] + src["ir_pulse"])
     for c in merged:
         dt = _parse_call_dt(c.get("call_date", ""), c.get("call_time", ""))
         c["parsed_datetime"] = dt.isoformat() if dt else None
+        if not c.get("ticker"):
+            c["ticker"] = _resolve_ticker(c.get("company_name", ""))
     merged.sort(key=lambda c: c.get("parsed_datetime") or "9999")
 
-    payload = {"generated_at": datetime.now().isoformat(), "calls": merged}
+    if not merged:
+        # Every source failing at once is an outage, not an empty week. Keep the
+        # previous snapshot rather than overwrite it with nothing (an empty
+        # snapshot also makes every schedule read fall back to an inline scrape).
+        previous = load_raw_concall_calls()
+        if previous:
+            print("LIVE_CONCALL: WARNING all sources returned 0 calls - keeping "
+                  f"previous snapshot ({len(previous)} calls)", file=sys.stderr)
+            return previous
+
+    payload = {"generated_at": datetime.now().isoformat(), "calls": merged,
+               "source_counts": source_counts, "source_errors": source_errors}
     try:
         tmp = SCHEDULE_CACHE_FILE + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
@@ -296,9 +417,9 @@ def load_concall_schedule(days: int = 5) -> List[Dict]:
             print(f"LIVE_CONCALL: inline refresh failed: {e}", file=sys.stderr)
             calls = []
 
-    today = datetime.now().date()
+    now_dt = now_ist()
+    today = now_dt.date()
     horizon = today + timedelta(days=days)
-    now_dt = datetime.now()
 
     out: List[Dict] = []
     for call in calls:
@@ -329,6 +450,8 @@ def load_concall_schedule(days: int = 5) -> List[Dict]:
 
         out.append({
             **call,
+            # Older snapshots predate ticker resolution; fill in (not persisted).
+            "ticker": call.get("ticker") or _resolve_ticker(call.get("company_name", "")),
             "parsed_datetime": parsed_dt.isoformat() if parsed_dt else None,
             "status": status,
         })
@@ -559,7 +682,7 @@ Text:
     try:
         client = genai.Client(api_key=api_key)
         response = client.models.generate_content(
-            model="gemini-3.1-flash-lite",
+            model=DIALIN_MODEL,
             contents=extraction_prompt,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
@@ -630,7 +753,7 @@ Return JSON with these fields:
 Set any missing field to null. Do NOT guess."""
 
         response = client.models.generate_content(
-            model="gemini-2.0-flash",
+            model=DIALIN_MODEL,
             contents=[types.Part.from_text(text=prompt), uploaded],
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
@@ -831,13 +954,16 @@ def place_exotel_call(phone_number: str, passcode: str = "",
 
         dial_string = _build_dial_string(phone_number, passcode, pin)
 
+        token = ""
         if session_id and session_id in _active_sessions:
             sess = _active_sessions[session_id]
             sess.dial_number = dial_string
+            token = sess.webhook_token
             if webhook_base_url:
                 sess.webhook_base = webhook_base_url
 
-        status_cb = f"{webhook_base_url}/api/live-concall/status?session_id={session_id}"
+        status_cb = (f"{webhook_base_url}/api/live-concall/status"
+                     f"?session_id={session_id}&t={token}")
         form = {
             "From": dial_string,
             "CallerId": caller_id,
@@ -875,16 +1001,6 @@ def place_exotel_call(phone_number: str, passcode: str = "",
         return {"error": str(e), "session_id": session_id}
 
 
-def inject_dtmf(call_sid: str, digits: str) -> Dict[str, Any]:
-    """
-    Not supported on Exotel: there is no documented API to inject DTMF into an
-    active call. The passcode is entered automatically at dial time via the
-    'number,,,passcode#' tuple in place_exotel_call().
-    """
-    return {"error": "DTMF injection is not supported on Exotel; the passcode is "
-                     "entered automatically when the call is placed."}
-
-
 def end_exotel_call(call_sid: str) -> Dict[str, Any]:
     """Hang up an active Exotel call by setting its status to completed."""
     try:
@@ -899,31 +1015,72 @@ def end_exotel_call(call_sid: str) -> Dict[str, Any]:
         return {"error": str(e)}
 
 
+# --- Webhook / callback trust -------------------------------------------------
+
+def _secret_matches(given: str, expected: str) -> bool:
+    return bool(given and expected) and secrets.compare_digest(given, expected)
+
+
+def _webhook_authorized(session: "LiveConcallSession", call_sid: str,
+                        args) -> bool:
+    """
+    Whether an Exotel callback may act on `session`. Accepts any one of:
+      - ?k=  the shared LIVE_CONCALL_WEBHOOK_SECRET (dashboard-configured URLs)
+      - ?t=  the per-session token we put in our own StatusCallback URL
+      - a CallSid equal to the one Exotel returned when we placed the call,
+        which only Exotel and this process know (covers a Passthru URL that
+        was configured without ?k=).
+    """
+    if _secret_matches(args.get("k", ""), WEBHOOK_SECRET):
+        return True
+    if _secret_matches(args.get("t", ""), session.webhook_token):
+        return True
+    return _secret_matches(call_sid, session.call_sid)
+
+
+def _is_allowed_recording_url(url: str) -> bool:
+    """True when `url` points at an Exotel recording host (see RECORDING_HOSTS)."""
+    try:
+        parsed = urlparse(url or "")
+    except Exception:
+        return False
+    if parsed.scheme not in ("http", "https"):
+        return False
+    host = (parsed.hostname or "").lower()
+    if not host:
+        return False
+    if any(host == h or host.endswith("." + h) for h in RECORDING_HOSTS):
+        return True
+    # Exotel serves recordings from its own S3 bucket.
+    if host.endswith(".amazonaws.com"):
+        return (host.startswith("exotelrecordings.")
+                or (parsed.path or "").startswith("/exotelrecordings/"))
+    return False
+
+
 # --- Tier 2: live transcription from the Exotel Stream applet ----------------
 
-def _resolve_stream_session(start_obj: Dict[str, Any]):
-    """Correlate a Stream 'start' event to a LiveConcallSession."""
+def _resolve_stream_session(start_obj: Dict[str, Any], trusted: bool = False):
+    """
+    Correlate a Stream 'start' event to a LiveConcallSession by CallSid. The
+    session_id custom parameter is only honoured on a connection that presented
+    the webhook secret. There is deliberately no "the only live call" guess:
+    with two calls running it routes one call's audio into the other.
+    """
     start_obj = start_obj or {}
     call_sid = start_obj.get("call_sid", "")
-    sid = _callsid_to_session.get(call_sid, "")
-    if not sid:
+    sid = _callsid_to_session.get(call_sid, "") if call_sid else ""
+    if not sid and trusted:
         custom = start_obj.get("custom_parameters") or {}
         sid = custom.get("session_id", "")
-    session = _active_sessions.get(sid) if sid else None
-    if session is None:
-        # Last resort: if exactly one call is live, attribute the stream to it.
-        live = [s for s in _active_sessions.values()
-                if s.state in ("dialing", "connected", "recording")]
-        if len(live) == 1:
-            session = live[0]
-    return session
+    return _active_sessions.get(sid) if sid else None
 
 
-def _handle_media_stream(ws):
+def _handle_media_stream(ws, trusted: bool = False):
     """
     Handle the raw WebSocket opened by Exotel's Stream applet: decode PCM media
     frames, stream them to the STT engine, and push transcripts into the
-    session. Listen-only — we never send audio back. Fully isolated/defensive so
+    session. Listen-only - we never send audio back. Fully isolated/defensive so
     a failure here never affects the call, recording, or the rest of the app.
     """
     import base64
@@ -947,7 +1104,7 @@ def _handle_media_stream(ws):
                 continue
             etype = evt.get("event")
             if etype == "start":
-                session = _resolve_stream_session(evt.get("start") or evt)
+                session = _resolve_stream_session(evt.get("start") or evt, trusted)
                 if session and open_stt_stream:
                     stt = open_stt_stream(
                         lambda text, final: session.add_transcript(text, is_final=final))
@@ -1011,6 +1168,12 @@ class LiveConcallSession:
     # Call tracking / webhook routing
     request_uuid: str = ""   # (legacy) provider request id; unused with Exotel
     webhook_base: str = ""   # public base URL Exotel calls back to
+    webhook_token: str = field(default_factory=lambda: secrets.token_urlsafe(24))
+
+    # Ownership + lifecycle
+    user_id: Any = None
+    state_changed_at: float = field(default_factory=time.time)
+    pipeline_started: bool = False   # set once, under _pipeline_lock
 
     # Callback for SocketIO emit
     _emit_fn: Any = None
@@ -1019,8 +1182,9 @@ class LiveConcallSession:
         """Update session state and emit to frontend."""
         old = self.state
         self.state = new_state
+        self.state_changed_at = time.time()
         print(f"LIVE_CONCALL: Session {self.session_id} "
-              f"state: {old} → {new_state}", file=sys.stderr)
+              f"state: {old} -> {new_state}", file=sys.stderr)
         self._emit("live_concall_state", {
             "session_id": self.session_id,
             "state": new_state,
@@ -1093,6 +1257,11 @@ def _transcribe_recording_with_gemini(session: LiveConcallSession,
               file=sys.stderr)
         return ""
 
+    if not _is_allowed_recording_url(recording_url):
+        print(f"LIVE_CONCALL: Refusing recording URL on non-Exotel host: "
+              f"{recording_url[:200]}", file=sys.stderr)
+        return ""
+
     try:
         # Ensure URL ends with .mp3 for easy download
         dl_url = recording_url
@@ -1103,7 +1272,7 @@ def _transcribe_recording_with_gemini(session: LiveConcallSession,
 
         import requests as _requests
         resp = _requests.get(dl_url, timeout=120)
-        # Exotel recording URLs may require HTTP Basic auth — retry if blocked.
+        # Exotel recording URLs may require HTTP Basic auth - retry if blocked.
         if resp.status_code in (401, 403):
             key = EXOTEL_API_KEY or os.getenv("EXOTEL_API_KEY")
             token = EXOTEL_API_TOKEN or os.getenv("EXOTEL_API_TOKEN")
@@ -1134,29 +1303,22 @@ def _transcribe_recording_with_gemini(session: LiveConcallSession,
             )
         )
 
-        # Wait for processing — a full-length recording can take minutes to decode
+        # Wait for processing - a full-length recording can take minutes to decode
         uploaded = _await_gemini_file(client, uploaded, max_wait_secs=300, poll_secs=3)
         if uploaded is None:
             return ""
 
-        prompt = """You are a financial transcription specialist. This audio is from an earnings conference call (concall) for a publicly traded Indian company.
-
-Transcribe ALL spoken words accurately. Preserve speaker attributions where possible (e.g., "Management:", "Analyst:", "Moderator:"). Capture all financial figures, percentages, and guidance numbers precisely.
-
-DO NOT summarize — transcribe only.
-Return ONLY the transcript text."""
-
-        response = client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=[types.Part.from_text(text=prompt), uploaded]
-        )
-
+        # Same prompt, model and fallback chain as the Concall Agent's own
+        # transcription, so both paths stay on maintained model ids.
+        from agents.concall_agent import _gemini_transcribe
         try:
-            client.files.delete(name=uploaded.name)
-        except Exception:
-            pass
-
-        transcript = response.text.strip() if response.text else ""
+            transcript = (_gemini_transcribe(client, uploaded, media_label='audio')
+                          or "").strip()
+        finally:
+            try:
+                client.files.delete(name=uploaded.name)
+            except Exception:
+                pass
         if transcript:
             print(f"LIVE_CONCALL: Transcribed {len(transcript)} chars from recording",
                   file=sys.stderr)
@@ -1179,22 +1341,24 @@ def _generate_post_call_summary(session: LiveConcallSession,
         return ""
 
     from agents.prompts.concall_prompts import CONCALL_ANALYSIS_PROMPT
+    from agents.concall_agent import ANALYSIS_MODEL, ANALYSIS_THINKING
 
     prompt = f"""{CONCALL_ANALYSIS_PROMPT}
 
 ## Company: {session.ticker} ({session.company_name})
 ## Transcript Source: Live Concall — Auto-Transcribed ({session.get_duration()}s duration)
 ## Full Transcript:
-{session.full_transcript}
+{session.full_transcript.strip()}
 """
 
     try:
         messages = [{"role": "user", "content": prompt}]
         result = call_gemini_api_fn(
             messages,
-            model="gemini-2.5-flash-preview-05-20",
+            model=ANALYSIS_MODEL,
             temperature=1,
-            thinking_level="HIGH"
+            thinking_level=ANALYSIS_THINKING,
+            usage_tag='live_concall.analysis'
         )
         return result
     except Exception as e:
@@ -1202,13 +1366,58 @@ def _generate_post_call_summary(session: LiveConcallSession,
         return ""
 
 
+_pipeline_lock = threading.Lock()
+
+
+def _start_post_call_pipeline(session: LiveConcallSession, call_gemini_api_fn,
+                              recording_url: str = "") -> bool:
+    """
+    Start the post-call pipeline at most once per session. /end, the /status
+    webhook and the reaper can all decide the call is over, often within
+    seconds of each other. Returns False when it was already started.
+    """
+    with _pipeline_lock:
+        if session.pipeline_started:
+            return False
+        session.pipeline_started = True
+    threading.Thread(
+        target=_run_post_call_pipeline,
+        args=(session, call_gemini_api_fn, recording_url),
+        daemon=True,
+    ).start()
+    return True
+
+
+def _emit_summary_error(session: LiveConcallSession, message: str):
+    session._emit("live_concall_summary", {
+        "session_id": session.session_id,
+        "analysis": "",
+        "error": message,
+        "duration": session.get_duration(),
+        "transcript_length": len(session.full_transcript),
+    })
+
+
 def _run_post_call_pipeline(session: LiveConcallSession,
                               call_gemini_api_fn,
                               recording_url: str = ""):
     """
-    Full post-call pipeline: transcribe recording (if needed) → summarize.
-    Runs in a background thread.
+    Full post-call pipeline: transcribe recording (if needed) -> summarize.
+    Runs in a background thread; never leaves the session in a non-terminal
+    state, so the UI always gets an answer.
     """
+    try:
+        _post_call_steps(session, call_gemini_api_fn, recording_url)
+    except Exception as e:
+        print(f"LIVE_CONCALL: Post-call pipeline crashed for "
+              f"{session.session_id}: {e}", file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
+        session.update_state("error")
+        _emit_summary_error(session, "Post-call processing failed. Please try again later.")
+
+
+def _post_call_steps(session: LiveConcallSession, call_gemini_api_fn,
+                     recording_url: str):
     session_id = session.session_id
 
     # Step 1: Transcribe recording if we don't have enough transcript text
@@ -1222,20 +1431,18 @@ def _run_post_call_pipeline(session: LiveConcallSession,
         })
         transcript = _transcribe_recording_with_gemini(session, recording_url)
         if transcript:
-            session.full_transcript = transcript
+            # The recording transcript replaces the (too short) live one.
+            # add_transcript appends, so clear first - otherwise the analysis
+            # prompt receives every line twice.
+            session.full_transcript = ""
+            session.transcript_chunks = []
             session.add_transcript(transcript, is_final=True)
 
     # Step 2: Summarize
     if not session.full_transcript or len(session.full_transcript.strip()) < 200:
         session.update_state("complete")
-        session._emit("live_concall_summary", {
-            "session_id": session_id,
-            "analysis": "",
-            "error": "Transcript too short for analysis. "
-                     "The call may have failed to connect or had no audio.",
-            "duration": session.get_duration(),
-            "transcript_length": len(session.full_transcript),
-        })
+        _emit_summary_error(session, "Transcript too short for analysis. "
+                                     "The call may have failed to connect or had no audio.")
         return
 
     session.update_state("summarizing")
@@ -1243,21 +1450,29 @@ def _run_post_call_pipeline(session: LiveConcallSession,
     session.analysis_result = result
     session.update_state("complete")
 
-    # Persist result for standard concall agent retrieval
-    try:
-        from agents.base import store_latest_result
-        store_latest_result('concall', session.ticker, {
-            'analysis': result,
-            'ticker': session.ticker,
-            'concall_label': f"Live Concall — {session.company_name}",
-            'concall_link': session.recording_url or '',
-            'transcript_text': session.full_transcript,
-            'analyzed_at': time.time(),
-            'source': 'live_concall',
-            'duration_seconds': session.get_duration(),
-        })
-    except Exception as e:
-        print(f"LIVE_CONCALL: Failed to store result: {e}", file=sys.stderr)
+    if not result:
+        _emit_summary_error(session, "The transcript was captured but the analysis "
+                                     "failed. Please try again later.")
+        return
+
+    # Persist under its own agent slot. Writing to the 'concall' slot would make
+    # the Concall Agent serve this result (which lacks its quarter/verification
+    # fields) in place of its own analysis for the ticker.
+    if session.ticker:
+        try:
+            from agents.base import store_latest_result
+            store_latest_result('live_concall', session.ticker, {
+                'analysis': result,
+                'ticker': session.ticker,
+                'concall_label': f"Live Concall — {session.company_name}",
+                'concall_link': session.recording_url or '',
+                'transcript_text': session.full_transcript.strip(),
+                'analyzed_at': time.time(),
+                'source': 'live_concall',
+                'duration_seconds': session.get_duration(),
+            })
+        except Exception as e:
+            print(f"LIVE_CONCALL: Failed to store result: {e}", file=sys.stderr)
 
     session._emit("live_concall_summary", {
         "session_id": session_id,
@@ -1268,25 +1483,155 @@ def _run_post_call_pipeline(session: LiveConcallSession,
 
 
 # ---------------------------------------------------------------------------
+# 6b. SESSION LIFECYCLE (reaper)
+# ---------------------------------------------------------------------------
+
+def _reap_sessions(call_gemini_api_fn, now: Optional[float] = None):
+    """
+    One sweep over the in-memory sessions:
+      - a call still live after MAX_SESSION_SECS is hung up;
+      - an ended call whose recording never arrived is finished from the live
+        transcript if there is one, otherwise failed (instead of waiting forever);
+      - finished sessions are dropped after SESSION_RETENTION_SECS, together with
+        their CallSid mapping.
+    """
+    now = now or time.time()
+    for sid, s in list(_active_sessions.items()):
+        try:
+            if s.state in LIVE_STATES and now - (s.started_at or now) > MAX_SESSION_SECS:
+                print(f"LIVE_CONCALL: Session {sid} exceeded {MAX_SESSION_SECS}s - "
+                      "hanging up", file=sys.stderr)
+                if s.call_sid:
+                    end_exotel_call(s.call_sid)
+                s.ended_at = s.ended_at or now
+                s.update_state("ended")
+            elif (s.state == "ended" and not s.pipeline_started
+                  and now - (s.ended_at or s.state_changed_at) > RECORDING_WAIT_SECS):
+                if len(s.full_transcript.strip()) >= 200:
+                    _start_post_call_pipeline(s, call_gemini_api_fn)
+                else:
+                    print(f"LIVE_CONCALL: Session {sid} - no recording after "
+                          f"{RECORDING_WAIT_SECS}s, giving up", file=sys.stderr)
+                    with _pipeline_lock:
+                        s.pipeline_started = True
+                    s.update_state("error")
+                    _emit_summary_error(s, "The call recording never arrived, so no "
+                                           "transcript could be produced.")
+            elif s.state in TERMINAL_STATES and now - s.state_changed_at > SESSION_RETENTION_SECS:
+                _active_sessions.pop(sid, None)
+                for csid, mapped in list(_callsid_to_session.items()):
+                    if mapped == sid:
+                        _callsid_to_session.pop(csid, None)
+        except Exception as e:
+            print(f"LIVE_CONCALL: reaper error for {sid}: {e}", file=sys.stderr)
+
+
+_reaper_started = False
+
+
+def _start_session_reaper(call_gemini_api_fn, interval_secs: int = 60):
+    global _reaper_started
+    if _reaper_started:
+        return
+    _reaper_started = True
+
+    def _loop():
+        while True:
+            time.sleep(interval_secs)
+            try:
+                _reap_sessions(call_gemini_api_fn)
+            except Exception as e:
+                print(f"LIVE_CONCALL: reaper loop error: {e}", file=sys.stderr)
+
+    threading.Thread(target=_loop, daemon=True, name="live-concall-reaper").start()
+
+
+# ---------------------------------------------------------------------------
 # 7. FLASK ROUTE REGISTRATION
 # ---------------------------------------------------------------------------
+
+def _room(session_id: str) -> str:
+    """Socket.IO room carrying one session's events (only its owner joins it)."""
+    return f"live_concall:{session_id}"
+
+
+def _can_access(session: LiveConcallSession, user) -> bool:
+    return bool(user) and (bool(getattr(user, "is_admin", False))
+                           or session.user_id == getattr(user, "id", None))
+
+
+# (user_id, IST date) -> dials placed; in-memory, so a restart resets the count.
+_dial_counts: Dict[Any, int] = {}
+_dial_counts_lock = threading.Lock()
+
+
+def _take_dial_quota(user) -> bool:
+    """Count one dial against the user's daily quota; False when exhausted."""
+    if getattr(user, "is_admin", False):
+        return True
+    today = now_ist().date()
+    with _dial_counts_lock:
+        for key in [k for k in _dial_counts if k[1] != today]:
+            _dial_counts.pop(key, None)
+        key = (user.id, today)
+        if _dial_counts.get(key, 0) >= DAILY_DIALS_PER_USER:
+            return False
+        _dial_counts[key] = _dial_counts.get(key, 0) + 1
+        return True
+
 
 def register_live_concall_routes(app, socketio, call_gemini_api_fn):
     """
     Register all Live Concall REST endpoints.
 
     Endpoints:
-      GET  /api/live-concall/schedule       — Get upcoming concall schedule
-      POST /api/live-concall/extract-dialin  — Extract dial-in from PDF URL
-      POST /api/live-concall/start          — Start a live session (dial out)
-      POST /api/live-concall/inject-dtmf    — (Exotel: not supported)
-      POST /api/live-concall/end            — End active call & summarize
-      GET  /api/live-concall/session/<id>   — Get session state
-      GET/POST /api/live-concall/status     — Exotel Passthru/StatusCallback (lifecycle + recording)
-      WS   /api/live-concall/media-stream   — Exotel Stream applet audio (Tier 2)
+      GET  /api/live-concall/schedule       - Get upcoming concall schedule (public)
+      POST /api/live-concall/extract-dialin - Extract dial-in from PDF URL (login)
+      POST /api/live-concall/start          - Start a live session / dial out (login, quota)
+      POST /api/live-concall/end            - End active call & summarize (owner/admin)
+      GET  /api/live-concall/session/<id>   - Get session state (owner/admin)
+      GET  /api/live-concall/sessions       - List my sessions (all, for admins)
+      GET/POST /api/live-concall/status     - Exotel Passthru/StatusCallback (lifecycle + recording)
+      WS   /api/live-concall/media-stream   - Exotel Stream applet audio (Tier 2)
+      Socket.IO 'live_concall_join'         - subscribe to one session's events
     """
     global _call_gemini_api_fn
     _call_gemini_api_fn = call_gemini_api_fn
+
+    from flask import session as flask_session
+    from flask_socketio import join_room
+    from auth.routes import login_required
+
+    def _user():
+        return getattr(request, "current_user", None)
+
+    def _owned_session(session_id: str):
+        """(session, error_response) for the current user."""
+        session = _active_sessions.get(session_id)
+        if not session or not _can_access(session, _user()):
+            # Same answer for "missing" and "not yours": don't confirm ids exist.
+            return None, (jsonify({"error": "Session not found"}), 404)
+        return session, None
+
+    # --- Socket.IO: per-session rooms ---
+    @socketio.on('live_concall_join')
+    def live_concall_join(data):
+        """Join the room for one session. Events are emitted only to that room,
+        so other users never receive this session's transcript."""
+        session_id = (data or {}).get('session_id', '')
+        session = _active_sessions.get(session_id)
+        user = None
+        uid = flask_session.get('user_id')
+        if uid:
+            try:
+                from auth.database import User
+                user = User.get_by_id(uid)
+            except Exception:
+                user = None
+        if not session or not _can_access(session, user):
+            return {"ok": False}
+        join_room(_room(session_id))
+        return {"ok": True, "session": session.get_state_dict()}
 
     # --- Schedule ---
     @app.route('/api/live-concall/schedule', methods=['GET'])
@@ -1302,6 +1647,7 @@ def register_live_concall_routes(app, socketio, call_gemini_api_fn):
 
     # --- Extract Dial-in ---
     @app.route('/api/live-concall/extract-dialin', methods=['POST'])
+    @login_required
     def live_concall_extract_dialin():
         """Extract dial-in details from a PDF announcement URL."""
         try:
@@ -1330,8 +1676,9 @@ def register_live_concall_routes(app, socketio, call_gemini_api_fn):
 
     # --- Start Session ---
     @app.route('/api/live-concall/start', methods=['POST'])
+    @login_required
     def live_concall_start():
-        """Start a live concall session — place Exotel call."""
+        """Start a live concall session - place Exotel call."""
         try:
             data = request.get_json(force=True)
             phone_number = data.get('phone_number', '').strip()
@@ -1339,6 +1686,7 @@ def register_live_concall_routes(app, socketio, call_gemini_api_fn):
             pin = data.get('pin', '').strip()
             company_name = data.get('company_name', '').strip()
             ticker = data.get('ticker', '').strip().upper()
+            user = _user()
 
             if not phone_number:
                 return jsonify({"error": "phone_number is required"}), 400
@@ -1364,15 +1712,28 @@ def register_live_concall_routes(app, socketio, call_gemini_api_fn):
                 return jsonify({"error": "Exotel not configured. "
                                          "EXOTEL_FLOW_APP_ID is missing."}), 503
 
+            # One live call at a time per user (admins may run several).
+            if not user.is_admin and any(
+                    s.user_id == user.id and s.state in LIVE_STATES
+                    for s in _active_sessions.values()):
+                return jsonify({"error": "You already have a live call in progress. "
+                                         "End it before starting another."}), 409
+
+            if not _take_dial_quota(user):
+                return jsonify({"error": f"Daily limit of {DAILY_DIALS_PER_USER} live "
+                                         "calls reached. Try again tomorrow."}), 429
+
             # Create session
-            session_id = f"lc_{int(time.time())}_{ticker or 'UNKNOWN'}"
+            session_id = (f"lc_{int(time.time())}_{ticker or 'UNKNOWN'}_"
+                          f"{secrets.token_hex(3)}")
             session = LiveConcallSession(
                 session_id=session_id,
                 company_name=company_name,
                 ticker=ticker,
                 started_at=time.time(),
+                user_id=user.id,
             )
-            session._emit_fn = lambda evt, d: socketio.emit(evt, d)
+            session._emit_fn = lambda evt, d: socketio.emit(evt, d, to=_room(session_id))
             _active_sessions[session_id] = session
 
             # Determine webhook base URL (Exotel calls back to this public host)
@@ -1390,6 +1751,7 @@ def register_live_concall_routes(app, socketio, call_gemini_api_fn):
                     session_id, webhook_base
                 )
                 if "error" in result:
+                    session.ended_at = time.time()
                     session.update_state("error")
                     session._emit("live_concall_error", {
                         "session_id": session_id,
@@ -1408,62 +1770,47 @@ def register_live_concall_routes(app, socketio, call_gemini_api_fn):
         except Exception as e:
             return jsonify({"error": str(e)}), 500
 
-    # --- Inject DTMF ---
-    @app.route('/api/live-concall/inject-dtmf', methods=['POST'])
-    def live_concall_inject_dtmf():
-        """Send DTMF digits to active call."""
-        try:
-            data = request.get_json(force=True)
-            session_id = data.get('session_id', '')
-            digits = data.get('digits', '')
-
-            session = _active_sessions.get(session_id)
-            if not session:
-                return jsonify({"error": "Session not found"}), 404
-            if not session.call_sid:
-                return jsonify({"error": "No active call"}), 400
-
-            result = inject_dtmf(session.call_sid, digits)
-            return jsonify(result)
-        except Exception as e:
-            return jsonify({"error": str(e)}), 500
-
     # --- End Call ---
     @app.route('/api/live-concall/end', methods=['POST'])
+    @login_required
     def live_concall_end():
         """End the active call and trigger summarization."""
         try:
             data = request.get_json(force=True)
             session_id = data.get('session_id', '')
 
-            session = _active_sessions.get(session_id)
-            if not session:
-                return jsonify({"error": "Session not found"}), 404
+            session, err = _owned_session(session_id)
+            if err:
+                return err
 
-            session.ended_at = time.time()
+            if session.state in TERMINAL_STATES or session.pipeline_started:
+                return jsonify({"status": "ok", "session_id": session_id,
+                                "duration": session.get_duration(),
+                                "message": "Call already ended."})
+
+            session.ended_at = session.ended_at or time.time()
 
             # End Exotel call
             if session.call_sid:
                 end_exotel_call(session.call_sid)
 
-            # If we already have a recording URL, kick off the full pipeline now.
-            # If not, the /status webhook will trigger it when Exotel delivers it.
-            if session.recording_url:
-                thread = threading.Thread(
-                    target=_run_post_call_pipeline,
-                    args=(session, call_gemini_api_fn, session.recording_url),
-                    daemon=True
-                )
-                thread.start()
+            # Recording already here, or enough live (Tier-2) transcript to
+            # analyse: finish now. Otherwise the /status webhook continues when
+            # the recording arrives, and the reaper gives up after
+            # RECORDING_WAIT_SECS.
+            if session.recording_url or len(session.full_transcript.strip()) >= 200:
+                _start_post_call_pipeline(session, call_gemini_api_fn,
+                                          session.recording_url)
+                message = "Call ended. Generating summary..."
             else:
-                # Mark as ended; recording webhook will continue the pipeline
                 session.update_state("ended")
+                message = "Call ended. Transcript will be generated when recording is ready."
 
             return jsonify({
                 "status": "ok",
                 "session_id": session_id,
                 "duration": session.get_duration(),
-                "message": "Call ended. Transcript will be generated when recording is ready."
+                "message": message,
             })
 
         except Exception as e:
@@ -1471,19 +1818,23 @@ def register_live_concall_routes(app, socketio, call_gemini_api_fn):
 
     # --- Get Session State ---
     @app.route('/api/live-concall/session/<session_id>', methods=['GET'])
+    @login_required
     def live_concall_session_status(session_id):
         """Get current session state."""
-        session = _active_sessions.get(session_id)
-        if not session:
-            return jsonify({"error": "Session not found"}), 404
+        session, err = _owned_session(session_id)
+        if err:
+            return err
         return jsonify(session.get_state_dict())
 
-    # --- List Active Sessions ---
+    # --- List Sessions ---
     @app.route('/api/live-concall/sessions', methods=['GET'])
+    @login_required
     def live_concall_sessions():
-        """List all active sessions."""
+        """List the caller's sessions (every session, for admins)."""
+        user = _user()
         return jsonify({
-            "sessions": [s.get_state_dict() for s in _active_sessions.values()]
+            "sessions": [s.get_state_dict() for s in list(_active_sessions.values())
+                         if _can_access(s, user)]
         })
 
     # --- Status / Recording Webhook (Exotel Passthru + StatusCallback) ---
@@ -1493,6 +1844,9 @@ def register_live_concall_routes(app, socketio, call_gemini_api_fn):
         Exotel Passthru / StatusCallback receiver: drives the call lifecycle and
         kicks off post-call transcription when the RecordingUrl arrives. Exotel
         may call this via GET (Passthru) or POST (StatusCallback).
+
+        Always answers 200: a Passthru applet branches on the response code, so
+        a 4xx here would change the call flow. Unverified requests are ignored.
         """
         vals = request.values
         call_sid = vals.get('CallSid', '')
@@ -1510,6 +1864,11 @@ def register_live_concall_routes(app, socketio, call_gemini_api_fn):
         if not session:
             return Response("OK", status=200)
 
+        if not _webhook_authorized(session, call_sid, request.args):
+            print(f"LIVE_CONCALL: Ignoring unverified status callback for "
+                  f"session={session_id}", file=sys.stderr)
+            return Response("OK", status=200)
+
         if call_sid and not session.call_sid:
             session.call_sid = call_sid
             _callsid_to_session[call_sid] = session_id
@@ -1522,8 +1881,8 @@ def register_live_concall_routes(app, socketio, call_gemini_api_fn):
                 session.update_state("recording")
         elif call_status in ('failed', 'busy', 'no-answer', 'no_answer',
                              'canceled', 'cancelled'):
-            session.ended_at = time.time()
-            if session.state not in ('summarizing', 'transcribing', 'complete'):
+            session.ended_at = session.ended_at or time.time()
+            if not session.pipeline_started and session.state not in TERMINAL_STATES:
                 session.update_state("error")
                 session._emit("live_concall_error", {
                     "session_id": session_id,
@@ -1533,27 +1892,25 @@ def register_live_concall_routes(app, socketio, call_gemini_api_fn):
         elif call_status in ('completed', 'complete'):
             if not session.ended_at:
                 session.ended_at = time.time()
-            if session.state not in ('summarizing', 'transcribing',
-                                     'complete', 'ended'):
+            if session.state in LIVE_STATES:
                 session.update_state("ended")
 
-        # Recording ready → run the post-call pipeline (Tier-1 transcript / backstop)
-        if recording_url and session.state not in ('summarizing', 'transcribing',
-                                                    'complete'):
-            session.recording_url = recording_url
-            session._emit("live_concall_recording", {
-                "session_id": session_id,
-                "recording_url": recording_url,
-            })
-            threading.Thread(
-                target=_run_post_call_pipeline,
-                args=(session, call_gemini_api_fn, recording_url),
-                daemon=True,
-            ).start()
+        # Recording ready -> run the post-call pipeline (Tier-1 transcript / backstop)
+        if recording_url and not session.pipeline_started:
+            if not _is_allowed_recording_url(recording_url):
+                print(f"LIVE_CONCALL: Ignoring RecordingUrl on non-Exotel host "
+                      f"for session={session_id}", file=sys.stderr)
+            else:
+                session.recording_url = recording_url
+                session._emit("live_concall_recording", {
+                    "session_id": session_id,
+                    "recording_url": recording_url,
+                })
+                _start_post_call_pipeline(session, call_gemini_api_fn, recording_url)
 
         return Response("OK", status=200)
 
-    # --- Live audio WebSocket (Exotel Stream applet → STT) — Tier 2, gated ---
+    # --- Live audio WebSocket (Exotel Stream applet -> STT) - Tier 2, gated ---
     # Registered only when LIVE_CONCALL_STREAMING is on, and guarded so a missing
     # flask-sock package (or any error) can never block app startup.
     if LIVE_STREAM_ENABLED:
@@ -1563,12 +1920,19 @@ def register_live_concall_routes(app, socketio, call_gemini_api_fn):
 
             @_sock.route('/api/live-concall/media-stream')
             def live_concall_media_stream(ws):
-                _handle_media_stream(ws)
+                trusted = _secret_matches(request.args.get('k', ''), WEBHOOK_SECRET)
+                if WEBHOOK_SECRET and not trusted:
+                    print("LIVE_CONCALL: Rejecting media-stream without valid ?k=",
+                          file=sys.stderr)
+                    return
+                _handle_media_stream(ws, trusted=trusted)
 
-            print("LIVE_CONCALL: ✓ media-stream WebSocket registered",
+            print("LIVE_CONCALL: media-stream WebSocket registered",
                   file=sys.stderr)
         except Exception as e:
             print(f"LIVE_CONCALL: media-stream WS NOT registered ({e})",
                   file=sys.stderr)
 
-    print("LIVE_CONCALL: ✓ Live Concall routes registered", file=sys.stderr)
+    _start_session_reaper(call_gemini_api_fn)
+
+    print("LIVE_CONCALL: Live Concall routes registered", file=sys.stderr)

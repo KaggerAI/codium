@@ -3520,6 +3520,33 @@
             margin-bottom: 1rem;
         }
 
+        .live-modal-error,
+        .live-modal-note {
+            display: none;
+            font-size: 0.78rem;
+            line-height: 1.4;
+            padding: 0.55rem 0.75rem;
+            border-radius: 0.4rem;
+            margin-bottom: 1rem;
+        }
+
+        .live-modal-error {
+            color: #ef4444;
+            background: rgba(239, 68, 68, 0.08);
+            border: 1px solid rgba(239, 68, 68, 0.35);
+        }
+
+        .live-modal-note {
+            color: var(--text-secondary);
+            background: rgba(245, 158, 11, 0.08);
+            border: 1px solid rgba(245, 158, 11, 0.35);
+        }
+
+        .live-modal-error.show,
+        .live-modal-note.show {
+            display: block;
+        }
+
         .live-modal-label {
             font-size: 0.75rem;
             font-weight: 600;
@@ -3652,23 +3679,6 @@
             gap: 0.5rem;
             align-items: center;
             flex-wrap: wrap;
-        }
-
-        .live-dtmf-btn {
-            font-size: 0.75rem;
-            font-weight: 600;
-            padding: 0.4rem 0.85rem;
-            border-radius: 0.4rem;
-            background: var(--bg-secondary);
-            color: var(--text-secondary);
-            border: 1px solid var(--border-color);
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-
-        .live-dtmf-btn:hover {
-            color: var(--text-primary);
-            border-color: var(--border-glow);
         }
 
         .live-end-btn {
@@ -4289,10 +4299,6 @@
                         </div>
                         <div class="live-stream-controls">
                             <span class="live-stream-duration" id="liveStreamDuration">00:00</span>
-                            <button class="live-dtmf-btn" id="liveDtmfBtn" onclick="sendLiveDtmf()"
-                                title="Re-send passcode digits">
-                                🔢 Re-send Digits
-                            </button>
                             <button class="live-end-btn" id="liveEndBtn" onclick="endLiveCall()">
                                 ⏹ End &amp; Summarise
                             </button>
@@ -4341,6 +4347,12 @@
                         <input class="live-modal-input" id="liveModalPin" type="text"
                             placeholder="Leave blank if not required" autocomplete="off" />
                     </div>
+                    <div class="live-modal-note" id="liveModalOperatorNote">
+                        No passcode found. This bridge is probably operator-assisted: an operator
+                        asks callers for their name before admitting them, and the bot can't answer
+                        yet, so it may not be let in.
+                    </div>
+                    <div class="live-modal-error" id="liveModalError"></div>
                     <div class="live-modal-actions">
                         <button class="live-dial-btn" id="liveDialNowBtn" onclick="startLiveCall()">
                             📞 Dial Now
@@ -5847,6 +5859,12 @@
             try {
                 lcSocket = io({ transports: ['websocket', 'polling'] });
 
+                // Session events go to a per-session room; re-join after every
+                // (re)connect, since a reconnect starts with no rooms.
+                lcSocket.on('connect', () => {
+                    if (liveSessionId) joinLiveRoom(liveSessionId);
+                });
+
                 lcSocket.on('live_concall_state', (data) => {
                     if (data.session_id !== liveSessionId) return;
                     onLiveSessionState(data.state, data);
@@ -5881,6 +5899,61 @@
             }
         }
 
+        function joinLiveRoom(sessionId) {
+            if (!lcSocket || !sessionId) return;
+            lcSocket.emit('live_concall_join', { session_id: sessionId }, (ack) => {
+                // Sync state we may have missed before joining the room.
+                if (ack && ack.ok && ack.session && sessionId === liveSessionId) {
+                    syncLiveSession(ack.session);
+                }
+            });
+        }
+
+        function syncLiveSession(sess) {
+            if (sess.duration && !liveConnectedAt) {
+                liveConnectedAt = Date.now() - sess.duration * 1000;
+            }
+            if (sess.state) onLiveSessionState(sess.state, sess);
+        }
+
+        // Re-attach to a call this user started earlier (page reload, new tab).
+        async function restoreLiveSession() {
+            if (liveSessionId) return;
+            try {
+                const resp = await fetch('/api/live-concall/sessions');
+                if (!resp.ok) return;
+                const data = await resp.json();
+                const active = (data.sessions || []).filter(s =>
+                    ['created', 'dialing', 'connected', 'recording', 'ended'].includes(s.state));
+                if (!active.length || liveSessionId) return;
+                const sess = active[active.length - 1];
+                liveSessionId = sess.session_id;
+                liveCurrentCall = { company_name: sess.company_name, ticker: sess.ticker };
+                showLiveStreamView(sess.company_name);
+                syncLiveSession(sess);
+                ensureLcSocket();
+                if (lcSocket && lcSocket.connected) joinLiveRoom(liveSessionId);
+            } catch (e) {
+                console.warn('LIVE_CONCALL: session restore failed', e);
+            }
+        }
+
+        function showLiveModalError(msg) {
+            const el = document.getElementById('liveModalError');
+            el.textContent = msg || '';
+            el.classList.toggle('show', !!msg);
+        }
+
+        function updateOperatorNote() {
+            const passcode = document.getElementById('liveModalPasscode').value.trim();
+            const pin = document.getElementById('liveModalPin').value.trim();
+            document.getElementById('liveModalOperatorNote')
+                .classList.toggle('show', !passcode && !pin);
+        }
+
+        document.getElementById('liveModalPasscode').addEventListener('input', updateOperatorNote);
+        document.getElementById('liveModalPin').addEventListener('input', updateOperatorNote);
+
         // ── Toggle live mode ─────────────────────────────────
         function toggleLiveMode() {
             liveModeActive = !liveModeActive;
@@ -5892,6 +5965,7 @@
                 schedPanel.classList.add('show');
                 ensureLcSocket();
                 if (!liveScheduleLoaded) loadLiveSchedule();
+                restoreLiveSession();
                 // Hide existing analysis panels to reduce clutter
                 hideEl('concallError');
                 if (!liveSessionId) hideEl('liveStreamPanel');
@@ -6039,6 +6113,9 @@
             document.getElementById('liveWebcastBtn').style.display = 'none';
             document.getElementById('liveWebcastBtn').href = '#';
             document.getElementById('liveDialNowBtn').disabled = false;
+            document.getElementById('liveDialNowBtn').textContent = '📞 Dial Now';
+            showLiveModalError('');
+            document.getElementById('liveModalOperatorNote').classList.remove('show');
 
             // Show modal
             document.getElementById('liveDialModal').classList.add('show');
@@ -6058,6 +6135,7 @@
                         wbBtn.style.display = 'inline-flex';
                     }
                     extractStatus.style.display = 'none';
+                    if (dialin.phone_number) updateOperatorNote();
                 };
 
                 const cached = liveDialinCache[call.announcement_url];
@@ -6116,9 +6194,23 @@
             const pin = document.getElementById('liveModalPin').value.trim();
             const companyName = liveCurrentCall?.company_name || '';
             const ticker = liveCurrentCall?.ticker || '';
+            const dialBtn = document.getElementById('liveDialNowBtn');
+            const resetDialBtn = () => {
+                dialBtn.disabled = false;
+                dialBtn.textContent = '📞 Dial Now';
+            };
 
-            document.getElementById('liveDialNowBtn').disabled = true;
-            document.getElementById('liveDialNowBtn').textContent = 'Dialing...';
+            // The stream view follows one call at a time.
+            const liveStates = ['created', 'dialing', 'connected', 'recording'];
+            const pill = document.getElementById('liveStatusPill');
+            if (liveSessionId && liveStates.some(s => pill.classList.contains(s))) {
+                showLiveModalError('A call is already in progress. End it before starting another.');
+                return;
+            }
+
+            showLiveModalError('');
+            dialBtn.disabled = true;
+            dialBtn.textContent = 'Dialing...';
 
             try {
                 ensureLcSocket();
@@ -6127,23 +6219,28 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ phone_number: phone, passcode, pin, company_name: companyName, ticker })
                 });
-                const data = await resp.json();
+                let data = {};
+                try { data = await resp.json(); } catch (_) { }
 
-                if (data.error) {
-                    alert('Failed to start call: ' + data.error);
-                    document.getElementById('liveDialNowBtn').disabled = false;
-                    document.getElementById('liveDialNowBtn').textContent = '📞 Dial Now';
+                if (resp.status === 401) {
+                    showLiveModalError('Your session has expired. Please log in again.');
+                    resetDialBtn();
+                    return;
+                }
+                if (!resp.ok || data.error) {
+                    showLiveModalError('Could not start the call: ' + (data.error || `HTTP ${resp.status}`));
+                    resetDialBtn();
                     return;
                 }
 
                 liveSessionId = data.session_id;
                 closeLiveModal();
                 showLiveStreamView(companyName);
+                if (lcSocket && lcSocket.connected) joinLiveRoom(liveSessionId);
 
             } catch (e) {
-                alert('Network error: ' + e.message);
-                document.getElementById('liveDialNowBtn').disabled = false;
-                document.getElementById('liveDialNowBtn').textContent = '📞 Dial Now';
+                showLiveModalError('Network error: ' + e.message);
+                resetDialBtn();
             }
         }
 
@@ -6215,35 +6312,6 @@
             document.getElementById('liveEndBtn').disabled = false;
         }
 
-        // ── DTMF re-send ──────────────────────────────────────
-        async function sendLiveDtmf() {
-            if (!liveSessionId) return;
-            const passcode = document.getElementById('liveModalPasscode')?.value?.trim()
-                || liveExtractedDialin?.passcode || '';
-            const pin = document.getElementById('liveModalPin')?.value?.trim()
-                || liveExtractedDialin?.pin || '';
-
-            if (!passcode && !pin) {
-                alert('No passcode stored. Dial in manually if needed.');
-                return;
-            }
-            let digits = passcode ? `wwwwww${passcode}` : '';
-            if (!digits.endsWith('#') && digits) digits += '#';
-            if (pin) digits += `wwww${pin}#`;
-
-            try {
-                const resp = await fetch('/api/live-concall/inject-dtmf', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ session_id: liveSessionId, digits })
-                });
-                const data = await resp.json();
-                if (data.error) alert('DTMF error: ' + data.error);
-            } catch (e) {
-                alert('Network error: ' + e.message);
-            }
-        }
-
         // ── End call ──────────────────────────────────────────
         async function endLiveCall() {
             if (!liveSessionId) return;
@@ -6259,13 +6327,19 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ session_id: liveSessionId })
                 });
-                const data = await resp.json();
+                let data = {};
+                try { data = await resp.json(); } catch (_) { }
+                btn.textContent = '⏹ End & Summarise';
+                if (!resp.ok || data.error) {
+                    showLiveError(data.error || `Could not end the call (HTTP ${resp.status}).`);
+                    return;
+                }
                 updateLiveStatusPill('ended');
                 appendLiveTranscript('\n\n[Call ended — generating transcript and summary...]\n');
             } catch (e) {
                 btn.disabled = false;
                 btn.textContent = '⏹ End & Summarise';
-                alert('Network error: ' + e.message);
+                showLiveError('Network error: ' + e.message);
             }
         }
 
