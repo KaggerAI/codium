@@ -909,7 +909,7 @@ def fetch_consolidated(ticker: str) -> tuple[dict[str, pd.DataFrame], str, dict,
     except Exception as e:
         log_progress(f"WARN: Peer extraction failed for {ticker}: {e}")
 
-    return tables, description, top_ratios, is_consolidated, peer_data
+    return tables, description, top_ratios, is_consolidated, _strip_private_peer_keys(peer_data)
 
 async def get_company_id_async(ticker: str) -> int:
     import urllib.parse
@@ -2641,7 +2641,7 @@ def fetch_latest_documents(ticker: str) -> list[dict]:
 # Peer Comparison Data Fetcher (Direct Screener.in Scrape)
 # =====================================================================
 
-def fetch_peer_comparison_from_screener(ticker: str, company_name: str = None) -> dict:
+def fetch_peer_comparison_from_screener(ticker: str, company_name: str = None, enrich: str = 'peers') -> dict:
     """
     Fetches peer comparison data directly from Screener.in by scraping the 
     peer comparison table (section id: #peers).
@@ -2669,19 +2669,106 @@ def fetch_peer_comparison_from_screener(ticker: str, company_name: str = None) -
             # If we're already in an async context, run in a new thread
             import concurrent.futures
             with concurrent.futures.ThreadPoolExecutor() as executor:
-                future = executor.submit(asyncio.run, fetch_peer_comparison_from_screener_async(ticker, company_name))
+                future = executor.submit(asyncio.run, fetch_peer_comparison_from_screener_async(ticker, company_name, enrich))
                 return future.result(timeout=60)
         else:
-            return loop.run_until_complete(fetch_peer_comparison_from_screener_async(ticker, company_name))
+            return loop.run_until_complete(fetch_peer_comparison_from_screener_async(ticker, company_name, enrich))
     except RuntimeError:
         # No event loop exists, create one
-        return asyncio.run(fetch_peer_comparison_from_screener_async(ticker, company_name))
+        return asyncio.run(fetch_peer_comparison_from_screener_async(ticker, company_name, enrich))
     except Exception as e:
         print(f"ERROR: Sync wrapper for peer comparison failed: {e}")
         return {'company': {}, 'peers': [], 'target_identified': False, 'match_method': 'none'}
 
 
-async def fetch_peer_comparison_from_screener_async(ticker: str, company_name: str = None) -> dict:
+def _strip_private_peer_keys(result: dict) -> dict:
+    """Remove parser-internal keys (e.g. _screener_path) from every row."""
+    if not isinstance(result, dict):
+        return result
+    rows = [result.get('company'), result.get('industry_avg')] + list(result.get('peers') or [])
+    for row in rows:
+        if isinstance(row, dict):
+            row.pop('_screener_path', None)
+    return result
+
+
+def _to_float(val):
+    try:
+        return float(str(val).replace(',', '').replace('%', '').strip())
+    except (TypeError, ValueError):
+        return None
+
+
+async def _enrich_peer_ratios_async(rows: list, max_concurrency: int = 5, overall_timeout: float = 20.0) -> None:
+    """
+    Fill P/B and ROE in-place for peer-table rows. Screener's peer table has
+    no P/B or ROE columns, but each company's own page header (#top-ratios)
+    has ROE and Book Value, so P/B = CMP / Book Value.
+
+    Best-effort: a failed or slow fetch leaves that row's values as they were.
+    """
+    targets = [r for r in rows
+               if isinstance(r, dict) and r.get('_screener_path')
+               and (r.get('pb_ratio', 'N/A') == 'N/A' or r.get('roe', 'N/A') == 'N/A')]
+    if not targets:
+        return
+
+    sem = asyncio.Semaphore(max_concurrency)
+
+    async def _one(row):
+        url = "https://www.screener.in" + row['_screener_path']
+        try:
+            async with sem:
+                text, _, status = await _stealth_get_html_async(url, follow_redirects=True)
+            if status != 200:
+                return
+            ratios = scrape_top_ratios(BeautifulSoup(text, 'html.parser'))
+            if row.get('roe', 'N/A') == 'N/A':
+                roe = _to_float(ratios.get('ROE'))
+                if roe is not None:
+                    row['roe'] = f"{roe:g}"
+            if row.get('pb_ratio', 'N/A') == 'N/A':
+                pb = _to_float(ratios.get('Price to book value') or ratios.get('Stock P/B'))
+                if pb is None:
+                    cmp_val = _to_float(row.get('cmp')) or _to_float(ratios.get('Current Price'))
+                    book_value = _to_float(ratios.get('Book Value'))
+                    if cmp_val is not None and book_value and book_value > 0:
+                        pb = cmp_val / book_value
+                if pb is not None:
+                    row['pb_ratio'] = f"{pb:.2f}"
+        except Exception as e:
+            log_progress(f"Peer ratio enrichment failed for {url}: {e}")
+
+    tasks = [asyncio.ensure_future(_one(r)) for r in targets]
+    done, pending = await asyncio.wait(tasks, timeout=overall_timeout)
+    for t in pending:
+        t.cancel()
+    if pending:
+        log_progress(f"Peer ratio enrichment: {len(pending)} of {len(targets)} pages timed out")
+    filled = sum(1 for r in targets if r.get('pb_ratio', 'N/A') != 'N/A' and r.get('roe', 'N/A') != 'N/A')
+    log_progress(f"Peer ratio enrichment: filled P/B + ROE for {filled}/{len(targets)} rows")
+
+
+async def fetch_peer_comparison_from_screener_async(ticker: str, company_name: str = None, enrich: str = 'peers') -> dict:
+    """
+    Fetch the Screener peer table, then optionally fill P/B and ROE (absent
+    from that table) from each company's own Screener page.
+
+    enrich: 'peers'   - fill peer rows (default; for the peer comparison UI)
+            'company' - fill only the target company row (Add Peer)
+            'none'    - no extra requests (callers that don't show P/B/ROE)
+    """
+    result = await _fetch_peer_comparison_raw_async(ticker, company_name)
+    try:
+        if isinstance(result, dict) and enrich in ('peers', 'company'):
+            rows = list(result.get('peers') or []) if enrich == 'peers' else [result.get('company')]
+            await _enrich_peer_ratios_async(rows)
+    except Exception as e:
+        log_progress(f"Peer ratio enrichment skipped for {ticker}: {e}")
+    return _strip_private_peer_keys(result)
+
+
+async def _fetch_peer_comparison_raw_async(ticker: str, company_name: str = None) -> dict:
     """
     Async version of fetch_peer_comparison_from_screener.
     Uses a three-stage approach:
@@ -2874,7 +2961,8 @@ def _parse_peer_table(soup, ticker: str, company_name: str = None) -> dict:
             if 's.no' in col_lower or col_lower == 's.no.':
                 continue
             
-            if 'name' in col_lower:
+            # Screener renamed this header "Name" -> "Company"; accept both.
+            if 'name' in col_lower or col_lower.startswith('company'):
                 column_mapping[col] = 'name'
             # IMPORTANT: Check for P/B ratio patterns BEFORE 'cmp' to avoid false match
             # Screener uses "CMP / BV" for Price-to-Book
@@ -2917,10 +3005,42 @@ def _parse_peer_table(soup, ticker: str, company_name: str = None) -> dict:
             elif 'npm' in col_lower or 'np margin' in col_lower or 'net margin' in col_lower:
                 column_mapping[col] = 'npm'
         
+        # Defensive fallback: if a future header rename leaves no 'name' column,
+        # use the first text column that isn't S.No. Without a name column the
+        # target can't be identified and the Median row leaks in as a peer.
+        if 'name' not in column_mapping.values():
+            for col in df.columns:
+                if 's.no' in col.lower() or col in column_mapping:
+                    continue
+                if not pd.api.types.is_numeric_dtype(df[col]):
+                    column_mapping[col] = 'name'
+                    print(f"WARN: No 'Name'/'Company' header in peer table; using '{col}' as name column")
+                    break
+
         print(f"DEBUG: Column mapping: {column_mapping}")
-        
+
         # Rename columns
         df = df.rename(columns=column_mapping)
+
+        # Screener slug for each data row, from the company link
+        # (e.g. /company/IGIL/consolidated/ -> IGIL). Used to identify the
+        # target exactly. Only trusted if it lines up 1:1 with the parsed rows.
+        row_slugs = []
+        row_paths = []
+        for tr in table.find_all("tr"):
+            if not tr.find_all("td"):
+                continue  # header row
+            link = tr.find("a", href=True)
+            slug = None
+            path = None
+            if link:
+                href = link["href"]
+                parts = [p for p in href.split("/") if p]
+                if href.startswith("/company/") and len(parts) >= 2:
+                    slug = parts[1].upper()
+                    path = href
+            row_slugs.append(slug)
+            row_paths.append(path)
 
         
         # Convert to list of dicts
@@ -2966,6 +3086,15 @@ def _parse_peer_table(soup, ticker: str, company_name: str = None) -> dict:
         best_match_score = 0.0
         MATCH_THRESHOLD = 0.5  # Minimum similarity to consider a match
         ticker_upper = ticker.upper()
+
+        # STRATEGY 0: Exact match on the Screener slug in the row's link
+        if len(row_slugs) == len(records):
+            for i, slug in enumerate(row_slugs):
+                if slug and slug == ticker_upper:
+                    company_index = i
+                    match_method = 'slug'
+                    print(f"DEBUG: Found company by Screener link: '{record_names[i][1]}' -> /company/{slug}/")
+                    break
 
         # STRATEGY 1: Fuzzy match using company_name (if provided)
         if company_name and company_index is None:
@@ -3013,8 +3142,8 @@ def _parse_peer_table(soup, ticker: str, company_name: str = None) -> dict:
             cleaned_record = {}
             # Include all standard metric columns plus the new ones we're extracting
             allowed_keys = ['name', 'cmp', 'market_cap', 'pe_ratio', 'pb_ratio', 
-                          'dividend_yield', 'roce', 'roe', 'sales_growth_yoy', 
-                          'ebitda_growth_yoy', 'npm', 'np_qtr', 'sales_qtr']
+                          'dividend_yield', 'roce', 'roe', 'sales_growth_yoy',
+                          'ebitda_growth_yoy', 'net_profit_growth', 'npm', 'np_qtr', 'sales_qtr']
             for key, value in record.items():
                 if key in allowed_keys:
                     if pd.isna(value):
@@ -3041,6 +3170,11 @@ def _parse_peer_table(soup, ticker: str, company_name: str = None) -> dict:
             if rec_name.lower().startswith('median'):
                 industry_avg = cleaned_record
                 continue
+
+            # Private: the row's Screener page, used by _enrich_peer_ratios_async
+            # to fill P/B and ROE (not in the peer table). Stripped before return.
+            if len(row_paths) == len(records) and row_paths[i]:
+                cleaned_record['_screener_path'] = row_paths[i]
             
             # Use the identified company_index to determine company vs peer
             if i == company_index:

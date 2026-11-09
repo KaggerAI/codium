@@ -3547,6 +3547,54 @@
             display: block;
         }
 
+        .live-modal-note a,
+        .live-modal-source a {
+            color: inherit;
+            text-decoration: underline;
+        }
+
+        .live-modal-source {
+            font-size: 0.75rem;
+            line-height: 1.45;
+            color: var(--text-secondary);
+            margin: -0.75rem 0 1rem;
+        }
+
+        .live-modal-source:empty,
+        .live-number-chips:empty {
+            display: none;
+        }
+
+        .live-modal-evidence {
+            display: block;
+            margin-top: 0.25rem;
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            color: var(--text-primary);
+            overflow-wrap: anywhere;
+        }
+
+        .live-number-chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.35rem;
+            margin-top: 0.45rem;
+        }
+
+        .live-number-chip {
+            font-size: 0.72rem;
+            padding: 0.2rem 0.55rem;
+            border-radius: 999px;
+            border: 1px solid var(--border-color);
+            background: var(--bg-secondary);
+            color: var(--text-secondary);
+            cursor: pointer;
+        }
+
+        .live-number-chip.active {
+            color: var(--text-primary);
+            border-color: #ef4444;
+        }
+
         .live-modal-label {
             font-size: 0.75rem;
             font-weight: 600;
@@ -4332,10 +4380,12 @@
                 </div>
 
                 <div id="liveModalFields">
+                    <div class="live-modal-source" id="liveModalSource"></div>
                     <div class="live-modal-field">
                         <div class="live-modal-label">Dial-in Number</div>
                         <input class="live-modal-input" id="liveModalPhone" type="tel" placeholder="+912262801123"
                             autocomplete="off" />
+                        <div class="live-number-chips" id="liveModalNumbers"></div>
                     </div>
                     <div class="live-modal-field">
                         <div class="live-modal-label">Passcode / Conference ID</div>
@@ -4347,6 +4397,7 @@
                         <input class="live-modal-input" id="liveModalPin" type="text"
                             placeholder="Leave blank if not required" autocomplete="off" />
                     </div>
+                    <div class="live-modal-note" id="liveModalRegNote"></div>
                     <div class="live-modal-note" id="liveModalOperatorNote">
                         No passcode found. This bridge is probably operator-assisted: an operator
                         asks callers for their name before admitting them, and the bot can't answer
@@ -5947,8 +5998,61 @@
         function updateOperatorNote() {
             const passcode = document.getElementById('liveModalPasscode').value.trim();
             const pin = document.getElementById('liveModalPin').value.trim();
+            // A registration-only call gets its own note instead.
+            const regOnly = !!liveExtractedDialin?.registration_required;
             document.getElementById('liveModalOperatorNote')
-                .classList.toggle('show', !passcode && !pin);
+                .classList.toggle('show', !passcode && !pin && !regOnly);
+        }
+
+        // Where the dial-in came from, the line it was read from, alternate
+        // India numbers, and registration-only calls.
+        function renderDialinDetails(dialin) {
+            const src = document.getElementById('liveModalSource');
+            const chips = document.getElementById('liveModalNumbers');
+            const reg = document.getElementById('liveModalRegNote');
+            src.innerHTML = '';
+            chips.innerHTML = '';
+            reg.classList.remove('show');
+            reg.innerHTML = '';
+            if (!dialin) return;
+
+            const parts = [];
+            if (dialin.notice) parts.push(escapeHtml(dialin.notice));
+            if (dialin.source_url) {
+                parts.push(`Source: <a href="${escapeHtml(dialin.source_url)}" target="_blank" rel="noopener">exchange filing</a>`);
+            }
+            let html = parts.join(' ');
+            if (dialin.evidence) {
+                html += `<span class="live-modal-evidence">${escapeHtml(dialin.evidence)}</span>`;
+            }
+            src.innerHTML = html;
+
+            const numbers = dialin.india_numbers || [];
+            if (numbers.length > 1) {
+                const phoneEl = document.getElementById('liveModalPhone');
+                const paint = () => chips.querySelectorAll('.live-number-chip').forEach(c =>
+                    c.classList.toggle('active', c.dataset.number === phoneEl.value.trim()));
+                numbers.forEach(n => {
+                    const chip = document.createElement('button');
+                    chip.type = 'button';
+                    chip.className = 'live-number-chip';
+                    chip.dataset.number = n;
+                    chip.textContent = n;
+                    chip.onclick = () => { phoneEl.value = n; paint(); };
+                    chips.appendChild(chip);
+                });
+                paint();
+            }
+
+            if (dialin.registration_required) {
+                const link = dialin.registration_url
+                    ? ` (<a href="${escapeHtml(dialin.registration_url)}" target="_blank" rel="noopener">registration link</a>)`
+                    : '';
+                reg.innerHTML = `This call uses pre-registration${link}. The passcode or meeting ID is sent ` +
+                    `after registering and isn't in the filing; without it, callers go through an operator ` +
+                    `or can't join, so the bot may not get in by dialing alone.`;
+                reg.classList.add('show');
+            }
         }
 
         document.getElementById('liveModalPasscode').addEventListener('input', updateOperatorNote);
@@ -6054,8 +6158,10 @@
             // Serve from cache if already extracted
             const cached = liveDialinCache[call.announcement_url];
             if (cached) {
-                if (cached.webcast_url) {
-                    window.open(cached.webcast_url, '_blank', 'noopener');
+                // A registration page is how registration-only calls are heard online.
+                const cachedUrl = cached.webcast_url || cached.registration_url;
+                if (cachedUrl) {
+                    window.open(cachedUrl, '_blank', 'noopener');
                 } else {
                     const orig = btn.textContent;
                     btn.textContent = '⚠ No webcast URL';
@@ -6074,14 +6180,15 @@
                 const resp = await fetch('/api/live-concall/extract-dialin', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ pdf_url: call.announcement_url })
+                    body: JSON.stringify({ pdf_url: call.announcement_url, ticker: call.ticker || '', call_date: call.call_date || '' })
                 });
                 const data = await resp.json();
                 const dialin = data.dialin || {};
                 liveDialinCache[call.announcement_url] = dialin;
 
-                if (dialin.webcast_url) {
-                    window.open(dialin.webcast_url, '_blank', 'noopener');
+                const webUrl = dialin.webcast_url || dialin.registration_url;
+                if (webUrl) {
+                    window.open(webUrl, '_blank', 'noopener');
                     btn.textContent = origText;
                     btn.disabled = false;
                 } else {
@@ -6116,6 +6223,7 @@
             document.getElementById('liveDialNowBtn').textContent = '📞 Dial Now';
             showLiveModalError('');
             document.getElementById('liveModalOperatorNote').classList.remove('show');
+            renderDialinDetails(null);
 
             // Show modal
             document.getElementById('liveDialModal').classList.add('show');
@@ -6135,6 +6243,7 @@
                         wbBtn.style.display = 'inline-flex';
                     }
                     extractStatus.style.display = 'none';
+                    renderDialinDetails(dialin);
                     if (dialin.phone_number) updateOperatorNote();
                 };
 
@@ -6152,7 +6261,7 @@
                     const resp = await fetch('/api/live-concall/extract-dialin', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ pdf_url: call.announcement_url })
+                        body: JSON.stringify({ pdf_url: call.announcement_url, ticker: call.ticker || '', call_date: call.call_date || '' })
                     });
                     const data = await resp.json();
                     if (data.dialin) {

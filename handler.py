@@ -4364,7 +4364,7 @@ def api_portfolio_peer_swaps():
                 if not peer_data:
                     print(f"PEER-SWAP: {ticker} - Light cache MISS, fetching live...")
                     peer_data = loop.run_until_complete(
-                        fetch_peer_comparison_from_screener_async(ticker, h.stock_name)
+                        fetch_peer_comparison_from_screener_async(ticker, h.stock_name, enrich='none')
                     )
 
                 if not peer_data or not peer_data.get('company'):
@@ -10044,7 +10044,7 @@ async def get_analysis_for_ticker_async(tick, skip_ai_summary=False):
     screener_company_row = screener_peer_comparison.get('company', {})
     
     final_key_metrics = {}
-    metric_keys = ['market_cap', 'cmp', 'current_price', 'pe_ratio', 'pb_ratio', 'dividend_yield', 'roce', 'roe', 'sales_growth_yoy', 'ebitda_growth_yoy', 'npm', 'industry', 'sector']
+    metric_keys = ['market_cap', 'cmp', 'current_price', 'pe_ratio', 'pb_ratio', 'dividend_yield', 'roce', 'roe', 'sales_growth_yoy', 'ebitda_growth_yoy', 'net_profit_growth', 'npm', 'industry', 'sector']
     
     for mk in metric_keys:
         # Check sources in order
@@ -11316,6 +11316,7 @@ def refresh_section():
                 'roe': get_value('roe', screener_company.get('roe'), yf_metrics.get('roe'), current_company_metrics.get('roe'), ai_company_metrics.get('roe')),
                 'sales_growth_yoy': get_value('sales_growth_yoy', screener_company.get('sales_growth_yoy'), yf_metrics.get('sales_growth_yoy'), current_company_metrics.get('sales_growth_yoy'), ai_company_metrics.get('sales_growth_yoy')),
                 'ebitda_growth_yoy': get_value('ebitda_growth_yoy', screener_company.get('ebitda_growth_yoy'), yf_metrics.get('ebitda_growth_yoy'), current_company_metrics.get('ebitda_growth_yoy'), ai_company_metrics.get('ebitda_growth_yoy')),
+                'net_profit_growth': get_value('net_profit_growth', screener_company.get('net_profit_growth'), current_company_metrics.get('net_profit_growth'), ai_company_metrics.get('net_profit_growth')),
                 'npm': get_value('npm', screener_company.get('npm'), yf_metrics.get('npm'), current_company_metrics.get('npm'), ai_company_metrics.get('npm'))
             }
             # print(f"DEBUG: Final merged company metrics for {ticker}: {final_company}")
@@ -11556,7 +11557,8 @@ def refresh_section():
                     pass
                 
                 log_progress(f"Fetching {ticker} peer data...")
-                screener_data = fetch_peer_comparison_from_screener(ticker, company_name)
+                # Only the company row is used here; skip per-peer page fetches.
+                screener_data = fetch_peer_comparison_from_screener(ticker, company_name, enrich='none')
                 screener_company = screener_data.get('company', {})
                 
                 if screener_company:
@@ -11849,7 +11851,9 @@ def add_peer():
         peer_data = {}
         try:
             log_progress(f"Fetching {ticker}...")
-            screener_result = fetch_peer_comparison_from_screener(ticker)
+            # The added ticker is the "company" row of its own peer table;
+            # fill its P/B and ROE from its Screener page.
+            screener_result = fetch_peer_comparison_from_screener(ticker, enrich='company')
             screener_company = screener_result.get('company', {})
             
             if screener_company and screener_company.get('name'):

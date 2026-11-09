@@ -1,34 +1,100 @@
 {
   "success": true,
-  "ran_at": "2026-10-17 23:37:11 IST",
+  "ran_at": "2026-11-09 11:22:55 IST",
   "dry_run": false,
-  "sitemap_entries": 5944,
-  "rows_before": 6112,
-  "rows_after": 6116,
-  "added": 4,
+  "sitemap_entries": 5956,
+  "rows_before": 6116,
+  "rows_after": 6140,
+  "added": 24,
   "added_tickers": [
-    "ZKHATAUE",
-    "PARASHLTH",
-    "JPL",
-    "1219"
+    "MELSTAR",
+    "KDJHRL",
+    "TRANOCE",
+    "542544",
+    "11610081",
+    "BLSPOLY",
+    "13521371",
+    "EDELALTS",
+    "SFCTECH",
+    "13110378",
+    "BCSSL",
+    "13580029",
+    "MKJEWELS",
+    "11625876",
+    "11625837",
+    "MAXENGS",
+    "15050168",
+    "HGSINDIALT",
+    "VPFL",
+    "CENTEXTPP",
+    "ENNATURE",
+    "IGLSPIRITS",
+    "OLAPP",
+    "14620284"
   ],
-  "updated": 4,
+  "updated": 15,
   "updates": [
     {
-      "trendlyne_id": "4231",
-      "Stock Name": "Jyotirgamya Enterprises Ltd -> Atma Industries Ltd"
+      "trendlyne_id": "4714",
+      "Ticker": "ICICIPRULI -> ICICILIFE"
     },
     {
-      "trendlyne_id": "82681",
-      "Ticker": "GFSTEELS -> TIKONA"
+      "trendlyne_id": "819",
+      "Stock Name": "Maharashtra Scooters Ltd -> Bajaj Nivesh Ltd"
     },
     {
-      "trendlyne_id": "806",
-      "Stock Name": "Lypsa Gems Jewellery Ltd -> Aurus Gem Corporaton Ltd"
+      "trendlyne_id": "2090",
+      "Ticker": "NOVARTIND -> EVONILE",
+      "Stock Name": "Novartis India Ltd -> Evonile Pharma Ltd"
     },
     {
-      "trendlyne_id": "3696011",
-      "Ticker": "17156915 -> ZETWERK"
+      "trendlyne_id": "770889",
+      "Ticker": "ABCOTS -> ABCIND",
+      "Stock Name": "Ab Cotspin India Ltd -> Abc Industries India Ltd"
+    },
+    {
+      "trendlyne_id": "82937",
+      "Ticker": "SUDEV -> IIRM"
+    },
+    {
+      "trendlyne_id": "3344",
+      "Stock Name": "Virat Industries Ltd -> Brahm Virat Industries Corporation Ltd"
+    },
+    {
+      "trendlyne_id": "82418",
+      "Stock Name": "Jolly Plastic Industries Ltd -> Sahaj Digital Ltd"
+    },
+    {
+      "trendlyne_id": "147295",
+      "Ticker": "12541585 -> SUDARSHAN"
+    },
+    {
+      "trendlyne_id": "1394503",
+      "Ticker": "17040844 -> BRIGHTOUTD"
+    },
+    {
+      "trendlyne_id": "1563599",
+      "Ticker": "15070580 -> KHAZANCHI"
+    },
+    {
+      "trendlyne_id": "1615359",
+      "Ticker": "13521165 -> BONDADA"
+    },
+    {
+      "trendlyne_id": "884",
+      "Stock Name": "Umiya Buildcon Ltd -> Mro Tek Networks Ltd"
+    },
+    {
+      "trendlyne_id": "1888080",
+      "Stock Name": "Shree Marutinandan Tubes Ltd -> Shree Marutinandan Industries Ltd"
+    },
+    {
+      "trendlyne_id": "3414",
+      "Stock Name": "Arunjyoti Bio Ventures Ltd -> Pasura Industries Ltd"
+    },
+    {
+      "trendlyne_id": "2653113",
+      "Stock Name": "Avax Apparels And Ornaments Ltd -> Avax Ltd"
     }
   ],
   "ambiguous": [
@@ -131,6 +197,13 @@
       "sitemap_name": "Dhanuka Infra Realty Ltd"
     },
     {
+      "trendlyne_id": "87872",
+      "ticker": "AMJUMBO",
+      "name": "A And M Jumbo Bags Ltd",
+      "sitemap_ticker": "PARAMPARA",
+      "sitemap_name": "Parampara Dairy Delights Ltd"
+    },
+    {
       "trendlyne_id": "113089",
       "ticker": "542057",
       "name": "Bcpl Railway Infrastructure Ltd",
@@ -203,5 +276,5 @@
   ],
   "conflicts": [],
   "error": null,
-  "duration_seconds": 3.5
+  "duration_seconds": 1.1
 }

@@ -498,141 +498,332 @@ async def fetch_concall_schedule(days: int = 5, include_past: bool = False) -> L
 # ---------------------------------------------------------------------------
 # 2. PDF EXTRACTION — Dial-in Credential Parsing
 # ---------------------------------------------------------------------------
+# Every exchange filing carries the company's own "Tel:" line in its letterhead,
+# and a filing that only announces the call ("details will be submitted in due
+# course") has no other number at all. So a number is only trusted when it sits
+# next to a dial-in label in the document itself: the model's answer is checked
+# against the candidates found in the text, and the regex fallback only ever
+# picks from those.
+
+_PDF_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                  "AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36",
+    "Accept": "application/pdf,*/*",
+}
+
+# A phone-number-looking run: optional +CC, digits with space/dash/dot
+# separators. Digit count is checked separately (10-15).
+_PHONE_RE = re.compile(
+    r"(?<![\w/@])(?:\+\s?\d{1,3}[\s\-.]*)?(?:\(\s?\d{1,5}\s?\)[\s\-.]*)?\d[\d\s\-.]{6,22}\d(?![\w/@])")
+
+_DIALIN_LABEL_RE = re.compile(
+    r"dial[\s\-]*in|toll[\s\-]*free|universal\s+(?:access|dial)|local\s+access|"
+    r"access\s+(?:number|no)|conference\s+(?:number|no|dial)|primary\s+(?:number|access)|"
+    r"secondary\s+(?:number|access)|international\s+(?:toll|numbers?|dial)|\bitfs\b|"
+    r"participants?\s+(?:can|may|are\s+requested\s+to|please)\s+dial|\bphone\s+numbers?\b|"
+    r"\bhotline\b",
+    re.IGNORECASE)
+
+# Letterhead / signature lines: "Tel: ... | Email: ... | Web: ... | CIN: ...".
+_OFFICE_PHONE_LABEL_RE = re.compile(r"\b(?:tel|telephone|ph|fax|mob|mobile|board)\b\.?\s*(?:no\.?)?\s*[:.]",
+                                    re.IGNORECASE)
+_OFFICE_CONTEXT_RE = re.compile(
+    r"e-?mail|www\.|\bweb\b|\bcin\b|\bfax\b|@|regd\.?|registered\s+office|corporate\s+office|"
+    r"corp\.?\s+office|head\s+office",
+    re.IGNORECASE)
+_CONTACT_CONTEXT_RE = re.compile(r"for\s+(?:further|more)\s+(?:information|details)|please\s+contact|"
+                                 r"investor\s+relations?\s+(?:contact|team)|\bcontact\s+(?:person|us)\b",
+                                 re.IGNORECASE)
+
+_FOREIGN_RE = re.compile(
+    r"singapore|hong\s*kong|\busa?\b|united\s+states|\buk\b|united\s+kingdom|london|new\s+york|"
+    r"japan|tokyo|australia|sydney|south\s+africa|dubai|\buae\b|canada|germany|france|"
+    r"netherlands|china|korea|taiwan|malaysia|thailand|indonesia|philippines|other\s+international",
+    re.IGNORECASE)
+_INDIA_RE = re.compile(r"\bindia\b|mumbai|delhi|bengaluru|bangalore|chennai|kolkata|hyderabad|pune|"
+                       r"ahmedabad|universal|local\s+access", re.IGNORECASE)
+
+_REGISTRATION_RE = re.compile(r"regist(?:er|ration)|diamond\s*pass|pre-?regist", re.IGNORECASE)
+_REGISTRATION_HOST_HINTS = ("diamondpass", "open-exchange", "zoom.us", "webex", "teams.microsoft",
+                            "register", "registration", "choruscall", "goto", "webinar")
+_MEETING_ID_RE = re.compile(
+    r"(?:webinar|meeting|conference|event)\s*(?:id|code|number|no\.?)\s*[:#\-]?\s*(\d[\d\s\-]{5,14}\d)",
+    re.IGNORECASE)
+
+
+def _digits(s: str) -> str:
+    return re.sub(r"\D", "", s or "")
+
+
+def _phone_candidates(text: str) -> List[Dict[str, Any]]:
+    """
+    Every phone-number-looking string in `text`, classified by its context:
+      kind  'dialin'     next to a dial-in label (same line or the two above)
+            'letterhead' a 'Tel:' line with email/web/CIN/office cues
+            'contact'    in an investor-relations / "please contact" block
+            'other'      anything else (never used as a dial-in number)
+      india  True for an India access number, False for an international one.
+    """
+    lines = (text or "").splitlines()
+    out: List[Dict[str, Any]] = []
+    seen = set()
+    for i, line in enumerate(lines):
+        for m in _PHONE_RE.finditer(line):
+            raw = re.sub(r"\s+", " ", m.group(0)).strip(" -.")
+            digits = _digits(raw)
+            if not 10 <= len(digits) <= 15:
+                continue
+            context = " ".join(lines[max(0, i - 2):i + 1])
+            prefix = line[:m.start()]
+            # "India: 000 800 ..." / "Singapore: 1800 ..." rows of a numbers table.
+            region_row = bool(_FOREIGN_RE.search(prefix)) or bool(
+                _INDIA_RE.search(prefix) and re.search(r"[:\-–]\s*(?:\S+\s*/\s*)*$", prefix))
+            if _OFFICE_PHONE_LABEL_RE.search(line) and _OFFICE_CONTEXT_RE.search(line):
+                kind = "letterhead"
+            elif _DIALIN_LABEL_RE.search(context) or region_row:
+                kind = "dialin"
+            elif _CONTACT_CONTEXT_RE.search(" ".join(lines[max(0, i - 4):i + 1])):
+                kind = "contact"
+            else:
+                kind = "other"
+            # Region: the label in front of the number on its own line wins
+            # ("India: ...", "Singapore: ..."), then the country code.
+            if _FOREIGN_RE.search(prefix):
+                india = False
+            elif _INDIA_RE.search(prefix):
+                india = True
+            elif raw.startswith("+") and not raw.replace(" ", "").startswith("+91"):
+                india = False
+            else:
+                india = (digits.startswith(("91", "0", "1800", "000800"))
+                         or (len(digits) == 10 and digits[0] in "2345678"))
+            key = (digits, kind)
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append({"raw": raw, "digits": digits, "kind": kind, "india": india,
+                        "line": line.strip()[:240]})
+    return out
+
+
+def _number_core(s: str) -> str:
+    """Digits without a +91 country code or leading trunk zeros."""
+    d = _digits(s)
+    if len(d) == 12 and d.startswith("91"):
+        d = d[2:]
+    return d.lstrip("0")
+
+
+def _same_number(a: str, b: str) -> bool:
+    """Digit-level match tolerant of an added/dropped +91 or trunk 0."""
+    da, db = _number_core(a), _number_core(b)
+    if len(da) < 8 or len(db) < 8:
+        return False
+    return da == db or da.endswith(db) or db.endswith(da)
+
+
+def _mentions(text: str, value: str) -> bool:
+    d = _digits(value)
+    return bool(d) and d in _digits(text)
+
+
+def _validate_dialin(parsed: Dict[str, Any], text: str,
+                     hyperlink_urls: Optional[List[str]] = None) -> Dict[str, Any]:
+    """
+    Check an extraction (from the model or the regex fallback) against the
+    document. The phone number must be one the document labels as a dial-in
+    number; otherwise it is replaced with the best labelled India number, or
+    cleared. Adds india_numbers, phone_check, evidence, registration fields.
+    """
+    cands = _phone_candidates(text)
+    dialin = [c for c in cands if c["kind"] == "dialin"]
+    india = [c for c in dialin if c["india"]]
+    claimed = (parsed.get("phone_number") or "").strip()
+
+    chosen = next((c for c in dialin if claimed and _same_number(claimed, c["raw"])), None)
+    if chosen and not chosen["india"] and india:
+        chosen = None      # the model picked an international line; prefer India
+    if chosen:
+        check = "verified"
+    else:
+        chosen = (india or dialin or [None])[0]
+        # 'corrected' only when a claimed number was replaced; a number picked
+        # from labelled candidates with nothing claimed is still 'verified'.
+        check = ("corrected" if claimed else "verified") if chosen else "not_found"
+        if claimed:
+            wrong = next((c for c in cands if _same_number(claimed, c["raw"])), None)
+            print(f"LIVE_CONCALL: rejected extracted number {claimed!r} "
+                  f"({wrong['kind'] if wrong else 'not in document'}); "
+                  f"using {chosen['raw'] if chosen else None!r}", file=sys.stderr)
+
+    parsed["phone_number"] = chosen["raw"] if chosen else None
+    parsed["phone_check"] = check
+    parsed["evidence"] = chosen["line"] if chosen else ""
+
+    seen_india: List[str] = []
+    for c in india:
+        if not any(_same_number(c["raw"], s) for s in seen_india):
+            seen_india.append(c["raw"])
+    parsed["india_numbers"] = seen_india
+    extras = [c["raw"] for c in dialin if not c["india"]]
+    parsed["extra_numbers"] = [n for n in dict.fromkeys(extras)][:10]
+
+    # Codes the document doesn't contain are guesses: drop them.
+    for fld in ("passcode", "pin", "meeting_id"):
+        val = parsed.get(fld)
+        if val and (not _mentions(text, str(val)) or _same_number(str(val), parsed["phone_number"] or "")):
+            parsed[fld] = None
+    if not parsed.get("meeting_id"):
+        m = _MEETING_ID_RE.search(text or "")
+        parsed["meeting_id"] = re.sub(r"\s+", " ", m.group(1)).strip() if m else None
+
+    # Registration-only calls (DiamondPass, Zoom/Open Exchange webinars): the
+    # credentials arrive after registering, so the bot cannot join from the PDF.
+    reg_url = parsed.get("registration_url")
+    links = list(hyperlink_urls or []) + re.findall(r"https?://\S+", text or "")
+    if reg_url and not any(reg_url.rstrip("/") == u.rstrip("/.)") for u in links):
+        reg_url = None
+    if not reg_url:
+        reg_url = next((u.rstrip(".)") for u in links
+                        if any(h in u.lower() for h in _REGISTRATION_HOST_HINTS)
+                        and "safelinks" not in u.lower()), None)
+    parsed["registration_url"] = reg_url
+    parsed["registration_required"] = bool(
+        (reg_url or _REGISTRATION_RE.search(text or ""))
+        and not parsed.get("passcode") and not parsed.get("meeting_id"))
+    return parsed
+
+
+def _pdf_text_and_links(pdf_bytes: bytes):
+    """(text, unique http(s) links) from a PDF via pdfplumber."""
+    import tempfile
+    text = ""
+    links: List[str] = []
+    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+        tmp.write(pdf_bytes)
+        tmp_path = tmp.name
+    try:
+        with pdfplumber.open(tmp_path) as pdf:
+            for page in pdf.pages:
+                t = page.extract_text()
+                if t:
+                    text += t + "\n"
+                # DiamondPass links are often "Click Here" buttons with a hidden URI.
+                try:
+                    for annot in (page.annots or []):
+                        uri = (annot.get("uri") or annot.get("URI")
+                               or annot.get("A", {}).get("URI", ""))
+                        if uri and uri.startswith("http"):
+                            links.append(uri)
+                except Exception:
+                    pass
+                try:
+                    for link in (page.hyperlinks or []):
+                        uri = link.get("uri", "")
+                        if uri and uri.startswith("http"):
+                            links.append(uri)
+                except Exception:
+                    pass
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except Exception:
+            pass
+    unique = list(dict.fromkeys(u.strip().rstrip('/') for u in links))
+    return text, unique
+
+
+async def _download_pdf(pdf_url: str) -> Optional[bytes]:
+    """Download a filing PDF: httpx first, curl_cffi (anti-bot) as fallback."""
+    try:
+        async with httpx.AsyncClient(follow_redirects=True) as client:
+            resp = await client.get(pdf_url, headers=_PDF_HEADERS, timeout=20.0)
+            if resp.status_code == 200 and resp.content[:5] == b"%PDF-":
+                return resp.content
+    except Exception as e:
+        print(f"LIVE_CONCALL: httpx PDF download failed: {e}", file=sys.stderr)
+    try:
+        def _cffi_download():
+            from curl_cffi import requests as cffi_requests
+            session = cffi_requests.Session(impersonate="chrome110")
+            r = session.get(pdf_url, headers=_PDF_HEADERS, allow_redirects=True, timeout=20)
+            return r.content if r.status_code == 200 and r.content[:5] == b"%PDF-" else None
+        return await asyncio.to_thread(_cffi_download)
+    except Exception as e:
+        print(f"LIVE_CONCALL: curl_cffi PDF download failed: {e}", file=sys.stderr)
+    return None
+
+
+def _empty_dialin(source_url: str) -> Dict[str, Any]:
+    return {
+        "phone_number": None, "passcode": None, "pin": None, "meeting_id": None,
+        "date": None, "time": None, "webcast_url": None, "registration_url": None,
+        "registration_required": False, "india_numbers": [], "extra_numbers": [],
+        "phone_check": "not_found", "evidence": "", "raw_text": "", "source_url": source_url,
+    }
+
 
 async def extract_dialin_from_pdf(pdf_url: str) -> Dict[str, Any]:
     """
     Download a concall announcement PDF and extract dial-in details.
     Strategy:
       1. Download PDF from NSE/BSE archive
-      2. Extract text via pdfplumber
-      3. Use Gemini to parse structured dial-in info from extracted text
-      4. Fallback: Send PDF page image to Gemini Vision if text extraction fails
+      2. Extract text + hyperlinks via pdfplumber
+      3. Gemini parses structured fields (vision fallback for scanned PDFs,
+         regex fallback when the model call fails)
+      4. _validate_dialin checks every number against the document
 
     Returns dict with:
-      phone_number, passcode, pin, date, time, webcast_url, extra_numbers
+      phone_number, india_numbers, extra_numbers, passcode, pin, meeting_id,
+      date, time, webcast_url, registration_url, registration_required,
+      phone_check ('verified' | 'corrected' | 'not_found'), evidence, source_url
     """
-    empty_result = {
-        "phone_number": None, "passcode": None, "pin": None,
-        "date": None, "time": None, "webcast_url": None,
-        "extra_numbers": [], "raw_text": "", "source_url": pdf_url
-    }
-
     try:
-        # Step 1: Download PDF
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                          "AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36",
-            "Accept": "application/pdf,*/*",
-        }
-
-        pdf_bytes = None
-        async with httpx.AsyncClient(follow_redirects=True) as client:
-            resp = await client.get(pdf_url, headers=headers, timeout=20.0)
-            if resp.status_code == 200:
-                pdf_bytes = resp.content
-
-        if not pdf_bytes:
-            # Fallback: try curl_cffi for anti-bot bypassing
-            try:
-                def _cffi_download():
-                    from curl_cffi import requests as cffi_requests
-                    session = cffi_requests.Session(impersonate="chrome110")
-                    r = session.get(pdf_url, headers=headers,
-                                    allow_redirects=True, timeout=20)
-                    return r.content if r.status_code == 200 else None
-                pdf_bytes = await asyncio.to_thread(_cffi_download)
-            except Exception as cffi_err:
-                print(f"LIVE_CONCALL: curl_cffi PDF download failed: {cffi_err}",
-                      file=sys.stderr)
-
+        pdf_bytes = await _download_pdf(pdf_url)
         if not pdf_bytes:
             print(f"LIVE_CONCALL: Failed to download PDF: {pdf_url}", file=sys.stderr)
-            return empty_result
-
+            return _empty_dialin(pdf_url)
         print(f"LIVE_CONCALL: Downloaded PDF ({len(pdf_bytes)} bytes)", file=sys.stderr)
+        return await _extract_dialin_from_bytes(pdf_bytes, pdf_url)
+    except Exception as e:
+        print(f"LIVE_CONCALL: PDF extraction error: {e}", file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
+        return _empty_dialin(pdf_url)
 
-        # Step 2: Extract text AND hyperlink annotations via pdfplumber
-        text = ""
-        hyperlink_urls: List[str] = []
-        import tempfile
-        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
-            tmp.write(pdf_bytes)
-            tmp_path = tmp.name
 
-        try:
-            with pdfplumber.open(tmp_path) as pdf:
-                for page in pdf.pages:
-                    t = page.extract_text()
-                    if t:
-                        text += t + "\n"
+async def _extract_dialin_from_bytes(pdf_bytes: bytes, source_url: str) -> Dict[str, Any]:
+    text, unique_links = _pdf_text_and_links(pdf_bytes)
 
-                    # Extract embedded hyperlinks from PDF annotations.
-                    # DiamondPass links are often "Click Here" buttons with a hidden URI.
-                    try:
-                        for annot in (page.annots or []):
-                            uri = (annot.get("uri") or annot.get("URI")
-                                   or annot.get("A", {}).get("URI", ""))
-                            if uri and uri.startswith("http"):
-                                hyperlink_urls.append(uri)
-                    except Exception:
-                        pass
+    diamondpass_url = next((u for u in unique_links if "diamondpass" in u.lower()), None)
+    if diamondpass_url:
+        print(f"LIVE_CONCALL: Found DiamondPass URL in PDF hyperlinks: {diamondpass_url}",
+              file=sys.stderr)
+    elif unique_links:
+        print(f"LIVE_CONCALL: Found {len(unique_links)} hyperlink(s) in PDF: {unique_links[:3]}",
+              file=sys.stderr)
 
-                    # pdfplumber >= 0.7 also exposes page.hyperlinks
-                    try:
-                        for link in (page.hyperlinks or []):
-                            uri = link.get("uri", "")
-                            if uri and uri.startswith("http"):
-                                hyperlink_urls.append(uri)
-                    except Exception:
-                        pass
-
-        finally:
-            try:
-                os.unlink(tmp_path)
-            except Exception:
-                pass
-
-        # Deduplicate and look for DiamondPass URL immediately
-        seen = set()
-        unique_links: List[str] = []
-        for u in hyperlink_urls:
-            u_clean = u.strip().rstrip('/')
-            if u_clean not in seen:
-                seen.add(u_clean)
-                unique_links.append(u_clean)
-
-        diamondpass_url = next(
-            (u for u in unique_links if "diamondpass" in u.lower()),
-            None
-        )
-        if diamondpass_url:
-            print(f"LIVE_CONCALL: Found DiamondPass URL in PDF hyperlinks: {diamondpass_url}",
-                  file=sys.stderr)
-        elif unique_links:
-            print(f"LIVE_CONCALL: Found {len(unique_links)} hyperlink(s) in PDF: {unique_links[:3]}",
-                  file=sys.stderr)
-
-        if len(text.strip()) < 50:
-            print("LIVE_CONCALL: PDF text too short, trying Gemini Vision fallback",
-                  file=sys.stderr)
-            result = await _extract_dialin_gemini_vision(pdf_bytes, pdf_url)
-            # Override webcast_url with DiamondPass if vision missed it
-            if diamondpass_url and not result.get("webcast_url"):
-                result["webcast_url"] = diamondpass_url
-            return result
-
-        # Step 3: Parse with Gemini (pass hyperlinks as additional context)
-        result = await _parse_dialin_with_gemini(text, pdf_url,
-                                                  hyperlink_urls=unique_links)
-        # Hard override: if DiamondPass URL found in annotations, always use it
+    if len(text.strip()) < 50:
+        # Scanned PDF: no text to validate against, so vision results are
+        # returned as-is (flagged unverified).
+        print("LIVE_CONCALL: PDF text too short, trying Gemini Vision fallback",
+              file=sys.stderr)
+        result = await _extract_dialin_gemini_vision(pdf_bytes, source_url)
+        if result.get("phone_number"):
+            result["phone_check"] = "unverified"
         if diamondpass_url and not result.get("webcast_url"):
             result["webcast_url"] = diamondpass_url
         return result
 
-    except Exception as e:
-        print(f"LIVE_CONCALL: PDF extraction error: {e}", file=sys.stderr)
-        traceback.print_exc(file=sys.stderr)
-        return empty_result
+    result = await _parse_dialin_with_gemini(text, source_url, hyperlink_urls=unique_links)
+    result = _validate_dialin(result, text, unique_links)
+    # Hard override: if DiamondPass URL found in annotations, always use it
+    if diamondpass_url and not result.get("webcast_url"):
+        result["webcast_url"] = diamondpass_url
+    print(f"LIVE_CONCALL: dial-in {result.get('phone_check')}: "
+          f"phone={result.get('phone_number')} india={result.get('india_numbers')} "
+          f"passcode={result.get('passcode')} reg={result.get('registration_url')}",
+          file=sys.stderr)
+    return result
 
 
 async def _parse_dialin_with_gemini(text: str, source_url: str,
@@ -655,23 +846,27 @@ async def _parse_dialin_with_gemini(text: str, source_url: str,
 
     extraction_prompt = f"""You are an expert at extracting dial-in details from Indian corporate earnings conference call (concall) announcement PDFs.
 
-Extract ALL dial-in details from the text below and return them as JSON.
+Extract the details participants use to JOIN the call and return them as JSON.
 
 Fields to extract:
-- phone_number: Primary Indian dial-in number (prefer toll-free or local India number; clean of spaces/dashes, e.g. "+912262801123"). Look for labels like "Dial-in Number", "India Toll", "India Toll Free", "Phone Number".
-- passcode: The participant passcode/access code needed to join. This is often labelled "Access Code", "Passcode", "Conference ID", "Conference Password", "Participant Passcode", "Participant Code", "Conference Code", "Entry Code". Extract only the DIGITS (and optional trailing #). Example: "12345678" or "12345678#".
-- pin: Separate participant PIN if present (labels: "PIN", "Participant PIN", "Participant Pass Code", "PIN Number"). Often a short 4–6 digit number. Set null if same as passcode or not present.
+- phone_number: The primary India dial-in number for joining the call, copied EXACTLY as printed (keep the digits and spacing; do NOT add +91 or any prefix). Look for labels like "Dial-in Number", "Universal Access", "Primary Number", "India Toll Free", "India:", "Local Access". India international toll-free numbers start with "000 800" and domestic toll-free with "1800" - copy them unchanged.
+- india_numbers: Every India dial-in number in the document, each copied exactly as printed.
+- passcode: The participant passcode/access code needed to join, if printed. Labels: "Access Code", "Passcode", "Conference ID", "Conference Password", "Participant Passcode", "Participant Code", "Conference Code", "Entry Code". Digits only (and optional trailing #).
+- pin: Separate participant PIN if present (labels: "PIN", "Participant PIN", "PIN Number"). Null if same as passcode or not present.
+- meeting_id: Zoom/Webex/Teams webinar or meeting ID, if printed.
 - date: Date of the call in YYYY-MM-DD format.
 - time: Time of the call with timezone, e.g. "16:00 IST" or "4:30 PM IST".
-- webcast_url: The URL for joining the call online. This is commonly a DiamondPass link (domain: diamondpass.net), but could also be a Zoom, Teams, Webex, or other meeting URL. In the PDF text it may appear as "Click Here", "Join Webcast", "Webcast Link", or similar — check the embedded hyperlinks section below. Return the full URL.
-- extra_numbers: List of alternative dial-in numbers (international or other cities).
+- webcast_url: URL for listening to the call online (DiamondPass, Zoom, Teams, Webex, webcast player). Check the embedded hyperlinks section below.
+- registration_url: URL participants must register at to receive dial-in credentials (pre-registration / DiamondPass / webinar registration), if any.
+- extra_numbers: Dial-in numbers for other countries.
 
-IMPORTANT NOTES:
-- Indian concalls typically have an "Access Code" that is 8–12 digits. This is NOT the same as the phone number.
-- Look for patterns like: "Access Code: 12345678", "Conference ID: 98765432#", "Passcode: 55554321"
-- DiamondPass (diamondpass.net) is the most common webcast provider for Indian concalls. Its URLs look like: https://www.diamondpass.net/... or https://app.diamondpass.net/...
-- If the document only shows a phone number with no separate code, set passcode to null.
-- Return null for any field you cannot find — do NOT guess.
+NEVER return any of these as a dial-in number:
+- The company's own telephone/fax numbers in the letterhead, footer, address block or signature (e.g. "Tel: +91-79-2656-4337 | Email: ... | CIN: ...").
+- Investor-relations or contact-person phone numbers.
+- Registered/corporate office numbers.
+
+Some filings only ANNOUNCE the call and say the joining details will be shared later. If the document has no dial-in number, set phone_number to null and india_numbers to [] - do NOT substitute any other number.
+Return null for any field you cannot find - do NOT guess.
 
 Text:
 \"\"\"
@@ -697,6 +892,7 @@ Text:
                 parsed = parsed[0] if parsed else {}
             if not isinstance(parsed, dict):
                 raise ValueError(f"Unexpected Gemini response type: {type(parsed)}")
+            parsed = {**_empty_dialin(source_url), **parsed}
             parsed["raw_text"] = text[:2000]
             parsed["source_url"] = source_url
             print(f"LIVE_CONCALL: Gemini extracted dial-in: "
@@ -717,11 +913,7 @@ async def _extract_dialin_gemini_vision(pdf_bytes: bytes,
     """Fallback: send first page of PDF as image to Gemini Vision."""
     api_key = GOOGLE_API_KEY or os.getenv("GOOGLE_API_KEY")
     if not api_key:
-        return {
-            "phone_number": None, "passcode": None, "pin": None,
-            "date": None, "time": None, "webcast_url": None,
-            "extra_numbers": [], "raw_text": "", "source_url": source_url
-        }
+        return _empty_dialin(source_url)
 
     try:
         client = genai.Client(api_key=api_key)
@@ -739,18 +931,21 @@ async def _extract_dialin_gemini_vision(pdf_bytes: bytes,
         if uploaded is None:
             raise RuntimeError("announcement PDF never became ACTIVE")
 
-        prompt = """Extract all dial-in details from this Indian corporate earnings conference call (concall) announcement PDF.
+        prompt = """Extract the details participants use to join this Indian corporate earnings conference call (concall) from the announcement PDF.
 
 Return JSON with these fields:
-- phone_number: Primary India dial-in number (e.g. "+912262801123")
-- passcode: Participant access/conference code (labels: "Access Code", "Conference ID", "Passcode", "Conference Password", "Participant Passcode"). Extract digits only + optional trailing #.
+- phone_number: Primary India dial-in number, copied exactly as printed (do not add +91)
+- india_numbers: Every India dial-in number, as printed
+- passcode: Participant access/conference code (labels: "Access Code", "Conference ID", "Passcode", "Conference Password", "Participant Passcode"). Digits only + optional trailing #.
 - pin: Separate participant PIN if present (short 4-6 digit code, different from passcode). Null if not present.
+- meeting_id: Zoom/Webex/Teams webinar or meeting ID, if printed
 - date: Call date in YYYY-MM-DD format
 - time: Call time with timezone (e.g. "16:00 IST")
 - webcast_url: Any webcast/Teams/Zoom URL (null if none)
-- extra_numbers: List of alternative dial-in numbers
+- registration_url: URL to register at for dial-in credentials (null if none)
+- extra_numbers: Dial-in numbers for other countries
 
-Set any missing field to null. Do NOT guess."""
+Never return the company's own office/letterhead/contact telephone numbers as dial-in numbers. If the document has no dial-in number, set phone_number to null. Set any missing field to null. Do NOT guess."""
 
         response = client.models.generate_content(
             model=DIALIN_MODEL,
@@ -772,6 +967,7 @@ Set any missing field to null. Do NOT guess."""
                 parsed = parsed[0] if parsed else {}
             if not isinstance(parsed, dict):
                 raise ValueError(f"Unexpected Gemini Vision response type: {type(parsed)}")
+            parsed = {**_empty_dialin(source_url), **parsed}
             parsed["source_url"] = source_url
             parsed["raw_text"] = ""
             return parsed
@@ -779,34 +975,21 @@ Set any missing field to null. Do NOT guess."""
     except Exception as e:
         print(f"LIVE_CONCALL: Gemini Vision fallback failed: {e}", file=sys.stderr)
 
-    return {
-        "phone_number": None, "passcode": None, "pin": None,
-        "date": None, "time": None, "webcast_url": None,
-        "extra_numbers": [], "raw_text": "", "source_url": source_url
-    }
+    return _empty_dialin(source_url)
+
+
+_MONTHS = ("january|february|march|april|may|june|july|august|september|october|"
+           "november|december")
 
 
 def _regex_fallback_extract(text: str, source_url: str) -> Dict[str, Any]:
-    """Last-resort regex extraction of phone numbers and dates from text."""
-    result = {
-        "phone_number": None, "passcode": None, "pin": None,
-        "date": None, "time": None, "webcast_url": None,
-        "extra_numbers": [], "raw_text": text[:2000], "source_url": source_url
-    }
-
-    # Phone number patterns (Indian format)
-    phone_patterns = [
-        r'(?:\+91[\s-]?)?(?:[0-9]{2,4}[\s-]?){2,3}[0-9]{4,6}',
-        r'(?:Toll\s*(?:Free)?[\s:]+)(\+?\d[\d\s\-()]+)',
-        r'(?:Dial[\s-]?in[\s:]+)(\+?\d[\d\s\-()]+)',
-    ]
-    for pat in phone_patterns:
-        m = re.search(pat, text, re.IGNORECASE)
-        if m:
-            num = re.sub(r'[\s\-()]', '', m.group(0) if not m.groups() else m.group(1))
-            if len(num) >= 10:
-                result["phone_number"] = num
-                break
+    """
+    Last-resort extraction when the model call fails. Numbers come only from
+    labelled dial-in candidates (_validate_dialin picks them); this fills in
+    the other fields.
+    """
+    result = _empty_dialin(source_url)
+    result["raw_text"] = (text or "")[:2000]
 
     # Passcode/PIN — covers common Indian concall PDF label variants
     passcode_labels = [
@@ -816,7 +999,7 @@ def _regex_fallback_extract(text: str, source_url: str) -> Dict[str, Any]:
     pin_labels = ["participant pin", "pin number", "pin"]
 
     for label in passcode_labels:
-        m = re.search(rf'{re.escape(label)}\s*[:#\-]?\s*(\d[\d\s#*]*)',
+        m = re.search(rf'\b{re.escape(label)}\b\s*[:#\-]?\s*(\d[\d\s#*]*)',
                       text, re.IGNORECASE)
         if m:
             val = re.sub(r'\s+', '', m.group(1)).rstrip('#') + '#'
@@ -825,42 +1008,166 @@ def _regex_fallback_extract(text: str, source_url: str) -> Dict[str, Any]:
                 break
 
     for label in pin_labels:
-        m = re.search(rf'{re.escape(label)}\s*[:#\-]?\s*(\d[\d\s]*)',
+        m = re.search(rf'\b{re.escape(label)}\b\s*[:#\-]?\s*(\d[\d\s]*)',
                       text, re.IGNORECASE)
         if m:
             val = re.sub(r'\s+', '', m.group(1))
-            if len(val) >= 4:
+            if 4 <= len(val) <= 8:
                 result["pin"] = val
                 break
 
-    # Date
-    date_patterns = [
-        r'(\d{1,2})\s*(January|February|March|April|May|June|July|August|'
-        r'September|October|November|December)\s*,?\s*(\d{4})',
-        r'(\d{1,2})[/\-](\d{1,2})[/\-](\d{4})',
-    ]
-    for pat in date_patterns:
-        m = re.search(pat, text, re.IGNORECASE)
+    # Date: "October 26, 2026" / "26th October, 2026" / "26/10/2026". Prefer a
+    # "Date:" line; the first date in a filing is usually the letter date.
+    flat = re.sub(r"\s+", " ", text or "")
+    date_pats = [rf'\b({_MONTHS})\s+(\d{{1,2}})(?:st|nd|rd|th)?\s*,?\s*(\d{{4}})',
+                 rf'\b(\d{{1,2}})(?:st|nd|rd|th)?\s+({_MONTHS})\s*,?\s*(\d{{4}})']
+    labelled = re.search(r'\bdate\b\s*[:\-]\s*(.{0,40})', flat, re.IGNORECASE)
+    for scope in ([labelled.group(1)] if labelled else []) + [flat]:
+        m = next((m for p in date_pats for m in [re.search(p, scope, re.I)] if m), None)
         if m:
-            try:
-                result["date"] = m.group(0)
-            except Exception:
-                pass
+            result["date"] = m.group(0)
             break
+    if not result["date"]:
+        for m in re.finditer(r'\b(\d{1,2})[/\-.](\d{1,2})[/\-.](20\d{2})\b', flat):
+            if 1 <= int(m.group(1)) <= 31 and 1 <= int(m.group(2)) <= 12:
+                result["date"] = m.group(0)
+                break
 
-    # Time
-    m = re.search(r'(\d{1,2}[:.]\d{2})\s*(AM|PM|IST|hrs?|hours?)?',
-                  text, re.IGNORECASE)
+    # Time: only with an AM/PM/IST/hrs marker
+    m = re.search(r'\b(\d{1,2}[:.]\d{2})\s*(A\.?M\.?|P\.?M\.?|IST|hrs?|hours?)(?![A-Za-z])',
+                  flat, re.IGNORECASE)
     if m:
         result["time"] = m.group(0).strip()
 
     # Webcast URL
-    m = re.search(r'(https?://\S+)', text)
-    if m:
-        url = m.group(1).rstrip('.')
-        if 'webcast' in url.lower() or 'meet' in url.lower() or 'zoom' in url.lower():
+    for m in re.finditer(r'(https?://\S+)', text):
+        url = m.group(1).rstrip('.)')
+        low = url.lower()
+        if any(k in low for k in ('webcast', 'meet', 'zoom', 'teams', 'webex', 'diamondpass')):
             result["webcast_url"] = url
+            break
 
+    return result
+
+
+# --- Newer dial-in filing ----------------------------------------------------
+# The schedule links one filing per call, often the first intimation, which
+# says joining details will follow. When that filing has no dial-in number,
+# look for the company's later "Con. Call Updates" filing on NSE.
+
+_CALL_FILING_DESC = ("con. call", "analyst", "investor meet")
+_CALL_FILING_TEXT = ("earnings call", "conference call", "con call", "concall", "earnings conference",
+                     "schedule of meet", "invite", "dial", "joining")
+_NOT_DIALIN_FILING = ("transcript", "recording", "outcome", "non-deal", "non deal", "roadshow")
+
+
+def _mentions_call_date(text: str, call_date: str) -> bool:
+    """Does `text` mention `call_date` (YYYY-MM-DD) in a common written form?"""
+    try:
+        d = datetime.strptime(call_date, "%Y-%m-%d")
+    except (ValueError, TypeError):
+        return False
+    month, short = d.strftime("%B").lower(), d.strftime("%b").lower()
+    day = str(d.day)
+    low = (text or "").lower()
+    pats = [
+        rf"\b0?{day}(?:st|nd|rd|th)?\s*(?:of\s+)?(?:{month}|{short})\b",
+        rf"\b(?:{month}|{short})\.?\s+0?{day}(?:st|nd|rd|th)?\b",
+        rf"\b0?{day}[/\-.]0?{d.month}[/\-.](?:{d.year}|{d.year % 100})\b",
+    ]
+    return any(re.search(p, low) for p in pats)
+
+
+async def find_newer_dialin_filing(ticker: str, call_date: str = "",
+                                   exclude_url: str = "", max_docs: int = 4):
+    """
+    Newest NSE call-update filing for `ticker` that carries a labelled dial-in
+    number (or registration / meeting details). Returns {url, date, pdf_bytes}
+    or None. Never raises.
+    """
+    sym = (ticker or "").strip().upper()
+    if not sym:
+        return None
+    try:
+        from fetchers.nse_fetcher import _nse_get_json
+        rows = await _nse_get_json({"index": "equities", "symbol": sym})
+    except Exception as e:
+        print(f"LIVE_CONCALL: NSE filing lookup failed for {sym}: {e}", file=sys.stderr)
+        return None
+    if not isinstance(rows, list):
+        return None
+
+    try:
+        call_day = datetime.strptime(call_date, "%Y-%m-%d") if call_date else None
+    except ValueError:
+        call_day = None
+    newest_ok = (call_day or now_ist()) + timedelta(days=1)
+    oldest_ok = (call_day or now_ist()) - timedelta(days=30)
+
+    picked = []
+    for row in rows[:150]:
+        desc = str(row.get("desc", "")).lower()
+        body = str(row.get("attchmntText", "")).lower()
+        url = row.get("attchmntFile") or ""
+        if not url.lower().endswith(".pdf") or url == exclude_url:
+            continue
+        if not (any(k in desc for k in _CALL_FILING_DESC)
+                or any(k in body for k in _CALL_FILING_TEXT)):
+            continue
+        if any(k in body for k in _NOT_DIALIN_FILING):
+            continue
+        try:
+            an_dt = datetime.strptime(str(row.get("an_dt", "")), "%d-%b-%Y %H:%M:%S")
+        except ValueError:
+            continue
+        if oldest_ok <= an_dt <= newest_ok:
+            picked.append((an_dt, url))
+    picked.sort(reverse=True)
+
+    fallback = None
+    for an_dt, url in picked[:max_docs]:
+        pdf_bytes = await _download_pdf(url)
+        if not pdf_bytes:
+            continue
+        try:
+            text, _links = _pdf_text_and_links(pdf_bytes)
+        except Exception:
+            continue
+        has_dialin = any(c["kind"] == "dialin" for c in _phone_candidates(text))
+        if not has_dialin:
+            continue
+        found = {"url": url, "date": an_dt.strftime("%Y-%m-%d"), "pdf_bytes": pdf_bytes}
+        if not call_date or _mentions_call_date(text, call_date):
+            print(f"LIVE_CONCALL: newer dial-in filing for {sym}: {url}", file=sys.stderr)
+            return found
+        fallback = fallback or found
+    if fallback:
+        print(f"LIVE_CONCALL: newer dial-in filing for {sym} (date not matched): "
+              f"{fallback['url']}", file=sys.stderr)
+    return fallback
+
+
+async def resolve_dialin(pdf_url: str, ticker: str = "", call_date: str = "") -> Dict[str, Any]:
+    """
+    Dial-in details for a scheduled call: the linked filing first; when it has
+    no labelled dial-in number, the company's newer NSE call-update filing.
+    """
+    result = await extract_dialin_from_pdf(pdf_url) if pdf_url else _empty_dialin("")
+    if result.get("phone_number") or not ticker:
+        if not result.get("phone_number"):
+            result["notice"] = "No dial-in number found in this filing."
+        return result
+
+    newer = await find_newer_dialin_filing(ticker, call_date, exclude_url=pdf_url)
+    if newer:
+        alt = await _extract_dialin_from_bytes(newer["pdf_bytes"], newer["url"])
+        if alt.get("phone_number") or alt.get("registration_url"):
+            alt["original_url"] = pdf_url
+            alt["notice"] = (f"The linked filing has no dial-in details; these come from "
+                             f"the company's newer filing dated {newer['date']}.")
+            return alt
+    result["notice"] = ("No dial-in number found in this filing, and no newer filing with "
+                        "dial-in details yet. Companies often file them a day or two before the call.")
     return result
 
 
@@ -1649,17 +1956,21 @@ def register_live_concall_routes(app, socketio, call_gemini_api_fn):
     @app.route('/api/live-concall/extract-dialin', methods=['POST'])
     @login_required
     def live_concall_extract_dialin():
-        """Extract dial-in details from a PDF announcement URL."""
+        """Extract dial-in details from a PDF announcement URL. With `ticker`
+        (and `call_date`), falls back to the company's newer NSE call-update
+        filing when the linked one has no dial-in number."""
         try:
             data = request.get_json(force=True)
             pdf_url = data.get('pdf_url', '').strip()
+            ticker = (data.get('ticker') or '').strip().upper()
+            call_date = (data.get('call_date') or '').strip()
             if not pdf_url:
                 return jsonify({"error": "pdf_url is required"}), 400
 
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             try:
-                result = loop.run_until_complete(extract_dialin_from_pdf(pdf_url))
+                result = loop.run_until_complete(resolve_dialin(pdf_url, ticker, call_date))
             finally:
                 # Drain any pending tasks (e.g. genai.Client's internal aclose)
                 # before closing the loop to prevent RuntimeWarning noise.
