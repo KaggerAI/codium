@@ -1221,13 +1221,14 @@ def _build_dial_string(phone_number: str, passcode: str = "",
     keyed in automatically after the bridge answers (commas insert pauses).
     """
     number = _format_phone_exotel(phone_number)
-    digits = ""
-    clean_passcode = re.sub(r'[^0-9#*]', '', passcode or "")
-    if clean_passcode:
-        digits = clean_passcode if clean_passcode.endswith('#') else clean_passcode + '#'
-    clean_pin = re.sub(r'[^0-9#*]', '', pin or "")
-    if clean_pin:
-        digits += clean_pin if clean_pin.endswith('#') else clean_pin + '#'
+    groups = []
+    for code in (passcode, pin):
+        clean = re.sub(r'[^0-9#*]', '', code or "")
+        if clean:
+            groups.append(clean if clean.endswith('#') else clean + '#')
+    # Bridges prompt for the PIN only after accepting the passcode, so the two
+    # groups need a pause between them.
+    digits = ",,".join(groups)
     if digits:
         # 3 commas ≈ a few seconds of pause to let the bridge prompt play first.
         return f"{number},,,{digits}"
@@ -1277,6 +1278,9 @@ def place_exotel_call(phone_number: str, passcode: str = "",
             "CallType": "trans",
             "Url": flow_url,
             "TimeLimit": "7200",
+            # Recording at the call level, so the post-call pipeline gets a
+            # RecordingUrl even when the flow's Voicebot recording is off.
+            "Record": "true",
             "StatusCallback": status_cb,
             "CustomField": session_id,
         }
@@ -1385,10 +1389,14 @@ def _resolve_stream_session(start_obj: Dict[str, Any], trusted: bool = False):
 
 def _handle_media_stream(ws, trusted: bool = False):
     """
-    Handle the raw WebSocket opened by Exotel's Stream applet: decode PCM media
-    frames, stream them to the STT engine, and push transcripts into the
-    session. Listen-only - we never send audio back. Fully isolated/defensive so
-    a failure here never affects the call, recording, or the rest of the app.
+    Handle the raw WebSocket opened by Exotel's Stream/Voicebot applet: decode
+    PCM media frames, stream them to the STT engine, and push transcripts into
+    the session. Listen-only - we never send audio back.
+
+    The socket must stay open until Exotel ends it: closing it moves the call
+    flow to the next applet, which hangs up the concall. So an STT failure (at
+    start or mid-call) only stops the live transcript; frames keep being read
+    and the recording continues for the post-call transcript.
     """
     import base64
     session = None
@@ -1413,8 +1421,19 @@ def _handle_media_stream(ws, trusted: bool = False):
             if etype == "start":
                 session = _resolve_stream_session(evt.get("start") or evt, trusted)
                 if session and open_stt_stream:
-                    stt = open_stt_stream(
-                        lambda text, final: session.add_transcript(text, is_final=final))
+                    try:
+                        stt = open_stt_stream(
+                            lambda text, final: session.add_transcript(text, is_final=final))
+                    except Exception as e:
+                        stt = None
+                        print(f"LIVE_CONCALL: STT failed to start, continuing without "
+                              f"live transcript ({e})", file=sys.stderr)
+                        session._emit("live_concall_error", {
+                            "session_id": session.session_id,
+                            "error": "Live transcript unavailable for this call. The call is "
+                                     "still being recorded; the transcript and summary will "
+                                     "be generated when it ends.",
+                        })
                 print("LIVE_CONCALL: media-stream started (session="
                       f"{session.session_id if session else None})", file=sys.stderr)
             elif etype == "media":
@@ -1428,6 +1447,7 @@ def _handle_media_stream(ws, trusted: bool = False):
             elif etype == "stop":
                 break
     except Exception as e:
+        # Only receive() failing gets here: the socket is already gone.
         print(f"LIVE_CONCALL: media-stream error: {e}", file=sys.stderr)
     finally:
         if stt:
@@ -1857,6 +1877,22 @@ def _start_session_reaper(call_gemini_api_fn, interval_secs: int = 60):
 # 7. FLASK ROUTE REGISTRATION
 # ---------------------------------------------------------------------------
 
+def _public_base_url() -> str:
+    """
+    Public https base URL Exotel should call back to. LIVE_CONCALL_PUBLIC_URL
+    wins (set it to the tunnel URL when testing on localhost). Otherwise use the
+    proxy's forwarded scheme/host: Azure and tunnels terminate TLS, so
+    request.host_url says http://, and an http callback gets redirected - and
+    lost - by HTTPS-only hosting.
+    """
+    configured = os.getenv("LIVE_CONCALL_PUBLIC_URL", "").strip().rstrip("/")
+    if configured:
+        return configured
+    proto = (request.headers.get("X-Forwarded-Proto") or request.scheme).split(",")[0].strip()
+    host = (request.headers.get("X-Forwarded-Host") or request.host).split(",")[0].strip()
+    return f"{proto}://{host}"
+
+
 def _room(session_id: str) -> str:
     """Socket.IO room carrying one session's events (only its owner joins it)."""
     return f"live_concall:{session_id}"
@@ -2048,9 +2084,7 @@ def register_live_concall_routes(app, socketio, call_gemini_api_fn):
             _active_sessions[session_id] = session
 
             # Determine webhook base URL (Exotel calls back to this public host)
-            webhook_base = data.get('webhook_base_url', '').strip()
-            if not webhook_base:
-                webhook_base = request.host_url.rstrip('/')
+            webhook_base = data.get('webhook_base_url', '').strip() or _public_base_url()
             session.webhook_base = webhook_base
 
             session.update_state("dialing")
