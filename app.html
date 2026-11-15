@@ -9,6 +9,8 @@
   <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
+  <script src="research_report.js"></script>
 
   <style>
     /* === THEME VARIABLES === */
@@ -3447,17 +3449,17 @@
                 class="sticky top-28 cosmic-card rounded-2xl p-6 border border-indigo-500/20 shadow-sm overflow-y-auto max-h-[calc(100vh-160px)] custom-scrollbar">
                 <div class="absolute top-0 left-0 w-1 h-full bg-indigo-500"></div>
                 <h4 class="text-xs font-bold uppercase tracking-widest text-indigo-400 mb-5">Contents</h4>
-                <nav id="unanswerableTOC" class="space-y-2">
+                <nav id="unanswerableTOC" class="space-y-1">
                   <!-- TOC links will be added here -->
                 </nav>
               </div>
             </div>
 
             <!-- Report Content -->
-            <div class="lg:col-span-3">
+            <div class="lg:col-span-3 min-w-0">
               <div id="unanswerableContent"
-                class="bg-white rounded-3xl p-10 md:p-16 border border-slate-200 shadow-2xl prose prose-slate max-w-none prose-indigo prose-headings:scroll-mt-32">
-                <!-- Final report will be rendered here -->
+                class="bg-white rounded-3xl px-5 py-8 sm:p-10 md:p-14 border border-slate-200 shadow-2xl">
+                <!-- Final report will be rendered here (research_report.js) -->
               </div>
             </div>
           </div>
@@ -11386,9 +11388,8 @@
 
       const resetHandler = () => {
         if (confirm('Are you sure you want to stop this research and start a new one?')) {
-          localStorage.removeItem('unanswerable_report');
-          localStorage.removeItem('unanswerable_run_id');
-          localStorage.removeItem('unanswerable_expanded_question');
+          ['unanswerable_report', 'unanswerable_output', 'unanswerable_meta', 'unanswerable_run_id',
+            'unanswerable_expanded_question'].forEach(k => localStorage.removeItem(k));
           location.reload();
         }
       };
@@ -11400,14 +11401,47 @@
     }
 
     function checkUnanswerablePersistence() {
+      const savedOutput = localStorage.getItem('unanswerable_output');
       const savedReport = localStorage.getItem('unanswerable_report');
       const savedRunId = localStorage.getItem('unanswerable_run_id');
 
+      if (savedOutput) {
+        try {
+          renderUnanswerableReport(JSON.parse(savedOutput));
+          return;
+        } catch (e) {
+          console.error('Saved research output unreadable:', e);
+          localStorage.removeItem('unanswerable_output');
+        }
+      }
       if (savedReport) {
-        renderUnanswerableReport(savedReport);
+        renderUnanswerableReport(null); // legacy: markdown saved before source tracking
       } else if (savedRunId) {
         connectToResearchStream(savedRunId);
       }
+    }
+
+    // Report metadata (question, depth, timestamps, title) kept alongside the saved output.
+    function readUnanswerableMeta() {
+      try { return JSON.parse(localStorage.getItem('unanswerable_meta') || '{}') || {}; } catch (e) { return {}; }
+    }
+
+    function writeUnanswerableMeta(patch) {
+      const meta = Object.assign(readUnanswerableMeta(), patch);
+      try { localStorage.setItem('unanswerable_meta', JSON.stringify(meta)); } catch (e) { /* quota */ }
+      return meta;
+    }
+
+    function saveUnanswerableOutput(output) {
+      writeUnanswerableMeta({ generatedAt: new Date().toISOString() });
+      try {
+        localStorage.setItem('unanswerable_output', JSON.stringify(KaggerReport.compactOutput(output)));
+      } catch (e) {
+        // Storage quota: keep the report text even if the citation basis has to go.
+        try { localStorage.setItem('unanswerable_output', JSON.stringify({ type: output.type, content: output.content })); } catch (e2) { }
+      }
+      localStorage.removeItem('unanswerable_report');
+      localStorage.removeItem('unanswerable_run_id');
     }
 
     async function copyUnanswerableReport(event) {
@@ -11429,23 +11463,15 @@
     }
 
     async function downloadUnanswerablePDF(event) {
-      const element = document.getElementById('unanswerableContent');
       const btn = event.currentTarget;
       const originalHtml = btn.innerHTML;
-
-      const opt = {
-        margin: [15, 15, 15, 15],
-        filename: `Kagger_Research_${new Date().toISOString().split('T')[0]}.pdf`,
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true, logging: false },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-      };
+      if (!unanswerableReportModel) return;
 
       btn.innerHTML = '⌛ Generating...';
       btn.disabled = true;
 
       try {
-        await html2pdf().set(opt).from(element).save();
+        await KaggerReport.downloadPdf(unanswerableReportModel);
       } catch (err) {
         console.error('PDF Error:', err);
         alert('Failed to generate PDF. Please try again.');
@@ -11482,6 +11508,8 @@
 
         const runId = data.run_id;
         const expandedQuestion = data.expanded_question;
+        localStorage.removeItem('unanswerable_meta');
+        writeUnanswerableMeta({ question, depth: processor, startedAt: new Date().toISOString() });
         localStorage.setItem('unanswerable_run_id', runId);
         if (expandedQuestion) {
           localStorage.setItem('unanswerable_expanded_question', expandedQuestion);
@@ -11518,10 +11546,8 @@
           const res = await fetch(`/api/ask-unanswerable/status/${runId}`);
           const data = await res.json();
           if (data.completed && data.output?.content) {
-            const markdown = formatParallelReport(data.output.content);
-            localStorage.setItem('unanswerable_report', markdown);
-            localStorage.removeItem('unanswerable_run_id');
-            renderUnanswerableReport(markdown);
+            saveUnanswerableOutput(data.output);
+            renderUnanswerableReport(data.output);
             if (unanswerableEventSource) unanswerableEventSource.close();
             return true;
           }
@@ -11574,13 +11600,16 @@
 
           // Handle final state and report
           if (eventType === 'task_run.state' || (data.status === 'completed' && data.output)) {
-            const reportContent = (data.state && data.state.output && data.state.output.content) || (data.output && data.output.content);
-            if (reportContent) {
-              const markdown = formatParallelReport(reportContent);
-              localStorage.setItem('unanswerable_report', markdown);
-              localStorage.removeItem('unanswerable_run_id');
-              renderUnanswerableReport(markdown);
+            const streamOutput = (data.state && data.state.output) || data.output;
+            if (streamOutput && streamOutput.content) {
               unanswerableEventSource.close();
+              // Prefer the status endpoint: it returns the full output including the citation basis.
+              checkFinalStatus().then(done => {
+                if (!done) {
+                  saveUnanswerableOutput(streamOutput);
+                  renderUnanswerableReport(streamOutput);
+                }
+              });
               return;
             }
           }
@@ -11611,126 +11640,52 @@
       };
     }
 
-    function formatParallelReport(content) {
-      if (!content) return '';
+    // The report itself (masthead, sections, tables, footnotes, sources, PDF) lives in research_report.js.
+    let unanswerableReportModel = null;
 
-      // Try to parse if it's a stringified JSON
-      let data = content;
-      if (typeof content === 'string') {
-        const trimmed = content.trim();
-        if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
-          try {
-            data = JSON.parse(trimmed);
-          } catch (e) {
-            // Not JSON after all, or malformed
-            data = content;
-          }
-        }
-      }
-
-      // If it's still just a string, return it (marked will handle markdown)
-      if (typeof data === 'string') return data;
-
-      // Handle the case where Parallel puts everything in an "answer" field
-      if (data.answer && typeof data.answer === 'string') {
-        // If the answer itself is stringified JSON, try one more parse
-        const trimmedAnswer = data.answer.trim();
-        if (trimmedAnswer.startsWith('{') || trimmedAnswer.startsWith('[')) {
-          try {
-            return formatParallelReport(JSON.parse(trimmedAnswer));
-          } catch (e) {
-            return data.answer;
-          }
-        }
-        return data.answer;
-      }
-
-      // Professional structured rendering for objects
-      let md = '';
-
-      // If we have a title or overview, show it first
-      if (data.overview || data.summary) {
-        md += `# ${data.title || 'Research Summary'}\n\n`;
-        md += `${data.overview || data.summary}\n\n`;
-      }
-
-      for (const [key, value] of Object.entries(data)) {
-        // Skip keys we already handled or internal keys
-        if (['overview', 'summary', 'title', 'run_id', 'status', 'created_at', 'completed_at', 'processor', 'warnings', 'error', 'taskgroup_id'].includes(key)) continue;
-
-        const title = key.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-        md += `## ${title}\n\n`;
-
-        if (Array.isArray(value)) {
-          value.forEach(item => {
-            if (typeof item === 'object' && item !== null) {
-              md += `### ${item.company_name || item.name || ''}\n\n`;
-              for (const [ik, iv] of Object.entries(item)) {
-                if (['company_name', 'name'].includes(ik)) continue;
-                md += `**${ik.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}**: ${iv}\n\n`;
-              }
-              md += '---\n\n';
-            } else {
-              md += `- ${item}\n`;
-            }
-          });
-          md += '\n';
-        } else if (typeof value === 'object' && value !== null) {
-          for (const [ik, iv] of Object.entries(value)) {
-            md += `**${ik.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}**: ${iv}\n\n`;
-          }
-          md += '\n';
-        } else {
-          md += `${value}\n\n`;
-        }
-      }
-
-      // Citations section if present
-      if (data.basis || data.sources) {
-        md += `---\n# Sources & Citations\n\n`;
-        const sources = data.basis || data.sources;
-        if (Array.isArray(sources)) {
-          sources.forEach((s, i) => {
-            if (s.citations && Array.isArray(s.citations)) {
-              s.citations.forEach(c => {
-                md += `> [!NOTE]\n`;
-                md += `> **${c.title || 'Source'}**: [View Link](${c.url || '#'})  \n`;
-                if (c.excerpts) md += `> Excerpt: *"${c.excerpts.join(' ')}"*  \n\n`;
-              });
-            } else if (s.url) {
-              md += `${i + 1}. [${s.title || s.url}](${s.url})\n`;
-            }
-          });
-        }
-      }
-
-      return md;
-    }
-
-    function renderUnanswerableReport(markdown) {
+    // output: Parallel task output ({ type, content, basis }), or null to render legacy saved markdown.
+    function renderUnanswerableReport(output) {
       const initialCard = document.getElementById('unanswerableInitialCard');
       if (initialCard) initialCard.classList.add('hidden');
       document.getElementById('unanswerableProgress').classList.add('hidden');
       document.getElementById('unanswerableResult').classList.remove('hidden');
 
+      const meta = readUnanswerableMeta();
+      const opts = {
+        question: meta.question || localStorage.getItem('unanswerable_expanded_question') || '',
+        depth: meta.depth || '',
+        generatedAt: meta.generatedAt || meta.startedAt || new Date().toISOString(),
+        title: meta.title || ''
+      };
+      if (output) opts.output = output;
+      else opts.legacyMarkdown = localStorage.getItem('unanswerable_report') || '';
+
       const content = document.getElementById('unanswerableContent');
-      content.innerHTML = marked.parse(markdown);
-
-      // Generate TOC
       const toc = document.getElementById('unanswerableTOC');
-      toc.innerHTML = '';
-      const headings = content.querySelectorAll('h1, h2');
+      const model = KaggerReport.build(opts);
+      KaggerReport.render(model, content, toc);
+      unanswerableReportModel = model;
 
-      headings.forEach((h, idx) => {
-        const id = 'unanswerable-h-' + idx;
-        h.id = id;
-        const link = document.createElement('a');
-        link.href = '#' + id;
-        const isH1 = h.tagName.toLowerCase() === 'h1';
-        link.className = `block py-2 px-3 text-sm transition-all rounded-xl ${isH1 ? 'font-bold text-slate-700' : 'pl-6 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50/50'}`;
-        link.textContent = h.textContent;
-        toc.appendChild(link);
-      });
+      if (!model.titleIsFinal) fetchUnanswerableTitle(model, content);
+    }
+
+    // Ask the backend for a concise report title; the heuristic title stays if this fails.
+    async function fetchUnanswerableTitle(model, content) {
+      try {
+        const res = await fetch('/api/ask-unanswerable/title', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ question: model.question, headings: model.headings })
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.title && unanswerableReportModel === model) {
+          KaggerReport.setTitle(model, content, data.title);
+          writeUnanswerableMeta({ title: data.title });
+        }
+      } catch (e) {
+        console.warn('Report title generation failed; keeping derived title.', e);
+      }
     }
 
     // Initialize Ask the Unanswerable at the end of script to ensure all functions are defined

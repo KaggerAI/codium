@@ -883,6 +883,45 @@ def api_ask_unanswerable_status(run_id):
         print(f"ERROR checking Parallel status: {e}", file=sys.stderr)
         return jsonify({"error": str(e)}), 500
 
+@app.route('/api/ask-unanswerable/title', methods=['POST'])
+def api_ask_unanswerable_title():
+    """Generate a concise, professional title for a finished deep-research report.
+
+    The client falls back to a heuristic title if this fails, so errors are non-fatal.
+    """
+    data = request.get_json(silent=True) or {}
+    question = str(data.get("question") or "").strip()[:2000]
+    headings = [str(h).strip()[:160] for h in (data.get("headings") or []) if str(h).strip()][:20]
+    if not question and not headings:
+        return jsonify({"error": "question or headings required"}), 400
+
+    prompt = (
+        "You title equity-research reports for Indian stock-market investors.\n"
+        "Write ONE title for the report described below.\n"
+        "Rules: 6-14 words; headline case; specific (name the theme, sector, period or companies "
+        "where relevant); no quotes, no emojis, no trailing period, no words like 'Report' or 'Analysis of'. "
+        "A colon separating a theme from a qualifier is fine.\n"
+        "Return only the title text.\n\n"
+        f"Research question:\n{question or '(not available)'}\n\n"
+        "Report section headings:\n" + ("\n".join(f"- {h}" for h in headings) or "(not available)")
+    )
+    try:
+        raw = call_gemini_api(
+            messages=[{"role": "user", "content": prompt}],
+            model="gemini-3.5-flash-lite",
+            temperature=0.3,
+            thinking_level="MINIMAL",
+            usage_tag="unanswerable.title",
+        )
+        title = (raw or "").strip().splitlines()[0].strip() if (raw or "").strip() else ""
+        title = title.strip("*#\"'` ").rstrip(".").strip()
+        if not title or len(title) > 160:
+            return jsonify({"error": "no usable title"}), 502
+        return jsonify({"title": title})
+    except Exception as e:
+        print(f"WARN: unanswerable title generation failed: {e}", file=sys.stderr)
+        return jsonify({"error": "title generation failed"}), 502
+
 @app.route('/debug/cookies-source')
 def debug_cookies_source():
     """Debug endpoint to check which source Trendlyne cookies are loaded from (admin only)"""
