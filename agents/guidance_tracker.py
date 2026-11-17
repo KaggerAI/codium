@@ -1078,18 +1078,132 @@ def compare_with_prior_call(conn, ticker, qkey, items):
 # =====================================================================
 # PIPELINE - ONE COMPANY
 # =====================================================================
+async def _exchange_transcripts(ticker, quarter):
+    """
+    Transcript filings for `quarter` on NSE and BSE -> [{quarter, transcript_url, source}].
+
+    Both are returned, not just the first: one exchange often carries only a
+    cover letter ("we have uploaded the transcript on our website") while the
+    other has the full PDF. Only an exact quarter match is accepted - these
+    fetchers scan recent filings and can surface the previous call.
+    """
+    from agents.concall_agent import _fetch_nse_transcript_candidate, _fetch_bse_transcript_candidate
+    out = []
+    for source, fn in (('nse', _fetch_nse_transcript_candidate),
+                       ('bse', _fetch_bse_transcript_candidate)):
+        try:
+            cand = await fn(ticker, quarter)
+        except Exception as e:
+            print(f"GUIDANCE: {source.upper()} transcript lookup failed for {ticker} {quarter}: {e}",
+                  file=sys.stderr)
+            continue
+        url = cand.get('url')
+        if url and cand.get('quarter') == quarter and url not in {c['transcript_url'] for c in out}:
+            out.append({'quarter': quarter, 'transcript_url': url, 'source': source})
+    return out
+
+
+_LETTER_HINT_RE = re.compile(r'upload|hosted|available on|placed on|web ?link|website', re.I)
+_URL_RE = re.compile(r'https?://[^\s<>()\]\[]+')
+
+
+def _cover_letter_link(pages):
+    """
+    The website link in an exchange cover letter, or '' if this is not one.
+
+    Many companies satisfy the transcript rule by filing a one-page letter that
+    says the transcript is on their investor site. That letter must not be read
+    as a (scanned) transcript, and the link is what an admin needs to know.
+    """
+    text = '\n'.join(pages)
+    if len(text) >= MIN_TRANSCRIPT_CHARS or 'transcript' not in text.lower() \
+            or not _LETTER_HINT_RE.search(text):
+        return ''
+    urls = [u.rstrip('.,;') for u in _URL_RE.findall(text)
+            if not re.search(r'nseindia|bseindia|sebi\.gov', u, re.I)]
+    urls.sort(key=lambda u: not re.search(r'transcript|investor|concall|conference', u, re.I))
+    return urls[0] if urls else 'the company website'
+
+
 async def _pick_transcript(ticker, quarter=None):
+    """
+    Transcripts to try, best first -> ([{quarter, transcript_url, source}], checked).
+
+    Screener is the primary source (it reaches back years). NSE and BSE are the
+    fallback for the gap Screener leaves around results season, when a call has
+    happened and its transcript is filed with the exchanges before Screener
+    links it:
+      * a specific quarter Screener has no transcript for;
+      * in "latest" mode, any quarter newer than Screener's newest transcript -
+        the quarter currently being reported, or a newer call Screener lists
+        without a transcript. Otherwise "latest" would quietly mean last quarter.
+    process_company() walks the list and takes the first document that is a
+    real transcript of this company, so a cover-letter filing for the new
+    quarter falls back to Screener's newest full transcript.
+    `checked` names the sources tried, for the no-transcript message.
+    """
     from fetchers.screener_fetcher import fetch_concall_history_async
-    from agents.concall_agent import _date_to_quarter, _normalize_quarter_label
-    history = await fetch_concall_history_async(ticker, date_to_quarter=_date_to_quarter)
+    from agents.concall_agent import (_date_to_quarter, _normalize_quarter_label,
+                                      _expected_results_quarters)
+    try:
+        history = await fetch_concall_history_async(ticker, date_to_quarter=_date_to_quarter)
+    except Exception as e:
+        print(f"GUIDANCE: Screener history failed for {ticker}: {e}", file=sys.stderr)
+        history = []
+
+    def screener(row):
+        return {'quarter': row['quarter'], 'transcript_url': row['transcript_url'], 'source': 'screener'}
+
     if quarter:
         quarter = _normalize_quarter_label(quarter) or quarter
         row = next((r for r in history if r.get('quarter') == quarter), None)
         if row and row.get('transcript_url'):
-            return row, history
-        return None, history
-    row = next((r for r in history if r.get('transcript_url')), None)
-    return row, history
+            return [screener(row)], 'Screener'
+        return await _exchange_transcripts(ticker, quarter), 'Screener, NSE and BSE'
+
+    latest = next((r for r in history if r.get('transcript_url')), None)
+    floor = quarter_key(latest['quarter']) if latest else 0
+    wanted = set(_expected_results_quarters())
+    wanted.update(r['quarter'] for r in history[:2] if r.get('quarter') and not r.get('transcript_url'))
+    cands = []
+    for q in sorted((q for q in wanted if quarter_key(q) > floor), key=quarter_key, reverse=True):
+        cands += await _exchange_transcripts(ticker, q)
+    if latest:
+        cands.append(screener(latest))
+    return cands, 'Screener, NSE and BSE'
+
+
+def _share_transcript_with_concall_agent(ticker, quarter, chosen, pages, verdict):
+    """
+    Put this transcript in the Concall Agent's per-quarter transcript cache.
+
+    Its past-quarter tabs, chat and on-demand quarter analysis all read
+    transcripts through fetch_past_concall_transcript(), which checks this
+    cache (keyed ticker|quarter, so a new call is always a miss) before
+    downloading. Sharing it means those features skip the download and read
+    the very document the guidance rows came from - including an NSE/BSE
+    filing Screener does not link yet.
+
+    The text is trimmed exactly as get_text_from_pdf_url_async() trims it -
+    start at the first page naming the moderator (else page 3), at most 75
+    pages, capped at the agent's TRANSCRIPT_MAX_CHARS - so a cached transcript
+    reads the same as one the agent fetched itself.
+    """
+    try:
+        from agents.concall_agent import _cache_put_transcript, TRANSCRIPT_MAX_CHARS
+        start = 2 if len(pages) > 2 else 0
+        for i, text in enumerate(pages[:10]):
+            if 'moderator' in (text or '').lower():
+                start = i
+                break
+        text = '\n'.join(p for p in pages[start:start + 75] if p)[:TRANSCRIPT_MAX_CHARS]
+        _cache_put_transcript(ticker, quarter, {
+            'quarter': quarter, 'text': text, 'url': chosen['transcript_url'],
+            'source': chosen['source'], 'verified': verdict.get('quarter') == 'confirmed',
+        })
+    except Exception as e:
+        print(f"GUIDANCE: could not share {ticker} {quarter} transcript with the Concall Agent: {e}",
+              file=sys.stderr)
 
 
 def _save_transcript(conn, rec):
@@ -1136,64 +1250,95 @@ def process_company(ticker: str, quarter: str = None, force: bool = False, model
 
     say(f'{ticker}: finding transcript')
     try:
-        row, _history = asyncio.run(_pick_transcript(ticker, quarter))
+        cands, checked = asyncio.run(_pick_transcript(ticker, quarter))
     except Exception as e:
-        return {'ticker': ticker, 'status': 'error', 'error': f'history fetch failed: {e}'}
-    if not row:
-        msg = (f'no transcript published for {quarter}' if quarter
-               else 'no transcript found on Screener')
-        if quarter:
-            with _db() as conn:
+        return {'ticker': ticker, 'status': 'error', 'error': f'transcript lookup failed: {e}'}
+
+    def record_failure(fq, status, err):
+        # Never downgrade a call that was already extracted successfully.
+        with _db() as conn:
+            ok = conn.execute("SELECT 1 FROM guidance_transcripts WHERE ticker = ? AND quarter = ? "
+                              "AND status = 'ok'", (ticker, fq)).fetchone()
+            if not ok:
                 _save_transcript(conn, {'ticker': ticker, 'company_name': company, 'sector': sector,
-                                        'sector_bucket': bucket, 'quarter': quarter,
-                                        'quarter_key': quarter_key(quarter),
-                                        'quarter_label': quarter_label(quarter),
-                                        'status': 'no_transcript', 'error': msg,
-                                        'extracted_at': _now()})
+                                        'sector_bucket': bucket, 'quarter': fq,
+                                        'quarter_key': quarter_key(fq), 'quarter_label': quarter_label(fq),
+                                        'status': status, 'error': err, 'extracted_at': _now(),
+                                        'model': model or EXTRACTION_MODEL})
+        return {'ticker': ticker, 'quarter': fq, 'status': status, 'error': err}
+
+    if not cands:
+        msg = (f'no transcript for {quarter} on {checked}' if quarter
+               else f'no transcript found on {checked}')
+        if quarter:
+            return record_failure(quarter, 'no_transcript', msg)
         return {'ticker': ticker, 'status': 'no_transcript', 'error': msg}
 
-    q = row['quarter']
-    qkey = quarter_key(q)
-    if not force:
-        with _db() as conn:
-            hit = conn.execute("SELECT id, status FROM guidance_transcripts WHERE ticker = ? "
-                               "AND quarter = ? AND status = 'ok'", (ticker, q)).fetchone()
-        if hit:
-            return {'ticker': ticker, 'quarter': q, 'status': 'skipped',
-                    'note': 'already extracted (use force to redo)', 'transcript_id': hit['id']}
+    # Walk the candidates, best first, and take the first document that is a
+    # full transcript of this company. Everything skipped is reported.
+    from agents.concall_agent import _verify_transcript_identity
+    notes, chosen, pages, verdict = [], None, None, {}
+    for cand in cands:
+        cq, src = cand['quarter'], cand['source'].upper()
+        if not force:
+            with _db() as conn:
+                hit = conn.execute("SELECT id FROM guidance_transcripts WHERE ticker = ? "
+                                   "AND quarter = ? AND status = 'ok'", (ticker, cq)).fetchone()
+            if hit:
+                note = '; '.join(notes + ['already extracted (use force to redo)'])
+                return {'ticker': ticker, 'quarter': cq, 'status': 'skipped', 'note': note,
+                        'transcript_id': hit['id']}
+        say(f'{ticker} {cq}: reading transcript ({src})')
+        try:
+            cpages = asyncio.run(fetch_transcript_pages(cand['transcript_url']))
+        except Exception as e:
+            notes.append(f'{src} {cq}: download failed ({e})')
+            continue
+        chars = sum(len(p) for p in cpages)
+        if chars < MIN_TRANSCRIPT_CHARS:
+            link = _cover_letter_link(cpages)
+            notes.append(f'{src} {cq}: filing is a cover letter; transcript is on {link}' if link
+                         else f'{src} {cq}: only {chars} characters of text (scanned PDF?)')
+            continue
+        try:
+            v = _verify_transcript_identity('\n'.join(cpages)[:120000], company, ticker, cq,
+                                            allow_model=False)
+        except Exception as e:
+            v = {'company': 'unconfirmed', 'quarter': 'unconfirmed', 'detail': f'check skipped: {e}'}
+        if v.get('quarter') == 'contradicted' or v.get('company') == 'contradicted':
+            notes.append(f"{src} {cq}: wrong document ({v.get('detail')})")
+            continue
+        # Screener's link is curated per company; an exchange search result is
+        # not, so it must name this company before it is trusted.
+        if cand['source'] != 'screener' and v.get('company') != 'confirmed':
+            notes.append(f"{src} {cq}: document does not name {company}")
+            continue
+        chosen, pages, verdict = cand, cpages, v
+        break
 
+    if not chosen:
+        letter = next((n for n in notes if 'cover letter' in n), '')
+        status = 'transcript_on_website' if letter else 'unreadable'
+        return record_failure(cands[0]['quarter'], status, '; '.join(notes))
+
+    q = chosen['quarter']
+    qkey = quarter_key(q)
+    _share_transcript_with_concall_agent(ticker, q, chosen, pages, verdict)
+    chars = sum(len(p) for p in pages)
     rec = {'ticker': ticker, 'company_name': company, 'sector': sector, 'sector_bucket': bucket,
            'quarter': q, 'quarter_key': qkey, 'quarter_label': quarter_label(q),
-           'source_url': row['transcript_url'], 'source': 'screener', 'extracted_at': _now(),
-           'model': model or EXTRACTION_MODEL}
+           'source_url': chosen['transcript_url'], 'source': chosen['source'], 'extracted_at': _now(),
+           'model': model or EXTRACTION_MODEL, 'page_count': len(pages), 'char_count': chars,
+           'call_date': _call_date_from_pages(pages),
+           'pages_z': zlib.compress(json.dumps(pages).encode('utf-8')),
+           'identity_check': verdict.get('detail', '')}
 
     def fail(status, err):
         rec.update({'status': status, 'error': err})
         with _db() as conn:
             _save_transcript(conn, rec)
-        return {'ticker': ticker, 'quarter': q, 'status': status, 'error': err}
-
-    say(f'{ticker} {q}: reading transcript')
-    try:
-        pages = asyncio.run(fetch_transcript_pages(row['transcript_url']))
-    except Exception as e:
-        return fail('error', f'transcript download failed: {e}')
-    chars = sum(len(p) for p in pages)
-    rec.update({'page_count': len(pages), 'char_count': chars,
-                'call_date': _call_date_from_pages(pages),
-                'pages_z': zlib.compress(json.dumps(pages).encode('utf-8'))})
-    if chars < MIN_TRANSCRIPT_CHARS:
-        return fail('unreadable', f'only {chars} characters of text (scanned PDF?)')
-
-    try:
-        from agents.concall_agent import _verify_transcript_identity
-        verdict = _verify_transcript_identity('\n'.join(pages)[:120000], company, ticker, q,
-                                              allow_model=False)
-        rec['identity_check'] = verdict.get('detail', '')
-        if verdict.get('quarter') == 'contradicted' or verdict.get('company') == 'contradicted':
-            return fail('wrong_document', f"transcript identity check failed: {verdict.get('detail')}")
-    except Exception as e:
-        rec['identity_check'] = f'check skipped: {e}'
+        return {'ticker': ticker, 'quarter': q, 'status': status, 'error': err,
+                'note': '; '.join(notes)}
 
     say(f'{ticker} {q}: extracting guidance ({len(pages)} pages)')
     prompt = build_guidance_prompt(company, ticker, bucket, quarter_label(q), _pages_for_model(pages))
@@ -1205,7 +1350,7 @@ def process_company(ticker: str, quarter: str = None, force: bool = False, model
 
     say(f'{ticker} {q}: validating')
     doc = TranscriptDoc(pages)
-    items = validate_items(data.get('items'), doc, row['transcript_url'])
+    items = validate_items(data.get('items'), doc, chosen['transcript_url'])
     items = add_not_disclosed(items, data.get('not_disclosed'), bucket)
 
     rec.update({'status': 'ok', 'error': None,
@@ -1221,7 +1366,8 @@ def process_company(ticker: str, quarter: str = None, force: bool = False, model
 
     st = Counter(i['verify_status'] for i in items)
     flags = Counter(f for i in items for f in i['verify_flags'])
-    return {'ticker': ticker, 'quarter': q, 'status': 'ok', 'transcript_id': tid,
+    return {'ticker': ticker, 'quarter': q, 'status': 'ok', 'transcript_id': tid, 'source': chosen['source'],
+            'note': '; '.join(notes),
             'items': len(items), 'verified': st.get('verified', 0),
             'needs_review': st.get('needs_review', 0), 'rejected': st.get('rejected', 0),
             'numbers_removed': flags.get('number_removed', 0),
@@ -1428,7 +1574,7 @@ def query_summaries(args) -> list:
     if args.get('include_failed') not in ('1', 'true'):
         where.append("t.status = 'ok'")
     sql = ("SELECT t.id, t.ticker, t.company_name, t.sector, t.sector_bucket, t.quarter, "
-           "t.quarter_label, t.call_date, t.source_url, t.page_count, t.status, t.error, "
+           "t.quarter_label, t.call_date, t.source_url, t.source, t.page_count, t.status, t.error, "
            "t.call_summary, t.outlook_tone, t.guidance_headline, t.model, t.extracted_at "
            f"FROM guidance_transcripts t {join} "
            + (f"WHERE {' AND '.join(where)} " if where else '')

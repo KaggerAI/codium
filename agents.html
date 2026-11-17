@@ -4469,6 +4469,14 @@
                     border-bottom:1px solid var(--border-color); gap:.75rem; font-size:.85rem; }
                 .gt-modal-body { padding:1rem; overflow:auto; white-space:pre-wrap; font-size:.82rem; line-height:1.6; color:var(--text-secondary); }
                 .gt-form { display:grid; gap:.5rem; padding:1rem; }
+                .gt-modal-body.gt-md { white-space:normal; color:var(--text-primary); line-height:1.6; }
+                .gt-md h1, .gt-md h2, .gt-md h3 { font-size:1rem; margin:1.1rem 0 .4rem; }
+                .gt-md h1:first-child, .gt-md h2:first-child, .gt-md h3:first-child { margin-top:0; }
+                .gt-md p, .gt-md li { color:var(--text-secondary); font-size:.84rem; }
+                .gt-md ul, .gt-md ol { padding-left:1.2rem; margin:.3rem 0 .7rem; }
+                .gt-md table { border-collapse:collapse; font-size:.78rem; margin:.5rem 0; display:block; overflow-x:auto; }
+                .gt-md th, .gt-md td { border:1px solid var(--border-color); padding:.35rem .5rem; text-align:left; }
+                .gt-md strong { color:var(--text-primary); }
             </style>
             <div class="gt-panel" id="gtPanel">
                 <div class="gt-card">
@@ -11206,10 +11214,60 @@
             const link = document.getElementById('gtModalLink');
             link.style.display = url ? '' : 'none';
             if (url) { link.href = url; link.textContent = 'Open PDF'; }
-            document.getElementById('gtModalBody').innerHTML = gtEsc(body);
+            const bodyEl = document.getElementById('gtModalBody');
+            bodyEl.classList.remove('gt-md');
+            bodyEl.innerHTML = gtEsc(body);
             document.getElementById('gtModal').classList.add('show');
         }
-        function gtCloseModal() { document.getElementById('gtModal').classList.remove('show'); }
+        function gtCloseModal() {
+            document.getElementById('gtModal').classList.remove('show');
+            // Stop polling a running analysis; the job itself keeps going on the
+            // server and lands in the quarter cache, so reopening picks it up.
+            clearTimeout(gtAnalysisTimer); gtAnalysisJob = null;
+        }
+
+        // ---- On-demand full analysis ----
+        // Uses the Concall Agent's own per-quarter analysis (same prompt as
+        // "Analyze Concall"). The server caches it per company + quarter, and the
+        // transcript is usually already in its cache from the Tracker run, so the
+        // first open costs one model call and every later open is instant.
+        let gtCallsById = {}, gtAnalysisJob = null, gtAnalysisTimer = null;
+
+        function gtFullAnalysis(id) {
+            const c = gtCallsById[id];
+            if (!c) return;
+            const label = `${c.company_name || c.ticker} · ${c.quarter_label || c.quarter} · full concall analysis`;
+            gtOpenModal(label, gtUrl(c.source_url), 'Starting analysis...');
+            const bodyEl = document.getElementById('gtModalBody');
+            fetch('/agent/concall/analyze-quarter', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ticker: c.ticker, quarter: c.quarter, company_name: c.company_name || c.ticker })
+            }).then(r => r.json()).then(data => {
+                if (data.status === 'complete') gtShowAnalysis(data.result, true);
+                else if (data.job_id) { gtAnalysisJob = data.job_id; gtPollAnalysis(data.job_id, Date.now()); }
+                else bodyEl.textContent = data.error || 'Could not start the analysis.';
+            }).catch(e => { bodyEl.textContent = 'Network error: ' + e.message; });
+        }
+
+        function gtPollAnalysis(jobId, started) {
+            if (gtAnalysisJob !== jobId) return;
+            const bodyEl = document.getElementById('gtModalBody');
+            fetchConcallStatus(jobId).then(({ ok, data }) => {
+                if (gtAnalysisJob !== jobId) return;
+                if (ok && data && data.status === 'complete') { gtAnalysisJob = null; gtShowAnalysis(data.result, false); return; }
+                if (ok && data && data.status !== 'processing') { gtAnalysisJob = null; bodyEl.textContent = data.error || 'Analysis failed.'; return; }
+                const secs = Math.round((Date.now() - started) / 1000);
+                bodyEl.textContent = `${(data && data.progress) || 'Analysing...'} (${secs}s)`;
+                gtAnalysisTimer = setTimeout(() => gtPollAnalysis(jobId, started), 2500);
+            }).catch(() => { gtAnalysisTimer = setTimeout(() => gtPollAnalysis(jobId, started), 4000); });
+        }
+
+        function gtShowAnalysis(result, cached) {
+            const bodyEl = document.getElementById('gtModalBody');
+            bodyEl.classList.add('gt-md');
+            const html = (typeof marked !== 'undefined') ? marked.parse(result.analysis || '') : gtEsc(result.analysis || '');
+            bodyEl.innerHTML = (cached ? '<div class="gt-sub" style="margin-bottom:.6rem;">Saved analysis</div>' : '') + html;
+        }
         document.addEventListener('keydown', e => { if (e.key === 'Escape') gtCloseModal(); });
 
         // ---- Concall summaries ----
@@ -11222,6 +11280,7 @@
             try {
                 const data = await gtFetch('/api/concall-guidance/summaries?' + p.toString());
                 const calls = data.calls || [];
+                gtCallsById = Object.fromEntries(calls.map(c => [c.id, c]));
                 document.getElementById('gtCallCount').textContent = `${calls.length} concall${calls.length === 1 ? '' : 's'}`;
                 if (!calls.length) { box.innerHTML = '<div class="gt-empty">No concalls extracted yet.</div>'; return; }
                 box.innerHTML = calls.map(c => {
@@ -11250,7 +11309,8 @@
                         ${risks ? `<div class="gt-section-label">Risks flagged</div><ul>${risks}</ul>` : ''}
                         ${(c.not_disclosed || []).length ? `<div class="gt-sub">Not disclosed: ${gtEsc(c.not_disclosed.join(', '))}</div>` : ''}
                         <div class="gt-actions" style="margin-top:auto;">
-                            ${src ? `<a class="gt-btn" href="${gtEsc(src)}" target="_blank" rel="noopener noreferrer">Transcript</a>` : ''}
+                            ${src ? `<a class="gt-btn" href="${gtEsc(src)}" target="_blank" rel="noopener noreferrer">Transcript${c.source && c.source !== 'screener' ? ' (' + gtEsc(c.source.toUpperCase()) + ' filing)' : ''}</a>` : ''}
+                            <button class="gt-btn primary" onclick="gtFullAnalysis(${c.id})" title="Full Concall Agent analysis of this call (runs once, then cached)">Full analysis</button>
                             <button class="gt-btn" onclick="gtShowCompanyRows('${gtEsc(c.ticker)}')">All rows</button>
                             <button class="gt-btn" onclick="gtMissedForm(${c.id}, '${gtEsc((c.company_name || c.ticker).replace(/['\\]/g, ''))}')">Report missed guidance</button>
                         </div>
@@ -11389,6 +11449,9 @@
                     clearInterval(gtRunTimer);
                     const failed = res.filter(r => !['ok', 'skipped'].includes(r.status));
                     if (failed.length) st.textContent += ' · Not extracted: ' + failed.map(r => `${r.ticker} (${r.error || r.status})`).join('; ');
+                    const fellBack = res.filter(r => ['ok', 'skipped'].includes(r.status) && r.note && r.note.includes('cover letter'));
+                    if (fellBack.length) st.textContent += ' · Newer call only on company website, used previous transcript: ' +
+                        fellBack.map(r => `${r.ticker} (${r.quarter})`).join(', ');
                     gtLoadEval(); gtLoadItems();
                 }
             } catch (e) { st.textContent = 'Status unavailable: ' + e.message; clearInterval(gtRunTimer); }
