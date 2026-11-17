@@ -13032,6 +13032,10 @@ from fetchers.screener_fetcher import fetch_latest_documents_async, get_text_fro
 register_concall_routes(app, call_gemini_api, fetch_latest_documents_async, get_text_from_pdf_url_async,
                         call_perplexity_search_api)
 
+# Register Concall Guidance Tracker routes (guidance database across companies)
+from agents.guidance_tracker import register_guidance_routes
+register_guidance_routes(app)
+
 # Register Live Concall routes
 from agents.live_concall import register_live_concall_routes
 register_live_concall_routes(app, socketio, call_gemini_api)

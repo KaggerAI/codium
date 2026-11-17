@@ -1,102 +1,17 @@
 {
   "success": true,
-  "ran_at": "2026-11-09 11:22:55 IST",
+  "ran_at": "2026-11-17 15:54:00 IST",
   "dry_run": false,
-  "sitemap_entries": 5956,
-  "rows_before": 6116,
-  "rows_after": 6140,
-  "added": 24,
+  "sitemap_entries": 5963,
+  "rows_before": 6145,
+  "rows_after": 6147,
+  "added": 2,
   "added_tickers": [
-    "MELSTAR",
-    "KDJHRL",
-    "TRANOCE",
-    "542544",
-    "11610081",
-    "BLSPOLY",
-    "13521371",
-    "EDELALTS",
-    "SFCTECH",
-    "13110378",
-    "BCSSL",
-    "13580029",
-    "MKJEWELS",
-    "11625876",
-    "11625837",
-    "MAXENGS",
-    "15050168",
-    "HGSINDIALT",
-    "VPFL",
-    "CENTEXTPP",
-    "ENNATURE",
-    "IGLSPIRITS",
-    "OLAPP",
-    "14620284"
+    "JKSHAH",
+    "15110032"
   ],
-  "updated": 15,
-  "updates": [
-    {
-      "trendlyne_id": "4714",
-      "Ticker": "ICICIPRULI -> ICICILIFE"
-    },
-    {
-      "trendlyne_id": "819",
-      "Stock Name": "Maharashtra Scooters Ltd -> Bajaj Nivesh Ltd"
-    },
-    {
-      "trendlyne_id": "2090",
-      "Ticker": "NOVARTIND -> EVONILE",
-      "Stock Name": "Novartis India Ltd -> Evonile Pharma Ltd"
-    },
-    {
-      "trendlyne_id": "770889",
-      "Ticker": "ABCOTS -> ABCIND",
-      "Stock Name": "Ab Cotspin India Ltd -> Abc Industries India Ltd"
-    },
-    {
-      "trendlyne_id": "82937",
-      "Ticker": "SUDEV -> IIRM"
-    },
-    {
-      "trendlyne_id": "3344",
-      "Stock Name": "Virat Industries Ltd -> Brahm Virat Industries Corporation Ltd"
-    },
-    {
-      "trendlyne_id": "82418",
-      "Stock Name": "Jolly Plastic Industries Ltd -> Sahaj Digital Ltd"
-    },
-    {
-      "trendlyne_id": "147295",
-      "Ticker": "12541585 -> SUDARSHAN"
-    },
-    {
-      "trendlyne_id": "1394503",
-      "Ticker": "17040844 -> BRIGHTOUTD"
-    },
-    {
-      "trendlyne_id": "1563599",
-      "Ticker": "15070580 -> KHAZANCHI"
-    },
-    {
-      "trendlyne_id": "1615359",
-      "Ticker": "13521165 -> BONDADA"
-    },
-    {
-      "trendlyne_id": "884",
-      "Stock Name": "Umiya Buildcon Ltd -> Mro Tek Networks Ltd"
-    },
-    {
-      "trendlyne_id": "1888080",
-      "Stock Name": "Shree Marutinandan Tubes Ltd -> Shree Marutinandan Industries Ltd"
-    },
-    {
-      "trendlyne_id": "3414",
-      "Stock Name": "Arunjyoti Bio Ventures Ltd -> Pasura Industries Ltd"
-    },
-    {
-      "trendlyne_id": "2653113",
-      "Stock Name": "Avax Apparels And Ornaments Ltd -> Avax Ltd"
-    }
-  ],
+  "updated": 0,
+  "updates": [],
   "ambiguous": [
     {
       "trendlyne_id": "4596",
@@ -276,5 +191,5 @@
   ],
   "conflicts": [],
   "error": null,
-  "duration_seconds": 1.1
+  "duration_seconds": 0.5
 }

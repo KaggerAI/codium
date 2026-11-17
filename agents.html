@@ -4136,6 +4136,16 @@
                         Join, record &amp; analyse earnings calls in real time
                     </span>
                 </div>
+                <!-- Guidance Tracker Toggle -->
+                <div class="live-mode-toggle-row">
+                    <button class="gt-mode-btn" id="gtModeToggleBtn" onclick="toggleGuidanceTracker()">
+                        <span class="gt-mode-icon">&#9636;</span>
+                        Guidance Tracker
+                    </button>
+                    <span style="font-size:0.78rem;color:var(--text-secondary);">
+                        All concall summaries &amp; management guidance, filterable, every row linked to its source
+                    </span>
+                </div>
             </div>
 
             <!-- Error -->
@@ -4356,6 +4366,250 @@
                     <div class="live-transcript-box" id="liveTranscriptBox">
                         <span class="live-transcript-empty">Transcript will appear here once connected and audio is
                             received...</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ============================================ -->
+            <!-- GUIDANCE TRACKER                             -->
+            <!-- ============================================ -->
+            <style>
+                .gt-mode-btn { display:flex; align-items:center; gap:.5rem; padding:.5rem 1.1rem; border-radius:.5rem;
+                    font-size:.82rem; font-weight:600; cursor:pointer; border:1px solid var(--accent-violet);
+                    background:transparent; color:var(--accent-violet); transition:all .2s; font-family:inherit; }
+                .gt-mode-btn:hover, .gt-mode-btn.active { background:rgba(139,92,246,.14); }
+                .gt-mode-icon { font-size:.9rem; line-height:1; }
+                .gt-panel { display:none; margin-top:1.25rem; }
+                .gt-panel.show { display:block; }
+                .gt-card { background:var(--bg-card); border:1px solid var(--border-color); border-radius:1rem; padding:1.25rem; }
+                .gt-head { display:flex; justify-content:space-between; align-items:flex-start; gap:1rem; flex-wrap:wrap; }
+                .gt-head h3 { margin:0; font-size:1.1rem; }
+                .gt-head p { margin:.25rem 0 0; color:var(--text-secondary); font-size:.8rem; max-width:680px; }
+                .gt-tabs { display:flex; gap:.25rem; margin:1rem 0 .9rem; border-bottom:1px solid var(--border-color); }
+                .gt-tab { background:none; border:none; color:var(--text-secondary); padding:.55rem .9rem; font-size:.84rem;
+                    font-weight:600; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-1px; font-family:inherit; }
+                .gt-tab.active { color:var(--text-primary); border-bottom-color:var(--accent-violet); }
+                .gt-view { display:none; } .gt-view.active { display:block; }
+                .gt-filters { display:grid; grid-template-columns:repeat(auto-fill,minmax(130px,1fr)); gap:.6rem; margin-bottom:.8rem; }
+                .gt-filters label { display:flex; flex-direction:column; gap:.25rem; font-size:.7rem; color:var(--text-muted);
+                    text-transform:uppercase; letter-spacing:.04em; }
+                .gt-filters select, .gt-filters input[type=text], .gt-filters input[type=number], .gt-input {
+                    background:var(--bg-secondary); border:1px solid var(--border-color); color:var(--text-primary);
+                    border-radius:.45rem; padding:.45rem .55rem; font-size:.82rem; font-family:inherit; min-width:0; }
+                .gt-range { display:flex; gap:.35rem; } .gt-range input { width:100%; }
+                .gt-bar { display:flex; justify-content:space-between; align-items:center; gap:.75rem; flex-wrap:wrap;
+                    font-size:.78rem; color:var(--text-secondary); margin-bottom:.6rem; }
+                .gt-bar a, .gt-link { color:var(--accent-violet); text-decoration:none; }
+                .gt-bar a:hover, .gt-link:hover { text-decoration:underline; }
+                .gt-check { display:inline-flex; align-items:center; gap:.35rem; cursor:pointer; }
+                .gt-table-wrap { overflow-x:auto; border:1px solid var(--border-color); border-radius:.6rem; }
+                table.gt-table { width:100%; border-collapse:collapse; font-size:.8rem; }
+                .gt-table th { text-align:left; background:var(--bg-secondary); color:var(--text-muted); font-weight:600;
+                    font-size:.7rem; text-transform:uppercase; letter-spacing:.04em; padding:.55rem .6rem; white-space:nowrap; }
+                .gt-table td { padding:.6rem; border-top:1px solid var(--border-color); vertical-align:top; }
+                .gt-table tr.gt-row { cursor:pointer; } .gt-table tr.gt-row:hover td { background:var(--bg-card-hover); }
+                .gt-co { font-weight:600; white-space:nowrap; } .gt-sub { color:var(--text-muted); font-size:.72rem; }
+                .gt-val { font-weight:700; white-space:nowrap; font-variant-numeric:tabular-nums; }
+                .gt-quote { color:var(--text-secondary); max-width:440px; line-height:1.45; }
+                .gt-quote sup a, .gt-sup a { color:var(--accent-violet); text-decoration:none; font-weight:700; font-size:.7rem; }
+                .gt-quote sup a:hover, .gt-sup a:hover { text-decoration:underline; }
+                .gt-badge { display:inline-block; padding:.12rem .45rem; border-radius:999px; font-size:.68rem; font-weight:600;
+                    white-space:nowrap; border:1px solid transparent; }
+                .gt-b-explicit { color:#34d399; border-color:rgba(52,211,153,.35); background:rgba(52,211,153,.08); }
+                .gt-b-inferred { color:#fbbf24; border-color:rgba(251,191,36,.35); background:rgba(251,191,36,.08); }
+                .gt-b-not_disclosed { color:var(--text-muted); border-color:var(--border-color); }
+                .gt-b-verified { color:#34d399; } .gt-b-needs_review { color:#fbbf24; } .gt-b-rejected { color:#f87171; }
+                .gt-b-raised { color:#34d399; } .gt-b-lowered { color:#f87171; } .gt-b-maintained, .gt-b-new { color:var(--text-secondary); }
+                .gt-b-positive { color:#34d399; border-color:rgba(52,211,153,.35); }
+                .gt-b-cautious, .gt-b-mixed { color:#fbbf24; border-color:rgba(251,191,36,.35); }
+                .gt-b-negative { color:#f87171; border-color:rgba(248,113,113,.35); }
+                .gt-detail td { background:var(--bg-secondary); }
+                .gt-detail-grid { display:grid; grid-template-columns:minmax(220px,1fr) 2fr; gap:1rem; }
+                @media (max-width: 760px) { .gt-detail-grid { grid-template-columns:1fr; } }
+                .gt-kv { font-size:.78rem; line-height:1.7; } .gt-kv b { color:var(--text-muted); font-weight:600; }
+                .gt-passage { white-space:pre-wrap; font-size:.8rem; line-height:1.55; color:var(--text-secondary);
+                    background:var(--bg-primary); border:1px solid var(--border-color); border-radius:.5rem; padding:.75rem;
+                    max-height:260px; overflow:auto; }
+                .gt-passage mark, .gt-modal-body mark { background:rgba(139,92,246,.35); color:var(--text-primary); border-radius:2px; }
+                .gt-flags { display:flex; flex-wrap:wrap; gap:.3rem; margin:.4rem 0; }
+                .gt-flag { font-size:.68rem; padding:.12rem .45rem; border-radius:.35rem; background:rgba(251,191,36,.08);
+                    color:#fbbf24; border:1px solid rgba(251,191,36,.25); }
+                .gt-flag.bad { background:rgba(248,113,113,.08); color:#f87171; border-color:rgba(248,113,113,.25); }
+                .gt-actions { display:flex; flex-wrap:wrap; gap:.4rem; margin-top:.6rem; align-items:center; }
+                .gt-btn { background:var(--bg-card); border:1px solid var(--border-color); color:var(--text-primary);
+                    border-radius:.45rem; padding:.35rem .65rem; font-size:.75rem; cursor:pointer; font-family:inherit; }
+                .gt-btn:hover { border-color:var(--accent-violet); }
+                .gt-btn.primary { background:var(--accent-purple); border-color:var(--accent-purple); }
+                .gt-btn.ok { border-color:rgba(52,211,153,.5); color:#34d399; }
+                .gt-btn.bad { border-color:rgba(248,113,113,.5); color:#f87171; }
+                .gt-refs { margin-top:1rem; font-size:.74rem; color:var(--text-muted); line-height:1.7; }
+                .gt-refs ol { margin:.3rem 0 0 1.2rem; padding:0; } .gt-refs a { color:var(--text-secondary); word-break:break-all; }
+                .gt-cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(330px,1fr)); gap:.9rem; }
+                .gt-call { background:var(--bg-secondary); border:1px solid var(--border-color); border-radius:.8rem; padding:1rem;
+                    display:flex; flex-direction:column; gap:.55rem; }
+                .gt-call h4 { margin:0; font-size:.95rem; display:flex; justify-content:space-between; gap:.5rem; align-items:baseline; }
+                .gt-headline { font-size:.82rem; color:var(--text-primary); font-weight:600; }
+                .gt-rev { font-size:.8rem; padding:.45rem .6rem; border-radius:.5rem; background:var(--bg-primary); border:1px solid var(--border-color); }
+                .gt-call p { margin:0; font-size:.78rem; color:var(--text-secondary); line-height:1.55; }
+                .gt-call ul { margin:0; padding-left:1rem; font-size:.76rem; color:var(--text-secondary); line-height:1.6; }
+                .gt-section-label { font-size:.68rem; text-transform:uppercase; letter-spacing:.05em; color:var(--text-muted); font-weight:600; }
+                .gt-stats { display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:.7rem; margin-bottom:1rem; }
+                .gt-stat { background:var(--bg-secondary); border:1px solid var(--border-color); border-radius:.7rem; padding:.8rem; }
+                .gt-stat .v { font-size:1.35rem; font-weight:700; font-variant-numeric:tabular-nums; }
+                .gt-stat .l { font-size:.72rem; color:var(--text-muted); margin-top:.15rem; }
+                .gt-empty { padding:2rem 1rem; text-align:center; color:var(--text-muted); font-size:.85rem; }
+                .gt-admin { margin-top:1rem; padding:1rem; border:1px dashed var(--border-color); border-radius:.7rem; display:none; }
+                .gt-admin textarea { width:100%; min-height:60px; box-sizing:border-box; }
+                .gt-modal-backdrop { position:fixed; inset:0; background:rgba(0,0,0,.65); display:none; align-items:center;
+                    justify-content:center; z-index:2000; padding:16px; }
+                .gt-modal-backdrop.show { display:flex; }
+                .gt-modal { background:var(--bg-card); border:1px solid var(--border-color); border-radius:.9rem; width:min(820px,100%);
+                    max-height:88vh; display:flex; flex-direction:column; }
+                .gt-modal-head { display:flex; justify-content:space-between; align-items:center; padding:.8rem 1rem;
+                    border-bottom:1px solid var(--border-color); gap:.75rem; font-size:.85rem; }
+                .gt-modal-body { padding:1rem; overflow:auto; white-space:pre-wrap; font-size:.82rem; line-height:1.6; color:var(--text-secondary); }
+                .gt-form { display:grid; gap:.5rem; padding:1rem; }
+            </style>
+            <div class="gt-panel" id="gtPanel">
+                <div class="gt-card">
+                    <div class="gt-head">
+                        <div>
+                            <h3>Guidance Tracker</h3>
+                            <p>Forward guidance pulled from each company's latest concall transcript. Each statement is
+                                checked against the transcript: quote located, speaker confirmed as management, numbers
+                                present in the quote. The superscript links open the transcript PDF at the source page.</p>
+                        </div>
+                        <div class="gt-sub" id="gtMetaLine"></div>
+                    </div>
+                    <div class="gt-tabs" role="tablist">
+                        <button class="gt-tab active" data-view="table" onclick="gtSwitchView('table')">Guidance table</button>
+                        <button class="gt-tab" data-view="calls" onclick="gtSwitchView('calls')">Concall summaries</button>
+                        <button class="gt-tab" data-view="eval" onclick="gtSwitchView('eval')">Accuracy</button>
+                    </div>
+
+                    <!-- TABLE VIEW -->
+                    <div class="gt-view active" id="gtViewTable">
+                        <div class="gt-filters">
+                            <label>Metric
+                                <select id="gtFamily" onchange="gtLoadItems()">
+                                    <option value="revenue" selected>Revenue</option>
+                                    <option value="profitability">Margins &amp; profit</option>
+                                    <option value="growth_drivers">Growth drivers (loans, orders, volume)</option>
+                                    <option value="capex">Capex &amp; capacity</option>
+                                    <option value="asset_quality">Asset quality</option>
+                                    <option value="returns">Returns (ROE/ROA)</option>
+                                    <option value="balance_sheet">Balance sheet</option>
+                                    <option value="costs">Costs</option>
+                                    <option value="risk">Risks flagged</option>
+                                    <option value="other">Other</option>
+                                    <option value="all">All metrics</option>
+                                </select>
+                            </label>
+                            <label>Guidance
+                                <select id="gtBasis" onchange="gtLoadItems()">
+                                    <option value="">Any (incl. not disclosed)</option>
+                                    <option value="guided">Guided (explicit + inferred)</option>
+                                    <option value="explicit">Explicit only</option>
+                                    <option value="inferred">Inferred only</option>
+                                    <option value="not_disclosed">Not disclosed</option>
+                                </select>
+                            </label>
+                            <label>Sector
+                                <select id="gtSector" onchange="gtLoadItems()"><option value="">All sectors</option></select>
+                            </label>
+                            <label>Quarter
+                                <select id="gtQuarter" onchange="gtLoadItems()"><option value="latest">Latest per company</option><option value="all">All quarters</option></select>
+                            </label>
+                            <label>Revision
+                                <select id="gtRevision" onchange="gtLoadItems()">
+                                    <option value="">Any</option><option value="raised">Raised</option>
+                                    <option value="lowered">Lowered</option><option value="maintained">Maintained</option>
+                                    <option value="new">New</option><option value="withdrawn">Withdrawn</option>
+                                </select>
+                            </label>
+                            <label>Verification
+                                <select id="gtStatus" onchange="gtLoadItems()">
+                                    <option value="not_rejected" selected>Hide rejected</option>
+                                    <option value="verified">Verified only</option>
+                                    <option value="needs_review">Needs review</option>
+                                    <option value="rejected">Rejected by validator</option>
+                                    <option value="all">Everything</option>
+                                </select>
+                            </label>
+                            <label>Search
+                                <input type="text" id="gtSearch" placeholder="Company, ticker, words" oninput="gtDebouncedLoad()">
+                            </label>
+                        </div>
+                        <div class="gt-bar">
+                            <span id="gtCount">Loading...</span>
+                            <span style="display:flex;gap:1rem;align-items:center;flex-wrap:wrap;">
+                                <label class="gt-check"><input type="checkbox" id="gtUnreviewed" onchange="gtLoadItems()"> Unreviewed only</label>
+                                <select id="gtSort" class="gt-input" onchange="gtLoadItems()">
+                                    <option value="company">Sort: company</option>
+                                    <option value="value_desc">Sort: guided value, high to low</option>
+                                    <option value="value_asc">Sort: guided value, low to high</option>
+                                    <option value="quarter">Sort: newest call</option>
+                                </select>
+                                <a href="/api/concall-guidance/export.csv">Export CSV</a>
+                            </span>
+                        </div>
+                        <div class="gt-table-wrap">
+                            <table class="gt-table">
+                                <thead><tr>
+                                    <th>Company</th><th>Metric</th><th>Guidance</th><th>Period</th><th>Basis</th>
+                                    <th>Revision</th><th>Management statement</th><th>Check</th>
+                                </tr></thead>
+                                <tbody id="gtTbody"><tr><td colspan="8" class="gt-empty">Loading...</td></tr></tbody>
+                            </table>
+                        </div>
+                        <div class="gt-refs" id="gtRefs"></div>
+                    </div>
+
+                    <!-- CALL SUMMARIES VIEW -->
+                    <div class="gt-view" id="gtViewCalls">
+                        <div class="gt-filters">
+                            <label>Search <input type="text" id="gtCallSearch" placeholder="Company or ticker" oninput="gtDebouncedCalls()"></label>
+                            <label>Sector <select id="gtCallSector" onchange="gtLoadCalls()"><option value="">All sectors</option></select></label>
+                            <label>Tone
+                                <select id="gtCallTone" onchange="gtLoadCalls()">
+                                    <option value="">Any</option><option value="positive">Positive</option>
+                                    <option value="cautious">Cautious</option><option value="mixed">Mixed</option>
+                                    <option value="negative">Negative</option>
+                                </select>
+                            </label>
+                            <label>Quarter <select id="gtCallQuarter" onchange="gtLoadCalls()"><option value="latest">Latest per company</option><option value="all">All quarters</option></select></label>
+                        </div>
+                        <div class="gt-bar"><span id="gtCallCount"></span></div>
+                        <div class="gt-cards" id="gtCards"></div>
+                    </div>
+
+                    <!-- ACCURACY VIEW -->
+                    <div class="gt-view" id="gtViewEval">
+                        <div class="gt-stats" id="gtStats"></div>
+                        <div id="gtEvalDetail"></div>
+                        <div class="gt-admin" id="gtAdmin">
+                            <div class="gt-section-label" style="margin-bottom:.5rem;">Run extraction (admin)</div>
+                            <div class="gt-filters" style="margin-bottom:.4rem;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));">
+                                <label>Companies
+                                    <select id="gtRunMode" onchange="gtRunModeChanged()">
+                                        <option value="pilot">Pilot set (47 sector-diverse names)</option>
+                                        <option value="top">Top X by market cap</option>
+                                        <option value="tickers">Specific tickers</option>
+                                    </select>
+                                </label>
+                                <label id="gtRunTopWrap" style="display:none;">Number of companies (X)
+                                    <input type="number" id="gtRunTopN" min="1" max="1000" step="1" placeholder="e.g. 500" oninput="gtDebouncedTopPreview()">
+                                </label>
+                            </div>
+                            <div class="gt-sub" id="gtRunTopPreview" style="margin-bottom:.5rem;"></div>
+                            <textarea class="gt-input" id="gtRunTickers" style="display:none;" placeholder="Tickers separated by commas or spaces, e.g. TCS, LT, HDFCBANK"></textarea>
+                            <div class="gt-actions">
+                                <input type="text" class="gt-input" id="gtRunQuarter" placeholder="Quarter, e.g. Sep 2026 (blank = latest)" style="width:240px;">
+                                <label class="gt-check" style="font-size:.78rem;"><input type="checkbox" id="gtRunForce"> Re-extract calls already done</label>
+                                <button class="gt-btn primary" onclick="gtStartRun()">Run extraction</button>
+                            </div>
+                            <div class="gt-sub" id="gtRunStatus" style="margin-top:.5rem;"></div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -10682,6 +10936,463 @@
             }
 
         })();
+    </script>
+
+    <!-- ============================================ -->
+    <!-- GUIDANCE TRACKER: MODAL + SCRIPT             -->
+    <!-- ============================================ -->
+    <div class="gt-modal-backdrop" id="gtModal" onclick="if (event.target === this) gtCloseModal()">
+        <div class="gt-modal" role="dialog" aria-modal="true">
+            <div class="gt-modal-head">
+                <span id="gtModalTitle"></span>
+                <span style="display:flex;gap:.6rem;align-items:center;">
+                    <a id="gtModalLink" class="gt-link" target="_blank" rel="noopener noreferrer"></a>
+                    <button class="gt-btn" onclick="gtCloseModal()">Close</button>
+                </span>
+            </div>
+            <div class="gt-modal-body" id="gtModalBody"></div>
+        </div>
+    </div>
+    <script>
+        // =====================================================
+        // GUIDANCE TRACKER
+        // =====================================================
+        let gtInited = false, gtItems = [], gtIsAdmin = false, gtRunTimer = null, gtDebounce = null;
+        const GT_FLAGS = {
+            quote_not_found: ['Quote not found in transcript', true],
+            no_statement: ['No statement given', true],
+            quote_paraphrased: ['Quote only partly matches the transcript', false],
+            analyst_speaker: ['Spoken by an analyst, not management', true],
+            moderator_speaker: ['Spoken by the moderator', true],
+            model_says_analyst: ['Model attributed it to an analyst', true],
+            model_says_moderator: ['Model attributed it to the moderator', true],
+            speaker_unconfirmed: ['Speaker could not be confirmed', false],
+            number_removed: ['Figure not in the quote: removed', true],
+            number_in_context_only: ['Figure is near, not in, the quote', false],
+            number_converted: ['Figure unit-converted from the quote', false],
+            number_from_phrase: ['Figure read from a phrase (e.g. "mid-teens")', false],
+            no_number_recategorised: ['No figure stated: filed as outlook', false],
+            low_model_confidence: ['Model had low confidence', false],
+            auto_not_disclosed: ['No guidance found: recorded as not disclosed', false],
+        };
+        const GT_STATUS = { verified: '&#10003; Verified', needs_review: '&#9888; Review', rejected: '&#10007; Rejected' };
+        const GT_CATEGORY = {
+            quantitative_guidance: 'Quantitative', guidance_revision: 'Revision', qualitative_outlook: 'Outlook',
+            management_commentary: 'Commentary', risk: 'Risk'
+        };
+        const GT_VERDICTS = [
+            ['correct', 'Correct', 'ok'], ['wrong_value', 'Wrong value/period', 'bad'], ['invented', 'Invented figure', 'bad'],
+            ['not_guidance', 'Not guidance', 'bad'], ['wrong_speaker', 'Wrong speaker', 'bad'],
+            ['wrong_not_disclosed', 'Was actually guided', 'bad']
+        ];
+
+        function gtEsc(s) {
+            return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        }
+        function gtUrl(u) { return /^https?:\/\//i.test(u || '') ? u : ''; }
+        function gtNum(v) { return v == null ? '' : (Math.round(v * 100) / 100).toLocaleString('en-IN'); }
+        function gtFmtRange(i) {
+            if (i.value_low == null && i.value_high == null) return '';
+            let r;
+            if (i.value_low != null && i.value_high != null) r = i.value_low === i.value_high ? gtNum(i.value_low) : `${gtNum(i.value_low)} to ${gtNum(i.value_high)}`;
+            else if (i.value_low != null) r = `&ge; ${gtNum(i.value_low)}`;
+            else r = `&le; ${gtNum(i.value_high)}`;
+            return `${r} ${gtEsc(i.unit || '')}`;
+        }
+        async function gtFetch(url, opts) {
+            const r = await fetch(url, opts);
+            let data = {};
+            try { data = await r.json(); } catch (e) { }
+            if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
+            return data;
+        }
+
+        function toggleGuidanceTracker() {
+            const panel = document.getElementById('gtPanel');
+            const btn = document.getElementById('gtModeToggleBtn');
+            const on = !panel.classList.contains('show');
+            panel.classList.toggle('show', on);
+            btn.classList.toggle('active', on);
+            if (on && !gtInited) gtInit();
+            if (on) panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        async function gtInit() {
+            gtInited = true;
+            fetch('/api/me').then(r => r.json()).then(d => { gtIsAdmin = !!d.is_admin; gtShowAdmin(); }).catch(() => { });
+            try {
+                const meta = await gtFetch('/api/concall-guidance/meta');
+                const calls = meta.quarters.reduce((a, q) => a + q.n, 0);
+                document.getElementById('gtMetaLine').textContent =
+                    `${calls} call${calls === 1 ? '' : 's'} extracted · model ${meta.model}`;
+                const addOpts = (id, list) => {
+                    const sel = document.getElementById(id);
+                    list.forEach(([v, l]) => { const o = document.createElement('option'); o.value = v; o.textContent = l; sel.appendChild(o); });
+                };
+                const sectors = meta.sectors.filter(s => s.sector).map(s => [s.sector, `${s.sector} (${s.n})`]);
+                addOpts('gtSector', sectors); addOpts('gtCallSector', sectors);
+                const qs = (meta.quarter_options || []).map(q => [q.quarter, q.quarter_label]);
+                addOpts('gtQuarter', qs); addOpts('gtCallQuarter', qs);
+            } catch (e) {
+                document.getElementById('gtMetaLine').textContent = 'Could not load: ' + e.message;
+            }
+            gtLoadItems();
+        }
+
+        function gtSwitchView(v) {
+            document.querySelectorAll('.gt-tab').forEach(t => t.classList.toggle('active', t.dataset.view === v));
+            document.getElementById('gtViewTable').classList.toggle('active', v === 'table');
+            document.getElementById('gtViewCalls').classList.toggle('active', v === 'calls');
+            document.getElementById('gtViewEval').classList.toggle('active', v === 'eval');
+            if (v === 'calls') gtLoadCalls();
+            if (v === 'eval') gtLoadEval();
+        }
+
+        function gtDebouncedLoad() { clearTimeout(gtDebounce); gtDebounce = setTimeout(gtLoadItems, 300); }
+        function gtDebouncedCalls() { clearTimeout(gtDebounce); gtDebounce = setTimeout(gtLoadCalls, 300); }
+
+        async function gtLoadItems() {
+            const val = id => document.getElementById(id).value.trim();
+            const p = new URLSearchParams({
+                family: val('gtFamily'), basis: val('gtBasis'),
+                sector: val('gtSector'), quarter: val('gtQuarter'), revision: val('gtRevision'),
+                status: val('gtStatus'), q: val('gtSearch'), sort: val('gtSort'),
+            });
+            if (document.getElementById('gtUnreviewed').checked) p.set('review', 'unreviewed');
+            [...p.keys()].forEach(k => { if (!p.get(k)) p.delete(k); });
+            const tbody = document.getElementById('gtTbody');
+            tbody.innerHTML = '<tr><td colspan="8" class="gt-empty">Loading...</td></tr>';
+            try {
+                const data = await gtFetch('/api/concall-guidance/items?' + p.toString());
+                gtItems = data.items || [];
+                gtRenderItems();
+            } catch (e) {
+                tbody.innerHTML = `<tr><td colspan="8" class="gt-empty">Could not load guidance: ${gtEsc(e.message)}</td></tr>`;
+                document.getElementById('gtCount').textContent = '';
+            }
+        }
+
+        function gtRenderItems() {
+            const tbody = document.getElementById('gtTbody');
+            const cos = new Set(gtItems.map(i => i.ticker)).size;
+            document.getElementById('gtCount').textContent =
+                `${gtItems.length} row${gtItems.length === 1 ? '' : 's'} across ${cos} compan${cos === 1 ? 'y' : 'ies'}`;
+            if (!gtItems.length) {
+                tbody.innerHTML = '<tr><td colspan="8" class="gt-empty">No guidance matches these filters. ' +
+                    'If nothing has been extracted yet, an admin can run the pilot from the Accuracy tab.</td></tr>';
+                document.getElementById('gtRefs').innerHTML = '';
+                return;
+            }
+            const refs = [];
+            tbody.innerHTML = gtItems.map((i, idx) => {
+                const nd = i.basis === 'not_disclosed';
+                let sup = '';
+                const url = gtUrl(i.source_ref);
+                if (url) {
+                    refs.push(i);
+                    sup = `<sup><a href="${gtEsc(url)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()"
+                        title="Open transcript, page ${gtEsc(i.page || '')}">[${refs.length}]</a></sup>`;
+                }
+                const quote = nd ? `<em>${gtEsc(i.rationale || 'No guidance given on the call.')}</em>`
+                    : `&ldquo;${gtEsc((i.statement || '').length > 260 ? i.statement.slice(0, 257) + '...' : i.statement)}&rdquo;${sup}`;
+                const rev = [];
+                if (i.revision && i.revision !== 'none') rev.push(`<span class="gt-badge gt-b-${gtEsc(i.revision)}">${gtEsc(i.revision)}</span>`);
+                if (i.vs_prior_call) rev.push(`<div class="gt-sub">vs ${gtEsc(i.prior_call_quarter)}: ${gtEsc(i.vs_prior_call)} (was ${gtEsc(i.prior_call_value_text)})</div>`);
+                const review = i.review ? `<div class="gt-sub">Reviewed: ${gtEsc(i.review.replace(/_/g, ' '))}</div>` : '';
+                return `<tr class="gt-row" onclick="gtToggleDetail(${i.id})">
+                    <td><div class="gt-co">${gtEsc(i.company_name || i.ticker)}</div>
+                        <div class="gt-sub">${gtEsc(i.ticker)} · ${gtEsc(i.quarter_label || i.quarter)}</div></td>
+                    <td>${gtEsc(i.metric_label)}<div class="gt-sub">${gtEsc(GT_CATEGORY[i.category] || i.category)}</div></td>
+                    <td><div class="gt-val">${nd ? '<span class="gt-sub">Not disclosed</span>' : gtEsc(i.value_text || '-')}</div>
+                        <div class="gt-sub">${nd ? '' : gtFmtRange(i)}</div></td>
+                    <td>${gtEsc(i.target_period || '-')}</td>
+                    <td><span class="gt-badge gt-b-${gtEsc(i.basis)}">${gtEsc((i.basis || '').replace('_', ' '))}</span></td>
+                    <td>${rev.join('') || '<span class="gt-sub">-</span>'}</td>
+                    <td class="gt-quote">${quote}</td>
+                    <td><span class="gt-badge gt-b-${gtEsc(i.verify_status)}">${GT_STATUS[i.verify_status] || gtEsc(i.verify_status)}</span>${review}</td>
+                </tr>
+                <tr class="gt-detail" id="gtDetail${i.id}" style="display:none;"><td colspan="8"></td></tr>`;
+            }).join('');
+            document.getElementById('gtRefs').innerHTML = refs.length ? `<div class="gt-section-label">Sources</div><ol>` +
+                refs.map(i => `<li>${gtEsc(i.company_name || i.ticker)}, ${gtEsc(i.quarter_label || i.quarter)} earnings call transcript, p. ${gtEsc(i.page || '?')}
+                    &mdash; <a href="${gtEsc(gtUrl(i.source_ref))}" target="_blank" rel="noopener noreferrer">${gtEsc(gtUrl(i.source_ref))}</a></li>`).join('') + '</ol>' : '';
+        }
+
+        function gtPassageHtml(i) {
+            if (!i.context) return '<span class="gt-sub">No passage stored.</span>';
+            const a = i.hl_start, b = i.hl_end;
+            if (a == null || b == null) return gtEsc(i.context);
+            return gtEsc(i.context.slice(0, a)) + '<mark>' + gtEsc(i.context.slice(a, b)) + '</mark>' + gtEsc(i.context.slice(b));
+        }
+
+        function gtToggleDetail(id) {
+            const row = document.getElementById('gtDetail' + id);
+            if (!row) return;
+            if (row.style.display !== 'none') { row.style.display = 'none'; return; }
+            const i = gtItems.find(x => x.id === id);
+            const url = gtUrl(i.source_ref);
+            const flags = (i.verify_flags || []).map(f => {
+                const [label, bad] = GT_FLAGS[f] || [f.replace(/_/g, ' '), false];
+                return `<span class="gt-flag ${bad ? 'bad' : ''}">${gtEsc(label)}</span>`;
+            }).join('');
+            const nd = i.basis === 'not_disclosed';
+            row.firstElementChild.innerHTML = `<div class="gt-detail-grid">
+                <div class="gt-kv">
+                    ${nd ? '' : `<div><b>Speaker:</b> ${gtEsc(i.speaker_name || '?')}${i.speaker_role ? ', ' + gtEsc(i.speaker_role) : ''}</div>
+                    <div><b>Detected in transcript:</b> ${gtEsc(i.speaker_detected || 'unknown')}</div>
+                    <div><b>Page:</b> ${gtEsc(i.page || '?')}</div>`}
+                    <div><b>Reporting period:</b> ${gtEsc(i.quarter_label || i.quarter)}</div>
+                    <div><b>Target period:</b> ${gtEsc(i.target_period || '-')}</div>
+                    <div><b>Basis:</b> ${gtEsc((i.basis || '').replace('_', ' '))}</div>
+                    <div><b>Model confidence:</b> ${gtEsc(i.confidence || '-')}</div>
+                    ${i.match_score != null ? `<div><b>Quote match:</b> ${Math.round(i.match_score * 100)}%</div>` : ''}
+                    ${i.model_value_text && i.model_value_text !== i.value_text ? `<div><b>Model's figure (removed):</b> ${gtEsc(i.model_value_text)}</div>` : ''}
+                    ${i.prior_value_text ? `<div><b>Previous guidance:</b> ${gtEsc(i.prior_value_text)}</div>` : ''}
+                    <div><b>Model:</b> ${gtEsc(i.model || '-')}</div>
+                    <div class="gt-flags">${flags}</div>
+                    ${i.rationale ? `<div class="gt-sub" style="line-height:1.5;">${gtEsc(i.rationale)}</div>` : ''}
+                </div>
+                <div>
+                    ${nd ? '' : `<div class="gt-section-label" style="margin-bottom:.35rem;">Source passage</div>
+                    <div class="gt-passage">${gtPassageHtml(i)}</div>`}
+                    <div class="gt-actions">
+                        ${url ? `<a class="gt-btn" href="${gtEsc(url)}" target="_blank" rel="noopener noreferrer">Open PDF at p. ${gtEsc(i.page)}</a>` : ''}
+                        ${i.page ? `<button class="gt-btn" onclick="gtShowPage(${i.id})">View full page</button>` : ''}
+                    </div>
+                    <div class="gt-actions" id="gtReview${i.id}">
+                        <span class="gt-sub">Your review:</span>
+                        ${GT_VERDICTS.filter(v => nd ? ['correct', 'wrong_not_disclosed'].includes(v[0]) : v[0] !== 'wrong_not_disclosed')
+                    .map(v => `<button class="gt-btn ${v[2]}" onclick="gtReview(${i.id}, '${v[0]}')">${v[1]}</button>`).join('')}
+                        <input class="gt-input" id="gtNote${i.id}" placeholder="Note (optional)" style="flex:1;min-width:140px;">
+                    </div>
+                </div>
+            </div>`;
+            row.style.display = '';
+        }
+
+        async function gtReview(id, verdict) {
+            const box = document.getElementById('gtReview' + id);
+            const note = (document.getElementById('gtNote' + id) || {}).value || '';
+            try {
+                await gtFetch(`/api/concall-guidance/items/${id}/review`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ verdict, note })
+                });
+                const it = gtItems.find(x => x.id === id); if (it) it.review = verdict;
+                box.insertAdjacentHTML('beforeend', `<span class="gt-sub">Saved: ${gtEsc(verdict.replace(/_/g, ' '))}</span>`);
+            } catch (e) {
+                box.insertAdjacentHTML('beforeend', `<span class="gt-sub" style="color:#f87171;">${gtEsc(e.message)}</span>`);
+            }
+        }
+
+        async function gtShowPage(id) {
+            const i = gtItems.find(x => x.id === id);
+            gtOpenModal(`${i.company_name || i.ticker} · ${i.quarter_label || i.quarter} · page ${i.page}`, gtUrl(i.source_ref), 'Loading...');
+            try {
+                const p = await gtFetch(`/api/concall-guidance/transcript/${i.transcript_id}/page/${i.page}`);
+                const hl = (i.context && i.hl_start != null) ? i.context.slice(i.hl_start, i.hl_end) : '';
+                const at = hl ? p.text.indexOf(hl) : -1;
+                document.getElementById('gtModalBody').innerHTML = at >= 0
+                    ? gtEsc(p.text.slice(0, at)) + '<mark id="gtModalMark">' + gtEsc(hl) + '</mark>' + gtEsc(p.text.slice(at + hl.length))
+                    : gtEsc(p.text);
+                const m = document.getElementById('gtModalMark'); if (m) m.scrollIntoView({ block: 'center' });
+            } catch (e) {
+                document.getElementById('gtModalBody').textContent = 'Could not load page: ' + e.message;
+            }
+        }
+
+        function gtOpenModal(title, url, body) {
+            document.getElementById('gtModalTitle').textContent = title;
+            const link = document.getElementById('gtModalLink');
+            link.style.display = url ? '' : 'none';
+            if (url) { link.href = url; link.textContent = 'Open PDF'; }
+            document.getElementById('gtModalBody').innerHTML = gtEsc(body);
+            document.getElementById('gtModal').classList.add('show');
+        }
+        function gtCloseModal() { document.getElementById('gtModal').classList.remove('show'); }
+        document.addEventListener('keydown', e => { if (e.key === 'Escape') gtCloseModal(); });
+
+        // ---- Concall summaries ----
+        async function gtLoadCalls() {
+            const val = id => document.getElementById(id).value.trim();
+            const p = new URLSearchParams({ q: val('gtCallSearch'), sector: val('gtCallSector'), tone: val('gtCallTone'), quarter: val('gtCallQuarter') });
+            [...p.keys()].forEach(k => { if (!p.get(k)) p.delete(k); });
+            const box = document.getElementById('gtCards');
+            box.innerHTML = '<div class="gt-empty">Loading...</div>';
+            try {
+                const data = await gtFetch('/api/concall-guidance/summaries?' + p.toString());
+                const calls = data.calls || [];
+                document.getElementById('gtCallCount').textContent = `${calls.length} concall${calls.length === 1 ? '' : 's'}`;
+                if (!calls.length) { box.innerHTML = '<div class="gt-empty">No concalls extracted yet.</div>'; return; }
+                box.innerHTML = calls.map(c => {
+                    const rv = c.revenue_guidance;
+                    const refLink = g => gtUrl(g.source_ref) ? `<sup class="gt-sup"><a href="${gtEsc(gtUrl(g.source_ref))}" target="_blank" rel="noopener noreferrer" title="Page ${gtEsc(g.page)}">[p${gtEsc(g.page)}]</a></sup>` : '';
+                    const revHtml = !rv || rv.basis === 'not_disclosed'
+                        ? '<span class="gt-sub">Revenue guidance:</span> <b>Not disclosed</b>'
+                        : `<span class="gt-sub">Revenue guidance:</span> <b>${gtEsc(rv.value_text || 'Qualitative')}</b>
+                           ${rv.target_period ? '<span class="gt-sub">for ' + gtEsc(rv.target_period) + '</span>' : ''}
+                           <span class="gt-badge gt-b-${gtEsc(rv.basis)}">${gtEsc(rv.basis)}</span>${refLink(rv)}`;
+                    const key = (c.key_guidance || []).map(g => `<li>${gtEsc(g.metric_label)}: <b>${gtEsc(g.value_text)}</b>
+                        ${g.target_period ? '(' + gtEsc(g.target_period) + ')' : ''}${refLink(g)}</li>`).join('');
+                    const risks = (c.risks || []).map(g => `<li>${gtEsc(g.metric_label)}${refLink(g)}</li>`).join('');
+                    const src = gtUrl(c.source_url);
+                    return `<div class="gt-call">
+                        <h4><span>${gtEsc(c.company_name || c.ticker)} <span class="gt-sub">${gtEsc(c.ticker)}</span></span>
+                            <span class="gt-sub">${gtEsc(c.quarter_label || c.quarter)}</span></h4>
+                        <div style="display:flex;gap:.4rem;flex-wrap:wrap;align-items:center;">
+                            ${c.outlook_tone ? `<span class="gt-badge gt-b-${gtEsc(c.outlook_tone)}">${gtEsc(c.outlook_tone)} tone</span>` : ''}
+                            <span class="gt-sub">${gtEsc(c.sector || '')}</span>
+                        </div>
+                        ${c.guidance_headline ? `<div class="gt-headline">${gtEsc(c.guidance_headline)}</div>` : ''}
+                        <div class="gt-rev">${revHtml}</div>
+                        <p>${gtEsc(c.call_summary || '')}</p>
+                        ${key ? `<div class="gt-section-label">Key guidance</div><ul>${key}</ul>` : ''}
+                        ${risks ? `<div class="gt-section-label">Risks flagged</div><ul>${risks}</ul>` : ''}
+                        ${(c.not_disclosed || []).length ? `<div class="gt-sub">Not disclosed: ${gtEsc(c.not_disclosed.join(', '))}</div>` : ''}
+                        <div class="gt-actions" style="margin-top:auto;">
+                            ${src ? `<a class="gt-btn" href="${gtEsc(src)}" target="_blank" rel="noopener noreferrer">Transcript</a>` : ''}
+                            <button class="gt-btn" onclick="gtShowCompanyRows('${gtEsc(c.ticker)}')">All rows</button>
+                            <button class="gt-btn" onclick="gtMissedForm(${c.id}, '${gtEsc((c.company_name || c.ticker).replace(/['\\]/g, ''))}')">Report missed guidance</button>
+                        </div>
+                    </div>`;
+                }).join('');
+            } catch (e) {
+                box.innerHTML = `<div class="gt-empty">Could not load summaries: ${gtEsc(e.message)}</div>`;
+            }
+        }
+
+        function gtShowCompanyRows(ticker) {
+            document.getElementById('gtFamily').value = 'all';
+            document.getElementById('gtBasis').value = '';
+            document.getElementById('gtSearch').value = ticker;
+            gtSwitchView('table');
+            gtLoadItems();
+        }
+
+        function gtMissedForm(tid, name) {
+            gtOpenModal(`Report guidance the extraction missed · ${name}`, '', '');
+            document.getElementById('gtModalBody').innerHTML = `<div class="gt-form">
+                <span class="gt-sub">Missed rows are the recall side of the pilot evaluation.</span>
+                <input class="gt-input" id="gtMissMetric" placeholder="Metric, e.g. revenue_growth">
+                <textarea class="gt-input" id="gtMissStatement" rows="4" placeholder="Management's statement, copied from the transcript"></textarea>
+                <input class="gt-input" id="gtMissPage" type="number" placeholder="Page number">
+                <input class="gt-input" id="gtMissNote" placeholder="Note (optional)">
+                <div class="gt-actions"><button class="gt-btn primary" onclick="gtSubmitMiss(${tid})">Save</button>
+                <span class="gt-sub" id="gtMissMsg"></span></div></div>`;
+        }
+
+        async function gtSubmitMiss(tid) {
+            const v = id => document.getElementById(id).value.trim();
+            try {
+                await gtFetch(`/api/concall-guidance/transcript/${tid}/missed`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ metric: v('gtMissMetric'), statement: v('gtMissStatement'), page: v('gtMissPage'), note: v('gtMissNote') })
+                });
+                document.getElementById('gtMissMsg').textContent = 'Saved.';
+                setTimeout(gtCloseModal, 700);
+            } catch (e) { document.getElementById('gtMissMsg').textContent = e.message; }
+        }
+
+        // ---- Accuracy ----
+        function gtPct(v) { return v == null ? '-' : (v * 100).toFixed(1) + '%'; }
+        async function gtLoadEval() {
+            gtShowAdmin();
+            const stats = document.getElementById('gtStats');
+            stats.innerHTML = '<div class="gt-empty">Loading...</div>';
+            try {
+                const e = await gtFetch('/api/concall-guidance/eval');
+                const tile = (v, l) => `<div class="gt-stat"><div class="v">${v}</div><div class="l">${l}</div></div>`;
+                stats.innerHTML = [
+                    tile(e.transcripts.ok || 0, 'Calls extracted'),
+                    tile(e.reviewed_items, `Rows reviewed (${e.reviewed_calls} calls)`),
+                    tile(gtPct(e.precision), 'Precision (rows judged correct)'),
+                    tile(gtPct(e.invented_rate_numeric), 'Invented-figure rate (numeric rows)'),
+                    tile(gtPct(e.not_guidance_rate), 'Not guidance / wrong speaker'),
+                    tile(gtPct(e.recall_estimate), `Recall estimate (${e.missed_reported} misses reported)`),
+                ].join('');
+                const kv = o => Object.entries(o || {}).map(([k, v]) => `<li>${gtEsc((GT_FLAGS[k] || [k.replace(/_/g, ' ')])[0])}: <b>${v}</b></li>`).join('') || '<li>None yet</li>';
+                const sectors = Object.entries(e.by_sector || {}).map(([k, s]) =>
+                    `<li>${gtEsc(k)}: ${gtPct(s.precision)} of ${s.reviewed} reviewed</li>`).join('') || '<li>No reviews yet</li>';
+                const tstat = Object.entries(e.transcripts || {}).map(([k, v]) => `<li>${gtEsc(k.replace(/_/g, ' '))}: <b>${v}</b></li>`).join('');
+                document.getElementById('gtEvalDetail').innerHTML = `<div class="gt-cards">
+                    <div class="gt-call"><div class="gt-section-label">Automatic validator</div><ul>${kv(e.auto_status)}</ul>
+                        <div class="gt-section-label">Validator flags</div><ul>${kv(e.auto_flags)}</ul></div>
+                    <div class="gt-call"><div class="gt-section-label">Precision by sector</div><ul>${sectors}</ul>
+                        <div class="gt-section-label">Transcripts</div><ul>${tstat || '<li>None yet</li>'}</ul>
+                        <div class="gt-sub">Tokens: ${(e.tokens.prompt || 0).toLocaleString()} in / ${(e.tokens.output || 0).toLocaleString()} out</div></div>
+                    <div class="gt-call"><div class="gt-section-label">How to evaluate the pilot</div>
+                        <p>Open rows in the Guidance table and mark each one. Tick "Unreviewed only" to work through the backlog.
+                        Use "Report missed guidance" on a call card for anything the model skipped. Precision and the
+                        invented-figure rate come from your verdicts; recall is estimated from reported misses.</p></div>
+                </div>`;
+            } catch (err) {
+                stats.innerHTML = `<div class="gt-empty">Could not load: ${gtEsc(err.message)}</div>`;
+            }
+        }
+
+        function gtShowAdmin() { const a = document.getElementById('gtAdmin'); if (a) a.style.display = gtIsAdmin ? 'block' : 'none'; }
+
+        function gtRunModeChanged() {
+            const mode = document.getElementById('gtRunMode').value;
+            document.getElementById('gtRunTopWrap').style.display = mode === 'top' ? '' : 'none';
+            document.getElementById('gtRunTickers').style.display = mode === 'tickers' ? '' : 'none';
+            document.getElementById('gtRunTopPreview').textContent = '';
+            if (mode === 'top') gtTopPreview();
+        }
+
+        let gtTopTimer = null;
+        function gtDebouncedTopPreview() { clearTimeout(gtTopTimer); gtTopTimer = setTimeout(gtTopPreview, 400); }
+
+        async function gtTopPreview() {
+            const box = document.getElementById('gtRunTopPreview');
+            const n = parseInt(document.getElementById('gtRunTopN').value, 10);
+            if (!n) { box.textContent = 'Companies are ranked by market cap from the Trendlyne stock master (synced daily from the Trendlyne sitemap).'; return; }
+            try {
+                const p = await gtFetch('/api/concall-guidance/top-preview?n=' + n);
+                const names = list => list.map(c => c.name || c.ticker).join(', ');
+                box.textContent = `${p.count} companies: ${names(p.first)}${p.count > 5 ? ' ... ' + names(p.last) : ''}.` +
+                    (p.skipped.length ? ` Skipped as bad data or duplicates: ${p.skipped.map(s => s.ticker).join(', ')}.` : '');
+            } catch (e) { box.textContent = e.message; }
+        }
+
+        async function gtStartRun() {
+            const st = document.getElementById('gtRunStatus');
+            const mode = document.getElementById('gtRunMode').value;
+            const body = {
+                mode,
+                top_n: document.getElementById('gtRunTopN').value.trim(),
+                tickers: document.getElementById('gtRunTickers').value.trim(),
+                quarter: document.getElementById('gtRunQuarter').value.trim(),
+                force: document.getElementById('gtRunForce').checked
+            };
+            const what = mode === 'top' ? `the top ${body.top_n || '?'} companies by market cap`
+                : mode === 'tickers' ? 'the tickers entered' : 'the 47-company pilot set';
+            if (!confirm(`Run guidance extraction for ${what}? Each new call is one Gemini extraction.`)) return;
+            try {
+                const r = await gtFetch('/api/concall-guidance/run', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+                });
+                st.textContent = `Started: ${r.tickers} companies (${r.source}).`;
+                clearInterval(gtRunTimer);
+                gtRunTimer = setInterval(() => gtPollRun(r.job_id), 5000);
+            } catch (e) { st.textContent = 'Could not start: ' + e.message; }
+        }
+
+        async function gtPollRun(jobId) {
+            const st = document.getElementById('gtRunStatus');
+            try {
+                const j = await gtFetch(`/api/concall-guidance/run/${jobId}`);
+                const res = (j.result && j.result.results) || [];
+                const by = res.reduce((a, r) => { a[r.status] = (a[r.status] || 0) + 1; return a; }, {});
+                st.textContent = `${j.status}: ${j.progress || ''} · ` + Object.entries(by).map(([k, v]) => `${k} ${v}`).join(', ');
+                if (j.status !== 'processing') {
+                    clearInterval(gtRunTimer);
+                    const failed = res.filter(r => !['ok', 'skipped'].includes(r.status));
+                    if (failed.length) st.textContent += ' · Not extracted: ' + failed.map(r => `${r.ticker} (${r.error || r.status})`).join('; ');
+                    gtLoadEval(); gtLoadItems();
+                }
+            } catch (e) { st.textContent = 'Status unavailable: ' + e.message; clearInterval(gtRunTimer); }
+        }
     </script>
 </body>
 
