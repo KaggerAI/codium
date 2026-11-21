@@ -1,17 +1,27 @@
 {
   "success": true,
-  "ran_at": "2026-11-17 15:54:00 IST",
+  "ran_at": "2026-11-21 16:24:16 IST",
   "dry_run": false,
-  "sitemap_entries": 5963,
-  "rows_before": 6145,
-  "rows_after": 6147,
-  "added": 2,
+  "sitemap_entries": 5968,
+  "rows_before": 6148,
+  "rows_after": 6151,
+  "added": 3,
   "added_tickers": [
-    "JKSHAH",
-    "15110032"
+    "RBGUPTA",
+    "11290687",
+    "13160115"
   ],
-  "updated": 0,
-  "updates": [],
+  "updated": 2,
+  "updates": [
+    {
+      "trendlyne_id": "3059",
+      "Ticker": "SHUKRAPHAR -> SHUKRAMED"
+    },
+    {
+      "trendlyne_id": "3344",
+      "Ticker": "VIRAT -> BRAHMVIRAT"
+    }
+  ],
   "ambiguous": [
     {
       "trendlyne_id": "4596",

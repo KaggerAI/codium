@@ -14,6 +14,9 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
+    <!-- Shared report renderer + native PDF export (Doc Summarizer reuses the AI Advanced Search layout) -->
+    <script src="/research_report.js"></script>
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <!-- Plotly for the Technical Agent's interactive charts (same CDN as app.html) -->
     <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
@@ -866,6 +869,32 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
+            position: relative;
+        }
+
+        .nav-title {
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            margin: 0;
+            font-size: 1.375rem;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+            white-space: nowrap;
+            pointer-events: none;
+        }
+
+        .nav-title .text-gradient {
+            background: var(--gradient-primary);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        @media (max-width: 640px) {
+            .nav-title {
+                display: none;
+            }
         }
 
         .nav-logo {
@@ -947,7 +976,7 @@
         .main-container {
             max-width: 1440px;
             margin: 0 auto;
-            padding: 2rem 1.5rem;
+            padding: 1.5rem 1.5rem 2rem;
         }
 
         /* === PAGE HEADER === */
@@ -3990,6 +4019,7 @@
                 <img src="/kagger_logo_full.jpg" alt="Kagger AI"
                     style="height:28px;object-fit:contain;filter:invert(1) hue-rotate(-40deg) saturate(3) brightness(1.1);mix-blend-mode:screen;" />
             </a>
+            <h1 class="nav-title">🤖 <span class="text-gradient">Advanced AI Agents</span></h1>
             <div class="nav-links">
                 <button onclick="saveAgentsState(); window.location.href='/app'"
                     class="px-5 py-2.5 bg-white/10 hover:bg-white/20 rounded-xl text-white transition-all text-sm font-semibold flex items-center gap-2 border border-white/10"
@@ -4008,11 +4038,6 @@
     <!-- MAIN CONTENT                      -->
     <!-- ================================ -->
     <div class="main-container">
-
-        <!-- Page Header -->
-        <div class="page-header">
-            <h1>🤖 <span class="text-gradient">Advanced AI Agents</span></h1>
-        </div>
 
         <!-- Agent Tabs -->
         <div class="agent-tabs-container">
@@ -4084,7 +4109,7 @@
                     <span class="agent-tab-icon">📑</span>
                     <div class="agent-tab-info">
                         <div class="agent-tab-name">Doc Summarizer</div>
-                        <div class="agent-tab-desc">Summarize financial documents</div>
+                        <div class="agent-tab-desc">Synthesize up to 5 documents</div>
                     </div>
                 </button>
             </div>
@@ -5181,20 +5206,79 @@
         <!-- FINANCIAL DOC SUMMARIZER WORKSPACE -->
         <!-- =============================== -->
         <div class="agent-workspace" id="workspace-docsum">
+            <style>
+                .docsum-drop {
+                    width: 100%; border: 1.5px dashed var(--border-color); border-radius: 0.875rem;
+                    background: var(--bg-secondary); padding: 1.5rem 1rem; text-align: center; cursor: pointer;
+                    transition: border-color .15s ease, background .15s ease;
+                }
+                .docsum-drop:hover, .docsum-drop.dragover { border-color: var(--accent-violet); background: rgba(124, 58, 237, 0.07); }
+                .docsum-drop.full { cursor: default; opacity: .6; }
+                .docsum-drop-title { color: var(--text-primary); font-weight: 600; font-size: 0.95rem; }
+                .docsum-drop-sub { color: var(--text-muted); font-size: 0.8rem; margin-top: 0.3rem; }
+                .docsum-files { width: 100%; display: flex; flex-direction: column; gap: 0.5rem; }
+                .docsum-file {
+                    display: flex; align-items: center; gap: 0.75rem; padding: 0.55rem 0.75rem;
+                    background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 0.625rem;
+                }
+                .docsum-file-tag {
+                    flex: none; font-size: 0.72rem; font-weight: 700; color: #fff; background: var(--gradient-primary);
+                    border-radius: 0.375rem; padding: 0.15rem 0.45rem; letter-spacing: .03em;
+                }
+                .docsum-file-name { flex: 1; min-width: 0; color: var(--text-primary); font-size: 0.86rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+                .docsum-file-size { flex: none; color: var(--text-muted); font-size: 0.78rem; }
+                .docsum-file-x {
+                    flex: none; background: none; border: none; color: var(--text-muted); cursor: pointer;
+                    font-size: 1.1rem; line-height: 1; padding: 0.1rem 0.3rem; border-radius: 0.3rem;
+                }
+                .docsum-file-x:hover { color: var(--accent-red); background: rgba(239, 68, 68, 0.1); }
+                .docsum-count { color: var(--text-muted); font-size: 0.8rem; }
+                .docsum-steps { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.9rem; }
+                .docsum-step {
+                    font-size: 0.75rem; color: var(--text-muted); border: 1px solid var(--border-color);
+                    border-radius: 999px; padding: 0.2rem 0.65rem;
+                }
+                .docsum-step.active { color: var(--text-primary); border-color: var(--accent-violet); background: rgba(124, 58, 237, 0.12); }
+                .docsum-step.done { color: var(--accent-green); border-color: rgba(16, 185, 129, 0.4); }
+                .docsum-elapsed { color: var(--text-muted); font-size: 0.8rem; margin-left: auto; font-variant-numeric: tabular-nums; }
+                .docsum-toolbar { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+                .docsum-tool-btn {
+                    padding: 0.5rem 0.95rem; border-radius: 0.5rem; font-size: 0.82rem; font-weight: 600; font-family: inherit;
+                    cursor: pointer; border: 1px solid var(--border-color); background: var(--bg-secondary); color: var(--text-primary);
+                }
+                .docsum-tool-btn.primary { background: var(--gradient-primary); border-color: transparent; color: #fff; }
+                .docsum-tool-btn:disabled { opacity: .6; cursor: wait; }
+                .docsum-warn {
+                    margin: 0 0 1rem; padding: 0.7rem 0.9rem; border-radius: 0.5rem; font-size: 0.82rem;
+                    background: rgba(217, 119, 6, 0.1); border: 1px solid rgba(217, 119, 6, 0.35); color: #fcd34d;
+                }
+                .docsum-paper { background: #fff; border-radius: 0.875rem; padding: 2.5rem 2.75rem; color: #334155; }
+                @media (max-width: 640px) { .docsum-paper { padding: 1.25rem 1rem; } }
+            </style>
+
             <div class="ticker-card">
-                <h2>📑 Financial Document Summarizer</h2>
-                <p class="subtitle">Upload a PDF or Word document (research report, concall transcript, investor
-                    presentation, analyst report, etc.) to get
-                    an AI summary.</p>
-                <div class="ticker-input-row" style="flex-direction: column; align-items: flex-start; gap: 1rem;">
-                    <input type="file" id="docsumFileInput" accept=".pdf,.doc,.docx" class="ticker-input"
-                        style="width: 100%; max-width: 400px; padding: 0.5rem; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 0.625rem; color: var(--text-primary);" />
+                <h2>📑 Document Synthesizer</h2>
+                <p class="subtitle">Upload up to 5 documents on the same subject (e.g. several brokers' reports on one
+                    company). The agent reads each one, then writes a single consolidated report: organised by topic,
+                    gaps in one document filled from another, contradictions reconciled, and every claim cited back
+                    to its source.</p>
+                <div class="ticker-input-row" style="flex-direction: column; align-items: stretch; gap: 0.875rem; max-width: 720px;">
+                    <input type="file" id="docsumFileInput" accept=".pdf,.docx,.txt,.md" multiple style="display:none" />
+                    <div class="docsum-drop" id="docsumDrop" role="button" tabindex="0"
+                        onclick="docsumBrowse()" onkeydown="if(event.key==='Enter'||event.key===' '){docsumBrowse();event.preventDefault();}">
+                        <div class="docsum-drop-title" id="docsumDropTitle">Drop up to 5 documents here, or click to browse</div>
+                        <div class="docsum-drop-sub">PDF, Word (.docx), TXT or Markdown · up to 25 MB each</div>
+                    </div>
+                    <div class="docsum-files" id="docsumFiles"></div>
                     <textarea id="docsumUserPrompt"
-                        placeholder="Optional: Ask a specific question or give an instruction (e.g. 'What are the key risks?' or 'Summarize the revenue trends')"
-                        style="width: 100%; max-width: 600px; min-height: 80px; padding: 0.625rem; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 0.625rem; color: var(--text-primary); font-size: 0.875rem; resize: vertical; font-family: inherit;"></textarea>
-                    <button class="analyze-btn" id="docsumAnalyzeBtn" onclick="startDocsumAnalysis()">
-                        <span id="docsumBtnText">Summarize Document</span>
-                    </button>
+                        placeholder="Optional: a question or focus for the report (e.g. 'Is the margin recovery thesis credible?' or 'Focus on the order book and execution risk')"
+                        style="width: 100%; min-height: 72px; padding: 0.625rem; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 0.625rem; color: var(--text-primary); font-size: 0.875rem; resize: vertical; font-family: inherit;"></textarea>
+                    <div style="display:flex; align-items:center; gap: 1rem; flex-wrap: wrap;">
+                        <button class="analyze-btn" id="docsumAnalyzeBtn" onclick="startDocsumAnalysis()">
+                            <span id="docsumBtnText">Generate Consolidated Report</span>
+                        </button>
+                        <span class="docsum-count" id="docsumCount">No documents selected</span>
+                    </div>
                 </div>
             </div>
 
@@ -5209,10 +5293,16 @@
             <div class="progress-card" id="docsumProgress" style="display: none;">
                 <div class="progress-status">
                     <div class="progress-dot"></div>
-                    <span id="docsumProgressText">Uploading and analyzing document...</span>
+                    <span id="docsumProgressText">Uploading documents...</span>
+                    <span class="docsum-elapsed" id="docsumElapsed"></span>
                 </div>
                 <div class="progress-bar-container">
                     <div class="progress-bar"></div>
+                </div>
+                <div class="docsum-steps">
+                    <span class="docsum-step" data-step="upload">1 · Upload &amp; read</span>
+                    <span class="docsum-step" data-step="extract">2 · Read documents</span>
+                    <span class="docsum-step" data-step="synth">3 · Cross-document synthesis</span>
                 </div>
             </div>
 
@@ -5220,62 +5310,256 @@
             <div class="analysis-card" id="docsumAnalysis" style="display: none;">
                 <div class="analysis-header">
                     <div class="analysis-header-left">
-                        <h3>Document Summary</h3>
+                        <h3>Consolidated Report</h3>
                         <span class="analysis-meta" id="docsumAnalysisMeta"></span>
                     </div>
+                    <div class="docsum-toolbar">
+                        <button class="docsum-tool-btn primary" id="docsumPdfBtn" onclick="docsumDownloadPdf()">⬇ Download PDF</button>
+                        <button class="docsum-tool-btn" onclick="docsumReset()">New report</button>
+                    </div>
                 </div>
-                <div class="analysis-body" id="docsumAnalysisBody"></div>
+                <!-- Not .analysis-body: its p/li/h1 colours and 700px scroll box would override the report's own styles. -->
+                <div style="padding: 1.5rem;">
+                    <div class="docsum-warn" id="docsumWarnings" style="display:none;"></div>
+                    <div class="docsum-paper" id="docsumReport"></div>
+                </div>
             </div>
         </div>
 
         <script>
-            function startDocsumAnalysis() {
-                const fileInput = document.getElementById('docsumFileInput');
-                const file = fileInput.files[0];
-                if (!file) {
-                    alert('Please select a PDF or Word document to upload.');
-                    return;
+            (function () {
+                const MAX_DOCS = 5;
+                const MAX_BYTES = 25 * 1024 * 1024;
+                const ALLOWED = ['.pdf', '.docx', '.txt', '.md'];
+                const STORE_KEY = 'docsum_state_v2';
+                let docsumFiles = [];
+                let docsumModel = null;
+                let docsumPollTimer = null;
+                let docsumTickTimer = null;
+
+                const $ = id => document.getElementById(id);
+                const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+                const fmtSize = b => b >= 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB';
+
+                function save(state) { try { state ? localStorage.setItem(STORE_KEY, JSON.stringify(state)) : localStorage.removeItem(STORE_KEY); } catch (e) { } }
+                function load() { try { return JSON.parse(localStorage.getItem(STORE_KEY) || 'null'); } catch (e) { return null; } }
+
+                function renderFileList() {
+                    const list = $('docsumFiles');
+                    list.innerHTML = docsumFiles.map((f, i) =>
+                        `<div class="docsum-file"><span class="docsum-file-tag">D${i + 1}</span>` +
+                        `<span class="docsum-file-name" title="${esc(f.name)}">${esc(f.name)}</span>` +
+                        `<span class="docsum-file-size">${fmtSize(f.size)}</span>` +
+                        `<button class="docsum-file-x" aria-label="Remove ${esc(f.name)}" onclick="docsumRemove(${i})">×</button></div>`
+                    ).join('');
+                    const n = docsumFiles.length;
+                    $('docsumCount').textContent = n ? `${n} of ${MAX_DOCS} documents` : 'No documents selected';
+                    $('docsumBtnText').textContent = n === 1 ? 'Summarize Document' : 'Generate Consolidated Report';
+                    $('docsumDrop').classList.toggle('full', n >= MAX_DOCS);
+                    $('docsumDropTitle').textContent = n >= MAX_DOCS ? 'Maximum of 5 documents reached'
+                        : n ? `Add more documents (${MAX_DOCS - n} remaining)` : 'Drop up to 5 documents here, or click to browse';
                 }
 
-                document.getElementById('docsumError').style.display = 'none';
-                document.getElementById('docsumAnalysis').style.display = 'none';
-                document.getElementById('docsumProgress').style.display = 'block';
-                document.getElementById('docsumAnalyzeBtn').disabled = true;
-                document.getElementById('docsumBtnText').innerHTML = '<span class="spinner"></span> Analyzing...';
-
-                const userPrompt = document.getElementById('docsumUserPrompt').value.trim();
-
-                const formData = new FormData();
-                formData.append('file', file);
-                if (userPrompt) formData.append('user_prompt', userPrompt);
-
-                fetch('/agent/doc-summarizer/upload', {
-                    method: 'POST',
-                    body: formData
-                })
-                    .then(r => r.json())
-                    .then(data => {
-                        document.getElementById('docsumProgress').style.display = 'none';
-                        document.getElementById('docsumAnalyzeBtn').disabled = false;
-                        document.getElementById('docsumBtnText').textContent = 'Summarize Document';
-
-                        if (data.status === 'success') {
-                            document.getElementById('docsumAnalysis').style.display = 'block';
-                            document.getElementById('docsumAnalysisMeta').textContent = file.name;
-                            document.getElementById('docsumAnalysisBody').innerHTML = typeof marked !== 'undefined' ? marked.parse(data.summary || 'No summary generated.') : ('<pre style="white-space:pre-wrap;">' + (data.summary || '') + '</pre>');
-                        } else if (data.error) {
-                            document.getElementById('docsumError').style.display = 'block';
-                            document.getElementById('docsumErrorText').textContent = data.error;
-                        }
-                    })
-                    .catch(err => {
-                        document.getElementById('docsumProgress').style.display = 'none';
-                        document.getElementById('docsumAnalyzeBtn').disabled = false;
-                        document.getElementById('docsumBtnText').textContent = 'Summarize Document';
-                        document.getElementById('docsumError').style.display = 'block';
-                        document.getElementById('docsumErrorText').textContent = 'Upload failed: ' + err.message;
+                function addFiles(fileList) {
+                    const rejected = [];
+                    Array.from(fileList || []).forEach(f => {
+                        const name = f.name.toLowerCase();
+                        if (!ALLOWED.some(ext => name.endsWith(ext))) { rejected.push(`${f.name} (unsupported type${name.endsWith('.doc') ? ' - save it as .docx' : ''})`); return; }
+                        if (f.size > MAX_BYTES) { rejected.push(`${f.name} (over 25 MB)`); return; }
+                        if (docsumFiles.some(x => x.name === f.name && x.size === f.size)) return;
+                        if (docsumFiles.length >= MAX_DOCS) { rejected.push(`${f.name} (limit of ${MAX_DOCS} documents)`); return; }
+                        docsumFiles.push(f);
                     });
-            }
+                    renderFileList();
+                    if (rejected.length) alert('Not added:\n' + rejected.join('\n'));
+                }
+
+                window.docsumBrowse = function () {
+                    if (docsumFiles.length >= MAX_DOCS) return;
+                    $('docsumFileInput').click();
+                };
+                window.docsumRemove = function (i) { docsumFiles.splice(i, 1); renderFileList(); };
+
+                $('docsumFileInput').addEventListener('change', e => { addFiles(e.target.files); e.target.value = ''; });
+                const drop = $('docsumDrop');
+                ['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('dragover'); }));
+                ['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('dragover'); }));
+                drop.addEventListener('drop', e => addFiles(e.dataTransfer.files));
+
+                function setStep(step) {
+                    const order = ['upload', 'extract', 'synth'];
+                    const at = order.indexOf(step);
+                    document.querySelectorAll('#docsumProgress .docsum-step').forEach(el => {
+                        const i = order.indexOf(el.dataset.step);
+                        el.classList.toggle('done', i < at);
+                        el.classList.toggle('active', i === at);
+                    });
+                }
+
+                function setBusy(busy) {
+                    $('docsumAnalyzeBtn').disabled = busy;
+                    $('docsumBtnText').innerHTML = busy ? '<span class="spinner"></span> Working...'
+                        : (docsumFiles.length === 1 ? 'Summarize Document' : 'Generate Consolidated Report');
+                }
+
+                function showError(msg) {
+                    stopTimers();
+                    $('docsumProgress').style.display = 'none';
+                    $('docsumError').style.display = 'block';
+                    $('docsumErrorText').textContent = msg;
+                    setBusy(false);
+                }
+
+                function stopTimers() {
+                    clearTimeout(docsumPollTimer); docsumPollTimer = null;
+                    clearInterval(docsumTickTimer); docsumTickTimer = null;
+                }
+
+                function startTicker(startedAt) {
+                    clearInterval(docsumTickTimer);
+                    const tick = () => {
+                        const s = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
+                        $('docsumElapsed').textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+                    };
+                    tick();
+                    docsumTickTimer = setInterval(tick, 1000);
+                }
+
+                window.startDocsumAnalysis = function () {
+                    if (!docsumFiles.length) { alert('Please add at least one document.'); return; }
+                    $('docsumError').style.display = 'none';
+                    $('docsumAnalysis').style.display = 'none';
+                    $('docsumProgress').style.display = 'block';
+                    $('docsumProgressText').textContent = `Uploading ${docsumFiles.length} document${docsumFiles.length > 1 ? 's' : ''}...`;
+                    setStep('upload');
+                    setBusy(true);
+                    const startedAt = Date.now();
+                    startTicker(startedAt);
+
+                    const formData = new FormData();
+                    docsumFiles.forEach(f => formData.append('files', f));
+                    const focus = $('docsumUserPrompt').value.trim();
+                    if (focus) formData.append('user_prompt', focus);
+
+                    fetch('/agent/doc-summarizer/upload', { method: 'POST', body: formData })
+                        .then(r => r.json())
+                        .then(data => {
+                            if (!data.job_id) { showError(data.error || 'Upload failed.'); return; }
+                            save({ jobId: data.job_id, startedAt, files: data.files || docsumFiles.map(f => f.name), focus });
+                            setStep('extract');
+                            poll(data.job_id);
+                        })
+                        .catch(err => showError('Upload failed: ' + err.message));
+                };
+
+                function poll(jobId) {
+                    fetch(`/agent/doc-summarizer/${jobId}/status`)
+                        .then(r => r.json().then(d => ({ ok: r.ok, d })))
+                        .then(({ ok, d }) => {
+                            if (!ok && d.error) { save(null); showError(d.error); return; }
+                            if (d.status === 'processing') {
+                                if (d.progress) $('docsumProgressText').textContent = d.progress;
+                                setStep(/synthesi|writing/i.test(d.progress || '') ? 'synth' : 'extract');
+                                docsumPollTimer = setTimeout(() => poll(jobId), 4000);
+                            } else if (d.status === 'complete') {
+                                const st = load() || {};
+                                save({ result: d.result, files: st.files, focus: st.focus });
+                                stopTimers();
+                                $('docsumProgress').style.display = 'none';
+                                setBusy(false);
+                                showResult(d.result);
+                            } else {
+                                save(null);
+                                showError(d.error || 'The analysis failed.');
+                            }
+                        })
+                        .catch(() => { docsumPollTimer = setTimeout(() => poll(jobId), 6000); });
+                }
+
+                function showResult(result) {
+                    const sources = (result.sources || []).map(s => ({
+                        num: s.num,
+                        title: `D${s.num} · ${s.title}`,
+                        excerpt: s.excerpt || '',
+                        url: ''
+                    }));
+                    const n = result.doc_count || sources.length;
+                    $('docsumAnalysisMeta').textContent = `Synthesised from ${n} document${n > 1 ? 's' : ''}`;
+                    const warnings = result.warnings || [];
+                    $('docsumWarnings').style.display = warnings.length ? 'block' : 'none';
+                    $('docsumWarnings').innerHTML = warnings.map(w => '⚠ ' + esc(w)).join('<br>');
+                    $('docsumAnalysis').style.display = 'block';
+
+                    const container = $('docsumReport');
+                    if (!window.KaggerReport) {
+                        container.innerHTML = typeof marked !== 'undefined' ? marked.parse(result.markdown || '') : `<pre style="white-space:pre-wrap">${esc(result.markdown)}</pre>`;
+                        $('docsumPdfBtn').style.display = 'none';
+                        return;
+                    }
+                    docsumModel = KaggerReport.build({
+                        output: { content: result.markdown || '' },
+                        title: result.title || (n > 1 ? `Consolidated View Across ${n} Documents` : 'Document Summary'),
+                        question: result.focus || '',
+                        depth: n > 1 ? `${n}-Document Synthesis` : 'Single-Document Summary',
+                        generatedAt: result.generated_at,
+                        sources: sources,
+                        labels: {
+                            doctype: n > 1 ? 'Consolidated Research Report' : 'Document Summary',
+                            depthKey: 'Basis',
+                            questionKey: 'Focus question',
+                            sourcesKey: 'Source documents',
+                            creator: 'Kagger.AI Document Synthesizer',
+                            filePrefix: 'Kagger_Synthesis_',
+                            disclaimer: 'This report was generated by Kagger.AI’s document synthesis engine solely from the ' +
+                                'documents uploaded by the user. It consolidates and reconciles their content and may reflect their ' +
+                                'errors, omissions or biases; figures marked "(derived)" are computed from the source figures. It is ' +
+                                'provided for information and research purposes only and does not constitute investment advice, a ' +
+                                'research recommendation, or an offer or solicitation to buy or sell any security. Verify material ' +
+                                'figures against the original documents and primary filings, and consult a SEBI-registered investment ' +
+                                'adviser before making investment decisions.'
+                        }
+                    });
+                    docsumModel.depthLabel = n > 1 ? `Synthesis of ${n} documents` : 'Single-document summary';
+                    $('docsumPdfBtn').style.display = '';
+                    KaggerReport.render(docsumModel, container);
+                }
+
+                window.docsumDownloadPdf = function () {
+                    if (!docsumModel || !window.KaggerReport) return;
+                    const btn = $('docsumPdfBtn');
+                    btn.disabled = true; btn.textContent = 'Preparing PDF...';
+                    KaggerReport.downloadPdf(docsumModel)
+                        .catch(e => alert('PDF export failed: ' + e.message))
+                        .finally(() => { btn.disabled = false; btn.textContent = '⬇ Download PDF'; });
+                };
+
+                window.docsumReset = function () {
+                    stopTimers();
+                    save(null);
+                    docsumModel = null;
+                    docsumFiles = [];
+                    renderFileList();
+                    $('docsumUserPrompt').value = '';
+                    $('docsumAnalysis').style.display = 'none';
+                    $('docsumError').style.display = 'none';
+                    $('docsumProgress').style.display = 'none';
+                    setBusy(false);
+                };
+
+                // Restore the last report, or resume polling a job still running, after a page reload.
+                const prev = load();
+                if (prev && prev.result) {
+                    showResult(prev.result);
+                } else if (prev && prev.jobId) {
+                    $('docsumProgress').style.display = 'block';
+                    $('docsumProgressText').textContent = 'Resuming your running analysis...';
+                    setStep('extract');
+                    setBusy(true);
+                    startTicker(prev.startedAt || Date.now());
+                    poll(prev.jobId);
+                }
+                renderFileList();
+            })();
         </script>
 
     </div>

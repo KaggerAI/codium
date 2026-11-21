@@ -183,7 +183,39 @@
     return map;
   }
 
-  function processCitations(md, basis) {
+  // Document-sourced reports (Doc Summarizer) cite "[D1]", "[D2, D4]", "[D1-D3]" against a fixed,
+  // pre-numbered source list instead of a Parallel basis.
+  var DOC_RUN = /(?:[ \t]*\[\s*D\d+(?:\s*(?:,|;|&|and|to|-|–)\s*D?\d+)*\s*\])+/g;
+
+  function docCitations(md, fixed) {
+    var byNum = {};
+    var sources = fixed.map(function (s, i) {
+      var num = Number(s.num) || i + 1;
+      var src = { num: num, url: safeUrl(s.url) || '', title: s.title || ('Document ' + num), excerpt: s.excerpt || '', ref: '' };
+      byNum[num] = src;
+      return src;
+    });
+    var out = md.replace(DOC_RUN, function (run) {
+      var nums = [];
+      run.replace(/\[([^\]]*)\]/g, function (m, inner) {
+        inner.replace(/D?(\d+)(?:\s*(?:to|-|–)\s*D?(\d+))?/g, function (mm, a, b) {
+          var lo = Math.min(Number(a), Number(b || a)), hi = Math.max(Number(a), Number(b || a));
+          for (var k = lo; k <= hi && k - lo < 10; k++) if (byNum[k] && nums.indexOf(k) === -1) nums.push(k);
+          return mm;
+        });
+        return m;
+      });
+      if (!nums.length) return '';
+      nums.sort(function (a, b) { return a - b; });
+      return '<sup class="kr-fn">' + nums.map(function (n) {
+        return '<a href="#kr-src-' + n + '" data-fn="' + n + '" title="' + esc(byNum[n].title) + '">' + n + '</a>';
+      }).join('<span class="kr-fn-sep">,</span>') + '</sup>';
+    });
+    return { markdown: out, sources: sources, consulted: [] };
+  }
+
+  function processCitations(md, basis, fixedSources) {
+    if (Array.isArray(fixedSources) && fixedSources.length) return docCitations(md, fixedSources);
     var basisMap = indexBasis(basis);
     var hasBasis = Object.keys(basisMap).length > 0;
     var ctx = { sources: [], byUrl: {}, byN: {}, byField: {} };
@@ -366,7 +398,9 @@
 
   /**
    * Build the report model + DOM.
-   * opts: { output, legacyMarkdown, question, depth, generatedAt, title }
+   * opts: { output, legacyMarkdown, question, depth, generatedAt, title, sources, labels }
+   *   sources: optional fixed source list [{ num, title, excerpt, url }] for "[D#]" citations.
+   *   labels:  optional overrides of the report's branding text (see defaultLabels()).
    */
   function build(opts) {
     var output = opts.output || null;
@@ -380,7 +414,7 @@
       md = opts.legacyMarkdown || '';
       // Legacy markdown carried "# Research Summary"-style h1s; masthead replaces them.
     }
-    var cit = processCitations(typographic(md), basis);
+    var cit = processCitations(typographic(md), basis, opts.sources);
     var parse = (global.marked && (global.marked.parse || global.marked)) || function (s) { return s; };
     var html = sanitize(parse.call(global.marked, cit.markdown));
 
@@ -398,6 +432,7 @@
       question: opts.question || '',
       depth: opts.depth || '',
       depthLabel: DEPTH_LABELS[opts.depth] || (opts.depth ? smartTitle(opts.depth) : 'Deep Research'),
+      labels: Object.assign(defaultLabels(), opts.labels || {}),
       generatedAt: opts.generatedAt || new Date().toISOString(),
       sources: cit.sources,
       consulted: cit.consulted,
@@ -414,6 +449,18 @@
     'or an offer or solicitation to buy or sell any security. Management guidance is reported as disclosed and may be ' +
     'revised or withdrawn; figures may contain errors or omissions. Verify against primary filings and consult a ' +
     'SEBI-registered investment adviser before making investment decisions.';
+
+  function defaultLabels() {
+    return {
+      doctype: 'Deep Research Report',
+      depthKey: 'Research depth',
+      questionKey: 'Research question',
+      sourcesKey: 'Sources cited',
+      disclaimer: DISCLAIMER,
+      creator: 'Kagger.AI Deep Research',
+      filePrefix: 'Kagger_Research_'
+    };
+  }
 
   function sourcesHtml(model) {
     if (model.sources.length) {
@@ -445,15 +492,15 @@
     article.className = 'kr-report';
     article.innerHTML =
       '<header class="kr-masthead">' +
-        '<div class="kr-brandrow"><span class="kr-brand">Kagger.AI</span><span class="kr-doctype">Deep Research Report</span></div>' +
+        '<div class="kr-brandrow"><span class="kr-brand">Kagger.AI</span><span class="kr-doctype">' + esc(model.labels.doctype) + '</span></div>' +
         '<h1 class="kr-title">' + esc(model.title) + '</h1>' +
         '<dl class="kr-meta">' +
           '<div><dt>Published</dt><dd>' + esc(formatDate(model.generatedAt)) + '</dd></div>' +
-          '<div><dt>Research depth</dt><dd>' + esc(model.depthLabel) + '</dd></div>' +
-          '<div><dt>Sources cited</dt><dd>' + (srcCount || '—') + '</dd></div>' +
+          '<div><dt>' + esc(model.labels.depthKey) + '</dt><dd>' + esc(model.depthLabel) + '</dd></div>' +
+          '<div><dt>' + esc(model.labels.sourcesKey) + '</dt><dd>' + (srcCount || '—') + '</dd></div>' +
           '<div><dt>Reading time</dt><dd>' + model.readMinutes + ' min</dd></div>' +
         '</dl>' +
-        (model.question ? '<div class="kr-question"><div class="kr-label">Research question</div><p>' + esc(model.question) + '</p></div>' : '') +
+        (model.question ? '<div class="kr-question"><div class="kr-label">' + esc(model.labels.questionKey) + '</div><p>' + esc(model.question) + '</p></div>' : '') +
       '</header>';
     article.appendChild(model.body);
     var src = document.createElement('section');
@@ -462,7 +509,7 @@
     article.appendChild(src);
     var foot = document.createElement('footer');
     foot.className = 'kr-disclaimer';
-    foot.innerHTML = '<div class="kr-label">Important information</div><p>' + esc(DISCLAIMER) + '</p>';
+    foot.innerHTML = '<div class="kr-label">Important information</div><p>' + esc(model.labels.disclaimer) + '</p>';
     article.appendChild(foot);
 
     container.innerHTML = '';
@@ -1093,7 +1140,7 @@
     doc.setTextColor.apply(doc, C.muted);
     doc.text('IMPORTANT INFORMATION', this.M.l, this.y + 3, { charSpace: 0.25 });
     this.y += 5.5;
-    this.text([{ t: DISCLAIMER }], { size: 7.8, color: C.muted, lh: 1.45 });
+    this.text([{ t: this.model.labels.disclaimer }], { size: 7.8, color: C.muted, lh: 1.45 });
   };
 
   PdfWriter.prototype.cover = function (tocCount) {
@@ -1108,7 +1155,7 @@
     doc.setTextColor.apply(doc, C.white);
     doc.text('KAGGER.AI', M.l, 24, { charSpace: 0.3 });
     doc.setFontSize(7.5); doc.setTextColor.apply(doc, C.bandSub);
-    doc.text('DEEP RESEARCH REPORT', this.pw - M.r, 24, { align: 'right', charSpace: 0.2 });
+    doc.text(pdfText(m.labels.doctype).toUpperCase(), this.pw - M.r, 24, { align: 'right', charSpace: 0.2 });
     doc.setDrawColor(51, 65, 85); doc.setLineWidth(0.25);
     doc.line(M.l, 29, this.pw - M.r, 29);
 
@@ -1129,7 +1176,7 @@
     if (m.question) {
       doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5);
       doc.setTextColor.apply(doc, C.accent);
-      doc.text('RESEARCH QUESTION', M.l, y, { charSpace: 0.3 });
+      doc.text(pdfText(m.labels.questionKey).toUpperCase(), M.l, y, { charSpace: 0.3 });
       y += 5;
       doc.setFont('helvetica', 'italic'); doc.setFontSize(9.8);
       doc.setTextColor.apply(doc, C.body);
@@ -1141,8 +1188,8 @@
 
     var stats = [
       ['PUBLISHED', formatDate(m.generatedAt)],
-      ['RESEARCH DEPTH', m.depthLabel],
-      ['SOURCES CITED', String(m.sources.length || m.consulted.length || '—')],
+      [pdfText(m.labels.depthKey).toUpperCase(), m.depthLabel],
+      [pdfText(m.labels.sourcesKey).toUpperCase(), String(m.sources.length || m.consulted.length || '—')],
       ['READING TIME', m.readMinutes + ' min']
     ];
     doc.setDrawColor.apply(doc, C.rule); doc.setLineWidth(0.3);
@@ -1218,7 +1265,7 @@
       doc.text('KAGGER.AI', M.l, 13, { charSpace: 0.3 });
       var bw = this.tw('KAGGER.AI') + 0.3 * 9 + 2.5;
       doc.setFont('helvetica', 'normal'); doc.setTextColor.apply(doc, C.faint);
-      doc.text('Deep Research Report', M.l + bw, 13);
+      doc.text(pdfText(m.labels.doctype), M.l + bw, 13);
       var t = pdfText(m.title), maxW = this.W * 0.55;
       while (doc.getTextWidth(t) > maxW && t.length > 10) t = t.slice(0, -2);
       if (t !== pdfText(m.title)) t = t.replace(/\s*\S?$/, '') + '…';
@@ -1255,7 +1302,7 @@
   function pdfFilename(model) {
     var d = new Date(model.generatedAt);
     var ds = isNaN(d) ? new Date().toISOString().slice(0, 10) : d.toISOString().slice(0, 10);
-    return 'Kagger_Research_' + (slug(model.title) || 'Report') + '_' + ds + '.pdf';
+    return ((model.labels && model.labels.filePrefix) || 'Kagger_Research_') + (slug(model.title) || 'Report') + '_' + ds + '.pdf';
   }
 
   function downloadPdf(model, opts) {
@@ -1267,7 +1314,7 @@
         title: pdfText(model.title),
         subject: pdfText(model.question).slice(0, 500),
         author: 'Kagger.AI',
-        creator: 'Kagger.AI Deep Research',
+        creator: model.labels.creator,
         keywords: 'Kagger.AI, equity research, Indian stock market'
       });
       var w = new PdfWriter(doc, model);
