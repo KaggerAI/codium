@@ -5,6 +5,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin - Kagger AI</title>
+    <script src="/kagger_theme.js"></script>
+    <link rel="stylesheet" href="/kagger_theme.css">
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -16,25 +18,219 @@
         .gradient-bg {
             background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
         }
+
+        /* ===== Theme: light overrides (page is designed dark; see kagger_theme.css) ===== */
+        html[data-theme="light"] .gradient-bg {
+            background: var(--kg-bg);
+        }
+
+        html[data-theme="light"] .kg-native-dark .adm-nav {
+            background-color: var(--kg-surface);
+            box-shadow: 0 1px 2px rgb(15 23 42 / .05);
+        }
+
+        html[data-theme="light"] .kg-native-dark .adm-tabs {
+            background-color: var(--kg-inset);
+        }
+
+        html[data-theme="light"] .kg-native-dark .adm-tabs > button.bg-blue-600 {
+            background-color: var(--kg-primary);
+            box-shadow: 0 1px 2px rgb(22 101 52 / .25);
+        }
+
+        html[data-theme="light"] .kg-native-dark .adm-mtabs {
+            background-color: var(--kg-surface);
+        }
+
+        html[data-theme="light"] .kg-native-dark .adm-mtabs > button.border-blue-500 {
+            border-bottom-color: var(--kg-primary);
+            color: var(--kg-primary-strong);
+        }
+
+        html[data-theme="light"] .kg-native-dark main .rounded-2xl.bg-slate-800\/50 {
+            box-shadow: var(--kg-shadow);
+        }
+
+        html[data-theme="light"] .kg-native-dark :is(input:not([type="checkbox"]), textarea, select).border-slate-600 {
+            background-color: var(--kg-input-bg);
+            border-color: var(--kg-input-border);
+        }
+
+        html[data-theme="light"] .kg-native-dark main button.bg-slate-700 {
+            box-shadow: inset 0 0 0 1px var(--kg-border-strong);
+        }
+
+        html[data-theme="light"] .kg-native-dark #top-sections-list .bg-slate-900 {
+            background-color: var(--kg-raised);
+        }
+
+        html[data-theme="light"] .kg-native-dark #insights-include-admins {
+            accent-color: var(--kg-primary);
+        }
+
+        html[data-theme="light"] .kg-native-dark #recent-activity-feed .bg-slate-800 {
+            box-shadow: inset 0 0 0 1px var(--kg-border);
+        }
+
+        html[data-theme="light"] .kg-native-dark .adm-modal {
+            background-color: var(--kg-overlay);
+        }
+
+        html[data-theme="light"] .kg-native-dark .adm-modal > div {
+            box-shadow: var(--kg-shadow-lg);
+        }
+
+        /* ===== Responsive (desktop >= 1280px unchanged) ===== */
+        /* The theme toggle sits left of "Back to App" without shifting the centred tab bar. */
+        @media (min-width: 1024px) {
+            .adm-right > .kg-theme-toggle {
+                position: absolute;
+                top: 50%;
+                right: calc(100% + 1rem);
+                margin-top: -1.125rem;
+            }
+
+            .adm-right.space-x-4 > .kg-theme-toggle + .adm-back {
+                margin-left: 0;
+            }
+        }
+
+        @media (max-width: 1279px) {
+            .adm-left,
+            .adm-tabs,
+            .adm-right {
+                white-space: nowrap;
+            }
+        }
+
+        @media (max-width: 1023px) {
+            body .adm-nav-inner {
+                padding-top: .625rem;
+                padding-bottom: .625rem;
+            }
+
+            .adm-mtabs > button {
+                min-height: 2.75rem;
+            }
+        }
+
+        @media (max-width: 1023px) {
+            /* Wide tables scroll inside their card instead of squeezing every column. */
+            #users-table table,
+            #contacts-table table {
+                min-width: 44rem;
+            }
+
+            #users-table :is(th, td),
+            #contacts-table :is(th, td) {
+                white-space: nowrap;
+            }
+        }
+
+        @media (max-width: 640px) {
+            body .adm-nav-inner {
+                padding-left: 1rem;
+                padding-right: 1rem;
+            }
+
+            .adm-left.space-x-6 > :not([hidden]) ~ :not([hidden]) {
+                margin-left: .625rem;
+            }
+
+            .adm-right.space-x-4 > :not([hidden]) ~ :not([hidden]) {
+                margin-left: .75rem;
+            }
+
+            .adm-divider,
+            .adm-back-long {
+                display: none;
+            }
+
+            .adm-title,
+            .adm-right > a,
+            .adm-right > button:last-child {
+                font-size: .875rem;
+            }
+
+            main .p-6 {
+                padding: 1rem;
+            }
+
+            main .flex.items-center.justify-between {
+                flex-wrap: wrap;
+                gap: .5rem .75rem;
+            }
+
+            #recent-activity-feed .flex.items-center.justify-between {
+                flex-wrap: nowrap;
+            }
+
+            #invite-form {
+                gap: .5rem;
+            }
+
+            #invite-email {
+                min-width: 0;
+            }
+
+            #invite-btn {
+                flex: none;
+                padding: .75rem 1rem;
+                white-space: nowrap;
+            }
+
+            #blogs-list > div > div {
+                flex-direction: column;
+                align-items: stretch;
+                gap: .75rem;
+            }
+
+            #blogs-list > div > div > div:last-child {
+                flex-wrap: wrap;
+            }
+
+            body .adm-modal {
+                padding: .5rem;
+            }
+
+            .adm-modal > div {
+                max-height: calc(100vh - 1rem);
+                max-height: calc(100dvh - 1rem);
+            }
+        }
+
+        @media (max-width: 400px) {
+            .adm-nav-inner > .flex {
+                gap: .5rem;
+            }
+
+            .adm-title {
+                font-size: .8125rem;
+            }
+
+            .adm-right.space-x-4 > :not([hidden]) ~ :not([hidden]) {
+                margin-left: .5rem;
+            }
+        }
     </style>
-    <script src="scale_ui.js"></script>
+    <script src="/scale_ui.js"></script>
 </head>
 
-<body class="gradient-bg min-h-screen text-white">
+<body class="kg-native-dark gradient-bg min-h-screen text-white">
     <!-- Navigation -->
-    <nav class="bg-slate-900/50 backdrop-blur-sm border-b border-slate-700">
-        <div class="container mx-auto px-6 py-4">
+    <nav class="adm-nav bg-slate-900/50 backdrop-blur-sm border-b border-slate-700">
+        <div class="adm-nav-inner container mx-auto px-6 py-4">
             <div class="flex items-center justify-between">
-                <div class="flex items-center space-x-6">
+                <div class="adm-left flex items-center space-x-6">
                     <a href="/app" class="flex items-center space-x-2">
                         <img src="/kagger_logo_full.jpg" alt="Kagger AI" class="h-7 object-contain"
                             style="filter:invert(1) hue-rotate(-80deg) saturate(3) brightness(1.1);mix-blend-mode:screen;" />
                     </a>
-                    <span class="text-slate-500">|</span>
-                    <span class="text-slate-300 font-medium">Admin Panel</span>
+                    <span class="adm-divider text-slate-500">|</span>
+                    <span class="adm-title text-slate-300 font-medium">Admin Panel</span>
                 </div>
                 <!-- Tabs Navigation -->
-                <div class="hidden md:flex items-center bg-slate-900/80 rounded-lg p-1 border border-slate-700">
+                <div class="adm-tabs hidden lg:flex items-center bg-slate-900/80 rounded-lg p-1 border border-slate-700">
                     <button onclick="switchTab('users')" id="btn-tab-users"
                         class="px-4 py-1.5 rounded-md text-sm font-medium transition-all bg-blue-600 text-white">
                         👥 Users
@@ -52,8 +248,9 @@
                         📝 Blog
                     </button>
                 </div>
-                <div class="flex items-center space-x-4">
-                    <a href="/app" class="text-slate-400 hover:text-white transition-colors">← Back to App</a>
+                <div class="adm-right relative flex items-center space-x-4">
+                    <button class="kg-theme-toggle text-slate-300" data-kg-theme-toggle></button>
+                    <a href="/app" aria-label="Back to App" class="adm-back text-slate-400 hover:text-white transition-colors">← <span class="adm-back-long">Back to </span>App</a>
                     <button onclick="logout()" class="text-red-400 hover:text-red-300 transition-colors">Logout</button>
                 </div>
             </div>
@@ -61,7 +258,7 @@
     </nav>
 
     <!-- Mobile Tabs Navigation -->
-    <div class="md:hidden bg-slate-900 border-b border-slate-700 flex">
+    <div class="adm-mtabs lg:hidden bg-slate-900 border-b border-slate-700 flex">
         <button onclick="switchTab('users')" id="mobile-btn-tab-users"
             class="flex-1 py-3 text-sm font-medium border-b-2 border-blue-500 text-white">
             Users
@@ -81,7 +278,7 @@
     </div>
 
     <!-- Main Content -->
-    <main class="container mx-auto px-6 py-8">
+    <main class="container mx-auto px-4 sm:px-6 py-6 sm:py-8">
 
         <!-- Tab 1: User Management -->
         <div id="tab-content-users">
@@ -93,7 +290,7 @@
                     <input type="email" id="invite-email" placeholder="user@example.com" required
                         class="flex-1 px-4 py-3 bg-slate-900/50 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500">
                     <button type="submit" id="invite-btn"
-                        class="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-lg font-semibold transition-all flex items-center space-x-2">
+                        class="kg-brand-solid bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-lg font-semibold transition-all flex items-center space-x-2">
                         <span>Send Invite</span>
                     </button>
                 </form>
@@ -212,7 +409,7 @@
 
                     <!-- Start Button -->
                     <button onclick="startPrecache()" id="precache-btn"
-                        class="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 px-6 py-3 rounded-lg font-semibold transition-all flex items-center space-x-2">
+                        class="kg-brand-btn bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 px-6 py-3 rounded-lg font-semibold transition-all flex items-center space-x-2">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                 d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -389,7 +586,7 @@
 
             <!-- Edit Blog Modal -->
             <div id="blog-edit-modal"
-                class="hidden fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                class="adm-modal hidden fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
                 <div
                     class="bg-slate-800 rounded-2xl border border-slate-700 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
                     <div class="p-6">
@@ -411,7 +608,7 @@
                             </div>
                             <div class="flex gap-3">
                                 <button onclick="saveBlogEdits()"
-                                    class="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-lg font-semibold transition-all">
+                                    class="kg-brand-solid bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-lg font-semibold transition-all">
                                     💾 Save Changes
                                 </button>
                                 <button onclick="closeEditModal()"

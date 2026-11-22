@@ -1,0 +1,394 @@
+/* =============================================================================
+   Kagger site-wide theme layer (light + dark) and responsive helpers.
+
+   Loaded by every page, right after kagger_theme.js (which sets
+   <html data-theme="light|dark"> before first paint).
+
+   How pages opt in
+   ----------------
+   * A page (or a section of one) declares the theme it was originally
+     designed for:  class="kg-native-light"  or  class="kg-native-dark".
+   * In its native theme nothing below changes how it looks.
+   * In the other theme, the "Tailwind remap" block at the end of this file
+     re-colours the common Tailwind colour utilities, and each page adds its
+     own page-specific overrides (custom CSS, inline styles) under
+       html[data-theme="light"] ...   or   html[data-theme="dark"] ...
+   * .kg-on-color marks a region that keeps white text in light theme
+     (e.g. a brand-green header bar inside a dark-native page).
+
+   Palettes
+   --------
+   light : the white + green look of the /app home page
+   dark  : the dark navy / violet-indigo / green look of /agents
+   ============================================================================= */
+
+:root,
+[data-theme="light"] {
+  color-scheme: light;
+
+  --kg-bg: #f1f5f9;
+  --kg-surface: #ffffff;
+  --kg-subtle: #f8fafc;
+  --kg-inset: #f1f5f9;
+  --kg-raised: #e2e8f0;
+  --kg-raised-2: #cbd5e1;
+  --kg-surface-hover: #f1f5f9;
+
+  --kg-border: #e2e8f0;
+  --kg-border-strong: #cbd5e1;
+
+  --kg-text-strong: #0f172a;
+  --kg-text: #1e293b;
+  --kg-text-2: #334155;
+  --kg-text-3: #475569;
+  --kg-muted: #64748b;
+  --kg-faint: #94a3b8;
+
+  --kg-primary: #16a34a;
+  --kg-primary-hover: #15803d;
+  --kg-primary-strong: #166534;
+  --kg-primary-soft: #dcfce7;
+  --kg-primary-tint: #f0fdf4;
+  --kg-on-primary: #ffffff;
+  --kg-gradient: linear-gradient(135deg, #16a34a 0%, #059669 100%);
+  --kg-gradient-text: linear-gradient(90deg, #15803d 0%, #059669 100%);
+  --kg-link: #15803d;
+  --kg-accent: #059669;
+  --kg-focus: rgb(22 163 74 / .35);
+
+  --kg-header-bg: #14532d;
+  --kg-header-border: rgb(6 78 59 / .5);
+  --kg-header-text: #ffffff;
+  --kg-header-muted: #d1fae5;
+  --kg-header-chip: rgb(255 255 255 / .08);
+  --kg-header-chip-border: rgb(255 255 255 / .12);
+
+  --kg-input-bg: #ffffff;
+  --kg-input-border: #cbd5e1;
+  --kg-overlay: rgb(15 23 42 / .5);
+  --kg-shadow: 0 1px 3px rgb(15 23 42 / .08), 0 1px 2px rgb(15 23 42 / .04);
+  --kg-shadow-lg: 0 10px 30px rgb(15 23 42 / .10);
+
+  --kg-success: #16a34a;
+  --kg-danger: #dc2626;
+  --kg-warning: #d97706;
+  --kg-info: #2563eb;
+
+  /* chart helpers (read by KaggerTheme.colors()) */
+  --kg-chart-text: #334155;
+  --kg-chart-grid: #e2e8f0;
+  --kg-chart-bg: #ffffff;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --kg-bg: #0a0a0f;
+  --kg-surface: #16161f;
+  --kg-subtle: #111118;
+  --kg-inset: #0e0e15;
+  --kg-raised: #252533;
+  --kg-raised-2: #33334a;
+  --kg-surface-hover: #1e1e2a;
+
+  --kg-border: #2a2a3a;
+  --kg-border-strong: #3a3a50;
+
+  --kg-text-strong: #ffffff;
+  --kg-text: #f0f0f5;
+  --kg-text-2: #c8c8de;
+  --kg-text-3: #a0a0b8;
+  --kg-muted: #8b8ba3;
+  --kg-faint: #6b6b80;
+
+  --kg-primary: #7c3aed;
+  --kg-primary-hover: #6d28d9;
+  --kg-primary-strong: #c4b5fd;
+  --kg-primary-soft: rgb(124 58 237 / .18);
+  --kg-primary-tint: rgb(124 58 237 / .10);
+  --kg-on-primary: #ffffff;
+  --kg-gradient: linear-gradient(135deg, #7c3aed 0%, #6366f1 50%, #3b82f6 100%);
+  --kg-gradient-text: linear-gradient(90deg, #a78bfa 0%, #818cf8 50%, #60a5fa 100%);
+  --kg-link: #a78bfa;
+  --kg-accent: #10b981;
+  --kg-focus: rgb(139 92 246 / .45);
+
+  --kg-header-bg: rgb(10 10 15 / .92);
+  --kg-header-border: #2a2a3a;
+  --kg-header-text: #f0f0f5;
+  --kg-header-muted: #a0a0b8;
+  --kg-header-chip: rgb(255 255 255 / .05);
+  --kg-header-chip-border: rgb(255 255 255 / .10);
+
+  --kg-input-bg: #111118;
+  --kg-input-border: #2a2a3a;
+  --kg-overlay: rgb(0 0 0 / .65);
+  --kg-shadow: 0 1px 3px rgb(0 0 0 / .4);
+  --kg-shadow-lg: 0 10px 30px rgb(0 0 0 / .45);
+
+  --kg-success: #10b981;
+  --kg-danger: #ef4444;
+  --kg-warning: #f59e0b;
+  --kg-info: #60a5fa;
+
+  --kg-chart-text: #a0a0b8;
+  --kg-chart-grid: #2a2a3a;
+  --kg-chart-bg: #16161f;
+}
+
+/* While switching, suppress transitions so the whole page flips at once. */
+html.kg-theme-switching,
+html.kg-theme-switching *,
+html.kg-theme-switching *::before,
+html.kg-theme-switching *::after {
+  transition: none !important;
+}
+
+/* Text inflation off on phones in landscape (keeps the layout we design). */
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/* Outside its native theme a page's canvas (behind <body>, overscroll, short
+   pages) takes the theme background. In its native theme it is untouched. */
+html[data-theme="dark"]:has(> body.kg-native-light),
+html[data-theme="light"]:has(> body.kg-native-dark) {
+  background-color: var(--kg-bg);
+}
+
+/* ---------------------------------------------------------------------------
+   Theme toggle button  <button class="kg-theme-toggle" data-kg-theme-toggle></button>
+   kagger_theme.js fills in the icons and the accessible label.
+   It inherits the text colour of wherever it is placed.
+   --------------------------------------------------------------------------- */
+.kg-theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 2.25rem;
+  height: 2.25rem;
+  padding: 0;
+  border-radius: 9999px;
+  border: 1px solid rgb(127 127 127 / .35);
+  border: 1px solid color-mix(in srgb, currentColor 28%, transparent);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  transition: background-color .2s ease, border-color .2s ease, transform .2s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.kg-theme-toggle:hover {
+  background: rgb(127 127 127 / .14);
+  background: color-mix(in srgb, currentColor 12%, transparent);
+}
+.kg-theme-toggle:active { transform: scale(.94); }
+.kg-theme-toggle:focus-visible {
+  outline: 2px solid var(--kg-focus);
+  outline-offset: 2px;
+}
+.kg-theme-toggle svg {
+  width: 1.1rem;
+  height: 1.1rem;
+  display: block;
+}
+.kg-theme-toggle .kg-i-sun { display: none; }
+[data-theme="dark"] .kg-theme-toggle .kg-i-sun { display: block; }
+[data-theme="dark"] .kg-theme-toggle .kg-i-moon { display: none; }
+.kg-theme-toggle--sm { width: 2rem; height: 2rem; }
+.kg-theme-toggle--sm svg { width: 1rem; height: 1rem; }
+
+/* ---------------------------------------------------------------------------
+   Responsive helpers (opt-in classes; nothing here changes existing markup)
+   --------------------------------------------------------------------------- */
+
+/* Wide content (tables, code, charts) scrolls inside itself, never the page. */
+.kg-scroll-x {
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+}
+
+/* Long unbroken strings (URLs, tickers lists) wrap instead of overflowing. */
+.kg-wrap-anywhere { overflow-wrap: anywhere; word-break: normal; }
+
+/* Phones: 16px form text stops iOS Safari zooming the page on focus. */
+@media (max-width: 640px) and (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
+  select,
+  textarea {
+    font-size: max(16px, 1em);
+  }
+}
+
+/* =============================================================================
+   Tailwind colour remap  (generated by tools/gen_theme_remap.py — edit there)
+   Only applies in the theme a page was NOT designed for.
+   ============================================================================= */
+/* @@REMAP-START@@ */
+/* ---------- light-native content shown in DARK theme ---------- */
+[data-theme="dark"] :is(.kg-native-light, .kg-native-light *):is(.bg-white) { background-color: var(--kg-surface); }
+[data-theme="dark"] :is(.kg-native-light, .kg-native-light *):is(.bg-slate-50) { background-color: var(--kg-subtle); }
+[data-theme="dark"] :is(.kg-native-light, .kg-native-light *):is(.bg-slate-100) { background-color: var(--kg-inset); }
+[data-theme="dark"] :is(.kg-native-light, .kg-native-light *):is(.bg-slate-200) { background-color: var(--kg-raised); }
+[data-theme="dark"] :is(.kg-native-light, .kg-native-light *):is(.bg-slate-300) { background-color: var(--kg-raised-2); }
+[data-theme="dark"] :is(.kg-native-light, .kg-native-light *):is(.hover\:bg-slate-50:hover, .hover\:bg-slate-100:hover, .hover\:bg-slate-200:hover) { background-color: var(--kg-surface-hover); }
+[data-theme="dark"] :is(.kg-native-light, .kg-native-light *):is(.text-slate-900, .text-slate-800) { color: var(--kg-text); }
+[data-theme="dark"] :is(.kg-native-light, .kg-native-light *):is(.text-slate-700) { color: var(--kg-text-2); }
+[data-theme="dark"] :is(.kg-native-light, .kg-native-light *):is(.text-slate-600) { color: var(--kg-text-3); }
+[data-theme="dark"] :is(.kg-native-light, .kg-native-light *):is(.text-slate-500) { color: var(--kg-muted); }
+[data-theme="dark"] :is(.kg-native-light, .kg-native-light *):is(.hover\:text-slate-700:hover) { color: var(--kg-text); }
+[data-theme="dark"] :is(.kg-native-light, .kg-native-light *):is(.border-slate-100, .border-slate-200, .border-slate-300) { border-color: var(--kg-border); }
+[data-theme="dark"] :is(.kg-native-light, .kg-native-light *):is(.divide-slate-100, .divide-slate-200) > :not([hidden]) ~ :not([hidden]) { border-color: var(--kg-border); }
+[data-theme="dark"] :is(.kg-native-light, .kg-native-light *):is(.bg-red-50) { background-color: rgb(239 68 68 / .10); }
+[data-theme="dark"] :is(.kg-native-light, .kg-native-light *):is(.bg-red-100) { background-color: rgb(239 68 68 / .16); }
+[data-theme="dark"] :is(.kg-native-light, .kg-native-light *):is(.hover\:bg-red-50:hover) { background-color: rgb(239 68 68 / .20); }
+[data-theme="dark"] :is(.kg-native-light, .kg-native-light *):is(.text-red-600, .text-red-700) { color: #f87171; }
+[data-theme="dark"] :is(.kg-native-light, .kg-native-light *):is(.hover\:text-red-600:hover) { color: #fca5a5; }
+[data-theme="dark"] :is(.kg-native-light, .kg-native-light *):is(.border-red-200) { border-color: rgb(239 68 68 / .32); }
+[data-theme="dark"] :is(.kg-native-light, .kg-native-light *):is(.border-orange-200) { border-color: rgb(249 115 22 / .32); }
+[data-theme="dark"] :is(.kg-native-light, .kg-native-light *):is(.from-orange-50) { --tw-gradient-from: rgb(249 115 22 / .12) var(--tw-gradient-from-position); }
+[data-theme="dark"] :is(.kg-native-light, .kg-native-light *):is(.bg-amber-50) { background-color: rgb(245 158 11 / .10); }
+[data-theme="dark"] :is(.kg-native-light, .kg-native-light *):is(.bg-amber-100) { background-color: rgb(245 158 11 / .16); }
+[data-theme="dark"] :is(.kg-native-light, .kg-native-light *):is(.text-amber-600, .text-amber-800) { color: #fbbf24; }
+[data-theme="dark"] :is(.kg-native-light, .kg-native-light *):is(.border-amber-300) { border-color: rgb(245 158 11 / .32); }
+[data-theme="dark"] :is(.kg-native-light, .kg-native-light *):is(.to-amber-50) { --tw-gradient-to: rgb(245 158 11 / .06) var(--tw-gradient-to-position); }
+[data-theme="dark"] :is(.kg-native-light, .kg-native-light *):is(.bg-yellow-50) { background-color: rgb(234 179 8 / .10); }
+[data-theme="dark"] :is(.kg-native-light, .kg-native-light *):is(.text-yellow-700, .text-yellow-800, .text-yellow-900) { color: #facc15; }
+[data-theme="dark"] :is(.kg-native-light, .kg-native-light *):is(.border-yellow-100, .border-yellow-200) { border-color: rgb(234 179 8 / .32); }
+[data-theme="dark"] :is(.kg-native-light, .kg-native-light *):is(.bg-green-50) { background-color: rgb(34 197 94 / .10); }
+[data-theme="dark"] :is(.kg-native-light, .kg-native-light *):is(.bg-green-100) { background-color: rgb(34 197 94 / .16); }
+[data-theme="dark"] :is(.kg-native-light, .kg-native-light *):is(.hover\:bg-green-50:hover) { background-color: rgb(34 197 94 / .20); }
+[data-theme="dark"] :is(.kg-native-light, .kg-native-light *):is(.text-green-600, .text-green-700, .text-green-800) { color: #4ade80; }
+[data-theme="dark"] :is(.kg-native-light, .kg-native-light *):is(.hover\:text-green-600:hover, .hover\:text-green-700:hover) { color: #86efac; }
+[data-theme="dark"] :is(.kg-native-light, .kg-native-light *):is(.border-green-100, .border-green-200) { border-color: rgb(34 197 94 / .32); }
+[data-theme="dark"] :is(.kg-native-light, .kg-native-light *):is(.from-green-50) { --tw-gradient-from: rgb(34 197 94 / .12) var(--tw-gradient-from-position); }
+[data-theme="dark"] :is(.kg-native-light, .kg-native-light *):is(.hover\:bg-emerald-50:hover) { background-color: rgb(16 185 129 / .20); }
+[data-theme="dark"] :is(.kg-native-light, .kg-native-light *):is(.text-emerald-600, .text-emerald-700) { color: #34d399; }
+[data-theme="dark"] :is(.kg-native-light, .kg-native-light *):is(.hover\:text-emerald-800:hover) { color: #6ee7b7; }
+[data-theme="dark"] :is(.kg-native-light, .kg-native-light *):is(.to-emerald-50) { --tw-gradient-to: rgb(16 185 129 / .06) var(--tw-gradient-to-position); }
+[data-theme="dark"] :is(.kg-native-light, .kg-native-light *):is(.bg-blue-50) { background-color: rgb(59 130 246 / .10); }
+[data-theme="dark"] :is(.kg-native-light, .kg-native-light *):is(.bg-blue-100) { background-color: rgb(59 130 246 / .16); }
+[data-theme="dark"] :is(.kg-native-light, .kg-native-light *):is(.hover\:bg-blue-50:hover) { background-color: rgb(59 130 246 / .20); }
+[data-theme="dark"] :is(.kg-native-light, .kg-native-light *):is(.text-blue-600, .text-blue-700, .text-blue-800) { color: #60a5fa; }
+[data-theme="dark"] :is(.kg-native-light, .kg-native-light *):is(.hover\:text-blue-700:hover, .hover\:text-blue-800:hover) { color: #93c5fd; }
+[data-theme="dark"] :is(.kg-native-light, .kg-native-light *):is(.border-blue-200, .border-blue-300) { border-color: rgb(59 130 246 / .32); }
+[data-theme="dark"] :is(.kg-native-light, .kg-native-light *):is(.from-blue-50) { --tw-gradient-from: rgb(59 130 246 / .12) var(--tw-gradient-from-position); }
+[data-theme="dark"] :is(.kg-native-light, .kg-native-light *):is(.to-indigo-50) { --tw-gradient-to: rgb(99 102 241 / .06) var(--tw-gradient-to-position); }
+[data-theme="dark"] :is(.kg-native-light, .kg-native-light *):is(.from-white) { --tw-gradient-from: var(--kg-surface) var(--tw-gradient-from-position); }
+[data-theme="dark"] :is(.kg-native-light, .kg-native-light *):is(.via-white) { --tw-gradient-stops: var(--tw-gradient-from), var(--kg-surface) var(--tw-gradient-via-position), var(--tw-gradient-to); }
+
+/* ---------- dark-native content shown in LIGHT theme ---------- */
+[data-theme="light"] :is(.kg-native-dark, .kg-native-dark *):is(.bg-slate-900, .bg-slate-900\/40, .bg-slate-900\/50, .bg-slate-900\/60, .bg-slate-900\/80, .bg-black) { background-color: var(--kg-subtle); }
+[data-theme="light"] :is(.kg-native-dark, .kg-native-dark *):is(.bg-slate-800, .bg-slate-800\/40, .bg-slate-800\/50, .bg-slate-800\/80) { background-color: var(--kg-surface); }
+[data-theme="light"] :is(.kg-native-dark, .kg-native-dark *):is(.bg-slate-700) { background-color: var(--kg-inset); }
+[data-theme="light"] :is(.kg-native-dark, .kg-native-dark *):is(.bg-white\/5, .bg-white\/\[0\.02\]) { background-color: rgb(15 23 42 / .03); }
+[data-theme="light"] :is(.kg-native-dark, .kg-native-dark *):is(.bg-white\/10) { background-color: rgb(15 23 42 / .05); }
+[data-theme="light"] :is(.kg-native-dark, .kg-native-dark *):is(.bg-white\/20) { background-color: rgb(15 23 42 / .08); }
+[data-theme="light"] :is(.kg-native-dark, .kg-native-dark *):is(.bg-black\/20, .bg-black\/30, .bg-black\/35) { background-color: rgb(15 23 42 / .04); }
+[data-theme="light"] :is(.kg-native-dark, .kg-native-dark *):is(.hover\:bg-white\/5:hover, .hover\:bg-white\/10:hover, .hover\:bg-white\/20:hover, .hover\:bg-slate-600:hover, .hover\:bg-slate-700:hover, .hover\:bg-slate-800:hover, .hover\:bg-slate-900:hover) { background-color: var(--kg-surface-hover); }
+[data-theme="light"] :is(.kg-native-dark, .kg-native-dark *):is(.text-white, .text-slate-200) { color: var(--kg-text); }
+[data-theme="light"] :is(.kg-native-dark, .kg-native-dark *):is(.text-slate-300) { color: var(--kg-text-2); }
+[data-theme="light"] :is(.kg-native-dark, .kg-native-dark *):is(.text-slate-400) { color: var(--kg-text-3); }
+[data-theme="light"] :is(.kg-native-dark, .kg-native-dark *):is(.text-slate-500) { color: var(--kg-muted); }
+[data-theme="light"] :is(.kg-native-dark, .kg-native-dark *):is(.text-slate-600, .text-slate-700) { color: var(--kg-faint); }
+[data-theme="light"] :is(.kg-native-dark, .kg-native-dark *):is(.text-white\/80) { color: var(--kg-text-3); }
+[data-theme="light"] :is(.kg-native-dark, .kg-native-dark *):is(.hover\:text-white:hover) { color: var(--kg-text-strong); }
+[data-theme="light"] :is(.kg-native-dark, .kg-native-dark *):is(.border-slate-600, .border-slate-700, .border-slate-700\/50, .border-slate-800, .border-white\/5, .border-white\/10) { border-color: var(--kg-border); }
+[data-theme="light"] :is(.kg-native-dark, .kg-native-dark *):is(.border-slate-500, .border-white\/30) { border-color: var(--kg-border-strong); }
+[data-theme="light"] :is(.kg-native-dark, .kg-native-dark *):is(.placeholder-slate-400, .placeholder-slate-500, .placeholder-slate-600)::placeholder { color: var(--kg-faint); }
+[data-theme="light"] :is(.kg-native-dark, .kg-native-dark *):is(.text-red-300, .text-red-400) { color: #dc2626; }
+[data-theme="light"] :is(.kg-native-dark, .kg-native-dark *):is(.hover\:text-red-300:hover, .hover\:text-red-400:hover) { color: #b91c1c; }
+[data-theme="light"] :is(.kg-native-dark, .kg-native-dark *):is(.bg-red-950\/20) { background-color: rgb(239 68 68 / .09); }
+[data-theme="light"] :is(.kg-native-dark, .kg-native-dark *):is(.text-orange-400) { color: #c2410c; }
+[data-theme="light"] :is(.kg-native-dark, .kg-native-dark *):is(.text-amber-300, .text-amber-400) { color: #b45309; }
+[data-theme="light"] :is(.kg-native-dark, .kg-native-dark *):is(.text-yellow-400) { color: #a16207; }
+[data-theme="light"] :is(.kg-native-dark, .kg-native-dark *):is(.text-green-100, .text-green-200, .text-green-300, .text-green-400) { color: #15803d; }
+[data-theme="light"] :is(.kg-native-dark, .kg-native-dark *):is(.text-emerald-300, .text-emerald-400) { color: #047857; }
+[data-theme="light"] :is(.kg-native-dark, .kg-native-dark *):is(.bg-emerald-950\/20) { background-color: rgb(16 185 129 / .09); }
+[data-theme="light"] :is(.kg-native-dark, .kg-native-dark *):is(.border-emerald-900\/50) { border-color: rgb(16 185 129 / .35); }
+[data-theme="light"] :is(.kg-native-dark, .kg-native-dark *):is(.text-cyan-400) { color: #0e7490; }
+[data-theme="light"] :is(.kg-native-dark, .kg-native-dark *):is(.text-blue-200, .text-blue-300, .text-blue-400) { color: #2563eb; }
+[data-theme="light"] :is(.kg-native-dark, .kg-native-dark *):is(.hover\:text-blue-300:hover, .hover\:text-blue-400:hover) { color: #1d4ed8; }
+[data-theme="light"] :is(.kg-native-dark, .kg-native-dark *):is(.text-indigo-300, .text-indigo-400) { color: #4f46e5; }
+[data-theme="light"] :is(.kg-native-dark, .kg-native-dark *):is(.hover\:text-indigo-300:hover) { color: #4338ca; }
+[data-theme="light"] :is(.kg-native-dark, .kg-native-dark *):is(.bg-indigo-950\/20) { background-color: rgb(99 102 241 / .09); }
+[data-theme="light"] :is(.kg-native-dark, .kg-native-dark *):is(.from-indigo-900\/20, .from-indigo-950\/40) { --tw-gradient-from: rgb(99 102 241 / .08) var(--tw-gradient-from-position); --tw-gradient-to: rgb(99 102 241 / 0) var(--tw-gradient-to-position); --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to); }
+[data-theme="light"] :is(.kg-native-dark, .kg-native-dark *):is(.text-violet-400) { color: #7c3aed; }
+[data-theme="light"] :is(.kg-native-dark, .kg-native-dark *):is(.text-purple-200, .text-purple-300, .text-purple-400) { color: #9333ea; }
+[data-theme="light"] :is(.kg-native-dark, .kg-native-dark *):is(.bg-purple-950\/20) { background-color: rgb(168 85 247 / .09); }
+[data-theme="light"] :is(.kg-native-dark, .kg-native-dark *):is(.to-purple-900\/20) { --tw-gradient-to: rgb(168 85 247 / .05) var(--tw-gradient-to-position); }
+
+/* Solid saturated fills (buttons, badges) and .kg-on-color regions keep white text in light theme. */
+[data-theme="light"] :is(.kg-native-dark, .kg-native-dark *):is(.bg-red-500, .bg-red-600, .bg-green-500, .bg-green-600, .bg-emerald-500, .bg-blue-500, .bg-blue-600, .bg-indigo-500, .bg-purple-500, .bg-purple-600):not(.text-transparent),
+[data-theme="light"] :is(.kg-native-dark, .kg-native-dark *)[class*="bg-gradient-to"]:is(.from-red-500, .from-orange-500, .from-amber-500, .from-green-500, .from-green-600, .from-emerald-500, .from-emerald-600, .from-blue-500, .from-blue-600, .from-indigo-500, .from-indigo-600, .from-purple-500, .from-purple-600):not(.text-transparent):not(.bg-clip-text),
+[data-theme="light"] .kg-native-dark .kg-on-color { color: #fff; }
+[data-theme="light"] :is(.kg-native-dark, .kg-native-dark *):is(.bg-red-500, .bg-red-600, .bg-green-500, .bg-green-600, .bg-emerald-500, .bg-blue-500, .bg-blue-600, .bg-indigo-500, .bg-purple-500, .bg-purple-600) :is(.text-white, .text-slate-100, .text-slate-200, .text-slate-300, .text-gray-100, .text-gray-200),
+[data-theme="light"] :is(.kg-native-dark, .kg-native-dark *)[class*="bg-gradient-to"]:is(.from-red-500, .from-orange-500, .from-amber-500, .from-green-500, .from-green-600, .from-emerald-500, .from-emerald-600, .from-blue-500, .from-blue-600, .from-indigo-500, .from-indigo-600, .from-purple-500, .from-purple-600) :is(.text-white, .text-slate-100, .text-slate-200, .text-slate-300, .text-gray-100, .text-gray-200),
+[data-theme="light"] .kg-native-dark .kg-on-color :is(.text-white, .text-slate-100, .text-slate-200, .text-slate-300, .text-gray-100, .text-gray-200) { color: #fff; }
+/* @@REMAP-END@@ */
+
+/* ---------------------------------------------------------------------------
+   Brand helpers (after the remap so they win at equal specificity) — opt-in classes for a page's primary actions/accents.
+   In a page's native theme they do nothing; in the other theme they take
+   the active palette (green in light, violet/indigo in dark).
+   --------------------------------------------------------------------------- */
+[data-theme="light"] .kg-native-dark .kg-brand-btn,
+[data-theme="dark"] .kg-native-light .kg-brand-btn {
+  background-image: var(--kg-gradient);
+  background-color: var(--kg-primary);
+  border-color: transparent;
+  color: var(--kg-on-primary);
+}
+[data-theme="light"] .kg-native-dark .kg-brand-btn:hover,
+[data-theme="dark"] .kg-native-light .kg-brand-btn:hover {
+  filter: brightness(1.06);
+  box-shadow: 0 6px 18px -6px var(--kg-focus);
+}
+[data-theme="light"] .kg-native-dark .kg-brand-solid,
+[data-theme="dark"] .kg-native-light .kg-brand-solid {
+  background-image: none;
+  background-color: var(--kg-primary);
+  border-color: var(--kg-primary);
+  color: var(--kg-on-primary);
+}
+[data-theme="light"] .kg-native-dark .kg-brand-solid:hover,
+[data-theme="dark"] .kg-native-light .kg-brand-solid:hover {
+  background-color: var(--kg-primary-hover);
+}
+[data-theme="light"] .kg-native-dark .kg-brand-text,
+[data-theme="dark"] .kg-native-light .kg-brand-text {
+  background-image: var(--kg-gradient-text);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+[data-theme="light"] .kg-native-dark .kg-brand-link,
+[data-theme="dark"] .kg-native-light .kg-brand-link {
+  color: var(--kg-link);
+}
+[data-theme="light"] .kg-native-dark .kg-brand-link:hover,
+[data-theme="dark"] .kg-native-light .kg-brand-link:hover {
+  color: var(--kg-primary-hover);
+}
+[data-theme="light"] .kg-native-dark .kg-brand-tint,
+[data-theme="dark"] .kg-native-light .kg-brand-tint {
+  background-image: none;
+  background-color: var(--kg-primary-soft);
+  border-color: transparent;
+  color: var(--kg-primary-strong);
+}
+[data-theme="light"] .kg-native-dark :is(input, textarea, select):focus,
+[data-theme="dark"] .kg-native-light :is(input, textarea, select):focus {
+  --tw-ring-color: var(--kg-focus);
+}
+
+/* Kagger wordmark image (green on white JPEG). Dark pages render it through an
+   inline invert filter; in light theme show its real colours instead. */
+[data-theme="light"] img[src*="kagger_logo_full"] {
+  filter: none !important;
+  mix-blend-mode: multiply !important;
+}

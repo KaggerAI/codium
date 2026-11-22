@@ -5,6 +5,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Agent Marketplace — Kagger AI</title>
+    <script src="/kagger_theme.js"></script>
+    <link rel="stylesheet" href="/kagger_theme.css">
     <meta name="description"
         content="Specialized AI financial agents for deep stock analysis. Conference call analysis, forensic accounting, and stock forecasting." />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap"
@@ -3943,11 +3945,295 @@
             line-height: 1;
             padding: 0;
         }
+
+        /* ===== Theme toggle (header) ===== */
+        .ag-theme-toggle {
+            color: var(--text-secondary);
+            margin-right: 0.25rem;
+        }
+
+        /* Dark (native) theme: kagger_theme.css sets color-scheme: dark, which restyles the
+           native checkboxes/radios/selects. Keep them exactly as this page always drew them. */
+        html[data-theme="dark"] body.kg-native-dark { color-scheme: normal; }
+
+        /* =====================================================================
+           Theme: light overrides (page is designed dark; see kagger_theme.css).
+           Everything below is scoped to html[data-theme="light"], so the
+           native dark look is untouched. Most colours come from the page
+           variables; the rest are hard-coded colours in rules and in the
+           inline styles the report renderers emit.
+           ===================================================================== */
+        html[data-theme="light"] {
+            --bg-primary: #f1f5f9;
+            --bg-secondary: #f8fafc;
+            --bg-card: #ffffff;
+            --bg-card-hover: #f1f5f9;
+            --border-color: #e2e8f0;
+            --border-glow: #16a34a;
+            --text-primary: #1e293b;
+            --text-secondary: #475569;
+            --text-muted: #64748b;
+            --accent-purple: #16a34a;
+            --accent-violet: #15803d;
+            --accent-indigo: #4f46e5;
+            --accent-green: #047857;
+            --accent-red: #dc2626;
+            --text-error: #dc2626;
+            --gradient-primary: linear-gradient(135deg, #16a34a 0%, #059669 100%);
+            --gradient-card: linear-gradient(135deg, rgba(22, 163, 74, 0.06) 0%, rgba(5, 150, 105, 0.02) 100%);
+        }
+
+        html[data-theme="light"] ::-webkit-scrollbar-thumb { background: #cbd5e1; }
+        html[data-theme="light"] ::-webkit-scrollbar-thumb:hover { background: #16a34a; }
+
+        /* --- Header: brand-green bar, as on /app --- */
+        html[data-theme="light"] .top-nav {
+            background: var(--kg-header-bg);
+            border-bottom-color: var(--kg-header-border);
+        }
+        html[data-theme="light"] .top-nav img[src*="kagger_logo_full"] {
+            filter: invert(1) grayscale(1) brightness(2.2) !important;
+            mix-blend-mode: screen !important;
+        }
+        html[data-theme="light"] .nav-title .text-gradient {
+            background: linear-gradient(90deg, #ffffff 0%, #bbf7d0 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+        }
+        html[data-theme="light"] .ag-theme-toggle { color: var(--kg-header-muted); }
+
+        /* --- Agent tab strip --- */
+        html[data-theme="light"] .agent-tab:hover { background: rgba(15, 23, 42, 0.04); }
+        html[data-theme="light"] .agent-tab.active { color: #fff; box-shadow: 0 4px 14px rgba(22, 163, 74, 0.28); }
+        html[data-theme="light"] .agent-tab-desc { opacity: 0.85; }
+        html[data-theme="light"] .agent-tab.active .agent-tab-desc { opacity: 0.92; }
+        html[data-theme="light"] .scroll-arrow {
+            background: rgba(255, 255, 255, 0.92);
+            border-color: var(--border-color);
+            color: #334155;
+            box-shadow: 0 4px 12px rgba(15, 23, 42, 0.12);
+        }
+        html[data-theme="light"] .scroll-arrow:hover {
+            background: #f0fdf4;
+            border-color: rgba(22, 163, 74, 0.45);
+            box-shadow: 0 0 12px rgba(22, 163, 74, 0.25);
+            color: #15803d;
+        }
+
+        /* --- Forms, buttons, dropdowns --- */
+        html[data-theme="light"] .ticker-input:focus { box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.18); }
+        html[data-theme="light"] .ticker-dropdown { box-shadow: 0 10px 30px rgba(15, 23, 42, 0.14); }
+        html[data-theme="light"] :is(.ticker-option:hover, .ticker-option.highlighted) { background: rgba(22, 163, 74, 0.08); }
+        html[data-theme="light"] .analyze-btn:hover { box-shadow: 0 6px 18px rgba(22, 163, 74, 0.3); }
+        html[data-theme="light"] .mismatch-analyze-btn { background: var(--gradient-primary); }
+        html[data-theme="light"] .mismatch-url-input { background: #fff; }
+        html[data-theme="light"] .kagger-history-toggle,
+        html[data-theme="light"] .kagger-history-clear-btn,
+        html[data-theme="light"] .analysis-source-link { border-color: rgba(22, 163, 74, 0.35); }
+        html[data-theme="light"] .kagger-history-clear-btn { opacity: 1; }
+        html[data-theme="light"] :is(.kagger-history-toggle:hover, .analysis-source-link:hover) { background: rgba(22, 163, 74, 0.08); }
+        html[data-theme="light"] .kagger-history-item:hover { background: rgba(15, 23, 42, 0.05); }
+        html[data-theme="light"] .chat-input-row { background: rgba(15, 23, 42, 0.03); }
+        html[data-theme="light"] .error-card { color: #b91c1c; }
+        html[data-theme="light"] .docsum-warn { color: #92400e; }
+        html[data-theme="light"] :is(.docsum-drop:hover, .docsum-drop.dragover) { background: rgba(22, 163, 74, 0.06); }
+        html[data-theme="light"] .docsum-step.active { background: rgba(22, 163, 74, 0.1); }
+        html[data-theme="light"] .docsum-paper { box-shadow: 0 0 0 1px var(--border-color); }
+        html[data-theme="light"] :is(.gt-mode-btn:hover, .gt-mode-btn.active) { background: rgba(22, 163, 74, 0.1); }
+        html[data-theme="light"] .gt-btn.primary { color: #fff; }
+        html[data-theme="light"] .gt-passage mark,
+        html[data-theme="light"] .gt-modal-body mark { background: rgba(250, 204, 21, 0.45); }
+
+        /* --- Markdown reports (concall / forensic / analyst / forecasting) --- */
+        html[data-theme="light"] :is(.analysis-body, .fc-section-body) :is(h1, h3) { color: #166534; }
+        html[data-theme="light"] :is(.analysis-body, .fc-section-body) h2 { color: #15803d; }
+        html[data-theme="light"] .fc-modal-body h3 { color: #166534; border-bottom-color: var(--border-color); }
+        html[data-theme="light"] .analysis-body code { background: rgba(22, 163, 74, 0.08); color: #166534; }
+        html[data-theme="light"] :is(.analysis-body, .fc-section-body) blockquote { background: rgba(22, 163, 74, 0.05); }
+        html[data-theme="light"] :is(.analysis-body, .fc-section-body, .fc-modal-body) th { background: rgba(22, 163, 74, 0.09); }
+        html[data-theme="light"] :is(.analysis-body, .fc-section-body) tr:hover { background: rgba(15, 23, 42, 0.025); }
+        html[data-theme="light"] :is(#fcTriangulationBody, .fc-reasoning-block) table { background: #fff; border-color: var(--border-color); }
+        html[data-theme="light"] :is(#fcTriangulationBody, .fc-reasoning-block) th { background: rgba(22, 163, 74, 0.09); border-bottom-color: var(--border-color); }
+        html[data-theme="light"] :is(#fcTriangulationBody, .fc-reasoning-block) td { border-bottom-color: var(--border-color); }
+        html[data-theme="light"] :is(#fcTriangulationBody, .fc-reasoning-block) tr:hover td { background: rgba(15, 23, 42, 0.025); }
+
+        /* --- Concall quarter tabs --- */
+        html[data-theme="light"] .concall-qtab:not(.active):hover { background: rgba(15, 23, 42, 0.045); }
+        html[data-theme="light"] .concall-qtab .qtab-sub { opacity: 1; }
+
+        /* --- Semantic colours, darkened for contrast on white ---
+           green #34d399/#10b981/#4ade80 -> #047857, red #f87171/#ef4444 -> #dc2626,
+           amber #fbbf24/#eab308 -> #b45309, indigo #818cf8 -> #4f46e5 */
+        html[data-theme="light"] :is(.tr-hero-conv.bull .tr-conv-num, .tr-weight-high, .tr-screener-badge.pass, .tr-balance-legend .bull,
+            .badge-live, .fc-verdict-undervalued, .fc-upside.positive, .fc-scenario-val.bull strong, .cr-metric-card .cr-mval.green,
+            .cr-badge.bull, .cr-signal-bull, .cr-scenario-card.best .cr-shead, .live-status-pill.complete,
+            .gt-b-explicit, .gt-b-verified, .gt-b-raised, .gt-b-positive, .gt-btn.ok) { color: #047857; }
+        html[data-theme="light"] :is(.tr-hero-conv.bear .tr-conv-num, .tr-balance-legend .bear, .error-card h4, .fc-verdict-overvalued,
+            .fc-upside.negative, .fc-scenario-val.bear strong, .cr-metric-card .cr-mval.red, .cr-badge.bear, .cr-signal-bear,
+            .cr-scenario-card.worst .cr-shead, .live-mode-btn, .live-badge, .live-join-btn, .live-modal-error,
+            .live-status-pill.recording, .live-status-pill.error, .live-toast-join,
+            .gt-b-rejected, .gt-b-lowered, .gt-b-negative, .gt-flag.bad, .gt-btn.bad) { color: #dc2626; }
+        html[data-theme="light"] .live-mode-btn { border-color: #dc2626; }
+        /* text on a tinted chip of its own colour needs one step more */
+        html[data-theme="light"] .kg-native-dark :is(.live-badge, .live-join-btn, .live-toast-join, .live-status-pill.recording, .live-status-pill.error,
+            .cr-badge.bear, .fc-btn-close, .live-mode-btn.active) { color: #b91c1c; }
+        html[data-theme="light"] .kg-native-dark :is(.fc-verdict-undervalued, .cr-badge.bull, .live-status-pill.complete) { color: #065f46; }
+        html[data-theme="light"] :is(.live-dial-btn, .live-end-btn) { background: #dc2626; }
+        html[data-theme="light"] :is(.tr-hero-conv.neut .tr-conv-num, .tr-weight-medium, .tr-balance-legend .neut, .badge-soon,
+            .mismatch-notice-header h4, .mismatch-notice p strong, .fc-verdict-fair, .cr-metric-card .cr-mval.amber, .cr-badge.warn,
+            .cr-scenario-card.base .cr-shead, .live-status-pill.dialing,
+            .gt-b-inferred, .gt-b-needs_review, .gt-b-cautious, .gt-b-mixed, .gt-flag) { color: #b45309; }
+        html[data-theme="light"] :is(.live-webcast-chip, .live-status-pill.ended, .live-call-time-tbd) { color: #4f46e5; }
+        html[data-theme="light"] .live-status-pill.transcribing { color: #2563eb; }
+        html[data-theme="light"] .live-status-pill.summarizing { color: #9333ea; }
+        /* fills and accent borders: one step deeper so they hold up on white */
+        html[data-theme="light"] :is(.tr-hero.bull, .tr-horizon.bull) { border-left-color: #10b981; }
+        html[data-theme="light"] :is(.tr-hero.bear, .tr-horizon.bear) { border-left-color: #ef4444; }
+        html[data-theme="light"] :is(.tr-hero.neut, .tr-horizon.neut) { border-left-color: #f59e0b; }
+        html[data-theme="light"] :is(.tr-conv-fill.bull, .tr-balance-bull, .tr-risk-low .tr-risk-dot, .cr-timeline-item.cool::before) { background: #10b981; }
+        html[data-theme="light"] :is(.tr-conv-fill.bear, .tr-balance-bear, .tr-risk-high .tr-risk-dot, .cr-timeline-item.hot::before) { background: #ef4444; }
+        html[data-theme="light"] :is(.tr-conv-fill.neut, .tr-balance-neut, .tr-risk-medium .tr-risk-dot, .cr-timeline-item.warm::before) { background: #f59e0b; }
+        html[data-theme="light"] .cr-scenario-card.best { border-color: #10b981; }
+        html[data-theme="light"] .cr-scenario-card.base { border-color: #f59e0b; }
+        html[data-theme="light"] .cr-scenario-card.worst { border-color: #ef4444; }
+
+        /* --- Technical Agent report --- */
+        html[data-theme="light"] .tr-chart-expand { background: rgba(255, 255, 255, 0.9); }
+        html[data-theme="light"] .tr-chart-expand:hover { background: #f1f5f9; }
+        html[data-theme="light"] .tr-modal-backdrop { background: var(--kg-overlay); }
+        html[data-theme="light"] .tr-modal-card { box-shadow: var(--kg-shadow-lg); }
+        html[data-theme="light"] .tr-modal-close:hover { background: rgba(15, 23, 42, 0.06); }
+
+        /* --- Forecasting overlay --- */
+        html[data-theme="light"] .fc-topbar { background: rgba(255, 255, 255, 0.92); }
+        html[data-theme="light"] .fc-model-card:hover { border-color: rgba(22, 163, 74, 0.35); box-shadow: 0 4px 18px rgba(22, 163, 74, 0.1); }
+        html[data-theme="light"] .fc-slider { background: #cbd5e1; }
+        html[data-theme="light"] .fc-slider::-webkit-slider-thumb { box-shadow: 0 0 6px rgba(22, 163, 74, 0.4); }
+        html[data-theme="light"] .fc-model-scenarios { background: rgba(15, 23, 42, 0.03); }
+        html[data-theme="light"] .fc-peer-table th { background: rgba(22, 163, 74, 0.09); }
+        html[data-theme="light"] .fc-peer-table tr:hover { background: rgba(22, 163, 74, 0.04); }
+        html[data-theme="light"] .fc-peer-table .fc-highlight-row { background: rgba(22, 163, 74, 0.08); }
+        html[data-theme="light"] .fc-modal { background: var(--kg-overlay); }
+        html[data-theme="light"] .fc-collapse-btn { background: rgba(22, 163, 74, 0.08); border-color: rgba(22, 163, 74, 0.35); color: #15803d; }
+        html[data-theme="light"] .fc-collapse-btn:hover { background: rgba(22, 163, 74, 0.15); }
+        html[data-theme="light"] .fc-reasoning-block { background: rgba(22, 163, 74, 0.05); }
+
+        /* --- Cosmic Macro report --- */
+        html[data-theme="light"] .cr-tab.active { background: var(--kg-primary); border-color: var(--kg-primary); color: #fff; }
+        html[data-theme="light"] .cr-sector-row { border-bottom-color: var(--border-color); }
+
+        /* --- Live concall --- */
+        html[data-theme="light"] .live-call-item:hover { border-color: rgba(22, 163, 74, 0.4); }
+        html[data-theme="light"] .live-call-item.starting-soon { border-color: rgba(220, 38, 38, 0.35); }
+        html[data-theme="light"] .live-pdf-link:hover { border-color: #4f46e5; }
+        html[data-theme="light"] .live-modal-backdrop,
+        html[data-theme="light"] .gt-modal-backdrop { background: var(--kg-overlay); }
+        html[data-theme="light"] .live-toast { box-shadow: var(--kg-shadow-lg); }
+
+        /* --- Hard-coded colours in inline styles (report renderers, chat notes) --- */
+        html[data-theme="light"] .kg-native-dark :is([style*="color:#34d399"], [style*="color:#10b981"], [style*="color: #34d399"], [style*="color: #10b981"]) { color: #047857 !important; }
+        html[data-theme="light"] .kg-native-dark [style*="color:#4ade80"] { color: #166534 !important; }
+        html[data-theme="light"] .kg-native-dark :is([style*="background:rgba(124,58,237,0.04)"], [style*="background:rgba(124,58,237,0.06)"]) { background: rgba(22, 163, 74, 0.045) !important; }
+        html[data-theme="light"] .kg-native-dark [style*="background:rgba(124,58,237,0.1)"] { background: rgba(22, 163, 74, 0.08) !important; }
+        html[data-theme="light"] .kg-native-dark :is([style*="color:#f87171"], [style*="color:#ef4444"], [style*="color: #f87171"], [style*="color: #ef4444"]) { color: #dc2626 !important; }
+        html[data-theme="light"] .kg-native-dark :is([style*="color:#fbbf24"], [style*="color:#eab308"], [style*="color:#f59e0b"], [style*="color:#d97706"]) { color: #b45309 !important; }
+        html[data-theme="light"] .kg-native-dark :is([style*="color:#818cf8"], [style*="color:#6366f1"]) { color: #4f46e5 !important; }
+        html[data-theme="light"] .kg-native-dark [style*="color:#60a5fa"] { color: #2563eb !important; }
+        html[data-theme="light"] .kg-native-dark [style*="color:#06b6d4"] { color: #0e7490 !important; }
+        html[data-theme="light"] .kg-native-dark [style*="color:#94a3b8"] { color: #64748b !important; }
+        html[data-theme="light"] .kg-native-dark [style*="color:#6b7280"] { color: #4b5563 !important; }
+        html[data-theme="light"] .kg-native-dark [style*="color: #fca5a5"] { color: #b91c1c !important; }
+        html[data-theme="light"] .kg-native-dark [style*="solid rgba(255,255,255,0.1)"] { border-color: var(--border-color) !important; }
+        html[data-theme="light"] .kg-native-dark [style*="0 4px 30px rgba(0, 0, 0, 0.4)"] { box-shadow: 0 4px 18px rgba(15, 23, 42, 0.08) !important; }
+
+        /* --- Cosmic Micro report (Tailwind arbitrary-value classes) --- */
+        html[data-theme="light"] #cosmicMicroReportContainer .text-\[\#a0a0b8\] { color: var(--text-secondary); }
+        html[data-theme="light"] #cosmicMicroReportContainer .text-\[\#f0f0f5\] { color: var(--text-primary); }
+        html[data-theme="light"] #cosmicMicroReportContainer .text-\[\#818cf8\] { color: #4f46e5; }
+        html[data-theme="light"] #cosmicMicroReportContainer :is(.text-\[\#a78bfa\], .text-\[\#8b5cf6\]) { color: #6d28d9; }
+        html[data-theme="light"] #cosmicMicroReportContainer .text-\[\#10b981\] { color: #047857; }
+        html[data-theme="light"] #cosmicMicroReportContainer .text-\[\#f87171\] { color: #dc2626; }
+        html[data-theme="light"] #cosmicMicroReportContainer .text-\[\#fbbf24\] { color: #b45309; }
+        html[data-theme="light"] #cosmicMicroReportContainer .bg-\[\#16161f\] { background-color: #fff; }
+        html[data-theme="light"] #cosmicMicroReportContainer :is(.bg-\[\#1a1a24\], .bg-\[\#12121a\]\/60) { background-color: var(--bg-secondary); }
+        html[data-theme="light"] #cosmicMicroReportContainer .bg-\[\#1c1214\] { background-color: #fef2f2; }
+        html[data-theme="light"] #cosmicMicroReportContainer .bg-\[\#1c1812\] { background-color: #fffbeb; }
+        html[data-theme="light"] #cosmicMicroReportContainer .from-\[\#16161f\] { --tw-gradient-from: #ffffff var(--tw-gradient-from-position); --tw-gradient-to: rgba(255, 255, 255, 0) var(--tw-gradient-to-position); --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to); }
+        html[data-theme="light"] #cosmicMicroReportContainer .to-\[\#12121a\] { --tw-gradient-to: #f8fafc var(--tw-gradient-to-position); }
+        html[data-theme="light"] #cosmicMicroReportContainer :is(.border-\[\#2a2a3a\], .border-\[\#2a2a3a\]\/30, .border-\[\#2a2a3a\]\/40, .border-\[\#2a2a3a\]\/50, .border-\[\#2a2a3a\]\/60) { border-color: var(--border-color); }
+        html[data-theme="light"] #cosmicMicroReportContainer [class*="hover:border-"]:hover { border-color: rgba(79, 70, 229, 0.35); }
+        html[data-theme="light"] #cosmicMicroReportContainer :is(.bg-black\/15, .bg-black\/30, .bg-black\/35) { background-color: var(--bg-secondary); }
+
+        /* =====================================================================
+           Responsive: phones, tablets and zoomed-in laptops (< 1280px only)
+           ===================================================================== */
+        /* The centred title would collide with the header buttons. */
+        @media (max-width: 800px) {
+            .nav-title { display: none; }
+        }
+
+        @media (max-width: 768px) {
+            .top-nav { padding: 0.6rem 1rem; }
+
+            /* Agent picker: compact grid instead of an 8-row list. */
+            .agent-tabs {
+                display: grid;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: 0.375rem;
+            }
+            .agent-tab { padding: 0.6rem 0.7rem; gap: 0.55rem; min-height: 44px; }
+            .agent-tab-icon { font-size: 1.2rem; }
+            .agent-tab-name { font-size: 0.8rem; }
+            .agent-tabs-container { margin-bottom: 1.25rem; }
+
+            .ticker-card { padding: 1.25rem; }
+            .progress-card { padding: 1.25rem; }
+            .analysis-header { flex-wrap: wrap; gap: 0.75rem; padding: 1rem; }
+            .analysis-source-link { white-space: nowrap; }
+            .analysis-body { padding: 1rem; }
+            .chat-header { padding: 0.85rem 1rem; }
+            .chat-messages { padding: 0.85rem 1rem; }
+            .chat-input-row { padding: 0.75rem 1rem; }
+            .live-mode-toggle-row { flex-wrap: wrap; gap: 0.5rem 0.75rem; }
+            :is(.live-mode-btn, .gt-mode-btn) { white-space: nowrap; }
+            .mismatch-url-row { flex-wrap: wrap; }
+            .mismatch-url-input { min-width: 0; flex: 1 1 220px; }
+            #cosmicReportContainer,
+            #cosmicMicroReportContainer,
+            #technicalReportContainer { padding: 0 1rem 1rem !important; }
+            .live-schedule-card, .live-stream-card, .gt-card { padding: 1rem; }
+            .live-call-item { flex-wrap: wrap; gap: 0.6rem; }
+            .live-modal { padding: 1.5rem 1.25rem; }
+            .gt-cards { grid-template-columns: repeat(auto-fill, minmax(min(330px, 100%), 1fr)); }
+            .gt-actions .gt-input { min-width: 0; max-width: 100%; }
+            .fc-topbar { gap: 0.5rem; }
+            .fc-topbar h2 { font-size: 0.95rem; }
+            .fc-summary { padding: 1.25rem; }
+            .fc-scenario-toggle { flex-wrap: wrap; max-width: 100%; }
+            .fc-modal-content { width: 94%; padding: 1.5rem 1.25rem; }
+        }
+
+        @media (min-width: 600px) and (max-width: 768px) {
+            .agent-tabs { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+        }
+
+        @media (max-width: 480px) {
+            .agent-tab-desc { display: none; }
+            .ticker-card h2 { font-size: 1.1rem; }
+            .fc-topbar-left > span { display: none; }
+            .fc-btn { padding: 0.45rem 0.65rem; }
+            .cr-sector-name { width: 96px; font-size: 13px; }
+            .cr-sector-signal { width: 76px; }
+            .tr-hero { flex-direction: column; padding: 1rem; }
+            .tr-hero-conv { text-align: left; }
+            #liveToastContainer { left: 1rem; right: 1rem; bottom: 1rem; }
+            .live-toast { max-width: none; }
+        }
     </style>
-    <script src="scale_ui.js"></script>
+    <script src="/scale_ui.js"></script>
 </head>
 
-<body>
+<body class="kg-native-dark">
     <script>
         // ===================================================================================
         // KAGGER HISTORY: Persistent localStorage-based history for all modules
@@ -4021,6 +4307,7 @@
             </a>
             <h1 class="nav-title">🤖 <span class="text-gradient">Advanced AI Agents</span></h1>
             <div class="nav-links">
+                <button class="kg-theme-toggle ag-theme-toggle" data-kg-theme-toggle></button>
                 <button onclick="saveAgentsState(); window.location.href='/app'"
                     class="px-5 py-2.5 bg-white/10 hover:bg-white/20 rounded-xl text-white transition-all text-sm font-semibold flex items-center gap-2 border border-white/10"
                     style="background: rgba(255, 255, 255, 0.1); border-radius: 0.75rem; border: 1px solid rgba(255, 255, 255, 0.1); display: flex; align-items: center; gap: 0.5rem; color: white; padding: 0.625rem 1.25rem; font-size: 0.875rem; font-weight: 600; cursor: pointer; transition: all 0.2s;">
@@ -8422,6 +8709,44 @@
             return layout;
         }
 
+        // Light theme (not this page's native one): axis text in the theme's chart colour, and
+        // the white price line the server bakes into the figures drawn in the theme's ink.
+        // In the native theme this does nothing, so the charts render exactly as before.
+        function _trThemeFigure(data, layout, big) {
+            if (!(window.KaggerTheme && KaggerTheme.get() !== KaggerTheme.native())) return;
+            const c = KaggerTheme.colors();
+            layout.font.color = big ? c.strong : c.text;
+            const isWhite = v => typeof v === 'string' && /^(#fff|#ffffff|white|rgb\(255, ?255, ?255\))$/i.test(v.trim());
+            (data || []).forEach(t => {
+                if (t.line && isWhite(t.line.color)) t.line.color = c.strong;
+                if (t.marker && isWhite(t.marker.color)) t.marker.color = c.strong;
+                if (t.line && /^#fbbf24$/i.test(t.line.color || '')) t.line.color = '#d97706';   // SMA: amber-400 is faint on white
+            });
+        }
+
+        // Charts keep the colours they were plotted with, so re-plot them when the theme switches.
+        if (window.KaggerTheme) KaggerTheme.onChange(function () {
+            if (typeof Plotly === 'undefined' || !currentTechnicalData) return;
+            document.querySelectorAll('#technicalReportContainer .tr-chart.js-plotly-plot').forEach(el => {
+                const panel = el.closest('.tr-gallery-panel');
+                if (panel && !panel.classList.contains('active')) {
+                    // hidden tab: re-plot when it is next shown (plotting at zero width mis-sizes it)
+                    technicalGallery.mounted[panel.id.replace('tr-gallery-', '')] = false;
+                    return;
+                }
+                try { Plotly.purge(el); } catch (_) { }
+                mountTechnicalPlotly(el.id, el.getAttribute('data-chart-key'));
+            });
+            const modal = document.getElementById('trChartModal');
+            if (modal && modal.classList.contains('open')) {
+                const key = document.getElementById('trModalTitle').textContent;
+                const src = Array.from(document.querySelectorAll('#technicalReportContainer .tr-chart'))
+                    .find(el => el.getAttribute('data-chart-key') === key);
+                const btn = src && src.closest('.tr-chart-box').querySelector('.tr-chart-expand');
+                if (btn) openTrChartModal(btn);
+            }
+        });
+
         // Inline SVG icons (no external deps; render crisply at any DPI)
         const TR_EXPAND_ICON = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3m13-5v3a2 2 0 0 1-2 2h-3"/></svg>';
         const TR_CLOSE_ICON = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>';
@@ -8451,6 +8776,7 @@
                 delete layout.width;
                 layout.autosize = true;
                 _styleTrLayout(layout);   // transparent bg, muted font, no gridlines
+                _trThemeFigure(f.data, layout, false);
                 Plotly.newPlot(el, f.data || [], layout, { responsive: true, displayModeBar: false })
                     .then(() => { try { Plotly.Plots.resize(el); } catch (_) { } });
             } catch (e) { console.error('mountTechnicalPlotly', key, e); el.innerHTML = `<div class="tr-chart-missing">Failed to render chart.</div>`; }
@@ -8501,6 +8827,7 @@
                     layout.margin = Object.assign({ t: 28, r: 24, b: 44, l: 58 }, layout.margin || {});
                     _styleTrLayout(layout);
                     layout.font.color = '#c8c8de';   // a touch brighter in the larger view
+                    _trThemeFigure(f.data, layout, true);
                     Plotly.newPlot(host, f.data || [], layout, { responsive: true, displayModeBar: true, displaylogo: false })
                         .then(() => { try { Plotly.Plots.resize(host); } catch (_) { } });
                 } catch (e) { console.error('openTrChartModal', key, e); host.innerHTML = '<div class="tr-chart-missing">Failed to render chart.</div>'; }
@@ -10217,6 +10544,10 @@
 
                 if (!labels.length) return;
 
+                // Light theme (not the page's native one): axis text/grid from the theme palette.
+                const fcAltTheme = !!(window.KaggerTheme && KaggerTheme.get() !== KaggerTheme.native());
+                const fcTc = fcAltTheme ? KaggerTheme.colors() : null;
+
                 fcFootballChart = new Chart(canvas, {
                     type: 'bar',
                     data: { labels, datasets },
@@ -10227,13 +10558,13 @@
                         scales: {
                             x: {
                                 stacked: true,
-                                grid: { color: 'rgba(255,255,255,0.05)' },
-                                ticks: { color: '#a0a0b8', callback: v => '₹' + formatNum(v) }
+                                grid: { color: fcAltTheme ? fcTc.grid : 'rgba(255,255,255,0.05)' },
+                                ticks: { color: fcAltTheme ? fcTc.text : '#a0a0b8', callback: v => '₹' + formatNum(v) }
                             },
                             y: {
                                 stacked: true,
                                 grid: { display: false },
-                                ticks: { color: '#f0f0f5', font: { size: 11, weight: '600' } }
+                                ticks: { color: fcAltTheme ? fcTc.strong : '#f0f0f5', font: { size: 11, weight: '600' } }
                             }
                         },
                         plugins: {
@@ -10275,6 +10606,19 @@
                     }
                 });
             }
+
+            // Re-colour the football field in place when the theme switches (no re-animation,
+            // so a PDF export that briefly flips to the native theme captures a finished chart).
+            if (window.KaggerTheme) KaggerTheme.onChange(function () {
+                if (!fcFootballChart || !fcFootballChart.canvas || !fcFootballChart.canvas.isConnected) return;
+                const alt = KaggerTheme.get() !== KaggerTheme.native();
+                const c = KaggerTheme.colors();
+                const s = fcFootballChart.options.scales;
+                s.x.grid.color = alt ? c.grid : 'rgba(255,255,255,0.05)';
+                s.x.ticks.color = alt ? c.text : '#a0a0b8';
+                s.y.ticks.color = alt ? c.strong : '#f0f0f5';
+                fcFootballChart.update('none');
+            });
 
             // =====================================================
             // MODEL CARDS WITH SLIDERS
@@ -11165,12 +11509,15 @@
                 if (btn) { btn.textContent = '⏳ Generating...'; btn.disabled = true; }
 
                 try {
-                    const canvas = await html2canvas(body, {
+                    // Capture in the page's native theme so the PDF comes out exactly as before.
+                    const capture = () => html2canvas(body, {
                         backgroundColor: '#0a0a0f',
                         scale: 1.5,
                         useCORS: true,
                         logging: false
                     });
+                    const canvas = await (window.KaggerTheme
+                        ? KaggerTheme.withTheme(KaggerTheme.native(), capture) : capture());
 
                     const jsPDF = (window.jspdf && window.jspdf.jsPDF) ? window.jspdf.jsPDF : window.jsPDF;
                     if (!jsPDF) throw new Error("jsPDF library not loaded");

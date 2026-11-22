@@ -5,6 +5,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>My Portfolio — Kagger.AI</title>
+    <script src="/kagger_theme.js"></script>
+    <link rel="stylesheet" href="/kagger_theme.css">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
     <link
@@ -1104,14 +1106,828 @@
         .count-up-anim {
             animation: countPulse 0.3s ease-out;
         }
+
+        /* ===== Responsive: phones, tablets and browser zoom (desktop >= 1280px unchanged) ===== */
+        .pf-menu-btn,
+        .pf-mobile-menu {
+            display: none;
+        }
+
+        @media (max-width: 767px) {
+            .pf-menu-btn {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: 2.25rem;
+                height: 2.25rem;
+                flex: none;
+                border-radius: 10px;
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                background: transparent;
+                color: #cbd5e1;
+                cursor: pointer;
+            }
+
+            .pf-menu-btn[aria-expanded="true"] {
+                background: rgba(255, 255, 255, 0.08);
+            }
+
+            .pf-mobile-menu.kg-open {
+                display: block;
+                position: absolute;
+                top: 100%;
+                left: 0;
+                right: 0;
+                padding: 0.5rem 0.75rem 0.75rem;
+                background: #0f1626;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+                box-shadow: 0 16px 32px rgba(0, 0, 0, 0.45);
+            }
+
+            .pf-mobile-menu a {
+                display: flex;
+                align-items: center;
+                min-height: 44px;
+                padding: 0 0.85rem;
+                border-radius: 10px;
+                font-size: 0.95rem;
+                font-weight: 500;
+            }
+
+            .pf-mobile-menu a.active {
+                background: rgba(34, 197, 94, 0.08);
+            }
+
+            .pf-mobile-menu-email {
+                margin: 0.35rem 0.85rem 0;
+                padding-top: 0.6rem;
+                border-top: 1px solid rgba(255, 255, 255, 0.08);
+                font-size: 0.8rem;
+                color: #94a3b8;
+                overflow-wrap: anywhere;
+            }
+
+            .pf-mobile-menu-email:empty {
+                display: none;
+            }
+
+            /* Hero metrics strip: tighter cells so more fit before it scrolls */
+            .hero-metric {
+                padding: 0.6rem 0.85rem;
+                white-space: nowrap;
+            }
+
+            .hero-metric-label {
+                font-size: 0.6rem;
+            }
+
+            /* Wide tables scroll inside their card; tighter cells, no squashed headers */
+            .holdings-table thead th,
+            .holdings-table tbody td {
+                padding: 0.65rem 0.85rem;
+            }
+
+            .holdings-table thead th {
+                white-space: nowrap;
+            }
+
+            /* Brief header: title, buttons and alpha wrap instead of overflowing */
+            .brief-meta {
+                flex-wrap: wrap;
+                gap: 0.75rem;
+            }
+
+            .brief-meta > div:last-child {
+                flex-wrap: wrap;
+            }
+
+            .brief-content {
+                overflow-wrap: anywhere;
+            }
+
+            .brief-content table {
+                display: block;
+                max-width: 100%;
+                overflow-x: auto;
+            }
+
+            .info-tip p {
+                font-size: 0.75rem;
+            }
+        }
+
+        @media (max-width: 719px) {
+
+            /* 4 tabs as a 2 x 2 grid instead of four squashed 3-line columns */
+            .portfolio-tabs {
+                display: grid;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            .portfolio-tab {
+                padding: 0.6rem 0.5rem;
+                font-size: 0.8rem;
+                text-align: center;
+                min-height: 2.75rem;
+            }
+        }
+
+        @media (max-width: 639px) {
+            .pf-term-row {
+                flex-wrap: wrap;
+                row-gap: 0.3rem;
+                column-gap: 0.75rem;
+            }
+
+            .pf-term-left {
+                gap: 0.6rem;
+            }
+
+            .terminal-brand {
+                font-size: 0.95rem;
+                letter-spacing: 0.1em;
+                white-space: nowrap;
+            }
+
+            .market-status {
+                white-space: nowrap;
+            }
+
+            .pf-perf-head {
+                flex-wrap: wrap;
+                gap: 0.75rem;
+            }
+
+            /* Hero metrics: 3 + 2 cells instead of a strip that cuts off "Beta" */
+            .pf-hero-strip {
+                flex-wrap: wrap;
+                row-gap: 0.25rem;
+            }
+
+            .pf-hero-strip .hero-divider {
+                display: none;
+            }
+
+            .pf-hero-strip .hero-metric {
+                flex: 1 0 30%;
+            }
+
+            /* Section titles with a side note: the note drops below instead of squeezing */
+            #portfolioHealthSection > .flex:first-child,
+            #peerSwapSection > .flex:first-child {
+                flex-wrap: wrap;
+                row-gap: 0.15rem;
+            }
+
+            /* Concentration: score + bar on one line, badge below */
+            #concentrationContainer > .flex:first-child {
+                flex-wrap: wrap;
+                row-gap: 0.75rem;
+            }
+
+            #concentrationContainer > .flex:first-child > .flex-1 {
+                flex-basis: 100%;
+            }
+
+            .perf-timeframe-btn {
+                padding: 0.4rem 0.7rem;
+            }
+
+            #peerSwapGrid td.whitespace-nowrap,
+            #peerSwapGrid th.whitespace-nowrap {
+                white-space: normal;
+            }
+
+            /* AI chat: roomier bubbles, one scrollable row of quick actions */
+            .ai-chat-messages {
+                padding: 1rem;
+            }
+
+            .ai-msg {
+                max-width: 92%;
+            }
+
+            .ai-quick-actions {
+                flex-wrap: nowrap;
+                overflow-x: auto;
+                padding: 0 1rem 0.75rem;
+                -webkit-overflow-scrolling: touch;
+            }
+
+            .ai-chat-input-bar {
+                padding: 0.75rem 1rem;
+            }
+
+            .toast {
+                left: 1rem;
+                right: 1rem;
+                bottom: 1rem;
+                text-align: center;
+            }
+        }
+
+        /* Holdings table (scrolls inside its card below desktop): keep "+₹18,474" etc. on one line */
+        @media (max-width: 1279px) {
+            #holdingsTableBody td:nth-child(-n+10):not(:first-child) {
+                white-space: nowrap;
+            }
+        }
+
+        /* Add Holding + CSV cards stack below 1024px */
+        @media (max-width: 1023px) {
+            .grid.pf-add-grid {
+                grid-template-columns: minmax(0, 1fr);
+            }
+
+            .pf-add-grid > div {
+                grid-column: auto;
+            }
+        }
+
+        /* Add Holding form: search on its own row, then qty / price / date (no truncated fields) */
+        @media (min-width: 640px) and (max-width: 1279px) {
+            .grid.pf-add-form {
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+            }
+
+            .pf-add-form > div:first-child {
+                grid-column: 1 / -1;
+            }
+        }
+
+        @media (max-width: 1023px),
+        (max-height: 640px) {
+            #techChartModal {
+                overflow-y: auto;
+            }
+        }
+
+        /* Bigger touch targets for the tiny "i" info buttons */
+        @media (pointer: coarse) {
+
+            .info-btn,
+            #portfolioHealthSection .glass-card button,
+            #dashboardSection h2 button {
+                position: relative;
+            }
+
+            .info-btn::after,
+            #portfolioHealthSection .glass-card button::after,
+            #dashboardSection h2 button::after {
+                content: '';
+                position: absolute;
+                inset: -10px;
+            }
+        }
+
+        /* ===== Theme: light overrides (page is designed dark; see kagger_theme.css) ===== */
+        html[data-theme="light"] body {
+            background: var(--kg-bg);
+            color: var(--kg-text);
+        }
+
+        html[data-theme="light"] ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+        }
+
+        /* Top nav: the dark-green header bar of /app */
+        html[data-theme="light"] .nav-bar {
+            background: var(--kg-header-bg);
+            border-bottom-color: var(--kg-header-border);
+            box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
+        }
+
+        html[data-theme="light"] .nav-bar .nav-link {
+            color: var(--kg-header-muted);
+        }
+
+        html[data-theme="light"] .nav-bar .nav-link:hover {
+            color: #ffffff;
+        }
+
+        html[data-theme="light"] .nav-bar .nav-link.active,
+        html[data-theme="light"] .nav-bar .text-green-400 {
+            color: #4ade80;
+        }
+
+        html[data-theme="light"] .nav-bar #userEmailDisplay,
+        html[data-theme="light"] .nav-bar .kg-theme-toggle,
+        html[data-theme="light"] .nav-bar .pf-menu-btn {
+            color: var(--kg-header-muted);
+        }
+
+        html[data-theme="light"] .nav-bar .pf-menu-btn {
+            border-color: var(--kg-header-chip-border);
+        }
+
+        html[data-theme="light"] .nav-bar .btn-secondary {
+            background: var(--kg-header-chip);
+            border-color: var(--kg-header-chip-border);
+            color: var(--kg-header-muted);
+        }
+
+        html[data-theme="light"] .nav-bar .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.16);
+            color: #ffffff;
+        }
+
+        html[data-theme="light"] .nav-bar .pf-mobile-menu {
+            background: var(--kg-surface);
+            border-bottom-color: var(--kg-border);
+            box-shadow: var(--kg-shadow-lg);
+        }
+
+        html[data-theme="light"] .nav-bar .pf-mobile-menu .nav-link {
+            color: var(--kg-text-2);
+        }
+
+        html[data-theme="light"] .nav-bar .pf-mobile-menu .nav-link:hover {
+            color: var(--kg-text-strong);
+            background: var(--kg-surface-hover);
+        }
+
+        html[data-theme="light"] .nav-bar .pf-mobile-menu .nav-link.active {
+            color: var(--kg-primary-strong);
+            background: var(--kg-primary-tint);
+        }
+
+        html[data-theme="light"] .nav-bar .pf-mobile-menu-email {
+            color: var(--kg-muted);
+            border-top-color: var(--kg-border);
+        }
+
+        /* Terminal status bar + ticker tape */
+        html[data-theme="light"] .terminal-header {
+            background: var(--kg-surface);
+            border-bottom-color: var(--kg-border);
+        }
+
+        html[data-theme="light"] .terminal-brand {
+            color: #15803d;
+            text-shadow: none;
+        }
+
+        html[data-theme="light"] .terminal-clock {
+            color: var(--kg-muted);
+        }
+
+        html[data-theme="light"] .market-status.open {
+            color: #15803d;
+            background: #dcfce7;
+            border-color: #bbf7d0;
+        }
+
+        html[data-theme="light"] .market-status.closed {
+            color: #b91c1c;
+            background: #fee2e2;
+            border-color: #fecaca;
+        }
+
+        html[data-theme="light"] .status-dot.open {
+            background: #16a34a;
+        }
+
+        html[data-theme="light"] .status-dot.closed {
+            background: #dc2626;
+        }
+
+        html[data-theme="light"] .ticker-tape {
+            background: var(--kg-subtle);
+            border-color: var(--kg-border);
+        }
+
+        html[data-theme="light"] .ticker-tape::before {
+            background: linear-gradient(90deg, var(--kg-subtle), transparent);
+        }
+
+        html[data-theme="light"] .ticker-tape::after {
+            background: linear-gradient(270deg, var(--kg-subtle), transparent);
+        }
+
+        html[data-theme="light"] .ticker-item {
+            border-right-color: var(--kg-border);
+        }
+
+        html[data-theme="light"] .ticker-item:hover {
+            background: rgba(15, 23, 42, 0.03);
+        }
+
+        html[data-theme="light"] .ticker-sym {
+            color: var(--kg-text-strong);
+        }
+
+        html[data-theme="light"] .ticker-price {
+            color: var(--kg-text-3);
+        }
+
+        html[data-theme="light"] .ticker-item span[style*="#4ade80"] {
+            color: #15803d !important;
+        }
+
+        html[data-theme="light"] .ticker-item span[style*="#f87171"] {
+            color: #dc2626 !important;
+        }
+
+        /* Cards */
+        html[data-theme="light"] .glass-card,
+        html[data-theme="light"] .glass-card-bright {
+            background: var(--kg-surface);
+            border-color: var(--kg-border);
+            box-shadow: var(--kg-shadow);
+            backdrop-filter: none;
+        }
+
+        html[data-theme="light"] .glass-card:hover,
+        html[data-theme="light"] .glass-card-bright:hover {
+            border-color: rgba(22, 163, 74, 0.28);
+            box-shadow: var(--kg-shadow), 0 0 0 3px rgba(22, 163, 74, 0.05);
+        }
+
+        html[data-theme="light"] .stat-card {
+            background: linear-gradient(135deg, rgba(22, 163, 74, 0.06) 0%, #ffffff 100%);
+            border-color: rgba(22, 163, 74, 0.2);
+        }
+
+        html[data-theme="light"] .stat-card.loss {
+            background: linear-gradient(135deg, rgba(220, 38, 38, 0.06) 0%, #ffffff 100%);
+            border-color: rgba(220, 38, 38, 0.2);
+        }
+
+        /* Hero value card */
+        html[data-theme="light"] .hero-value-card {
+            background: linear-gradient(135deg, #ffffff 0%, #f0fdf4 100%);
+            border-color: #bbf7d0;
+            box-shadow: var(--kg-shadow);
+        }
+
+        html[data-theme="light"] .hero-value-card::before {
+            background: linear-gradient(90deg, transparent, #16a34a, transparent);
+        }
+
+        html[data-theme="light"] .hero-value {
+            color: var(--kg-text-strong);
+        }
+
+        html[data-theme="light"] .hero-label,
+        html[data-theme="light"] .hero-metric-label {
+            color: var(--kg-muted);
+        }
+
+        html[data-theme="light"] .hero-metric-value {
+            color: var(--kg-text);
+        }
+
+        html[data-theme="light"] .hero-metric-value[style*="74, 222, 128"] {
+            color: #15803d !important;
+        }
+
+        html[data-theme="light"] .hero-metric-value[style*="248, 113, 113"] {
+            color: #dc2626 !important;
+        }
+
+        html[data-theme="light"] .hero-divider {
+            background: var(--kg-border);
+        }
+
+        /* Gauges: the empty track of the arc */
+        html[data-theme="light"] .gauge-svg path[stroke="rgba(255,255,255,0.06)"] {
+            stroke: #e2e8f0;
+        }
+
+        /* Tabs */
+        html[data-theme="light"] .portfolio-tabs {
+            background: var(--kg-surface);
+            border-color: var(--kg-border);
+            box-shadow: var(--kg-shadow);
+        }
+
+        html[data-theme="light"] .portfolio-tab {
+            color: var(--kg-muted);
+        }
+
+        html[data-theme="light"] .portfolio-tab:hover {
+            color: var(--kg-text-2);
+            background: var(--kg-subtle);
+        }
+
+        html[data-theme="light"] .portfolio-tab.active {
+            color: var(--kg-primary-strong);
+            background: var(--kg-primary-soft);
+            border-color: #bbf7d0;
+            box-shadow: 0 1px 2px rgba(22, 163, 74, 0.15);
+        }
+
+        html[data-theme="light"] .portfolio-tab:focus-visible,
+        html[data-theme="light"] .perf-timeframe-btn:focus-visible,
+        html[data-theme="light"] .ai-quick-btn:focus-visible {
+            outline: 2px solid var(--kg-focus);
+            outline-offset: 2px;
+        }
+
+        /* Tables */
+        html[data-theme="light"] .holdings-table thead th {
+            background: var(--kg-subtle);
+            color: var(--kg-muted);
+            border-bottom-color: var(--kg-border);
+        }
+
+        html[data-theme="light"] .holdings-table tbody td {
+            border-bottom-color: #f1f5f9;
+        }
+
+        html[data-theme="light"] .holdings-table tbody tr:nth-child(even) {
+            background: rgba(15, 23, 42, 0.015);
+        }
+
+        html[data-theme="light"] .holdings-table tbody tr:hover {
+            background: rgba(22, 163, 74, 0.05);
+        }
+
+        /* Forms and buttons */
+        html[data-theme="light"] .input-field {
+            background: var(--kg-input-bg);
+            border-color: var(--kg-input-border);
+            color: var(--kg-text);
+        }
+
+        html[data-theme="light"] .input-field:focus {
+            border-color: #16a34a;
+            box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.18);
+        }
+
+        html[data-theme="light"] .input-field::placeholder {
+            color: var(--kg-muted);
+        }
+
+        html[data-theme="light"] .btn-primary,
+        html[data-theme="light"] .ai-chat-send-btn {
+            background: var(--kg-gradient);
+        }
+
+        html[data-theme="light"] .btn-primary:disabled,
+        html[data-theme="light"] .ai-chat-send-btn:disabled {
+            opacity: 1;
+            background: var(--kg-raised);
+            color: var(--kg-muted);
+            box-shadow: none;
+        }
+
+        html[data-theme="light"] .btn-secondary {
+            background: var(--kg-surface);
+            border-color: var(--kg-border-strong);
+            color: var(--kg-text-2);
+        }
+
+        html[data-theme="light"] .btn-secondary:hover {
+            background: var(--kg-surface-hover);
+            color: var(--kg-text-strong);
+        }
+
+        html[data-theme="light"] .btn-secondary:disabled {
+            color: var(--kg-muted);
+        }
+
+        html[data-theme="light"] .btn-danger {
+            background: rgba(220, 38, 38, 0.06);
+            color: #dc2626;
+            border-color: rgba(220, 38, 38, 0.25);
+        }
+
+        html[data-theme="light"] .btn-danger:hover {
+            background: rgba(220, 38, 38, 0.12);
+        }
+
+        html[data-theme="light"] .dropzone {
+            border-color: var(--kg-border-strong);
+            background: var(--kg-subtle);
+        }
+
+        html[data-theme="light"] .dropzone:hover,
+        html[data-theme="light"] .dropzone.dragover {
+            border-color: #16a34a;
+            background: rgba(22, 163, 74, 0.05);
+        }
+
+        html[data-theme="light"] .autocomplete-dropdown {
+            background: var(--kg-surface);
+            border-color: var(--kg-border);
+            box-shadow: var(--kg-shadow-lg);
+        }
+
+        html[data-theme="light"] .autocomplete-item {
+            border-bottom-color: #f1f5f9;
+        }
+
+        html[data-theme="light"] .autocomplete-item:hover {
+            background: var(--kg-primary-tint);
+        }
+
+        html[data-theme="light"] .spinner:not(.border-white) {
+            border-color: var(--kg-border);
+            border-top-color: #16a34a;
+        }
+
+        html[data-theme="light"] #addStatus .spinner,
+        html[data-theme="light"] .btn-primary:disabled .spinner {
+            border-color: var(--kg-border-strong);
+            border-top-color: transparent;
+        }
+
+        /* Badges and bars */
+        html[data-theme="light"] .badge-green {
+            background: #dcfce7;
+            color: #15803d;
+        }
+
+        html[data-theme="light"] .badge-red {
+            background: #fee2e2;
+            color: #b91c1c;
+        }
+
+        html[data-theme="light"] .badge-yellow {
+            background: #fef3c7;
+            color: #b45309;
+        }
+
+        html[data-theme="light"] .badge-blue {
+            background: #dbeafe;
+            color: #1d4ed8;
+        }
+
+        html[data-theme="light"] .concentration-bar {
+            background: var(--kg-raised);
+        }
+
+        html[data-theme="light"] .perf-timeframe-btn {
+            border-color: var(--kg-border);
+            color: var(--kg-muted);
+        }
+
+        html[data-theme="light"] .perf-timeframe-btn:hover {
+            border-color: #86efac;
+            color: var(--kg-text-2);
+        }
+
+        html[data-theme="light"] .perf-timeframe-btn.active {
+            border-color: #86efac;
+            background: #dcfce7;
+            color: #15803d;
+        }
+
+        html[data-theme="light"] #peerSwapGrid .text-emerald-400\/70 {
+            color: rgba(4, 120, 87, 0.9);
+        }
+
+        /* Info buttons, tooltips and popovers */
+        html[data-theme="light"] .info-btn {
+            background: #eef2ff;
+            color: #4f46e5;
+            border-color: #c7d2fe;
+        }
+
+        html[data-theme="light"] .info-btn:hover {
+            background: #e0e7ff;
+            color: #3730a3;
+        }
+
+        html[data-theme="light"] .info-tip {
+            background: var(--kg-surface);
+            border-color: var(--kg-border);
+            box-shadow: var(--kg-shadow-lg);
+        }
+
+        html[data-theme="light"] .info-tip h4 {
+            color: #4338ca;
+        }
+
+        html[data-theme="light"] .info-tip p {
+            color: var(--kg-text-3);
+        }
+
+        html[data-theme="light"] .metric-popover {
+            background: var(--kg-surface) !important;
+            border-color: var(--kg-border) !important;
+            color: var(--kg-text-3) !important;
+            box-shadow: var(--kg-shadow-lg) !important;
+        }
+
+        /* Modals */
+        html[data-theme="light"] .modal-overlay,
+        html[data-theme="light"] #techChartModal {
+            background-color: var(--kg-overlay);
+        }
+
+        html[data-theme="light"] .toast-success {
+            background: rgba(22, 163, 74, 0.95);
+        }
+
+        html[data-theme="light"] .toast-error {
+            background: rgba(220, 38, 38, 0.95);
+        }
+
+        /* Pre / post-market briefs (server HTML) */
+        html[data-theme="light"] .brief-content {
+            color: var(--kg-text-2);
+        }
+
+        html[data-theme="light"] .brief-content h3,
+        html[data-theme="light"] .brief-content strong {
+            color: var(--kg-text-strong);
+        }
+
+        html[data-theme="light"] .brief-content li {
+            background: var(--kg-subtle);
+            border-left-color: rgba(22, 163, 74, 0.45);
+        }
+
+        html[data-theme="light"] .brief-meta {
+            border-bottom-color: var(--kg-border);
+        }
+
+        html[data-theme="light"] .brief-skeleton .skel-block {
+            background: var(--kg-raised);
+        }
+
+        html[data-theme="light"] #postmarketSummaryBar > div {
+            background: var(--kg-subtle);
+            box-shadow: inset 0 0 0 1px var(--kg-border);
+        }
+
+        /* Inline colours from the server / JS templates, darkened for a white background */
+        html[data-theme="light"] :is(.brief-content, #postmarketSummaryBar, #postmarketAlpha) :is([style*="#22c55e"], [style*="#4ade80"], [style*="#10b981"], [style*="#34d399"]) {
+            color: #15803d !important;
+        }
+
+        html[data-theme="light"] :is(.brief-content, #postmarketSummaryBar, #postmarketAlpha) :is([style*="#ef4444"], [style*="#f87171"]) {
+            color: #dc2626 !important;
+        }
+
+        html[data-theme="light"] .brief-content :is([style*="#f59e0b"], [style*="#fbbf24"], [style*="#eab308"], [style*="#facc15"]) {
+            color: #b45309 !important;
+        }
+
+        html[data-theme="light"] .brief-content :is([style*="color:#fff"], [style*="color: #fff"], [style*="color:white"], [style*="color: white"], [style*="#e2e8f0"], [style*="#f1f5f9"], [style*="#cbd5e1"]) {
+            color: var(--kg-text) !important;
+        }
+
+        html[data-theme="light"] .brief-content :is([style*="#94a3b8"], [style*="#64748b"]) {
+            color: var(--kg-muted) !important;
+        }
+
+        /* AI Portfolio Manager chat */
+        html[data-theme="light"] .ai-msg.user {
+            background: linear-gradient(135deg, #dcfce7 0%, #f0fdf4 100%);
+            border-color: #bbf7d0;
+            color: var(--kg-text);
+        }
+
+        html[data-theme="light"] .ai-msg.assistant {
+            background: var(--kg-subtle);
+            border-color: var(--kg-border);
+            color: var(--kg-text-2);
+        }
+
+        html[data-theme="light"] .ai-msg.assistant :is(h1, h2, h3, strong) {
+            color: var(--kg-text-strong);
+        }
+
+        html[data-theme="light"] .ai-msg.assistant code {
+            background: var(--kg-raised);
+            color: #0369a1;
+        }
+
+        html[data-theme="light"] .ai-chat-input-bar {
+            background: var(--kg-subtle);
+            border-top-color: var(--kg-border);
+        }
+
+        html[data-theme="light"] .ai-quick-btn {
+            background: var(--kg-surface);
+            border-color: var(--kg-border);
+            color: var(--kg-text-3);
+        }
+
+        html[data-theme="light"] .ai-quick-btn:hover {
+            background: var(--kg-primary-tint);
+            border-color: #bbf7d0;
+            color: var(--kg-primary-strong);
+        }
+
+        html[data-theme="light"] .ai-typing span {
+            background: var(--kg-faint);
+        }
+
+        html[data-theme="light"] .ai-welcome-icon {
+            background: linear-gradient(135deg, #dcfce7 0%, #e0e7ff 100%);
+        }
     </style>
-  <script src="scale_ui.js"></script>
+  <script src="/scale_ui.js"></script>
 </head>
 
-<body>
+<body class="kg-native-dark">
 
     <!-- ==================== NAV BAR ==================== -->
-    <nav class="nav-bar px-6 py-3.5 flex items-center justify-between sticky top-0 z-50">
+    <nav class="nav-bar kg-on-color px-4 sm:px-6 py-3.5 flex items-center justify-between sticky top-0 z-50">
         <div class="flex items-center gap-8">
             <a href="/app" class="flex items-center gap-2">
                 <img src="/kagger_logo_icon.png" alt="Kagger" class="w-8 h-8 rounded-lg">
@@ -1124,16 +1940,32 @@
                 <a href="/blog" class="nav-link">Blog</a>
             </div>
         </div>
-        <div class="flex items-center gap-4">
-            <span id="userEmailDisplay" class="text-xs text-slate-400"></span>
+        <div class="flex items-center gap-3 sm:gap-4">
+            <span id="userEmailDisplay" class="hidden sm:inline text-xs text-slate-400"></span>
+            <button class="kg-theme-toggle kg-theme-toggle--sm text-slate-400" data-kg-theme-toggle></button>
             <button onclick="logout()" class="btn-secondary text-xs py-1.5 px-3">Logout</button>
+            <button type="button" class="pf-menu-btn" data-kg-menu-toggle="pfNavMenu" aria-controls="pfNavMenu"
+                aria-expanded="false" aria-label="Menu">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" aria-hidden="true">
+                    <path d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+            </button>
+        </div>
+        <!-- Mobile menu (below md the inline links are hidden) -->
+        <div id="pfNavMenu" class="pf-mobile-menu">
+            <a href="/app" class="nav-link">Research</a>
+            <a href="/portfolio" class="nav-link active">Portfolio</a>
+            <a href="/news" class="nav-link">News</a>
+            <a href="/blog" class="nav-link">Blog</a>
+            <p id="pfNavMenuEmail" class="pf-mobile-menu-email"></p>
         </div>
     </nav>
 
     <!-- ==================== TERMINAL HEADER ==================== -->
     <div class="terminal-header">
-        <div class="max-w-[90rem] mx-auto px-4 sm:px-6 flex items-center justify-between">
-            <div class="flex items-center gap-4">
+        <div class="pf-term-row max-w-[90rem] mx-auto px-4 sm:px-6 flex items-center justify-between">
+            <div class="pf-term-left flex items-center gap-4">
                 <span class="terminal-brand">Kagger Terminal</span>
                 <div id="marketStatusBadge" class="market-status closed">
                     <span id="marketStatusDot" class="status-dot closed"></span>
@@ -1194,7 +2026,7 @@
                     </div>
                     <!-- Compact metrics strip -->
                     <div
-                        class="flex items-center justify-start gap-0 overflow-x-auto border-t border-white/5 pt-3 -mx-2">
+                        class="pf-hero-strip flex items-center justify-start gap-0 overflow-x-auto border-t border-white/5 pt-3 -mx-2">
                         <div class="hero-metric">
                             <div id="totalInvested" class="hero-metric-value">—</div>
                             <div class="hero-metric-label">Invested</div>
@@ -1299,7 +2131,7 @@
             </div>
 
             <!-- ==================== ADD HOLDING + CSV UPLOAD ==================== -->
-            <div class="grid md:grid-cols-3 gap-6 mb-8">
+            <div class="pf-add-grid grid md:grid-cols-3 gap-6 mb-8">
                 <!-- Manual Add Section -->
                 <div class="md:col-span-2 glass-card p-6 fade-in">
                     <h2 class="text-base font-semibold text-white mb-4 flex items-center gap-2">
@@ -1309,7 +2141,7 @@
                         </svg>
                         Add Holding
                     </h2>
-                    <div class="grid grid-cols-1 sm:grid-cols-5 gap-3">
+                    <div class="pf-add-form grid grid-cols-1 sm:grid-cols-5 gap-3">
                         <div class="relative sm:col-span-2">
                             <input type="text" id="stockSearchInput" class="input-field w-full"
                                 placeholder="Search stock..." autocomplete="off">
@@ -1398,7 +2230,7 @@
 
             <!-- ==================== PERFORMANCE CHART ==================== -->
             <div id="perfChartSection" class="glass-card p-6 mb-8 fade-in-up stagger-4" style="display:none;">
-                <div class="flex items-center justify-between mb-4">
+                <div class="pf-perf-head flex items-center justify-between mb-4">
                     <h2 class="text-base font-semibold text-white flex items-center gap-2">
                         <svg class="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -2686,7 +3518,7 @@
                     values: industry_data.map(i => i.value),
                     textinfo: 'label+percent parent',
                     textfont: { size: 14, color: '#fff' },
-                    marker: { colors: colors.slice(0, industry_data.length), line: { width: 1, color: '#0f172a' } },
+                    marker: { colors: colors.slice(0, industry_data.length), line: { width: 1, color: pfTreemapLine() } },
                     hovertemplate: '<b>%{label}</b><br>₹%{value:,.0f}<br>%{percentParent:.1%}<extra></extra>'
                 }], {
                     paper_bgcolor: 'transparent',
@@ -2959,7 +3791,7 @@
                 };
 
                 // Merge the layout configs
-                fig.layout = { ...fig.layout, ...darkTemplate };
+                fig.layout = pfThemeLayout('tech', { ...fig.layout, ...darkTemplate });
 
                 // Render plotly
                 Plotly.newPlot('techChartContainer', fig.data, fig.layout, { responsive: true, displayModeBar: false });
@@ -3136,7 +3968,7 @@
                         values: values,
                         textinfo: 'label+percent parent',
                         textfont: { size: 13, color: '#fff' },
-                        marker: { colors: colors.slice(0, labels.length), line: { width: 1, color: '#0f172a' } },
+                        marker: { colors: colors.slice(0, labels.length), line: { width: 1, color: pfTreemapLine() } },
                         hovertemplate: '<b>%{label}</b><br>₹%{value:,.0f}<br>%{percentParent:.1%}<extra></extra>'
                     }], {
                         paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
@@ -3527,7 +4359,7 @@
                     });
                 });
 
-                Plotly.newPlot('perfChart', traces, {
+                Plotly.newPlot('perfChart', traces, pfThemeLayout('perf', {
                     paper_bgcolor: 'transparent',
                     plot_bgcolor: 'transparent',
                     font: { family: 'JetBrains Mono, monospace', color: '#64748b', size: 10 },
@@ -3551,7 +4383,7 @@
                         font: { size: 10 }
                     },
                     hovermode: 'x unified'
-                }, { responsive: true, displayModeBar: false });
+                }), { responsive: true, displayModeBar: false });
             } catch (e) {
                 console.error('Perf chart error:', e);
                 document.getElementById('perfChart').innerHTML = '<p class="text-sm text-slate-500 text-center py-8">Could not load performance data</p>';
@@ -3577,6 +4409,8 @@
             const topPos = rect.bottom + window.scrollY + 8;
             let rightPos = window.innerWidth - rect.right;
             if (rightPos < 10) rightPos = 10;
+            // Narrow screens: leave room for the full 280px popover inside the viewport
+            if (window.innerWidth - rightPos < 290) rightPos = Math.max(10, window.innerWidth - 290);
 
             pop.style.cssText = `position:absolute;top:${topPos}px;right:${rightPos}px;z-index:9999;background:rgba(15,23,42,0.98);border:1px solid rgba(100,116,139,0.3);border-radius:8px;padding:12px;max-width:280px;font-size:12px;color:#94a3b8;box-shadow:0 8px 24px rgba(0,0,0,0.5);`;
 
@@ -3915,6 +4749,91 @@
                 item.classList.toggle('bg-slate-700', i === aiChatMentionIndex); 
             });
         }
+
+        // ================================================================
+        // THEME: chart colours (light/dark). In the page's native (dark) theme
+        // charts are built exactly as before; otherwise they take the palette
+        // from KaggerTheme.colors() and are re-coloured on every theme switch.
+        // ================================================================
+        function pfTheme() {
+            const K = window.KaggerTheme;
+            const native = !K || K.get() === K.native();
+            return { native, c: K ? K.colors() : null };
+        }
+
+        function pfTreemapLine() {
+            const { native, c } = pfTheme();
+            return native ? '#0f172a' : c.surface;
+        }
+
+        const PF_CHART_NATIVE = {
+            perf: {
+                'font.color': '#64748b',
+                'xaxis.gridcolor': 'rgba(255,255,255,0.03)', 'xaxis.linecolor': 'rgba(255,255,255,0.06)',
+                'yaxis.gridcolor': 'rgba(255,255,255,0.03)', 'yaxis.linecolor': 'rgba(255,255,255,0.06)',
+                'yaxis.zerolinecolor': 'rgba(255,255,255,0.08)',
+                'hoverlabel.bgcolor': null, 'hoverlabel.bordercolor': null, 'hoverlabel.font.color': null
+            },
+            tech: {
+                'font.color': '#e2e8f0',
+                'xaxis.gridcolor': 'rgba(255,255,255,0.1)', 'xaxis.linecolor': 'rgba(255,255,255,0.2)',
+                'yaxis.gridcolor': 'rgba(255,255,255,0.1)', 'yaxis.linecolor': 'rgba(255,255,255,0.2)',
+                'hoverlabel.bgcolor': '#1e293b', 'hoverlabel.bordercolor': '#475569', 'hoverlabel.font.color': '#f1f5f9'
+            }
+        };
+
+        // Flat Plotly attribute updates for the active theme.
+        function pfChartUpdates(kind) {
+            const { native, c } = pfTheme();
+            if (native) return PF_CHART_NATIVE[kind];
+            return {
+                'font.color': kind === 'perf' ? c.muted : c.text,
+                'xaxis.gridcolor': c.grid, 'xaxis.linecolor': c.border,
+                'yaxis.gridcolor': c.grid, 'yaxis.linecolor': c.border,
+                ...(kind === 'perf' ? { 'yaxis.zerolinecolor': '#cbd5e1' } : {}),
+                'hoverlabel.bgcolor': c.surface, 'hoverlabel.bordercolor': c.border, 'hoverlabel.font.color': c.strong
+            };
+        }
+
+        // Layout passed to Plotly.newPlot: unchanged in the native theme.
+        function pfThemeLayout(kind, layout) {
+            if (pfTheme().native) return layout;
+            const upd = pfChartUpdates(kind);
+            Object.keys(upd).forEach(path => {
+                const keys = path.split('.');
+                let o = layout;
+                for (let i = 0; i < keys.length - 1; i++) {
+                    if (!o[keys[i]] || typeof o[keys[i]] !== 'object') o[keys[i]] = {};
+                    o = o[keys[i]];
+                }
+                o[keys[keys.length - 1]] = upd[path];
+            });
+            return layout;
+        }
+
+        if (window.KaggerTheme) {
+            KaggerTheme.onChange(() => {
+                if (typeof Plotly === 'undefined') return;
+                ['industryChart', 'whatIfChart'].forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el && el.data && el.data.length) Plotly.restyle(el, { 'marker.line.color': pfTreemapLine() });
+                });
+                const perf = document.getElementById('perfChart');
+                if (perf && perf.data && perf.layout) Plotly.relayout(perf, pfChartUpdates('perf'));
+                const tech = document.getElementById('techChartContainer');
+                if (tech && tech.data && tech.layout) Plotly.relayout(tech, pfChartUpdates('tech'));
+            });
+        }
+
+        // Mobile menu shows the signed-in email (the header hides it on phones).
+        (function () {
+            const src = document.getElementById('userEmailDisplay');
+            const dst = document.getElementById('pfNavMenuEmail');
+            if (!src || !dst) return;
+            const sync = () => { dst.textContent = src.textContent; };
+            new MutationObserver(sync).observe(src, { childList: true, characterData: true, subtree: true });
+            sync();
+        })();
     </script>
 
 </body>

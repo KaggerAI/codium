@@ -5,6 +5,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Blog - Kagger AI</title>
+    <script src="/kagger_theme.js"></script>
+    <link rel="stylesheet" href="/kagger_theme.css">
     <meta name="description"
         content="Expert insights on Indian stock markets, investment strategies, and financial analysis powered by AI research.">
     <script src="https://cdn.tailwindcss.com"></script>
@@ -105,11 +107,47 @@
         .animate-fadeIn {
             animation: fadeIn 0.4s ease-out;
         }
+
+        /* ===== Theme: light overrides (page is designed dark; see kagger_theme.css) ===== */
+        html[data-theme="light"] .gradient-bg {
+            background: radial-gradient(ellipse 80% 35% at 50% 0%, #dcfce7 0%, rgba(220, 252, 231, 0) 100%), #f1f5f9;
+        }
+        html[data-theme="light"] .blog-content h2 { color: #0f172a; border-bottom-color: #e2e8f0; }
+        html[data-theme="light"] .blog-content h3 { color: #1e293b; }
+        html[data-theme="light"] .blog-content p,
+        html[data-theme="light"] .blog-content ul,
+        html[data-theme="light"] .blog-content ol { color: #334155; }
+        html[data-theme="light"] .blog-content strong { color: #0f172a; }
+        html[data-theme="light"] .blog-content em { color: #047857; }
+        html[data-theme="light"] .blog-content blockquote {
+            border-left-color: #16a34a;
+            background: #f0fdf4;
+            color: #334155;
+        }
+        html[data-theme="light"] .blog-content blockquote strong { color: #166534; }
+        html[data-theme="light"] .blog-content a { color: #15803d; }
+        html[data-theme="light"] .blog-content a:hover { color: #166534; }
+        html[data-theme="light"] .card-hover { box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06); }
+        html[data-theme="light"] .card-hover:hover { box-shadow: 0 20px 40px -20px rgba(15, 23, 42, 0.25); }
+        html[data-theme="light"] .back-btn {
+            background: #fff !important;
+            border-color: #e2e8f0 !important;
+            color: #1e293b !important;
+        }
+        html[data-theme="light"] .back-btn:hover { background: #f8fafc !important; }
+
+        /* Phones: long words / URLs in articles wrap; wide tables scroll inside the article */
+        .blog-content { overflow-wrap: break-word; }
+        .blog-content table { display: block; max-width: 100%; overflow-x: auto; }
+        .blog-content img { max-width: 100%; height: auto; }
+        @media (max-width: 480px) {
+            .back-btn { padding: 0.5rem 0.85rem !important; font-size: 0.8125rem !important; white-space: nowrap; }
+        }
     </style>
-  <script src="scale_ui.js"></script>
+  <script src="/scale_ui.js"></script>
 </head>
 
-<body class="gradient-bg min-h-screen text-white">
+<body class="kg-native-dark gradient-bg min-h-screen text-white">
     <!-- Navigation -->
     <nav class="max-w-6xl mx-auto px-6 py-6">
         <div class="flex items-center justify-between">
@@ -117,9 +155,10 @@
                 <img src="/kagger_logo_full.jpg" alt="Kagger AI" class="h-8 object-contain"
                     style="filter:invert(1) hue-rotate(-80deg) saturate(3) brightness(1.1);mix-blend-mode:screen;" />
             </a>
-            <div class="flex items-center space-x-4">
+            <div class="flex items-center space-x-3 sm:space-x-4">
+                <button class="kg-theme-toggle text-slate-300" data-kg-theme-toggle></button>
                 <button onclick="window.location.href='/app'"
-                    class="px-5 py-2.5 bg-white/10 hover:bg-white/20 rounded-xl text-white transition-all text-sm font-semibold flex items-center gap-2 border border-white/10"
+                    class="back-btn px-5 py-2.5 bg-white/10 hover:bg-white/20 rounded-xl text-white transition-all text-sm font-semibold flex items-center gap-2 border border-white/10"
                     style="background: rgba(255, 255, 255, 0.1); border-radius: 0.75rem; border: 1px solid rgba(255, 255, 255, 0.1); display: flex; align-items: center; gap: 0.5rem; color: white; padding: 0.625rem 1.25rem; font-size: 0.875rem; font-weight: 600; cursor: pointer; transition: all 0.2s;">
                     <svg style="width: 1rem; height: 1rem;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
@@ -135,7 +174,7 @@
         <div class="text-center mb-12">
             <h1 class="text-4xl md:text-5xl font-extrabold mb-4">
                 Kagger AI
-                <span class="bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">Blog</span>
+                <span class="kg-brand-text bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">Blog</span>
             </h1>
             <p class="text-slate-400 max-w-2xl mx-auto text-lg">
                 Expert insights on Indian markets, investment strategies, and financial analysis — powered by AI
@@ -210,7 +249,7 @@
                 <textarea id="suggestion-text" rows="3" placeholder="Share your thoughts or suggestions..."
                     class="w-full px-4 py-3 bg-slate-900/50 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none mb-4"></textarea>
                 <button onclick="submitSuggestion()" id="suggest-btn"
-                    class="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 px-6 py-3 rounded-lg font-semibold transition-all flex items-center gap-2">
+                    class="kg-brand-btn bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 px-6 py-3 rounded-lg font-semibold transition-all flex items-center gap-2">
                     <span>Submit Suggestion</span>
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"

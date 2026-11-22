@@ -5,6 +5,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Kagger.AI — Interactive AI Stock Research for Indian Markets</title>
+  <script src="/kagger_theme.js"></script>
+  <link rel="stylesheet" href="/kagger_theme.css">
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
@@ -3209,10 +3211,10 @@
     }
   </style>
 
-  <script src="scale_ui.js"></script>
+  <script src="/scale_ui.js"></script>
 </head>
 
-<body class="bg-slate-100 text-slate-800 antialiased">
+<body class="kg-native-light bg-slate-100 text-slate-800 antialiased">
   <script>
     // ===================================================================================
     // KAGGER HISTORY: Persistent localStorage-based history for all modules
@@ -3280,7 +3282,7 @@
     };
   </script>
   <!-- ASK THE UNANSWERABLE OVERLAY SECTION -->
-  <div id="unanswerableSection"
+  <div id="unanswerableSection" class="kg-native-dark"
     style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:linear-gradient(135deg,#0f172a 0%,#020617 100%);z-index:100;overflow-y:auto;">
     <header class="fixed top-0 left-0 right-0 z-[110] cosmic-card border-b border-indigo-500/20 backdrop-blur-md">
       <div class="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
@@ -3294,13 +3296,13 @@
             <p class="text-xs text-indigo-400 font-medium">Parallel Web Systems • Ultra Deep Research</p>
           </div>
         </div>
-        <button onclick="showSection('analyze')"
+        <div class="kg-overlay-actions flex items-center gap-2 flex-shrink-0"><button class="kg-theme-toggle text-slate-300" data-kg-theme-toggle></button><button onclick="showSection('analyze')" aria-label="Back to Analyze"
           class="px-5 py-2.5 bg-white/10 hover:bg-white/20 rounded-xl text-white transition-all text-sm font-semibold flex items-center gap-2 border border-white/10">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
           </svg>
-          Back to Analyze
-        </button>
+          <span class="kg-back-label">Back to Analyze</span>
+        </button></div>
       </div>
     </header>
 
@@ -4030,7 +4032,7 @@
       cursor: not-allowed;
     }
   </style>
-  <div id="watchlistSection"
+  <div id="watchlistSection" class="kg-native-dark"
     style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:linear-gradient(135deg,#0a0a1a 0%,#0f172a 50%,#020617 100%);z-index:100;overflow-y:auto;">
     <header class="fixed top-0 left-0 right-0 z-[110] backdrop-blur-md"
       style="background:rgba(10,10,26,0.85);border-bottom:1px solid rgba(139,92,246,0.2);">
@@ -4045,13 +4047,13 @@
             <p class="text-xs text-slate-400">Your personal stock research command center</p>
           </div>
         </div>
-        <button onclick="showSection('analyze')"
+        <div class="kg-overlay-actions flex items-center gap-2 flex-shrink-0"><button class="kg-theme-toggle text-slate-300" data-kg-theme-toggle></button><button onclick="showSection('analyze')" aria-label="Back to Analyze"
           class="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 transition-all text-sm font-medium text-white flex items-center gap-2">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
           </svg>
-          Back to Analyze
-        </button>
+          <span class="kg-back-label">Back to Analyze</span>
+        </button></div>
       </div>
     </header>
     <main class="pt-24 pb-6 px-4">
@@ -4087,7 +4089,7 @@
     </main>
   </div>
   <!-- Financials Modal -->
-  <div id="wlFinancialsModal" class="wl-modal-overlay" onclick="if(event.target===this)wlCloseFinancialsModal()">
+  <div id="wlFinancialsModal" class="wl-modal-overlay kg-native-dark" onclick="if(event.target===this)wlCloseFinancialsModal()">
     <div class="wl-modal">
       <div class="wl-modal-header">
         <h2 id="wlFinTitle">🏦 Financials Agent</h2>
@@ -4103,7 +4105,7 @@
     </div>
   </div>
   <!-- Agent Modal (Concall / Forensic / Analyst) -->
-  <div id="wlAgentModal" class="wl-modal-overlay" onclick="if(event.target===this)wlCloseAgentModal()">
+  <div id="wlAgentModal" class="wl-modal-overlay kg-native-dark" onclick="if(event.target===this)wlCloseAgentModal()">
     <div class="wl-modal">
       <div class="wl-modal-header">
         <h2 id="wlAgentTitle">🎤 Agent</h2>
@@ -4664,22 +4666,23 @@
     });
   </script>
   <!-- NAVBAR -->
-  <nav style="background:#14532d;" class="backdrop-blur-md shadow-lg sticky top-0 z-50 border-b border-emerald-900/50">
+  <nav id="kgNav" style="background:#14532d;" class="backdrop-blur-md shadow-lg sticky top-0 z-50 border-b border-emerald-900/50">
     <div class="container mx-auto px-6 py-2.5 flex items-center justify-between">
       <!-- Logo -->
       <a href="#" id="navLogo" class="flex items-center hover:opacity-80 transition-opacity flex-shrink-0 gap-2">
-        <div
+        <div class="kg-nav-logo-mark"
           style="background:#22c55e;width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-weight:800;color:white;font-size:18px;">
           K</div>
-        <span style="color:white;font-weight:700;font-size:1.15rem;letter-spacing:-0.02em;">Kagger</span>
+        <span class="kg-nav-logo-text" style="color:white;font-weight:700;font-size:1.15rem;letter-spacing:-0.02em;">Kagger</span>
       </a>
 
-      <!-- Nav Items -->
-      <div class="flex items-center gap-1">
+      <!-- Nav Items (below 1280px this becomes the collapsible menu panel) -->
+      <div id="kgNavMenu" class="kg-nav-menu flex items-center gap-1">
 
         <!-- 1. Analysis Dropdown -->
         <div class="relative group">
-          <button class="flex items-center gap-1.5 px-3.5 py-1.5 text-sm font-medium rounded-full transition-all"
+          <button type="button" data-kg-dd-toggle aria-haspopup="true" aria-expanded="false"
+            class="kg-nav-chip flex items-center gap-1.5 px-3.5 py-1.5 text-sm font-medium rounded-full transition-all"
             style="color:#d1fae5;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12);">
             <span>📊</span> Analysis
             <svg class="w-3.5 h-3.5 opacity-60 group-hover:rotate-180 transition-transform duration-200" fill="none"
@@ -4688,7 +4691,7 @@
             </svg>
           </button>
           <div
-            class="absolute left-0 top-full pt-2 w-72 opacity-0 invisible translate-y-1 group-hover:opacity-100 group-hover:visible group-hover:translate-y-0 transition-all duration-200 z-50 pointer-events-none group-hover:pointer-events-auto">
+            class="kg-nav-dd absolute left-0 top-full pt-2 w-72 opacity-0 invisible translate-y-1 group-hover:opacity-100 group-hover:visible group-hover:translate-y-0 transition-all duration-200 z-50 pointer-events-none group-hover:pointer-events-auto">
             <div class="bg-white rounded-xl shadow-2xl border border-slate-100 py-2 overflow-hidden">
               <a href="#" onclick="setMode('company'); return false;"
                 class="flex items-center gap-3 px-4 py-3 hover:bg-emerald-50 transition-colors cursor-pointer no-underline">
@@ -4712,7 +4715,8 @@
 
         <!-- 2. AI Agents Dropdown -->
         <div class="relative group">
-          <button class="flex items-center gap-1.5 px-3.5 py-1.5 text-sm font-medium rounded-full transition-all"
+          <button type="button" data-kg-dd-toggle aria-haspopup="true" aria-expanded="false"
+            class="kg-nav-chip flex items-center gap-1.5 px-3.5 py-1.5 text-sm font-medium rounded-full transition-all"
             style="color:#d1fae5;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12);">
             <span>🤖</span> AI Agents
             <svg class="w-3.5 h-3.5 opacity-60 group-hover:rotate-180 transition-transform duration-200" fill="none"
@@ -4721,7 +4725,7 @@
             </svg>
           </button>
           <div
-            class="absolute left-0 top-full pt-2 w-80 opacity-0 invisible translate-y-1 group-hover:opacity-100 group-hover:visible group-hover:translate-y-0 transition-all duration-200 z-50 pointer-events-none group-hover:pointer-events-auto">
+            class="kg-nav-dd absolute left-0 top-full pt-2 w-80 opacity-0 invisible translate-y-1 group-hover:opacity-100 group-hover:visible group-hover:translate-y-0 transition-all duration-200 z-50 pointer-events-none group-hover:pointer-events-auto">
             <div class="bg-white rounded-xl shadow-2xl border border-slate-100 py-2 overflow-hidden">
               <a href="/agents?tab=concall" onclick="saveAppState()"
                 class="flex items-center gap-3 px-4 py-3 hover:bg-emerald-50 transition-colors no-underline"><span
@@ -4793,7 +4797,8 @@
 
         <!-- 3. AI Search Dropdown -->
         <div class="relative group">
-          <button class="flex items-center gap-1.5 px-3.5 py-1.5 text-sm font-medium rounded-full transition-all"
+          <button type="button" data-kg-dd-toggle aria-haspopup="true" aria-expanded="false"
+            class="kg-nav-chip flex items-center gap-1.5 px-3.5 py-1.5 text-sm font-medium rounded-full transition-all"
             style="color:#d1fae5;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12);">
             <span>🔍</span> AI Search
             <svg class="w-3.5 h-3.5 opacity-60 group-hover:rotate-180 transition-transform duration-200" fill="none"
@@ -4802,7 +4807,7 @@
             </svg>
           </button>
           <div
-            class="absolute left-0 top-full pt-2 w-80 opacity-0 invisible translate-y-1 group-hover:opacity-100 group-hover:visible group-hover:translate-y-0 transition-all duration-200 z-50 pointer-events-none group-hover:pointer-events-auto">
+            class="kg-nav-dd absolute left-0 top-full pt-2 w-80 opacity-0 invisible translate-y-1 group-hover:opacity-100 group-hover:visible group-hover:translate-y-0 transition-all duration-200 z-50 pointer-events-none group-hover:pointer-events-auto">
             <div class="bg-white rounded-xl shadow-2xl border border-slate-100 py-2 overflow-hidden">
               <a href="#" onclick="showSection('news'); return false;"
                 class="flex items-center gap-3 px-4 py-3 hover:bg-emerald-50 transition-colors cursor-pointer no-underline"><span
@@ -4850,29 +4855,29 @@
 
         <!-- 4. Market Intelligence -->
         <a href="/blog"
-          class="flex items-center gap-1.5 px-3.5 py-1.5 text-sm font-medium rounded-full transition-all no-underline"
+          class="kg-nav-link flex items-center gap-1.5 px-3.5 py-1.5 text-sm font-medium rounded-full transition-all no-underline"
           style="color:#d1fae5;">
           <span>📡</span> Market Intelligence
         </a>
 
         <!-- 5. Watchlist -->
-        <button onclick="showSection('watchlist')" id="watchlist-tab-btn"
-          class="flex items-center gap-1.5 px-3.5 py-1.5 text-sm font-medium rounded-full transition-all border-0 cursor-pointer"
+        <button onclick="showSection('watchlist')" id="watchlist-tab-btn" data-kg-menu-close
+          class="kg-nav-link flex items-center gap-1.5 px-3.5 py-1.5 text-sm font-medium rounded-full transition-all border-0 cursor-pointer"
           style="color:#d1fae5;background:transparent;font-family:inherit;">
           <span>👀</span> Watchlist
         </button>
 
         <!-- 6. My Portfolio -->
         <a href="/portfolio" onclick="saveAppState()"
-          class="flex items-center gap-1.5 px-3.5 py-1.5 text-sm font-medium rounded-full transition-all no-underline"
+          class="kg-nav-link flex items-center gap-1.5 px-3.5 py-1.5 text-sm font-medium rounded-full transition-all no-underline"
           style="color:#d1fae5;">
           <span>📁</span> My Portfolio
         </a>
       </div>
 
       <!-- Right: Search + Admin + Logout -->
-      <div class="flex items-center gap-3 flex-shrink-0">
-        <button id="navSearchTrigger"
+      <div class="kg-nav-right flex items-center gap-3 flex-shrink-0">
+        <button id="navSearchTrigger" aria-label="Search companies, sectors"
           onclick="document.getElementById('tickerInput').focus(); window.scrollTo({top:0,behavior:'smooth'})"
           class="flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg transition-all cursor-pointer"
           style="min-width:200px;color:#94a3b8;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);">
@@ -4880,16 +4885,23 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
               d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
           </svg>
-          <span class="truncate">Search companies, sectors...</span>
-          <kbd class="ml-auto text-xs rounded px-1.5 py-0.5 flex-shrink-0"
+          <span class="kg-nav-search-label truncate">Search companies, sectors...</span>
+          <kbd class="kg-nav-search-kbd ml-auto text-xs rounded px-1.5 py-0.5 flex-shrink-0"
             style="background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);color:#94a3b8;">⌘K</kbd>
         </button>
         <a href="/admin" id="admin-link"
           class="hidden w-8 h-8 flex items-center justify-center rounded-lg transition-all text-sm"
           style="color:#a7f3d0;" title="Admin Panel">⚙️</a>
-        <button onclick="logout()" class="ml-1 px-3 py-1.5 text-xs font-medium rounded-lg transition-all"
+        <button class="kg-theme-toggle kg-theme-toggle--sm kg-nav-theme" data-kg-theme-toggle></button>
+        <button onclick="logout()" class="kg-nav-logout ml-1 px-3 py-1.5 text-xs font-medium rounded-lg transition-all"
           style="color:#fca5a5;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);">
           Logout
+        </button>
+        <button type="button" id="kgNavToggle" class="kg-nav-burger" data-kg-menu-toggle="kgNavMenu" data-kg-menu-max="1280"
+          aria-controls="kgNavMenu" aria-expanded="false" aria-label="Open menu">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
         </button>
       </div>
     </div>
@@ -4919,6 +4931,115 @@
       window.location.href = '/login';
     }
 
+    // Header dropdowns open on tap/click as well as on hover (touch screens have no hover).
+    // Mouse users see no change: the menu still follows the pointer and closes on mouse leave.
+    (function () {
+      const groups = Array.from(document.querySelectorAll('#kgNav .relative.group'));
+      const setOpen = (g, open) => {
+        g.classList.toggle('kg-dd-open', open);
+        const b = g.querySelector('[data-kg-dd-toggle]');
+        if (b) b.setAttribute('aria-expanded', open ? 'true' : 'false');
+      };
+      const wide = window.matchMedia("(min-width: 1280px)");
+      groups.forEach(g => {
+        const b = g.querySelector('[data-kg-dd-toggle]');
+        if (!b) return;
+        b.addEventListener('click', (e) => {
+          e.preventDefault();
+          const open = !g.classList.contains('kg-dd-open');
+          groups.forEach(o => { if (o !== g) setOpen(o, false); });
+          setOpen(g, open);
+        });
+        g.addEventListener('mouseleave', () => { if (wide.matches) setOpen(g, false); });
+        g.querySelectorAll('.kg-nav-dd a').forEach(a => a.addEventListener('click', () => setOpen(g, false)));
+      });
+      document.addEventListener('click', (e) => { groups.forEach(g => { if (!g.contains(e.target)) setOpen(g, false); }); });
+      document.addEventListener('keydown', (e) => { if (e.key === 'Escape') groups.forEach(g => setOpen(g, false)); });
+    })();
+
+    // Plotly charts follow the site theme. A chart belongs to the light page or to one of the
+    // dark overlays (.kg-native-dark); in that part's native theme it is never touched, so the
+    // native output is exactly as before. In the other theme its colours are re-laid-out after
+    // plotting, and restored from a snapshot when the theme switches back (also for printing).
+    (function () {
+      if (!window.Plotly || !window.KaggerTheme) return;
+      const AX = /^[xy]axis\d*$/;
+      const probe = document.createElement('canvas').getContext('2d');
+      const lum = (c) => {
+        if (typeof c !== 'string') return null;
+        probe.fillStyle = '#010203'; probe.fillStyle = c;
+        const v = probe.fillStyle;
+        if (v === '#010203' && c.replace(/\s/g, '') !== '#010203') return null;
+        let r, g, b, a = 1;
+        if (v[0] === '#') { r = parseInt(v.slice(1, 3), 16); g = parseInt(v.slice(3, 5), 16); b = parseInt(v.slice(5, 7), 16); }
+        else { const m = v.match(/[\d.]+/g); if (!m) return null; [r, g, b] = m.map(Number); a = m[3] != null ? Number(m[3]) : 1; }
+        if (a < 0.5) return null;
+        return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+      };
+      const get = (o, path) => path.split('.').reduce((x, k) => (x == null ? undefined : x[k]), o);
+      const nativeOf = (gd) => (gd.closest && gd.closest('.kg-native-dark')) ? 'dark' : 'light';
+
+      function themePlot(gd) {
+        if (!gd || !gd._fullLayout || !gd.layout) return;
+        const target = KaggerTheme.get();
+        const native = nativeOf(gd);
+        if (target === native) {
+          const snap = gd._kgNative;
+          if (!snap) return;
+          gd._kgNative = null;
+          const lay = {};
+          Object.keys(snap.layout).forEach(k => { lay[k] = snap.layout[k] === undefined ? null : snap.layout[k]; });
+          Plotly.relayout(gd, lay);
+          snap.traces.forEach(t => Plotly.restyle(gd, { [t.key]: [t.val === undefined ? null : t.val] }, [t.i]));
+          return;
+        }
+        if (gd._kgNative) return;  // already in the non-native colours
+        const c = KaggerTheme.colors();
+        const toDark = target === 'dark';
+        const lay = {
+          'font.color': c.text, 'title.font.color': c.strong, 'legend.font.color': c.text,
+          'hoverlabel.bgcolor': c.surface, 'hoverlabel.bordercolor': c.border, 'hoverlabel.font.color': c.strong
+        };
+        const pb = get(gd.layout, 'paper_bgcolor'), plb = get(gd.layout, 'plot_bgcolor');
+        if (toDark) {
+          if (lum(pb) === null ? pb === undefined : true) lay.paper_bgcolor = 'rgba(0,0,0,0)';
+          if (lum(plb) !== null || (plb === undefined && lum(get(gd._fullLayout, 'plot_bgcolor')) > 0.6)) lay.plot_bgcolor = 'rgba(255,255,255,0.03)';
+        }
+        Object.keys(gd._fullLayout).filter(k => AX.test(k)).forEach(ax => {
+          lay[ax + '.gridcolor'] = c.grid; lay[ax + '.linecolor'] = c.border; lay[ax + '.zerolinecolor'] = c.border;
+          lay[ax + '.tickfont.color'] = c.text; lay[ax + '.title.font.color'] = c.text;
+        });
+        const snap = { layout: {}, traces: [] };
+        Object.keys(lay).forEach(k => { snap.layout[k] = get(gd.layout, k); });
+        (gd.data || []).forEach((tr, i) => {
+          ['line.color', 'marker.color', 'textfont.color'].forEach(key => {
+            const v = get(tr, key), L = lum(v);
+            if (L === null) return;
+            if ((toDark && L < 0.25) || (!toDark && L > 0.8)) {
+              snap.traces.push({ i, key, val: v });
+              Plotly.restyle(gd, { [key]: [toDark ? (key === 'textfont.color' ? c.strong : '#e2e8f0') : '#1e293b'] }, [i]);
+            }
+          });
+        });
+        gd._kgNative = snap;
+        Plotly.relayout(gd, lay);
+      }
+
+      ['newPlot', 'react'].forEach(fn => {
+        const orig = Plotly[fn];
+        if (typeof orig !== 'function') return;
+        Plotly[fn] = function (gd) {
+          const el = typeof gd === 'string' ? document.getElementById(gd) : gd;
+          if (el) el._kgNative = null;
+          const out = orig.apply(this, arguments);
+          Promise.resolve(out).then(() => { try { themePlot(el); } catch (e) { /* keep the chart as drawn */ } });
+          return out;
+        };
+      });
+      KaggerTheme.onChange(() => {
+        document.querySelectorAll('.js-plotly-plot').forEach(gd => { try { themePlot(gd); } catch (e) { } });
+      });
+    })();
 
   </script>
 
@@ -4959,7 +5080,7 @@
             <!-- Mascot + Speech Bubble -->
             <div class="flex items-center gap-4 flex-shrink-0">
               <img src="/kagger_mascot.png" alt="Kagger AI" style="height:120px;object-fit:contain;" />
-              <div
+              <div class="kg-hero-bubble"
                 style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:12px 16px;max-width:200px;position:relative;">
                 <div style="font-weight:700;font-size:0.85rem;color:#14532d;">I'm Kagger AI</div>
                 <div style="font-size:0.75rem;color:#475569;margin-top:2px;line-height:1.4;">Your AI research partner.
@@ -4989,7 +5110,7 @@
                 </div>
               </div>
               <button id="goBtn"
-                class="bg-gradient-to-r from-emerald-600 to-emerald-700 text-white px-8 py-4 rounded-r-xl hover:from-emerald-700 hover:to-emerald-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 transition-all duration-150 ease-in-out font-semibold text-base theme-transition flex items-center gap-2 whitespace-nowrap">
+                class="kg-brand-btn bg-gradient-to-r from-emerald-600 to-emerald-700 text-white px-8 py-4 rounded-r-xl hover:from-emerald-700 hover:to-emerald-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 transition-all duration-150 ease-in-out font-semibold text-base theme-transition flex items-center gap-2 whitespace-nowrap">
                 ✨ Analyze Now
               </button>
               </button>
@@ -5021,7 +5142,7 @@
                 class="flex-grow border border-slate-200 rounded-l-xl px-4 py-4 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base"
                 style="background:#f8fafc;" />
               <button id="industryGoBtn"
-                class="bg-gradient-to-r from-blue-500 to-blue-600 text-white px-8 py-4 rounded-r-xl hover:from-blue-600 hover:to-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-150 ease-in-out font-semibold text-base">
+                class="kg-brand-btn bg-gradient-to-r from-blue-500 to-blue-600 text-white px-8 py-4 rounded-r-xl hover:from-blue-600 hover:to-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-150 ease-in-out font-semibold text-base">
                 🔍 Research
               </button>
             </div>
@@ -5211,7 +5332,7 @@
           <div class="flex gap-2">
             <input id="sidebarChatInput" type="text" placeholder="Ask about this analysis..."
               class="flex-grow border border-slate-200 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm" />
-            <button type="submit" class="bg-green-600 text-white p-2 rounded-lg hover:bg-green-700 transition-colors">
+            <button type="submit" class="kg-brand-solid bg-green-600 text-white p-2 rounded-lg hover:bg-green-700 transition-colors">
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                   d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path>
@@ -5225,7 +5346,7 @@
 
   <!-- Chat launcher button -->
   <button id="chatBtn"
-    class="fixed bottom-6 right-6 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-full p-4 shadow-xl hover:from-green-600 hover:to-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-all duration-150 ease-in-out hover:scale-110"
+    class="kg-brand-btn fixed bottom-6 right-6 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-full p-4 shadow-xl hover:from-green-600 hover:to-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-all duration-150 ease-in-out hover:scale-110"
     title="Ask me anything">
     <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -10122,7 +10243,7 @@
   </script>
 
   <!-- NEWS SECTION -->
-  <div id="news-section"
+  <div id="news-section" class="kg-native-dark"
     style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:linear-gradient(135deg,#0f172a 0%,#1e293b 50%,#0f172a 100%);z-index:100;overflow-y:auto;">
     <style>
       #news-section .glass-card {
@@ -10217,11 +10338,11 @@
             <h1 class="text-xl font-bold gradient-text text-white">Kagger's AI Search and News</h1>
             <p class="text-xs text-slate-400">India's Most Advanced Financial Research Engine</p>
           </div>
-        </div><button onclick="showSection('analyze')"
+        </div><div class="kg-overlay-actions flex items-center gap-2 flex-shrink-0"><button class="kg-theme-toggle text-slate-300" data-kg-theme-toggle></button><button onclick="showSection('analyze')" aria-label="Back to Analyze"
           class="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 transition-all text-sm font-medium text-white flex items-center gap-2"><svg
             class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-          </svg>Back to Analyze</button>
+          </svg><span class="kg-back-label">Back to Analyze</span></button></div>
       </div>
     </header>
     <main class="pt-24 pb-6 px-4">
@@ -10541,7 +10662,7 @@
   </script>
 
   <!-- CHART ANALYSIS SECTION -->
-  <div id="chart-section"
+  <div id="chart-section" class="kg-native-dark"
     style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:linear-gradient(135deg,#064e3b 0%,#0f172a 50%,#064e3b 100%);z-index:100;overflow-y:auto;">
     <style>
       #chart-section .glass-card {
@@ -10597,13 +10718,13 @@
           </h1>
           <p class="text-slate-400 mt-2">Lightning-fast technical analysis using TradingView data</p>
         </div>
-        <button onclick="showSection('analyze')"
+        <div class="kg-overlay-actions flex items-center gap-2 flex-shrink-0"><button class="kg-theme-toggle text-slate-300" data-kg-theme-toggle></button><button onclick="showSection('analyze')" aria-label="Back to Analyze"
           class="px-5 py-2.5 bg-white/10 rounded-xl text-white hover:bg-white/20 transition-all flex items-center gap-2 font-medium">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
           </svg>
-          Back to Analyze
-        </button>
+          <span class="kg-back-label">Back to Analyze</span>
+        </button></div>
       </div>
 
       <!-- Chart Modes Tabs -->
@@ -10798,13 +10919,13 @@
             <p class="text-xs text-slate-400 font-medium">Real-time Insights & AI Analysis</p>
           </div>
         </div>
-        <button onclick="showSection('analyze')"
+        <div class="kg-overlay-actions flex items-center gap-2 flex-shrink-0"><button class="kg-theme-toggle text-slate-500" data-kg-theme-toggle></button><button onclick="showSection('analyze')" aria-label="Back to Analyze"
           class="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 transition-all text-sm font-semibold text-slate-700 flex items-center gap-2 rounded-xl shadow-sm border border-slate-200">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
           </svg>
-          Back to Analyze
-        </button>
+          <span class="kg-back-label">Back to Analyze</span>
+        </button></div>
       </div>
     </header>
     <div class="w-full h-full pt-20">
@@ -11773,7 +11894,7 @@
   </script>
 
   <!-- Chart Popout Modal -->
-  <div id="chartPopoutModal" class="chart-popout-modal">
+  <div id="chartPopoutModal" class="chart-popout-modal kg-native-dark">
     <div class="chart-popout-backdrop" onclick="toggleChartPopout(false)"></div>
     <div class="chart-popout-content">
       <div class="chart-popout-header">
@@ -12394,7 +12515,7 @@
     }
   </script>
   <div id="screenerChartExpandModal"
-    class="hidden fixed inset-0 z-[200] bg-black/90 flex-col justify-center items-center p-4 md:p-8 backdrop-blur-sm">
+    class="kg-native-dark hidden fixed inset-0 z-[200] bg-black/90 flex-col justify-center items-center p-4 md:p-8 backdrop-blur-sm">
     <div
       class="w-full max-w-7xl h-[85vh] bg-slate-900 rounded-2xl border border-white/10 flex flex-col overflow-hidden relative">
       <div class="flex justify-between items-center p-4 border-b border-white/10 bg-slate-800">
@@ -12412,7 +12533,7 @@
 
   <!-- Screener Info Guide Modal -->
   <div id="screenerGuideModal"
-    class="hidden fixed inset-0 z-[300] bg-black/80 flex-col justify-center items-center p-4 md:p-8 backdrop-blur-md transition-all">
+    class="kg-native-dark hidden fixed inset-0 z-[300] bg-black/80 flex-col justify-center items-center p-4 md:p-8 backdrop-blur-md transition-all">
     <div
       class="w-full max-w-3xl bg-slate-900 rounded-2xl border border-white/10 flex flex-col overflow-hidden relative shadow-[0_0_50px_rgba(0,0,0,0.8)] max-h-[90vh]">
       <div class="flex justify-between items-center p-5 border-b border-white/10 bg-slate-800/80">
@@ -12463,6 +12584,1847 @@
     #screenerGuideModal .custom-scrollbar::-webkit-scrollbar-thumb {
       background: rgba(255, 255, 255, 0.2);
       border-radius: 4px;
+    }
+  </style>
+
+  <!-- =====================================================================
+       THEME (light / dark) + RESPONSIVE LAYER  — see kagger_theme.css
+       The page is designed LIGHT (body.kg-native-light); the overlays marked
+       kg-native-dark (Ask the Unanswerable, Watchlist + its modals, AI Search,
+       Chart Analysis, chart pop-out, screener modals) are designed DARK.
+       Rules below only apply in the non-native theme of each part, or below
+       desktop widths (max-width queries), so the native desktop look is unchanged.
+       ===================================================================== -->
+  <style id="kgThemeStyles">
+    /* ===== Header nav: theme toggle, tap-to-open dropdowns, collapsed menu ===== */
+    .kg-nav-burger {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      width: 2.5rem;
+      height: 2.5rem;
+      flex: none;
+      border-radius: .625rem;
+      color: #d1fae5;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      cursor: pointer;
+    }
+
+    .kg-nav-burger[aria-expanded="true"] {
+      background: rgba(255, 255, 255, 0.18);
+    }
+
+    #kgNav .kg-nav-theme {
+      color: #d1fae5;
+    }
+
+    #kgNav .group.kg-dd-open>.kg-nav-dd {
+      opacity: 1;
+      visibility: visible;
+      --tw-translate-y: 0px;
+      transform: none;
+      pointer-events: auto;
+    }
+
+    #kgNav .group.kg-dd-open [data-kg-dd-toggle] svg {
+      transform: rotate(180deg);
+    }
+
+    #kgNav [data-kg-dd-toggle]:focus-visible,
+    #kgNav .kg-nav-link:focus-visible,
+    .kg-nav-burger:focus-visible {
+      outline: 2px solid #86efac;
+      outline-offset: 2px;
+    }
+
+    /* Wide screens: the desktop nav has no spare room, so the toggle sits just past
+       the right-hand cluster (in the container's side margin) instead of squeezing it. */
+    @media (min-width: 1360px) {
+      #kgNav .kg-nav-right {
+        position: relative;
+      }
+
+      #kgNav .kg-nav-theme {
+        position: absolute;
+        left: 100%;
+        top: 50%;
+        margin-left: 1rem;
+        transform: translateY(-50%);
+      }
+
+      #kgNav .kg-nav-theme:active {
+        transform: translateY(-50%) scale(.94);
+      }
+
+      /* 125%-scaled laptops (scale_ui.js): the container spans the full width, but there
+         is free space between the nav items and the right-hand cluster */
+      html.scaled-ui #kgNav .kg-nav-theme {
+        left: auto;
+        right: 100%;
+        margin-left: 0;
+        margin-right: .75rem;
+      }
+    }
+
+    @media (min-width: 1280px) and (max-width: 1359.98px) {
+      #navSearchTrigger {
+        min-width: 0 !important;
+        width: 212px;
+      }
+    }
+
+    /* The collapsed (zero-width) chat sidebar was nudged 20px past the page edge,
+       which gave every desktop width a few pixels of horizontal scroll. */
+    @media (min-width: 1201px) {
+      .chat-sidebar.collapsed {
+        transform: none;
+      }
+    }
+
+    @media (max-width: 1279.98px) {
+      #kgNav>.container {
+        position: relative;
+        flex-direction: row;
+        flex-wrap: nowrap;
+        gap: .5rem;
+        padding: .5rem 1rem;
+      }
+
+      #kgNav .kg-nav-burger {
+        display: inline-flex;
+      }
+
+      #kgNavMenu {
+        display: none;
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        flex-direction: column;
+        align-items: stretch;
+        gap: .25rem;
+        padding: .75rem 1rem 1rem;
+        background: #14532d;
+        border-bottom: 1px solid rgba(6, 78, 59, 0.5);
+        box-shadow: 0 18px 30px -12px rgba(0, 0, 0, 0.35);
+        max-height: calc(100vh - 3.5rem);
+        max-height: calc(100dvh - 3.5rem);
+        overflow-y: auto;
+        overscroll-behavior: contain;
+      }
+
+      #kgNavMenu.kg-open {
+        display: flex;
+      }
+
+      #kgNavMenu>* {
+        width: 100%;
+      }
+
+      #kgNavMenu [data-kg-dd-toggle],
+      #kgNavMenu .kg-nav-link {
+        width: 100%;
+        min-height: 44px;
+        justify-content: flex-start;
+        padding: .625rem 1rem;
+        font-size: .9375rem;
+        border-radius: .75rem;
+      }
+
+      #kgNavMenu [data-kg-dd-toggle] svg {
+        margin-left: auto;
+      }
+
+      #kgNavMenu .kg-nav-dd {
+        position: static;
+        display: none;
+        width: auto;
+        padding-top: .375rem;
+        opacity: 1;
+        visibility: visible;
+        transform: none;
+        pointer-events: auto;
+      }
+
+      #kgNavMenu .group.kg-dd-open>.kg-nav-dd {
+        display: block;
+      }
+
+      #kgNavMenu .kg-nav-dd>div {
+        box-shadow: none;
+      }
+
+      #kgNav .kg-nav-right {
+        gap: .5rem;
+      }
+
+      #navSearchTrigger {
+        min-width: 0 !important;
+        width: 2.25rem;
+        height: 2.25rem;
+        justify-content: center;
+        padding: 0 !important;
+      }
+
+      #navSearchTrigger .kg-nav-search-label,
+      #navSearchTrigger .kg-nav-search-kbd {
+        display: none;
+      }
+
+      #kgNav .kg-nav-logout {
+        margin-left: 0;
+        min-height: 2.25rem;
+      }
+    }
+
+    @media (max-width: 380px) {
+      #kgNav .kg-nav-right {
+        gap: .375rem;
+      }
+
+      #kgNav .kg-nav-logout {
+        padding-left: .5rem;
+        padding-right: .5rem;
+      }
+    }
+
+    /* ===== Responsive layout (phones, tablets, zoomed-in laptops) ===== */
+    @media (max-width: 1200px) {
+
+      /* The layout stacks here; without this the results column sized itself to its widest table */
+      .app-layout>.main-content {
+        width: 100%;
+      }
+    }
+
+    @media (max-width: 1100px) {
+      #portfolioMetricsGrid {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
+
+      #portfolioMetricsGrid>.col-span-7,
+      #marketIndicesStrip>.col-span-6 {
+        grid-column: 1 / -1;
+      }
+    }
+
+    @media (max-width: 768px) {
+
+      /* Hero: greeting on its own line, mascot + bubble below it */
+      #searchCard>div:first-child {
+        flex-wrap: wrap;
+        gap: .75rem;
+        margin-bottom: 1.25rem;
+      }
+
+      #searchCard>div:first-child>div:first-child {
+        flex: 1 1 100%;
+        min-width: 0;
+      }
+
+      #searchCard>div:first-child>div:last-child {
+        flex: 1 1 100%;
+        flex-shrink: 1;
+        gap: .75rem;
+      }
+
+      #searchCard>div:first-child img {
+        height: 72px !important;
+      }
+
+      #searchCard>div:first-child>div:last-child>div {
+        max-width: none !important;
+        flex: 1;
+      }
+
+      /* "Popular" chips wrap as a row of pills (the form rules above stack every button) */
+      #companyForm #popularStocksRow,
+      #industryForm #popularIndustryRow {
+        flex-direction: row;
+        gap: .5rem;
+        margin-top: 1rem;
+      }
+
+      #companyForm #popularStocksRow button,
+      #industryForm #popularIndustryRow button {
+        width: auto;
+        margin-top: 0;
+        min-height: 36px;
+        border-radius: 9999px !important;
+      }
+
+      #popularStocksRow>span,
+      #popularIndustryRow>span {
+        flex-basis: 100%;
+      }
+
+      #marketIndicesStrip {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        row-gap: 1rem;
+      }
+
+      #portfolioMetricsGrid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      #technicalSummaryTable td {
+        white-space: normal;
+      }
+
+      /* Industry report: drop the per-heading indents, keep headings + tables full width */
+      .industry-report h4 {
+        margin-left: 0;
+      }
+
+      #industryResults .industry-report :is(p, ul, ol, .table-container) {
+        margin-left: 0 !important;
+        margin-right: 0 !important;
+        width: auto !important;
+      }
+
+      #industryResults>.bg-white>.flex:first-child,
+      #industryResults>.bg-white>.flex:first-child>.flex {
+        flex-wrap: wrap;
+        gap: .75rem;
+      }
+
+      #industryResults>.bg-white>.flex:first-child>.flex>* {
+        margin-left: 0 !important;
+      }
+
+      .value-chain-flow {
+        flex-direction: column;
+        overflow-x: visible;
+      }
+
+      .value-chain-stage {
+        min-width: 0;
+      }
+
+      .value-chain-arrow {
+        flex-direction: row;
+        padding: .25rem 0;
+      }
+
+      .value-chain-arrow .arrow-symbol {
+        transform: rotate(90deg);
+      }
+
+      .value-chain-arrow .arrow-label {
+        writing-mode: horizontal-tb;
+      }
+
+      .segment-extract-btn {
+        white-space: normal;
+      }
+
+      /* Overlay headers (Deep Research, Watchlist, AI Search, Budget) */
+      #unanswerableSection>header>div,
+      #watchlistSection>header>div,
+      #news-section>header>div,
+      #budget-section>header>div {
+        padding: .75rem 1rem;
+        gap: .75rem;
+      }
+
+      #unanswerableSection>header h1,
+      #watchlistSection>header h1,
+      #news-section>header h1,
+      #budget-section>header h1 {
+        font-size: 1rem !important;
+        line-height: 1.3;
+      }
+
+      #unanswerableSection>header .w-10,
+      #watchlistSection>header .w-10,
+      #news-section>header .w-10,
+      #budget-section>header .w-10 {
+        width: 2.25rem;
+        height: 2.25rem;
+        flex: none;
+      }
+
+      .kg-overlay-actions>button[onclick] {
+        padding: .5rem .75rem;
+      }
+
+      #unanswerableSection>main {
+        padding-top: 5.5rem;
+      }
+
+      #unanswerableInitialCard {
+        padding: 1.5rem 1rem;
+      }
+
+      #unanswerableResult>.flex:first-child,
+      #unanswerableResult>.flex:first-child>.flex {
+        flex-wrap: wrap;
+        gap: .75rem;
+      }
+
+      #unanswerableProgress {
+        padding: 1.25rem;
+      }
+
+      #unanswerableProgress>.flex:nth-child(2) {
+        flex-wrap: wrap;
+        gap: 1rem;
+      }
+
+      #watchlistSection>main {
+        padding-top: 5rem;
+      }
+
+      #news-section>main {
+        padding-top: 5rem;
+        padding-left: .75rem;
+        padding-right: .75rem;
+      }
+
+      #news-section .news-chat-container {
+        height: calc(100vh - 170px);
+        height: calc(100dvh - 170px);
+        padding: 1rem;
+      }
+
+      #newsChatForm>button {
+        padding-left: 1rem;
+        padding-right: 1rem;
+      }
+
+      #news-section #newsWelcomeMessage {
+        padding-top: 1.5rem;
+        padding-bottom: 1.5rem;
+      }
+
+      /* Chart analysis */
+      #chart-section>main {
+        padding: 1.25rem 1rem;
+      }
+
+      #chart-section>main>.flex:first-child {
+        flex-wrap: wrap;
+        gap: .75rem;
+        margin-bottom: 1.25rem;
+      }
+
+      #single-stock-panel .flex.items-center.gap-3.mt-4 {
+        flex-wrap: wrap;
+      }
+
+      .chart-popout-header {
+        flex-wrap: wrap;
+        gap: .75rem;
+        padding: .75rem 1rem;
+      }
+
+      .chart-popout-header>.flex:last-child {
+        width: 100%;
+        justify-content: space-between;
+        gap: .5rem;
+      }
+
+      .chart-popout-content {
+        width: 100%;
+        height: 100%;
+        border-radius: 1rem;
+      }
+
+      .chart-popout-modal {
+        padding: .5rem;
+      }
+
+      .chart-popout-body {
+        padding: .75rem;
+      }
+
+      .wl-modal-overlay {
+        padding: .75rem .5rem;
+      }
+
+      .wl-modal-header,
+      .wl-modal-body {
+        padding: 1rem;
+      }
+
+      .wl-chat-input-row {
+        padding: .75rem 1rem;
+      }
+    }
+
+    @media (max-width: 480px) {
+      #key-metrics-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+      }
+
+      #marketIndicesStrip,
+      #portfolioMetricsGrid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .kg-back-label,
+      #unanswerableSection>header p,
+      #watchlistSection>header p,
+      #news-section>header p,
+      #budget-section>header p {
+        display: none;
+      }
+
+      #unanswerableResult>.flex:first-child>.flex>button {
+        padding: .5rem .75rem;
+      }
+
+      .chat-header {
+        padding: .875rem 1rem;
+      }
+
+      #sidebarAiModelSelector {
+        max-width: 128px;
+      }
+    }
+
+    /* Touch screens: the screener cards' hover-only actions stay visible */
+    @media (hover: none) {
+      #screenerChartFeed .group-hover\:opacity-100 {
+        opacity: 1;
+      }
+    }
+
+    /* =====================================================================
+       DARK THEME for the light-native page (Tailwind utilities are remapped by
+       kagger_theme.css; this covers the page's own CSS and inline styles)
+       ===================================================================== */
+    html[data-theme="dark"] body.kg-native-light.bg-slate-100 {
+      background-color: var(--kg-bg);
+    }
+
+    /* --- header (matches the /agents header) --- */
+    html[data-theme="dark"] #kgNav {
+      background: var(--kg-header-bg) !important;
+      border-bottom-color: var(--kg-header-border);
+      backdrop-filter: blur(20px);
+    }
+
+    html[data-theme="dark"] #kgNav .kg-nav-logo-mark {
+      background: var(--kg-gradient) !important;
+    }
+
+    html[data-theme="dark"] #kgNav .kg-nav-logo-text {
+      color: var(--kg-header-text) !important;
+    }
+
+    html[data-theme="dark"] #kgNav :is([data-kg-dd-toggle], .kg-nav-link, .kg-nav-theme, .kg-nav-burger) {
+      color: var(--kg-header-muted) !important;
+    }
+
+    html[data-theme="dark"] #kgNav :is([data-kg-dd-toggle], .kg-nav-burger, #navSearchTrigger, #navSearchTrigger kbd) {
+      background: var(--kg-header-chip) !important;
+      border-color: var(--kg-header-chip-border) !important;
+    }
+
+    html[data-theme="dark"] #kgNav #navSearchTrigger,
+    html[data-theme="dark"] #kgNav #navSearchTrigger kbd {
+      color: var(--kg-muted) !important;
+    }
+
+    html[data-theme="dark"] #kgNav :is([data-kg-dd-toggle], .kg-nav-link):hover,
+    html[data-theme="dark"] #kgNav .group:hover [data-kg-dd-toggle],
+    html[data-theme="dark"] #kgNav .group.kg-dd-open [data-kg-dd-toggle] {
+      color: var(--kg-header-text) !important;
+      background: rgba(255, 255, 255, 0.08) !important;
+    }
+
+    html[data-theme="dark"] #kgNav .kg-nav-logout {
+      background: var(--kg-header-chip) !important;
+      border-color: var(--kg-header-chip-border) !important;
+    }
+
+    html[data-theme="dark"] #kgNav .kg-nav-dd>div {
+      border-color: var(--kg-border);
+      box-shadow: 0 18px 40px -12px rgba(0, 0, 0, 0.7);
+    }
+
+    @media (max-width: 1279.98px) {
+      html[data-theme="dark"] #kgNavMenu {
+        background: rgb(14 14 21 / .98);
+        border-bottom-color: var(--kg-border);
+      }
+    }
+
+    /* --- hero / search --- */
+    html[data-theme="dark"] .kg-hero-bubble {
+      background: rgba(16, 185, 129, 0.08) !important;
+      border-color: rgba(16, 185, 129, 0.28) !important;
+    }
+
+    html[data-theme="dark"] .kg-hero-bubble>div:first-child {
+      color: #6ee7b7 !important;
+    }
+
+    html[data-theme="dark"] .kg-hero-bubble>div:last-child {
+      color: var(--kg-text-3) !important;
+    }
+
+    html[data-theme="dark"] :is(#tickerInput, #industryInput) {
+      background: var(--kg-input-bg) !important;
+      color: var(--kg-text);
+    }
+
+    html[data-theme="dark"] body.kg-native-light>:not(.kg-native-dark) :is(input[type="text"], input:not([type]), select, textarea):not([class*="bg-"]):not([style*="background"]) {
+      background-color: var(--kg-input-bg);
+      color: var(--kg-text);
+    }
+
+    html[data-theme="dark"] .kg-native-light [class*="ring-offset"] {
+      --tw-ring-offset-color: var(--kg-bg);
+    }
+
+    html[data-theme="dark"] #stockDropdown::-webkit-scrollbar-track {
+      background: var(--kg-subtle);
+    }
+
+    html[data-theme="dark"] #stockDropdown::-webkit-scrollbar-thumb {
+      background: var(--kg-raised-2);
+    }
+
+    html[data-theme="dark"] .stock-item {
+      border-bottom-color: var(--kg-border);
+    }
+
+    html[data-theme="dark"] .stock-item:hover,
+    html[data-theme="dark"] .stock-item.selected {
+      background-color: rgba(16, 185, 129, 0.12);
+    }
+
+    html[data-theme="dark"] .stock-name {
+      color: var(--kg-text);
+    }
+
+    html[data-theme="dark"] .stock-name strong[style*="#059669"] {
+      color: #34d399 !important;
+    }
+
+    html[data-theme="dark"] .stock-ticker {
+      color: #34d399;
+      background: rgba(16, 185, 129, 0.14);
+    }
+
+    html[data-theme="dark"] .stock-item-highlight {
+      background-color: rgba(245, 158, 11, 0.16);
+    }
+
+    html[data-theme="dark"] .industry-fields label {
+      color: var(--kg-muted);
+    }
+
+    html[data-theme="dark"] .industry-fields :is(select, input) {
+      background-color: var(--kg-input-bg);
+      border-color: var(--kg-input-border);
+      color: var(--kg-text);
+    }
+
+    html[data-theme="dark"] .kagger-history-toggle.blue {
+      color: #60a5fa;
+      border-color: rgba(59, 130, 246, 0.35);
+    }
+
+    html[data-theme="dark"] .kagger-history-toggle.blue:hover {
+      background: rgba(59, 130, 246, 0.12);
+    }
+
+    html[data-theme="dark"] #industryForm .kagger-history-clear-btn {
+      color: #60a5fa !important;
+      border-color: rgba(59, 130, 246, 0.35) !important;
+    }
+
+    html[data-theme="dark"] #industryHistoryList .kagger-history-item:hover {
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    html[data-theme="dark"] #budget-section {
+      background: var(--kg-bg) !important;
+    }
+
+    /* Tailwind utilities the shared remap doesn't cover */
+    html[data-theme="dark"] .even\:bg-slate-50:nth-child(even) {
+      background-color: var(--kg-subtle);
+    }
+
+    html[data-theme="dark"] .kg-native-light .via-white\/80 {
+      --tw-gradient-stops: var(--tw-gradient-from), rgb(22 22 31 / .8) var(--tw-gradient-via-position), var(--tw-gradient-to);
+    }
+
+    html[data-theme="dark"] .kg-native-light .border-green-200\/50 {
+      border-color: rgb(34 197 94 / .2);
+    }
+
+    html[data-theme="dark"] .kg-native-light .bg-yellow-50\/50 {
+      background-color: rgb(234 179 8 / .05);
+    }
+
+    html[data-theme="dark"] .kg-native-light .hover\:bg-slate-400:hover,
+    html[data-theme="dark"] .kg-native-light .hover\:bg-slate-300:hover {
+      background-color: var(--kg-raised-2);
+    }
+
+    /* --- company analysis --- */
+    html[data-theme="dark"] .ask-ai-btn {
+      background: rgba(16, 185, 129, 0.10);
+      color: #6ee7b7;
+      border-color: rgba(16, 185, 129, 0.32);
+      box-shadow: none;
+    }
+
+    html[data-theme="dark"] .ask-ai-btn:hover {
+      background: rgba(16, 185, 129, 0.18);
+      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.4);
+    }
+
+    html[data-theme="dark"] body.theme-industry .ask-ai-btn {
+      background: rgba(59, 130, 246, 0.10);
+      color: #93c5fd;
+      border-color: rgba(59, 130, 246, 0.32);
+    }
+
+    html[data-theme="dark"] body.theme-industry .ask-ai-btn:hover {
+      background: rgba(59, 130, 246, 0.18);
+    }
+
+    html[data-theme="dark"] #companyResults .summary-content h4 {
+      color: var(--kg-text);
+    }
+
+    html[data-theme="dark"] #companyResults .summary-content :is(div[style*="#fff3cd"], div[style*="#FFF3CD"], div[style*="#fef3c7"], div[style*="#fffbeb"], div[style*="#fff8e1"], div[style*="#ffc107"]) {
+      background: rgba(245, 158, 11, 0.10) !important;
+      border-left-color: #f59e0b !important;
+      color: #fde68a !important;
+    }
+
+    html[data-theme="dark"] #companyResults .summary-content :is(div[style*="#fff3cd"], div[style*="#FFF3CD"], div[style*="#fef3c7"], div[style*="#fffbeb"], div[style*="#fff8e1"], div[style*="#ffc107"]) strong {
+      color: #fcd34d;
+    }
+
+    html[data-theme="dark"] .analyst-tabs {
+      border-bottom-color: var(--kg-border);
+    }
+
+    html[data-theme="dark"] .analyst-tab {
+      color: var(--kg-muted);
+    }
+
+    html[data-theme="dark"] .analyst-tab.active {
+      color: #34d399;
+      border-bottom-color: #10b981;
+      background: rgba(16, 185, 129, 0.12);
+    }
+
+    html[data-theme="dark"] .analyst-tab:hover {
+      color: #34d399;
+      background: rgba(16, 185, 129, 0.08);
+    }
+
+    html[data-theme="dark"] .reco-buy {
+      background: rgba(16, 185, 129, 0.16);
+      color: #6ee7b7;
+    }
+
+    html[data-theme="dark"] .reco-hold {
+      background: rgba(245, 158, 11, 0.16);
+      color: #fcd34d;
+    }
+
+    html[data-theme="dark"] .reco-sell {
+      background: rgba(239, 68, 68, 0.16);
+      color: #fca5a5;
+    }
+
+    html[data-theme="dark"] .peer-comparison-table td {
+      border-bottom-color: var(--kg-border);
+    }
+
+    html[data-theme="dark"] .peer-comparison-table tr:hover {
+      background-color: var(--kg-surface-hover);
+    }
+
+    html[data-theme="dark"] .peer-comparison-table tr.highlight-company {
+      background: rgba(16, 185, 129, 0.14);
+    }
+
+    html[data-theme="dark"] .peer-comparison-table tr.highlight-company:hover {
+      background: rgba(16, 185, 129, 0.20);
+    }
+
+    html[data-theme="dark"] .peer-comparison-table .company-name {
+      color: #93c5fd;
+    }
+
+    html[data-theme="dark"] .peer-comparison-table .positive {
+      color: #4ade80;
+    }
+
+    html[data-theme="dark"] .peer-comparison-table .negative {
+      color: #f87171;
+    }
+
+    html[data-theme="dark"] .peer-comparison-table tr.industry-average {
+      background: rgba(34, 197, 94, 0.08);
+    }
+
+    html[data-theme="dark"] .peer-comparison-table tr.industry-average:hover {
+      background: rgba(34, 197, 94, 0.14);
+    }
+
+    html[data-theme="dark"] .peer-comparison-table tr.industry-average td,
+    html[data-theme="dark"] .peer-comparison-table tr.industry-average .company-name {
+      color: #86efac;
+    }
+
+    html[data-theme="dark"] .ann-tab[style*="box-shadow"] {
+      box-shadow: 0 1px 0 var(--kg-surface), 0 -1px 3px rgba(0, 0, 0, 0.3) !important;
+    }
+
+    html[data-theme="dark"] .copy-msg-btn:hover {
+      background-color: var(--kg-raised);
+    }
+
+    /* segment extraction (AI) */
+    html[data-theme="dark"] .segment-loading {
+      background: rgba(139, 92, 246, 0.08);
+      border-color: rgba(139, 92, 246, 0.30);
+    }
+
+    html[data-theme="dark"] .segment-loading-spinner {
+      border-color: rgba(139, 92, 246, 0.25);
+      border-top-color: #8b5cf6;
+    }
+
+    html[data-theme="dark"] .segment-loading p {
+      color: #c4b5fd;
+    }
+
+    html[data-theme="dark"] .segment-analysis-wrapper {
+      background: var(--kg-subtle);
+      border-color: var(--kg-border);
+    }
+
+    html[data-theme="dark"] .segment-source-badge {
+      background: rgba(139, 92, 246, 0.10);
+      border-color: rgba(139, 92, 246, 0.30);
+    }
+
+    html[data-theme="dark"] .segment-source-badge span {
+      color: #c4b5fd;
+    }
+
+    html[data-theme="dark"] .segment-pdf-link {
+      color: #a78bfa;
+    }
+
+    html[data-theme="dark"] .segment-pdf-link:hover {
+      color: #c4b5fd;
+    }
+
+    html[data-theme="dark"] .segment-title {
+      color: var(--kg-text);
+    }
+
+    html[data-theme="dark"] .segment-table {
+      background: var(--kg-surface);
+      box-shadow: none;
+    }
+
+    html[data-theme="dark"] .segment-table td {
+      border-bottom-color: var(--kg-border);
+      color: var(--kg-text-2);
+    }
+
+    html[data-theme="dark"] .segment-table tbody tr:nth-child(even) {
+      background: var(--kg-subtle);
+    }
+
+    html[data-theme="dark"] .segment-table tbody tr:hover {
+      background: rgba(139, 92, 246, 0.10);
+    }
+
+    html[data-theme="dark"] .segment-not-found {
+      color: #fcd34d;
+      background: rgba(245, 158, 11, 0.10);
+    }
+
+    html[data-theme="dark"] .segment-analysis-container>div[style*="#fef2f2"] {
+      background: rgba(239, 68, 68, 0.10) !important;
+      border-color: rgba(239, 68, 68, 0.30) !important;
+    }
+
+    html[data-theme="dark"] .segment-analysis-container>div[style*="#fef2f2"] p {
+      color: #fca5a5 !important;
+    }
+
+    /* AI summary + AI Quant Score modals, and inline analyst AI summaries */
+    html[data-theme="dark"] .ai-summary-content {
+      background: var(--kg-surface);
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+    }
+
+    html[data-theme="dark"] .ai-summary-header {
+      border-bottom-color: var(--kg-border);
+    }
+
+    html[data-theme="dark"] .ai-summary-body {
+      color: var(--kg-text-2);
+    }
+
+    html[data-theme="dark"] :is(#ai-summary-modal-body, #ai-summary-0, #ai-summary-1, #ai-summary-2, #ai-summary-3, #ai-summary-4, #ai-summary-5, #ai-summary-6, #ai-summary-7) table {
+      background: var(--kg-surface);
+      box-shadow: none;
+    }
+
+    html[data-theme="dark"] :is(#ai-summary-modal-body, #ai-summary-0, #ai-summary-1, #ai-summary-2, #ai-summary-3, #ai-summary-4, #ai-summary-5, #ai-summary-6, #ai-summary-7) table td {
+      border-bottom-color: var(--kg-border);
+    }
+
+    html[data-theme="dark"] :is(#ai-summary-modal-body, #ai-summary-0, #ai-summary-1, #ai-summary-2, #ai-summary-3, #ai-summary-4, #ai-summary-5, #ai-summary-6, #ai-summary-7) table tbody tr:nth-child(even) {
+      background: var(--kg-subtle);
+    }
+
+    html[data-theme="dark"] :is(#ai-summary-modal-body, #ai-summary-0, #ai-summary-1, #ai-summary-2, #ai-summary-3, #ai-summary-4, #ai-summary-5, #ai-summary-6, #ai-summary-7) table tbody tr:hover {
+      background: rgba(59, 130, 246, 0.10);
+    }
+
+    html[data-theme="dark"] :is(#ai-summary-modal-body, #ai-summary-0, #ai-summary-1, #ai-summary-2, #ai-summary-3, #ai-summary-4, #ai-summary-5, #ai-summary-6, #ai-summary-7) :is(h2, strong) {
+      color: #93c5fd;
+    }
+
+    html[data-theme="dark"] :is(#ai-summary-modal-body, #ai-summary-0, #ai-summary-1, #ai-summary-2, #ai-summary-3, #ai-summary-4, #ai-summary-5, #ai-summary-6, #ai-summary-7) h3 {
+      color: #bfdbfe;
+    }
+
+    html[data-theme="dark"] :is(#ai-summary-modal-body, #ai-summary-0, #ai-summary-1, #ai-summary-2, #ai-summary-3, #ai-summary-4, #ai-summary-5, #ai-summary-6, #ai-summary-7) blockquote {
+      background: rgba(59, 130, 246, 0.10);
+      color: #bfdbfe;
+    }
+
+    html[data-theme="dark"] :is(#ai-summary-modal-body, #ai-summary-0, #ai-summary-1, #ai-summary-2, #ai-summary-3, #ai-summary-4, #ai-summary-5, #ai-summary-6, #ai-summary-7) hr {
+      border-top-color: var(--kg-border);
+    }
+
+    html[data-theme="dark"] :is(#ai-summary-modal-body, #ai-summary-0, #ai-summary-1, #ai-summary-2, #ai-summary-3, #ai-summary-4, #ai-summary-5, #ai-summary-6, #ai-summary-7) p {
+      color: var(--kg-text-2);
+    }
+
+    /* --- industry report --- */
+    html[data-theme="dark"] .quality-badge.grade-a {
+      background: rgba(16, 185, 129, 0.16);
+      color: #6ee7b7;
+    }
+
+    html[data-theme="dark"] .quality-badge.grade-b {
+      background: rgba(59, 130, 246, 0.16);
+      color: #93c5fd;
+    }
+
+    html[data-theme="dark"] .quality-badge.grade-c {
+      background: rgba(245, 158, 11, 0.16);
+      color: #fcd34d;
+    }
+
+    html[data-theme="dark"] .quality-stat {
+      color: var(--kg-muted);
+    }
+
+    html[data-theme="dark"] .quality-stat strong {
+      color: var(--kg-text-2);
+    }
+
+    html[data-theme="dark"] .kpi-card {
+      background: linear-gradient(135deg, var(--kg-surface) 0%, var(--kg-subtle) 100%);
+      border-color: var(--kg-border);
+      box-shadow: none;
+    }
+
+    html[data-theme="dark"] .kpi-card:hover {
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+    }
+
+    html[data-theme="dark"] .kpi-card .kpi-value {
+      color: #93c5fd;
+    }
+
+    html[data-theme="dark"] .kpi-card .kpi-label {
+      color: var(--kg-muted);
+    }
+
+    html[data-theme="dark"] .toc-container {
+      background: linear-gradient(135deg, rgba(59, 130, 246, 0.10) 0%, rgba(59, 130, 246, 0.05) 100%);
+      border-color: rgba(59, 130, 246, 0.30);
+    }
+
+    html[data-theme="dark"] .toc-title {
+      color: #93c5fd;
+    }
+
+    html[data-theme="dark"] .toc-link {
+      color: #bfdbfe;
+    }
+
+    html[data-theme="dark"] .toc-link:hover {
+      color: #dbeafe;
+    }
+
+    html[data-theme="dark"] .toc-number {
+      color: #60a5fa;
+    }
+
+    html[data-theme="dark"] .industry-report h1 {
+      color: #93c5fd;
+    }
+
+    html[data-theme="dark"] .industry-report h2 {
+      color: #bfdbfe;
+    }
+
+    html[data-theme="dark"] .industry-report h3 {
+      color: var(--kg-text-2);
+    }
+
+    html[data-theme="dark"] .industry-report h4 {
+      color: var(--kg-text-3);
+    }
+
+    html[data-theme="dark"] .table-container {
+      border-color: var(--kg-border);
+    }
+
+    html[data-theme="dark"] .industry-report :is(th, td) {
+      border-color: var(--kg-border);
+    }
+
+    html[data-theme="dark"] .industry-report th {
+      background: var(--kg-raised);
+    }
+
+    html[data-theme="dark"] .industry-report tr:nth-child(even) {
+      background: var(--kg-subtle);
+    }
+
+    html[data-theme="dark"] .industry-report code {
+      background: var(--kg-raised);
+    }
+
+    html[data-theme="dark"] .industry-report blockquote {
+      color: var(--kg-text-3);
+    }
+
+    html[data-theme="dark"] .industry-report hr {
+      border-top-color: var(--kg-border);
+    }
+
+    html[data-theme="dark"] .industry-report .table-collapse-wrapper th:hover {
+      background: var(--kg-raised-2);
+    }
+
+    html[data-theme="dark"] .table-collapse-wrapper {
+      background: var(--kg-surface);
+      border-color: var(--kg-border);
+      box-shadow: none;
+    }
+
+    html[data-theme="dark"] .table-collapse-header {
+      background: var(--kg-subtle);
+      border-bottom-color: var(--kg-border);
+      color: var(--kg-text-2);
+    }
+
+    html[data-theme="dark"] .table-collapse-header:hover {
+      background: rgba(59, 130, 246, 0.10);
+    }
+
+    html[data-theme="dark"] .table-collapse-header .table-caption {
+      color: var(--kg-text-2);
+    }
+
+    html[data-theme="dark"] .table-collapse-header .row-badge {
+      background: rgba(59, 130, 246, 0.18);
+      color: #93c5fd;
+    }
+
+    html[data-theme="dark"] .table-collapse-header .row-badge[style*="background"] {
+      background: rgba(245, 158, 11, 0.18) !important;
+      color: #fcd34d !important;
+    }
+
+    html[data-theme="dark"] .table-collapse-header .collapse-icon {
+      color: var(--kg-muted);
+    }
+
+    html[data-theme="dark"] .table-collapse-wrapper.has-scroll::after {
+      background: linear-gradient(to left, rgba(22, 22, 31, 0.9), transparent);
+    }
+
+    html[data-theme="dark"] .table-filter-bar {
+      background: var(--kg-subtle);
+      border-bottom-color: var(--kg-border);
+    }
+
+    html[data-theme="dark"] .table-filter-input {
+      background: var(--kg-input-bg);
+      border-color: var(--kg-input-border);
+      color: var(--kg-text);
+    }
+
+    html[data-theme="dark"] .sort-icon {
+      color: var(--kg-faint);
+    }
+
+    html[data-theme="dark"] .sort-icon.active {
+      color: #93c5fd;
+    }
+
+    html[data-theme="dark"] .cell-positive {
+      color: #34d399;
+    }
+
+    html[data-theme="dark"] .cell-negative {
+      color: #f87171;
+    }
+
+    html[data-theme="dark"] .value-chain-stage.upstream {
+      background: rgba(245, 158, 11, 0.06);
+      border-color: rgba(245, 158, 11, 0.45);
+    }
+
+    html[data-theme="dark"] .value-chain-stage.midstream {
+      background: rgba(59, 130, 246, 0.06);
+      border-color: rgba(59, 130, 246, 0.45);
+    }
+
+    html[data-theme="dark"] .value-chain-stage.downstream {
+      background: rgba(16, 185, 129, 0.06);
+      border-color: rgba(16, 185, 129, 0.45);
+    }
+
+    html[data-theme="dark"] .upstream .stage-header {
+      background: linear-gradient(135deg, rgba(245, 158, 11, 0.22), rgba(245, 158, 11, 0.12));
+    }
+
+    html[data-theme="dark"] .midstream .stage-header {
+      background: linear-gradient(135deg, rgba(59, 130, 246, 0.22), rgba(59, 130, 246, 0.12));
+    }
+
+    html[data-theme="dark"] .downstream .stage-header {
+      background: linear-gradient(135deg, rgba(16, 185, 129, 0.22), rgba(16, 185, 129, 0.12));
+    }
+
+    html[data-theme="dark"] .upstream :is(.stage-header, .stage-detail-label) {
+      color: #fcd34d;
+    }
+
+    html[data-theme="dark"] .midstream :is(.stage-header, .stage-detail-label) {
+      color: #93c5fd;
+    }
+
+    html[data-theme="dark"] .downstream :is(.stage-header, .stage-detail-label) {
+      color: #6ee7b7;
+    }
+
+    html[data-theme="dark"] .stage-detail-content {
+      color: var(--kg-text-2);
+    }
+
+    html[data-theme="dark"] .upstream .stage-detail-content li::before {
+      color: #fbbf24;
+    }
+
+    html[data-theme="dark"] .midstream .stage-detail-content li::before {
+      color: #60a5fa;
+    }
+
+    html[data-theme="dark"] .downstream .stage-detail-content li::before {
+      color: #34d399;
+    }
+
+    html[data-theme="dark"] .upstream .company-tag {
+      background: rgba(245, 158, 11, 0.14);
+      color: #fde68a;
+      border-color: rgba(245, 158, 11, 0.45);
+    }
+
+    html[data-theme="dark"] .midstream .company-tag {
+      background: rgba(59, 130, 246, 0.14);
+      color: #bfdbfe;
+      border-color: rgba(96, 165, 250, 0.45);
+    }
+
+    html[data-theme="dark"] .downstream .company-tag {
+      background: rgba(16, 185, 129, 0.14);
+      color: #a7f3d0;
+      border-color: rgba(52, 211, 153, 0.45);
+    }
+
+    html[data-theme="dark"] .margin-badge.high {
+      background: rgba(16, 185, 129, 0.16);
+      color: #6ee7b7;
+    }
+
+    html[data-theme="dark"] .margin-badge.medium {
+      background: rgba(245, 158, 11, 0.16);
+      color: #fcd34d;
+    }
+
+    html[data-theme="dark"] .margin-badge.low {
+      background: rgba(239, 68, 68, 0.16);
+      color: #fca5a5;
+    }
+
+    html[data-theme="dark"] .margin-badge.volatile {
+      background: rgba(99, 102, 241, 0.18);
+      color: #c7d2fe;
+    }
+
+    html[data-theme="dark"] .upstream .stage-footer {
+      color: #fcd34d;
+      background: rgba(245, 158, 11, 0.08);
+    }
+
+    html[data-theme="dark"] .midstream .stage-footer {
+      color: #93c5fd;
+      background: rgba(59, 130, 246, 0.08);
+    }
+
+    html[data-theme="dark"] .downstream .stage-footer {
+      color: #6ee7b7;
+      background: rgba(16, 185, 129, 0.08);
+    }
+
+    html[data-theme="dark"] .value-chain-arrow .arrow-symbol {
+      color: var(--kg-faint);
+    }
+
+    html[data-theme="dark"] .value-chain-arrow .arrow-label {
+      color: var(--kg-muted);
+    }
+
+    html[data-theme="dark"] .stage-detail-content span[style*="#dc2626"] {
+      color: #f87171 !important;
+    }
+
+    html[data-theme="dark"] .stage-detail-content span[style*="#16a34a"] {
+      color: #4ade80 !important;
+    }
+
+    html[data-theme="dark"] .stage-detail-content span[style*="#d97706"] {
+      color: #fbbf24 !important;
+    }
+
+    html[data-theme="dark"] .investor-implication {
+      background: linear-gradient(135deg, rgba(59, 130, 246, 0.12), rgba(59, 130, 246, 0.06));
+      color: #dbeafe;
+    }
+
+    html[data-theme="dark"] .investor-implication strong:first-child {
+      color: #93c5fd;
+    }
+
+    html[data-theme="dark"] .tag-fact {
+      background: rgba(16, 185, 129, 0.18);
+      color: #6ee7b7;
+    }
+
+    html[data-theme="dark"] .tag-assumption {
+      background: rgba(245, 158, 11, 0.18);
+      color: #fcd34d;
+    }
+
+    html[data-theme="dark"] .tag-opinion {
+      background: rgba(99, 102, 241, 0.20);
+      color: #c7d2fe;
+    }
+
+    html[data-theme="dark"] .industry-chart {
+      background: var(--kg-surface);
+      border-color: var(--kg-border);
+      box-shadow: none;
+    }
+
+    html[data-theme="dark"] .industry-chart .chart-title {
+      color: #93c5fd;
+    }
+
+    html[data-theme="dark"] .section-collapse-header:hover {
+      color: #60a5fa;
+    }
+
+    html[data-theme="dark"] .section-chevron {
+      color: var(--kg-muted);
+    }
+
+    html[data-theme="dark"] .section-controls button {
+      background: var(--kg-surface);
+      border-color: var(--kg-border-strong);
+      color: var(--kg-text-3);
+    }
+
+    html[data-theme="dark"] .section-controls button:hover {
+      background: rgba(59, 130, 246, 0.12);
+      border-color: #3b82f6;
+      color: #93c5fd;
+    }
+
+    /* --- AI chat sidebar (and the legacy chat modal) --- */
+    html[data-theme="dark"] .chat-sidebar {
+      background: var(--kg-surface);
+      border-color: var(--kg-border);
+      box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.6);
+    }
+
+    html[data-theme="dark"] .bot-message .message-content :is(h4, strong) {
+      color: var(--kg-text-strong);
+    }
+
+    html[data-theme="dark"] .bot-message .message-content :is(p, li) {
+      color: var(--kg-text-2);
+    }
+
+    html[data-theme="dark"] .bot-message .message-content li::marker {
+      color: var(--kg-faint);
+    }
+
+    html[data-theme="dark"] #sidebarChatLog .message-content strong {
+      color: var(--kg-text-strong) !important;
+    }
+
+    html[data-theme="dark"] #sidebarChatLog .message-content :is(h1, h2, h3, h4, h5, h6) {
+      color: var(--kg-text) !important;
+    }
+
+    html[data-theme="dark"] #sidebarChatLog .message-content :is(th, td) {
+      border-color: var(--kg-border) !important;
+    }
+
+    html[data-theme="dark"] #sidebarChatLog .message-content th,
+    html[data-theme="dark"] #sidebarChatLog .message-content :is(code, pre) {
+      background-color: var(--kg-raised) !important;
+    }
+
+    html[data-theme="dark"] #chatLog::-webkit-scrollbar-track {
+      background-color: var(--kg-subtle);
+    }
+
+    html[data-theme="dark"] #chatLog::-webkit-scrollbar-thumb {
+      background-color: var(--kg-raised-2);
+    }
+
+    /* =====================================================================
+       Dark-native overlays inside this light page, in DARK theme: undo the
+       shared light->dark remap so they keep their exact original colours
+       ===================================================================== */
+    html[data-theme="dark"] body.kg-native-light>.kg-native-dark {
+      color: #1e293b;  /* the text colour they inherited from <body> (text-slate-800) */
+    }
+
+    html[data-theme="dark"] .kg-native-dark .bg-white {
+      background-color: #fff;
+    }
+
+    html[data-theme="dark"] .kg-native-dark .border-slate-200 {
+      border-color: #e2e8f0;
+    }
+
+    html[data-theme="dark"] .kg-native-dark .text-slate-500 {
+      color: #64748b;
+    }
+
+    html[data-theme="dark"] .kg-native-dark .text-slate-600 {
+      color: #475569;
+    }
+
+    /* =====================================================================
+       LIGHT THEME for the dark-native overlays (white + green, like /app)
+       ===================================================================== */
+    html[data-theme="light"] :is(#unanswerableSection, #watchlistSection, #news-section, #chart-section) {
+      background: var(--kg-bg) !important;
+    }
+
+    html[data-theme="light"] :is(#unanswerableSection, #watchlistSection, #news-section)>header {
+      background: rgb(255 255 255 / .92) !important;
+      border-bottom: 1px solid var(--kg-border) !important;
+      box-shadow: var(--kg-shadow);
+    }
+
+    html[data-theme="light"] .kg-native-dark .custom-scrollbar::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.04);
+    }
+
+    html[data-theme="light"] .kg-native-dark .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: var(--kg-raised-2);
+    }
+
+    html[data-theme="light"] .kagger-history-item.dark:hover {
+      background: rgba(15, 23, 42, 0.05);
+    }
+
+    html[data-theme="light"] .kagger-history-item.dark .kagger-history-item-query {
+      color: var(--kg-text);
+    }
+
+    html[data-theme="light"] .kagger-history-item.dark .kagger-history-item-time {
+      color: var(--kg-muted);
+    }
+
+    html[data-theme="light"] .kg-native-dark .kagger-history-clear-btn {
+      color: var(--kg-muted) !important;
+      border-color: var(--kg-border-strong) !important;
+    }
+
+    /* --- Ask the Unanswerable (deep research) --- */
+    html[data-theme="light"] #unanswerableSection .cosmic-card {
+      background: #fff;
+      border-color: var(--kg-border);
+    }
+
+    html[data-theme="light"] #unanswerableInitialCard {
+      background: radial-gradient(ellipse at top, #dcfce7 0%, rgba(220, 252, 231, 0) 60%), #fff;
+      box-shadow: var(--kg-shadow-lg);
+    }
+
+    html[data-theme="light"] #unanswerableInitialCard>.absolute.inset-0 {
+      display: none;
+    }
+
+    html[data-theme="light"] #unanswerableInitialCard h2 .bg-clip-text {
+      background-image: var(--kg-gradient-text);
+    }
+
+    html[data-theme="light"] #unanswerableDepth {
+      border-color: var(--kg-border-strong);
+    }
+
+    html[data-theme="light"] #unanswerableSubmit {
+      background-image: var(--kg-gradient);
+      box-shadow: 0 10px 22px -10px rgb(22 163 74 / .55);
+    }
+
+    html[data-theme="light"] .kagger-history-toggle.cosmic {
+      color: #4f46e5;
+      border-color: rgba(79, 70, 229, 0.30);
+    }
+
+    html[data-theme="light"] .kagger-history-toggle.cosmic:hover {
+      background: #eef2ff;
+    }
+
+    html[data-theme="light"] .event-item {
+      background: var(--kg-subtle);
+    }
+
+    html[data-theme="light"] .event-item.complete {
+      background: rgba(16, 185, 129, 0.07);
+    }
+
+    html[data-theme="light"] .event-item.running {
+      background: rgba(99, 102, 241, 0.06);
+    }
+
+    html[data-theme="light"] #unanswerableContent {
+      box-shadow: var(--kg-shadow-lg);
+    }
+
+    html[data-theme="light"] #unanswerableContent h2 {
+      border-left-color: var(--kg-primary);
+    }
+
+    html[data-theme="light"] #unanswerableResult .sticky>.bg-indigo-500 {
+      background-color: var(--kg-primary);
+    }
+
+    /* --- Watchlist + its Financials / Agent modals --- */
+    html[data-theme="light"] .wl-card {
+      background: #fff;
+      border-color: var(--kg-border);
+      box-shadow: var(--kg-shadow);
+      backdrop-filter: none;
+    }
+
+    html[data-theme="light"] .wl-card:hover {
+      border-color: rgba(22, 163, 74, 0.45);
+      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+    }
+
+    html[data-theme="light"] .wl-ticker-badge {
+      background: var(--kg-gradient);
+    }
+
+    html[data-theme="light"] .wl-card-name {
+      color: var(--kg-text);
+    }
+
+    html[data-theme="light"] :is(.wl-card-date, .wl-ready-label, .wl-modal-asof) {
+      color: var(--kg-muted);
+    }
+
+    html[data-theme="light"] .wl-dock {
+      border-top-color: var(--kg-border);
+    }
+
+    html[data-theme="light"] .wl-dock-btn {
+      background: var(--kg-subtle);
+      border-color: var(--kg-border);
+    }
+
+    html[data-theme="light"] .wl-dock-btn:hover {
+      background: var(--kg-primary-soft);
+      border-color: rgba(22, 163, 74, 0.40);
+    }
+
+    html[data-theme="light"] .wl-remove-btn {
+      color: var(--kg-faint);
+    }
+
+    html[data-theme="light"] .wl-remove-btn:hover {
+      color: #dc2626;
+    }
+
+    html[data-theme="light"] .wl-dot:not([class*="wl-dot-"]) {
+      background: #cbd5e1;
+    }
+
+    html[data-theme="light"] .wl-search-input,
+    html[data-theme="light"] .wl-chat-input {
+      background: #fff;
+      border-color: var(--kg-input-border);
+      color: var(--kg-text);
+    }
+
+    html[data-theme="light"] .wl-search-input:focus,
+    html[data-theme="light"] .wl-chat-input:focus {
+      border-color: var(--kg-primary);
+      box-shadow: 0 0 0 3px var(--kg-focus);
+    }
+
+    html[data-theme="light"] .wl-search-input::placeholder,
+    html[data-theme="light"] .wl-chat-input::placeholder {
+      color: var(--kg-faint);
+    }
+
+    html[data-theme="light"] .wl-search-dropdown {
+      background: #fff;
+      border-color: var(--kg-border);
+      box-shadow: var(--kg-shadow-lg);
+    }
+
+    html[data-theme="light"] .wl-search-item:hover {
+      background: var(--kg-primary-tint);
+    }
+
+    html[data-theme="light"] .wl-search-item span[style*="#e2e8f0"] {
+      color: var(--kg-text) !important;
+    }
+
+    html[data-theme="light"] .wl-search-item span[style*="#7c3aed"] {
+      color: var(--kg-link) !important;
+    }
+
+    html[data-theme="light"] .wl-modal-overlay {
+      background: var(--kg-overlay);
+    }
+
+    html[data-theme="light"] .wl-modal {
+      background: #fff;
+      border-color: var(--kg-border);
+      color: var(--kg-text);
+      box-shadow: var(--kg-shadow-lg);
+    }
+
+    html[data-theme="light"] :is(.wl-modal-header, .wl-fin-tabs) {
+      border-bottom-color: var(--kg-border);
+    }
+
+    html[data-theme="light"] .wl-chat-input-row {
+      border-top-color: var(--kg-border);
+    }
+
+    html[data-theme="light"] .wl-modal-close {
+      background: var(--kg-subtle);
+      border-color: var(--kg-border);
+      color: var(--kg-muted);
+    }
+
+    html[data-theme="light"] .wl-modal-close:hover {
+      background: rgba(239, 68, 68, 0.10);
+      color: #dc2626;
+    }
+
+    html[data-theme="light"] .wl-modal-body::-webkit-scrollbar-thumb {
+      background: var(--kg-raised-2);
+    }
+
+    html[data-theme="light"] .wl-progress-bar {
+      background: var(--kg-primary-soft);
+    }
+
+    html[data-theme="light"] :is(.wl-progress-bar-inner, .wl-chat-send) {
+      background: var(--kg-gradient);
+    }
+
+    html[data-theme="light"] .wl-fin-tab {
+      color: var(--kg-muted);
+    }
+
+    html[data-theme="light"] .wl-fin-tab:hover,
+    html[data-theme="light"] .wl-fin-tab.active {
+      color: var(--kg-link);
+    }
+
+    html[data-theme="light"] .wl-fin-tab.active {
+      border-bottom-color: var(--kg-primary);
+    }
+
+    html[data-theme="light"] .wl-md :is(h1, h2, h3, strong) {
+      color: var(--kg-text-strong);
+    }
+
+    html[data-theme="light"] .wl-md :is(p, ul, ol) {
+      color: var(--kg-text-2);
+    }
+
+    html[data-theme="light"] .wl-md th {
+      background: var(--kg-primary-tint);
+      color: var(--kg-primary-strong);
+      border-bottom-color: var(--kg-border);
+    }
+
+    html[data-theme="light"] .wl-md td {
+      color: var(--kg-text-2);
+      border-bottom-color: var(--kg-border);
+    }
+
+    html[data-theme="light"] .wl-md tr:hover td {
+      background: var(--kg-subtle);
+    }
+
+    html[data-theme="light"] .wl-md :is(div[style*="#fff3cd"], div[style*="#FFF3CD"], div[style*="#fef3c7"], div[style*="#fffbeb"], div[style*="#fff8e1"], div[style*="#ffc107"]) {
+      background: #fffbeb !important;
+      border-color: #fde68a !important;
+      border-left-color: #f59e0b !important;
+      color: #92400e !important;
+    }
+
+    html[data-theme="light"] .wl-md :is(div[style*="#fff3cd"], div[style*="#FFF3CD"], div[style*="#fef3c7"], div[style*="#fffbeb"], div[style*="#fff8e1"], div[style*="#ffc107"]) strong {
+      color: #78350f !important;
+    }
+
+    html[data-theme="light"] .wl-modal-meta {
+      border-bottom-color: var(--kg-border);
+      background: var(--kg-subtle);
+    }
+
+    html[data-theme="light"] .wl-modal-asof b {
+      color: var(--kg-link);
+    }
+
+    html[data-theme="light"] .wl-modal b[style*="#f59e0b"],
+    html[data-theme="light"] .wl-modal p[style*="#f59e0b"] {
+      color: #b45309 !important;
+    }
+
+    html[data-theme="light"] .wl-refresh-btn {
+      background: var(--kg-primary-tint);
+      border-color: rgba(22, 163, 74, 0.35);
+      color: var(--kg-link);
+    }
+
+    html[data-theme="light"] .wl-refresh-btn:hover:not(:disabled) {
+      background: var(--kg-primary-soft);
+    }
+
+    /* inline-styled pieces built by the watchlist JS (metric tiles, peer table, meta line) */
+    html[data-theme="light"] #wlFinBody div[style*="rgba(139,92,246,0.08)"] {
+      background: var(--kg-subtle) !important;
+      border-color: var(--kg-border) !important;
+    }
+
+    html[data-theme="light"] .wl-modal [style*="color:#e2e8f0"] {
+      color: var(--kg-text) !important;
+    }
+
+    html[data-theme="light"] .wl-modal [style*="color:#a0a0b8"] {
+      color: var(--kg-text-3) !important;
+    }
+
+    html[data-theme="light"] .wl-modal th[style*="color:#a78bfa"] {
+      color: var(--kg-primary-strong) !important;
+      background: var(--kg-primary-tint) !important;
+      border-bottom-color: var(--kg-border) !important;
+    }
+
+    html[data-theme="light"] .wl-modal tr[style*="rgba(139,92,246,0.1)"] {
+      background: var(--kg-primary-tint) !important;
+    }
+
+    html[data-theme="light"] .wl-modal [style*="rgba(255,255,255,0.04)"],
+    html[data-theme="light"] .wl-modal [style*="rgba(255,255,255,0.06)"],
+    html[data-theme="light"] .wl-modal [style*="rgba(255,255,255,0.08)"] {
+      border-color: var(--kg-border) !important;
+    }
+
+    html[data-theme="light"] .wl-modal a[style*="#a78bfa"] {
+      color: var(--kg-link) !important;
+    }
+
+    /* --- AI Search & News --- */
+    html[data-theme="light"] :is(#news-section, #chart-section) .glass-card {
+      background: #fff;
+      border-color: var(--kg-border);
+      box-shadow: var(--kg-shadow);
+      backdrop-filter: none;
+    }
+
+    html[data-theme="light"] #news-section>header.glass-card {
+      background: rgb(255 255 255 / .92);
+      backdrop-filter: blur(12px);
+    }
+
+    html[data-theme="light"] #news-section .gradient-text {
+      background: var(--kg-gradient-text);
+      -webkit-background-clip: text;
+      background-clip: text;
+    }
+
+    html[data-theme="light"] #news-section .user-message {
+      color: #fff;
+    }
+
+    html[data-theme="light"] #news-section .ai-message {
+      background: var(--kg-subtle);
+      border-color: var(--kg-border);
+    }
+
+    html[data-theme="light"] #news-section .ai-message :is(th, td) {
+      border-color: var(--kg-border);
+    }
+
+    html[data-theme="light"] #news-section .ai-message th {
+      background: var(--kg-inset);
+    }
+
+    html[data-theme="light"] #news-section .ai-message strong {
+      color: #1d4ed8;
+    }
+
+    html[data-theme="light"] #news-section .ai-message :is(h1, h2, h3) {
+      color: #1e40af;
+    }
+
+    html[data-theme="light"] #news-section .ai-message li::marker {
+      color: #2563eb;
+    }
+
+    html[data-theme="light"] #news-section .bg-blue-600 .text-blue-200 {
+      color: #dbeafe;
+    }
+
+    html[data-theme="light"] .kagger-history-toggle.news {
+      color: #2563eb;
+      border-color: rgba(37, 99, 235, 0.30);
+    }
+
+    html[data-theme="light"] .kagger-history-toggle.news:hover {
+      background: #eff6ff;
+    }
+
+    html[data-theme="light"] #newsSendButton {
+      background-image: var(--kg-gradient);
+    }
+
+    /* --- Chart analysis + screeners --- */
+    html[data-theme="light"] #chart-section .gradient-text {
+      background: linear-gradient(135deg, #047857 0%, #0e7490 50%, #059669 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+    }
+
+    html[data-theme="light"] #chart-section .chart-summary-table {
+      background: var(--kg-subtle);
+    }
+
+    html[data-theme="light"] #chart-section .chart-summary-table tr:nth-child(even) {
+      background: var(--kg-inset);
+    }
+
+    html[data-theme="light"] #chart-section .chart-summary-table td {
+      border-bottom-color: var(--kg-border);
+    }
+
+    html[data-theme="light"] #chart-section .chart-summary-table td:first-child {
+      color: #047857;
+    }
+
+    html[data-theme="light"] #chart-section .chart-summary-table td:last-child {
+      color: var(--kg-text);
+    }
+
+    html[data-theme="light"] #chart-section :is(.bg-emerald-500\/90, .bg-purple-600\/90),
+    html[data-theme="light"] #screenerChartFeed .hover\:bg-emerald-500:hover {
+      color: #fff;
+    }
+
+    html[data-theme="light"] #mode-btn-screener.bg-purple-600\/90,
+    html[data-theme="light"] #screener-panel [id^="strat-btn-"].bg-purple-500 {
+      background-color: var(--kg-primary);
+      box-shadow: none;
+    }
+
+    html[data-theme="light"] #runScreenerBtn {
+      background-image: var(--kg-gradient);
+      box-shadow: 0 8px 20px -8px rgb(22 163 74 / .5);
+    }
+
+    html[data-theme="light"] #screenerChartExpandModal,
+    html[data-theme="light"] #screenerGuideModal {
+      background-color: var(--kg-overlay);
+    }
+
+    html[data-theme="light"] :is(#screenerChartExpandModal, #screenerGuideModal)>div {
+      box-shadow: var(--kg-shadow-lg);
+    }
+
+    html[data-theme="light"] .chart-popout-backdrop {
+      background: var(--kg-overlay);
+    }
+
+    html[data-theme="light"] .chart-popout-content {
+      background: #fff;
+      border-color: var(--kg-border);
+      box-shadow: var(--kg-shadow-lg);
+    }
+
+    html[data-theme="light"] .chart-popout-header {
+      background: var(--kg-subtle);
+      border-bottom-color: var(--kg-border);
+    }
+
+    html[data-theme="light"] .chart-popout-summary {
+      background: var(--kg-subtle);
+      border-color: var(--kg-border);
+      color: var(--kg-text-2);
+    }
+
+    html[data-theme="light"] .chart-popout-summary::-webkit-scrollbar-thumb {
+      background: var(--kg-raised-2);
+    }
+
+    html[data-theme="light"] .chart-popout-summary.loading::after {
+      background: linear-gradient(90deg, transparent, rgba(15, 23, 42, 0.04), transparent);
+    }
+
+    html[data-theme="light"] .chart-popout-summary [style*="color:#94a3b8"] {
+      color: var(--kg-muted) !important;
+    }
+
+    html[data-theme="light"] .chart-popout-close {
+      background: var(--kg-inset);
+      color: var(--kg-muted);
     }
   </style>
 </body>

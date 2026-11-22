@@ -3,8 +3,10 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
     <title>AI-Enhanced News | Kagger</title>
+    <script src="/kagger_theme.js"></script>
+    <link rel="stylesheet" href="/kagger_theme.css">
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -244,47 +246,342 @@
             -webkit-text-fill-color: transparent;
             background-clip: text;
         }
+
+        /* ===== Theme: light overrides (page is designed dark; see kagger_theme.css) ===== */
+        html[data-theme="light"] body.kg-native-dark {
+            background: var(--kg-bg);
+        }
+
+        html[data-theme="light"] .kg-native-dark .glass-card {
+            background: var(--kg-surface);
+            border-color: var(--kg-border);
+            box-shadow: var(--kg-shadow);
+        }
+
+        html[data-theme="light"] .kg-native-dark .nw-header {
+            background: rgb(255 255 255 / .92);
+            border-width: 0 0 1px;
+        }
+
+        html[data-theme="light"] .kg-native-dark .nw-logo {
+            background-image: var(--kg-gradient);
+        }
+
+        html[data-theme="light"] .kg-native-dark .nw-back {
+            border: 1px solid var(--kg-border);
+        }
+
+        html[data-theme="light"] .chat-container::-webkit-scrollbar-track {
+            background: rgb(15 23 42 / .04);
+        }
+
+        html[data-theme="light"] .chat-container::-webkit-scrollbar-thumb {
+            background: rgb(15 23 42 / .18);
+        }
+
+        html[data-theme="light"] .kg-native-dark .nw-welcome-icon {
+            background-image: none;
+            background-color: var(--kg-primary-soft);
+        }
+
+        html[data-theme="light"] .kg-native-dark .nw-welcome-icon svg {
+            color: var(--kg-primary);
+        }
+
+        html[data-theme="light"] .kg-native-dark .nw-chip {
+            background-color: var(--kg-surface);
+        }
+
+        html[data-theme="light"] .kg-native-dark .nw-chip:hover {
+            background-color: var(--kg-primary-tint);
+            border-color: #86efac;
+            color: var(--kg-primary-strong);
+        }
+
+        html[data-theme="light"] .kg-native-dark #questionInput {
+            background-color: var(--kg-input-bg);
+            border-color: var(--kg-input-border);
+        }
+
+        html[data-theme="light"] .kg-native-dark #questionInput:focus {
+            border-color: var(--kg-primary);
+            box-shadow: 0 0 0 3px var(--kg-focus);
+        }
+
+        html[data-theme="light"] .kg-native-dark .typing-indicator span {
+            background-color: var(--kg-primary);
+        }
+
+        html[data-theme="light"] .kg-native-dark .user-message {
+            background: var(--kg-gradient);
+            color: #fff;
+        }
+
+        html[data-theme="light"] .kg-native-dark .ai-message {
+            background: var(--kg-surface);
+            border-color: var(--kg-border);
+            box-shadow: var(--kg-shadow);
+            color: var(--kg-text);
+        }
+
+        html[data-theme="light"] .kg-native-dark .ai-message table {
+            background: var(--kg-surface);
+        }
+
+        html[data-theme="light"] .kg-native-dark .ai-message :is(th, td) {
+            border-color: var(--kg-border-strong);
+            color: var(--kg-text);
+        }
+
+        html[data-theme="light"] .kg-native-dark .ai-message th {
+            background: var(--kg-primary-tint);
+            color: var(--kg-primary-strong);
+        }
+
+        html[data-theme="light"] .kg-native-dark .ai-message tbody tr:hover {
+            background: var(--kg-subtle);
+        }
+
+        html[data-theme="light"] .kg-native-dark .ai-message :is(p, li) {
+            color: var(--kg-text);
+        }
+
+        html[data-theme="light"] .kg-native-dark .ai-message li::marker {
+            color: var(--kg-primary);
+        }
+
+        html[data-theme="light"] .kg-native-dark .ai-message strong {
+            color: var(--kg-text-strong);
+        }
+
+        html[data-theme="light"] .kg-native-dark .ai-message em {
+            color: #6d28d9;
+        }
+
+        html[data-theme="light"] .kg-native-dark .ai-message :is(h1, h2, h3) {
+            color: var(--kg-primary-strong);
+        }
+
+        html[data-theme="light"] .kg-native-dark .ai-message h1 {
+            border-bottom-color: rgb(22 163 74 / .3);
+        }
+
+        html[data-theme="light"] .kg-native-dark .ai-message code {
+            background: var(--kg-inset);
+            color: #be185d;
+        }
+
+        html[data-theme="light"] .kg-native-dark .ai-message pre {
+            background: var(--kg-subtle);
+            border-color: var(--kg-border);
+        }
+
+        html[data-theme="light"] .kg-native-dark .ai-message pre code {
+            background: none;
+            color: var(--kg-text);
+        }
+
+        html[data-theme="light"] .kg-native-dark .ai-message blockquote {
+            border-left-color: var(--kg-primary);
+            color: var(--kg-text-3);
+        }
+
+        html[data-theme="light"] .kg-native-dark .ai-message hr {
+            border-top-color: var(--kg-border);
+        }
+
+        html[data-theme="light"] .kg-native-dark .ai-message a {
+            color: var(--kg-link);
+        }
+
+        html[data-theme="light"] .kg-native-dark .ai-message a:hover {
+            color: var(--kg-primary-strong);
+        }
+
+        /* ===== Responsive (desktop >= 1280px unchanged) ===== */
+        /* Laptops zoomed in / tablets: header + chat + input bar fit the screen exactly. */
+        @media (max-width: 1279px) {
+            #chatContainer {
+                height: calc(100vh - 224px);
+                height: calc(100dvh - 224px);
+                min-height: 12rem;
+            }
+        }
+
+        @media (max-width: 640px) {
+            body .nw-header-inner {
+                padding: .625rem .75rem;
+                gap: .5rem;
+            }
+
+            body .nw-brand {
+                gap: .5rem;
+                min-width: 0;
+            }
+
+            .nw-brand > div:last-child {
+                min-width: 0;
+            }
+
+            body .nw-logo {
+                flex: none;
+                width: 2rem;
+                height: 2rem;
+                border-radius: .625rem;
+            }
+
+            .nw-logo svg {
+                width: 1.25rem;
+                height: 1.25rem;
+            }
+
+            body .nw-title {
+                font-size: 1rem;
+                line-height: 1.375rem;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+
+            .nw-title-pre,
+            .nw-sub,
+            .nw-back-label {
+                display: none;
+            }
+
+            .nw-actions {
+                flex: none;
+            }
+
+            /* "Back to App" becomes a square arrow button (label kept as aria-label). */
+            body .nw-back {
+                width: 2.25rem;
+                height: 2.25rem;
+                padding: 0;
+                justify-content: center;
+            }
+
+            body .nw-main {
+                padding: 4.25rem .75rem .75rem;
+            }
+
+            /* 166px = header + gaps + input bar; dvh follows the browser toolbars and,
+               with interactive-widget=resizes-content, the on-screen keyboard. */
+            #chatContainer {
+                height: calc(100vh - 166px);
+                height: calc(100dvh - 166px);
+                min-height: 10rem;
+                padding: 1rem;
+                margin-bottom: .75rem;
+            }
+
+            #welcomeMessage {
+                padding-top: 2rem;
+                padding-bottom: 2rem;
+            }
+
+            body .nw-input-card {
+                padding: .75rem;
+            }
+
+            #chatForm {
+                gap: .5rem;
+            }
+
+            #questionInput {
+                min-width: 0;
+                padding: .75rem 1rem;
+            }
+
+            #sendButton {
+                flex: none;
+                padding: .75rem 1rem;
+            }
+
+            #sendButton > span {
+                display: none;
+            }
+
+            #chatMessages > div > div {
+                max-width: 92%;
+                min-width: 0;
+                overflow-wrap: anywhere;
+                padding: .75rem 1rem;
+            }
+
+            .ai-message table {
+                display: block;
+                max-width: 100%;
+                overflow-x: auto;
+            }
+
+            .ai-message th,
+            .ai-message td {
+                min-width: 5rem;
+                padding: 8px 10px;
+                overflow-wrap: normal;
+            }
+
+            /* The last column is usually the descriptive one: keep it readable while the table scrolls. */
+            .ai-message :is(th, td):last-child:not(:first-child) {
+                min-width: 11rem;
+            }
+
+            .ai-message ul,
+            .ai-message ol {
+                padding-left: 1.25rem;
+            }
+        }
+
+        @media (max-width: 400px) {
+            body .nw-title {
+                font-size: .9375rem;
+            }
+        }
     </style>
-  <script src="scale_ui.js"></script>
+  <script src="/scale_ui.js"></script>
 </head>
 
-<body class="text-white">
+<body class="kg-native-dark text-white">
     <!-- Header -->
-    <header class="fixed top-0 left-0 right-0 z-50 glass-card">
-        <div class="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
-            <div class="flex items-center gap-3">
+    <header class="nw-header fixed top-0 left-0 right-0 z-50 glass-card">
+        <div class="nw-header-inner max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
+            <div class="nw-brand flex items-center gap-3">
                 <div
-                    class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
+                    class="nw-logo w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M13 10V3L4 14h7v7l9-11h-7z" />
                     </svg>
                 </div>
                 <div>
-                    <h1 class="text-xl font-bold gradient-text">Kagger's AI-Enhanced News Search</h1>
-                    <p class="text-xs text-slate-400">India's Most Advanced Financial Research Engine</p>
+                    <h1 class="nw-title kg-brand-text text-xl font-bold gradient-text"><span class="nw-title-pre">Kagger's </span>AI-Enhanced News Search</h1>
+                    <p class="nw-sub text-xs text-slate-400">India's Most Advanced Financial Research Engine</p>
                 </div>
             </div>
-            <a href="/"
-                class="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 transition-all text-sm font-medium flex items-center gap-2">
+            <div class="nw-actions flex items-center gap-2">
+            <button class="kg-theme-toggle text-slate-300" data-kg-theme-toggle></button>
+            <a href="/" aria-label="Back to App"
+                class="nw-back px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 transition-all text-sm font-medium flex items-center gap-2">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                         d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                 </svg>
-                Back to App
+                <span class="nw-back-label"><span class="nw-back-long">Back to </span>App</span>
             </a>
+            </div>
         </div>
     </header>
 
     <!-- Main Content -->
-    <main class="pt-24 pb-6 px-4">
+    <main class="nw-main pt-24 pb-6 px-4">
         <div class="max-w-4xl mx-auto">
             <!-- Chat Container -->
             <div id="chatContainer" class="chat-container rounded-2xl glass-card p-6 mb-4">
                 <!-- Welcome Message -->
                 <div id="welcomeMessage" class="text-center py-16">
                     <div
-                        class="w-20 h-20 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-blue-500/20 to-purple-600/20 flex items-center justify-center">
+                        class="nw-welcome-icon w-20 h-20 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-blue-500/20 to-purple-600/20 flex items-center justify-center">
                         <svg class="w-10 h-10 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
                                 d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
@@ -297,15 +594,15 @@
                     </p>
                     <div class="flex flex-wrap justify-center gap-3">
                         <button onclick="askSuggestion('What happened in the market today?')"
-                            class="px-4 py-2 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-sm transition-all">
+                            class="nw-chip px-4 py-2 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-sm transition-all">
                             What happened in the market today?
                         </button>
                         <button onclick="askSuggestion('RELIANCE news')"
-                            class="px-4 py-2 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-sm transition-all">
+                            class="nw-chip px-4 py-2 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-sm transition-all">
                             RELIANCE news
                         </button>
                         <button onclick="askSuggestion('IT sector outlook')"
-                            class="px-4 py-2 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-sm transition-all">
+                            class="nw-chip px-4 py-2 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-sm transition-all">
                             IT sector outlook
                         </button>
                     </div>
@@ -316,13 +613,13 @@
             </div>
 
             <!-- Input Area -->
-            <div class="glass-card rounded-2xl p-4">
+            <div class="nw-input-card glass-card rounded-2xl p-4">
                 <form id="chatForm" class="flex gap-3">
                     <input type="text" id="questionInput" placeholder="Ask about stocks, sectors, market news..."
                         class="flex-1 bg-white/5 border border-white/10 rounded-xl px-5 py-4 text-white placeholder-slate-500 focus:outline-none input-glow transition-all"
                         autocomplete="off">
-                    <button type="submit" id="sendButton"
-                        class="px-6 py-4 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl font-semibold hover:opacity-90 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                    <button type="submit" id="sendButton" aria-label="Send"
+                        class="kg-brand-btn px-6 py-4 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl font-semibold hover:opacity-90 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
                         <span>Send</span>
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"

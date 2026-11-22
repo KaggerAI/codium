@@ -5,6 +5,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login - Kagger AI</title>
+    <script src="/kagger_theme.js"></script>
+    <link rel="stylesheet" href="/kagger_theme.css">
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -16,11 +18,21 @@
         .gradient-bg {
             background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
         }
+
+        /* ---- Light theme (page is designed dark; see kagger_theme.css) ---- */
+        html[data-theme="light"] .gradient-bg {
+            background: radial-gradient(ellipse at top, #dcfce7 0%, rgba(220, 252, 231, 0) 55%), #f1f5f9;
+        }
+        html[data-theme="light"] .login-card {
+            background: #fff;
+            box-shadow: 0 20px 45px -20px rgba(15, 23, 42, 0.18);
+        }
     </style>
-  <script src="scale_ui.js"></script>
+  <script src="/scale_ui.js"></script>
 </head>
 
-<body class="gradient-bg min-h-screen flex items-center justify-center p-4">
+<body class="kg-native-dark gradient-bg min-h-screen flex items-center justify-center p-4">
+    <button class="kg-theme-toggle fixed top-4 right-4 z-10 text-slate-300" data-kg-theme-toggle></button>
     <div class="w-full max-w-md">
         <!-- Logo -->
         <div class="text-center mb-8">
@@ -31,7 +43,7 @@
         </div>
 
         <!-- Login Card -->
-        <div class="bg-slate-800/50 backdrop-blur-sm rounded-2xl p-8 border border-slate-700 shadow-2xl">
+        <div class="login-card bg-slate-800/50 backdrop-blur-sm rounded-2xl p-6 sm:p-8 border border-slate-700 shadow-2xl">
             <h1 class="text-2xl font-bold text-white mb-2 text-center">Welcome Back</h1>
             <p class="text-slate-400 text-center mb-8">Sign in to access your AI research dashboard</p>
 
@@ -58,7 +70,7 @@
                 </div>
 
                 <button type="submit" id="login-btn"
-                    class="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-semibold py-3 px-4 rounded-lg transition-all duration-200 shadow-lg hover:shadow-xl flex items-center justify-center">
+                    class="kg-brand-btn w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-semibold py-3 px-4 rounded-lg transition-all duration-200 shadow-lg hover:shadow-xl flex items-center justify-center">
                     <span id="btn-text">Sign In</span>
                     <svg id="btn-spinner" class="hidden animate-spin ml-2 h-5 w-5" fill="none" viewBox="0 0 24 24">
                         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4">
@@ -74,7 +86,7 @@
         <!-- Footer -->
         <p class="text-center text-slate-500 text-sm mt-8">
             Don't have an account? <a href="/#contact"
-                class="text-blue-400 hover:text-blue-300 hover:underline transition-colors">Request access here.</a>
+                class="kg-brand-link text-blue-400 hover:text-blue-300 hover:underline transition-colors">Request access here.</a>
         </p>
     </div>
 

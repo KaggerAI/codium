@@ -631,7 +631,22 @@
       '.kr-toc-link.kr-active{color:#fff;background:rgba(99,102,241,.22)}',
       '.kr-toc-num{flex:none;min-width:20px;height:20px;border-radius:5px;background:rgba(99,102,241,.25);color:#c7d2fe;font-size:11px;font-weight:700;display:inline-flex;align-items:center;justify-content:center}',
       '.kr-toc-dot{background:transparent;position:relative}.kr-toc-dot::after{content:"";width:6px;height:6px;border-radius:50%;background:#818cf8}',
-      '@media (max-width:640px){.kr-report{font-size:15px}.kr-meta{grid-template-columns:repeat(2,minmax(0,1fr))}.kr-meta>div:nth-child(3){padding-left:0;border-left:0}.kr-meta>div:nth-child(n+3){border-top:1px solid var(--kr-rule)}.kr-exec{padding:4px 16px 10px}.kr-section h2{font-size:20px}}'
+      '@media (max-width:640px){.kr-report{font-size:15px}.kr-meta{grid-template-columns:repeat(2,minmax(0,1fr))}.kr-meta>div:nth-child(3){padding-left:0;border-left:0}.kr-meta>div:nth-child(n+3){border-top:1px solid var(--kr-rule)}.kr-exec{padding:4px 16px 10px}.kr-section h2{font-size:20px}}',
+      // Site theme (kagger_theme.js sets <html data-theme>). Both pages that show this report
+      // (/app Deep Research, /agents Doc Summarizer) are designed dark, so the rules above are
+      // their native look and stay untouched in dark theme. In light theme the report paper
+      // takes the green accent of the light palette, and the contents links (styled for a
+      // dark sidebar) switch to light-sidebar colours. The PDF is typeset by jsPDF and is
+      // not affected by any of this.
+      '[data-theme="light"] .kr-report{--kr-accent:#15803d;--kr-accent-soft:#f0fdf4;--kr-accent-ink:#166534}',
+      '[data-theme="light"] .kr-section a{text-decoration-color:rgba(21,128,61,.35)}',
+      '[data-theme="light"] .kr-exec{border-color:#dcfce7}',
+      '[data-theme="light"] .kr-toc-link{color:#475569}',
+      '[data-theme="light"] .kr-toc-link:hover{color:#166534;background:#f0fdf4}',
+      '[data-theme="light"] .kr-toc-link.kr-active{color:#14532d;background:#dcfce7}',
+      '[data-theme="light"] .kr-toc-num{background:#dcfce7;color:#166534}',
+      '[data-theme="light"] .kr-toc-link.kr-active .kr-toc-num:not(.kr-toc-dot){background:#16a34a;color:#fff}',
+      '[data-theme="light"] .kr-toc-dot{background:transparent}[data-theme="light"] .kr-toc-dot::after{background:#16a34a}'
     ].join('\n');
     var el = document.createElement('style');
     el.id = 'kr-report-styles';

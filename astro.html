@@ -5,6 +5,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Astro Predictions Hub — Kagger AI</title>
+    <script src="/kagger_theme.js"></script>
+    <link rel="stylesheet" href="/kagger_theme.css">
     <meta name="description"
         content="Vedic Mundane Astrology research reports covering geopolitics, economies, financial markets, and world events." />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap"
@@ -469,10 +471,59 @@
         .report-card:nth-child(4) {
             animation-delay: 0.35s;
         }
+
+        /* ===== Theme: light overrides (page is designed dark; see kagger_theme.css) ===== */
+        html[data-theme="light"] {
+            --bg-primary: #f1f5f9;
+            --bg-secondary: #f8fafc;
+            --bg-card: #ffffff;
+            --bg-card-hover: #f8fafc;
+            --border-color: #e2e8f0;
+            --border-glow: #16a34a;
+            --text-primary: #1e293b;
+            --text-secondary: #475569;
+            --text-muted: #64748b;
+            --accent-purple: #16a34a;
+            --accent-violet: #15803d;
+            --accent-indigo: #4f46e5;
+            --accent-green: #059669;
+            --accent-red: #dc2626;
+            --gradient-primary: linear-gradient(135deg, #16a34a 0%, #059669 100%);
+            --gradient-card: linear-gradient(135deg, rgba(22, 163, 74, 0.08) 0%, rgba(5, 150, 105, 0.04) 100%);
+            --gold: #a16207;
+            --gold-soft: rgba(212, 168, 67, 0.10);
+            --gold-border: rgba(161, 98, 7, 0.28);
+        }
+        html[data-theme="light"] .top-nav { background: rgba(255, 255, 255, 0.9); }
+        html[data-theme="light"] .nav-link:hover { background: rgba(15, 23, 42, 0.05); }
+        html[data-theme="light"] .nav-btn-logout { background: rgba(15, 23, 42, 0.03); }
+        html[data-theme="light"] .page-header h1 {
+            background: linear-gradient(135deg, #a16207 0%, #ca8a04 55%, #a16207 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+        }
+        html[data-theme="light"] .report-card { box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06); }
+        html[data-theme="light"] .report-card:hover { box-shadow: 0 10px 30px -12px rgba(161, 98, 7, 0.25); }
+        html[data-theme="light"] .type-pdf { color: #dc2626; }
+        html[data-theme="light"] .cosmic-cta-btn:hover { box-shadow: 0 4px 16px rgba(22, 163, 74, 0.3); }
+        html[data-theme="light"] .back-btn {
+            background: #fff !important;
+            border-color: #e2e8f0 !important;
+            color: #1e293b !important;
+        }
+        html[data-theme="light"] .back-btn:hover { background: #f8fafc !important; }
+
+        @media (max-width: 480px) {
+            .top-nav { padding: 0.6rem 1rem; }
+            .back-btn { padding: 0.5rem 0.9rem !important; font-size: 0.8125rem !important; }
+            .main-container { padding: 0 1rem 3rem; }
+            .report-card-body { padding: 0.75rem 1rem 1.25rem; }
+            .report-card-header { padding: 1rem 1.1rem; }
+        }
     </style>
 </head>
 
-<body>
+<body class="kg-native-dark">
     <!-- ================================ -->
     <!-- NAVIGATION BAR                    -->
     <!-- ================================ -->
@@ -483,8 +534,9 @@
                     style="height:28px;object-fit:contain;filter:invert(1) hue-rotate(-40deg) saturate(3) brightness(1.1);mix-blend-mode:screen;" />
             </a>
             <div class="nav-links">
+                <button class="kg-theme-toggle" data-kg-theme-toggle style="margin-right:0.25rem"></button>
                 <button onclick="window.location.href='/app'"
-                    class="px-5 py-2.5 bg-white/10 hover:bg-white/20 rounded-xl text-white transition-all text-sm font-semibold flex items-center gap-2 border border-white/10"
+                    class="back-btn px-5 py-2.5 bg-white/10 hover:bg-white/20 rounded-xl text-white transition-all text-sm font-semibold flex items-center gap-2 border border-white/10"
                     style="background: rgba(255, 255, 255, 0.1); border-radius: 0.75rem; border: 1px solid rgba(255, 255, 255, 0.1); display: flex; align-items: center; gap: 0.5rem; color: white; padding: 0.625rem 1.25rem; font-size: 0.875rem; font-weight: 600; cursor: pointer; transition: all 0.2s;">
                     <svg style="width: 1rem; height: 1rem;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
