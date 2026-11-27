@@ -380,6 +380,7 @@ def _run_analyst_analysis(job_id, ticker, company_name, call_gemini_api_fn,
                                                   f"(also searching news for global brokerage calls)..."})
 
         download_errors: list[str] = []
+        network_failed: list[dict] = []
 
         def _read_one(r):
             # trendlyne_auth: cookies -> re-login on expiry (if credentials are set),
@@ -391,6 +392,8 @@ def _run_analyst_analysis(job_id, ticker, company_name, call_gemini_api_fn,
                 except Exception as de:
                     with lock:
                         download_errors.append(str(de))
+                        if "Could not reach Trendlyne" in str(de):
+                            network_failed.append(r)
                     _log(f"ANALYST_AGENT: PDF download failed for {r['brokerage']}: {str(de)[:200]}")
                     return r["pdf_url"], None
                 if not pdf or len(pdf) < 1000:
@@ -413,6 +416,18 @@ def _run_analyst_analysis(job_id, ticker, company_name, call_gemini_api_fn,
                 for url, ext in ex.map(_read_one, pending):
                     if ext:
                         extractions[url] = ext
+        # Trendlyne sometimes resets connections in bursts: one more, unhurried pass for the
+        # reports that failed on the network (not off-site broker hosts, not login/quota).
+        retry = [r for r in network_failed if r["pdf_url"] not in extractions]
+        if retry:
+            time.sleep(5)
+            download_errors[:] = [e for e in download_errors if "Could not reach Trendlyne" not in e]
+            with lock:
+                done_count[0] -= len(retry)
+            for r in retry:
+                url, ext = _read_one(r)
+                if ext:
+                    extractions[url] = ext
         n_failed = sum(1 for r in to_read if r["pdf_url"] not in extractions)
         if n_failed:
             pool_down = any("No Trendlyne account" in e for e in download_errors)
@@ -510,10 +525,11 @@ def _run_analyst_analysis(job_id, ticker, company_name, call_gemini_api_fn,
                 ext_rating = ext.get("rating") if ext.get("rating") not in (None, "Not rated") else None
                 if not (ext_rating or ext.get("target_price") or (ext.get("thesis") or "").strip()):
                     continue        # articles mention the broker but carry no view of its own
-            elif no_view:
-                ext, sources = None, []     # keep the call itself; the articles found weren't about it
+                # A lead's rating / target come only from the articles actually read.
                 c = {**c, "rating": ext_rating or "Not rated", "rating_raw": ext.get("rating_raw"),
                      "target_price": ext.get("target_price")}
+            elif no_view:
+                ext, sources = None, []     # keep the call itself; the articles found weren't about it
             base = {
                 "brokerage": c.get("brokerage"), "origin": c.get("origin") or "Global",
                 "source_kind": "News",

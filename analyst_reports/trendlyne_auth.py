@@ -76,7 +76,7 @@ MAX_ACCOUNTS = 5
 
 # Trendlyne resets connections when several PDFs are pulled at once; downloads take
 # seconds while extraction takes ~20s, so throttling only this step costs little.
-_DOWNLOAD_SEM = threading.BoundedSemaphore(max(1, int(os.getenv("TRENDLYNE_MAX_PARALLEL_DOWNLOADS", "2") or 2)))
+_DOWNLOAD_SEM = threading.BoundedSemaphore(max(1, int(os.getenv("TRENDLYNE_MAX_PARALLEL_DOWNLOADS", "1") or 1)))
 LOGIN_RETRY_SECONDS = 6 * 3600       # after a failed password login
 ERROR_COOLDOWN_SECONDS = 3600        # after an unrecognised non-PDF answer
 
@@ -383,7 +383,7 @@ def request(method: str, url: str, cookies: dict | None = None, context: str = "
     last_err = None
     for via_proxy in routes:
         resp = None
-        for attempt in range(3):
+        for attempt in range(4):
             session = _new_session(use_proxy=via_proxy)
             for name, value in (cookies or {}).items():
                 try:
@@ -399,8 +399,8 @@ def request(method: str, url: str, cookies: dict | None = None, context: str = "
                 # Connection resets / timeouts under load are transient: back off and retry the
                 # same route. A DNS failure (broker-hosted PDF) is not - don't waste retries on it.
                 transient = any(s in msg for s in ("(35)", "(56)", "(52)", "(28)", "(7)", "reset", "timed out", "Timeout"))
-                if transient and "resolve host" not in msg and attempt < 2:
-                    time.sleep(3 * (attempt + 1))
+                if transient and "resolve host" not in msg and attempt < 3:
+                    time.sleep(4 * (2 ** attempt))      # 4s, 8s, 16s
                     continue
                 _log(f"{'proxy' if via_proxy else 'direct'} request failed ({context}): {msg[:160]}")
                 if "resolve host" not in msg:
