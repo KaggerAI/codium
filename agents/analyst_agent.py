@@ -1,518 +1,623 @@
 """
-analyst_agent.py — Analyst Report Agent for the Kagger AI Agent Marketplace.
+analyst_agent.py - Analyst Report Agent for the Kagger AI Agent Marketplace.
 
-Fetches domestic analyst reports from Trendlyne (via Scrapling) and global
-reports (via Perplexity Search API), downloads and summarises full PDFs
-with Gemini, and synthesises everything into a single comprehensive view.
+Pipeline (v2):
+  1. Live Trendlyne feed (paginated, 12 months) + market data (price, Yahoo/LSEG consensus) in parallel.
+     The pre-fetched JSON cache is only a fallback, and is flagged as stale when used.
+  2. Every broker's latest report PDF -> structured extraction (rating, target, valuation
+     method & multiple, multi-year estimates, SWOT, industry outlook, catalysts, risks).
+     Runs concurrently with
+  3. Targeted Perplexity searches per broker group (global houses + domestic institutional
+     desks) -> structured news-sourced calls.
+  4. Deterministic metrics in code (agents/analyst_metrics.py): upside, forward P/E / P/B,
+     EPS CAGR, PEG, implied multiples, consensus stats, EPS dispersion, target momentum.
+  5. One structured synthesis call: consolidated SWOT with broker attribution, debates,
+     bull / bear case, valuation view, industry outlook, catalysts, risks.
+
+The result carries both the structured data (rendered as tables/charts by agents.html)
+and a markdown rendering of it in `analysis` (used by chat and the watchlist modal).
 """
 
 import sys
 import os
 import re
+import json
 import time
 import asyncio
+import datetime
 import threading
 import traceback
-import json
-import re
-
-def slugify(text):
-    text = text.lower()
-    return re.sub(r'[^a-z0-9]', '_', text)
-import datetime
-from io import BytesIO
+import urllib.parse
+import concurrent.futures
 
 from flask import request, jsonify
-from google import genai
-from google.genai import types
 
 from agents.base import (
     create_agent_job, update_agent_job, get_agent_job,
     store_latest_result, get_latest_result,
 )
 from agents.prompts.analyst_prompts import (
-    ANALYST_SYNTHESIS_PROMPT, ANALYST_CHAT_PROMPT, ANALYST_PDF_SUMMARY_PROMPT,
+    ANALYST_CHAT_PROMPT, ANALYST_SYNTHESIS_STRUCTURED_PROMPT, ANALYST_SYNTHESIS_SCHEMA,
 )
+from agents import analyst_metrics as am
 
 
-# =====================================================================
-# CONSTANTS
-# =====================================================================
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
-MAX_PDF_DOWNLOADS = 3  # Max PDFs to fully download + summarise
+def _log(*parts):
+    """stderr log that cannot raise on a non-ASCII Windows console (cp1252)."""
+    try:
+        print(*parts, file=sys.stderr)
+    except UnicodeEncodeError:
+        print(*(str(p).encode("ascii", "replace").decode() for p in parts), file=sys.stderr)
+
+
+RESULT_VERSION = 4          # 4: growth CAGR columns, current-standing tiles
+MAX_PDF_REPORTS = 15        # latest report per broker, newest first
+PDF_WORKERS = 5           # extraction parallelism; Trendlyne downloads are throttled separately in trendlyne_auth
+LOOKBACK_DAYS = 365         # Trendlyne history window (for target momentum + history chart)
+NEWS_MONTHS = 6
+MAX_ENRICHED_CALLS = 14      # news-sourced calls whose full articles are read
 
 
 # =====================================================================
 # HELPERS
 # =====================================================================
 
-def _summarise_pdf_bytes(pdf_bytes: bytes, brokerage: str, ticker: str) -> str:
-    """
-    Upload PDF bytes to Gemini Files API, summarise, clean up.
-    Runs SYNCHRONOUSLY (call via asyncio.to_thread).
-    """
-    if not GOOGLE_API_KEY:
-        return "Error: Google API Key not configured."
+_BROKER_STOPWORDS = {
+    "ltd", "limited", "pvt", "private", "securities", "security", "capital", "markets",
+    "market", "institutional", "equities", "equity", "financial", "services", "broking",
+    "stock", "stockbroking", "india", "research", "the", "co", "company", "group", "inc",
+    "llc", "plc", "asia", "global", "investment", "investments", "bank", "and",
+}
 
+
+# Same firm, different names in the press vs on Trendlyne.
+_BROKER_ALIASES = {
+    "pl": "prabhudas lilladher", "prabhudas lilladhar": "prabhudas lilladher",
+    "bank america": "bofa", "j p morgan": "jpmorgan", "jp morgan": "jpmorgan",
+    "kr choksey": "deven choksey", "spark": "avendus spark",
+}
+
+
+def _norm_broker(name: str) -> str:
+    toks = re.sub(r"[^a-z0-9 ]", " ", (name or "").lower()).split()
+    toks = [t for t in toks if t not in _BROKER_STOPWORDS]
+    norm = " ".join(toks) or (name or "").lower().strip()
+    return _BROKER_ALIASES.get(norm, norm)
+
+
+def _same_broker(a: str, b: str) -> bool:
+    na, nb = _norm_broker(a), _norm_broker(b)
+    if not na or not nb:
+        return False
+    # Whole-word containment: "PL Capital (Prabhudas Lilladher)" vs "Prabhudas Lilladher".
+    return na == nb or f" {nb} " in f" {na} " or f" {na} " in f" {nb} "
+
+
+def _parse_any_date(text: str):
+    if not text:
+        return None
     try:
-        client = genai.Client(api_key=GOOGLE_API_KEY)
+        from dateutil import parser as dp
+        d = dp.parse(text, fuzzy=True, default=datetime.datetime(2000, 1, 1)).date()
+        if d.year == 2000 or d > datetime.date.today() + datetime.timedelta(days=2):
+            return None
+        return d
+    except Exception:
+        return None
 
-        uploaded = client.files.upload(
-            file=BytesIO(pdf_bytes),
-            config=types.UploadFileConfig(
-                display_name=f"{brokerage}_{ticker}_report.pdf",
-                mime_type="application/pdf",
-            ),
-        )
 
-        response = client.models.generate_content(
-            model="gemini-3.5-flash-lite",
-            contents=[
-                types.Part.from_text(text=ANALYST_PDF_SUMMARY_PROMPT),
-                uploaded,
-            ],
-            config=types.GenerateContentConfig(
-                thinking_config=types.ThinkingConfig(thinking_level="MEDIUM")
-            ),
-        )
+def _pdf_link(pdf_url: str | None) -> str | None:
+    if not pdf_url:
+        return None
+    return "/api/analyst-pdf?url=" + urllib.parse.quote(pdf_url, safe="")
 
-        # Clean up
+
+def _cache_reports_to_live_shape(cached: list[dict]) -> list[dict]:
+    """Convert entries from analyst_reports_cache.json to the trendlyne_live shape."""
+    out = []
+    for r in cached or []:
+        d = _parse_any_date(r.get("date", ""))
         try:
-            client.files.delete(name=uploaded.name)
-        except Exception:
-            pass
+            tp = float(str(r.get("target_price", "")).replace(",", ""))
+        except ValueError:
+            tp = None
+        out.append({
+            "brokerage": r.get("brokerage", "Unknown"),
+            "date": d.strftime("%d %b %Y") if d else r.get("date", ""),
+            "date_iso": d.isoformat() if d else "",
+            "rating_raw": r.get("recommendation", ""),
+            "recommendation": r.get("recommendation", "Hold"),
+            "target_price": tp,
+            "title": "",
+            "summary": r.get("summary", ""),
+            "pdf_url": r.get("pdf_url"),
+            "source": "Trendlyne (cached)",
+        })
+    return out
 
-        return response.text or ""
-    except Exception as e:
-        print(f"ANALYST_AGENT: PDF summary failed for {brokerage}: {e}", file=sys.stderr)
-        traceback.print_exc(file=sys.stderr)
-        return f"Error summarising {brokerage} report: {str(e)}"
 
-
-def _fetch_global_reports(ticker: str, company_name: str,
-                          call_gemini_api_fn, call_perplexity_search_api_fn) -> list[dict]:
+def _latest_per_broker(reports: list[dict]) -> tuple[list[dict], list[dict]]:
     """
-    Fetch global research reports using Perplexity Search API + Gemini
-    extraction.  Mirrors the logic in handler.py api_global_analyst_reports().
+    reports: newest first, possibly several per broker.
+    Returns (latest report per broker with prev_* fields attached, full target history).
     """
-    search_query = (
-        f"latest research reports on {company_name} OR {ticker} stock only by "
-        "Morgan Stanley, Goldman Sachs, Jefferies, CLSA, Nomura, Macquarie, "
-        "UBS, Nuvama, Bernstein, BofA target price buy sell rating"
-    )
+    by_broker: dict[str, list[dict]] = {}
+    order = []
+    for r in sorted(reports, key=lambda x: x.get("date_iso") or "", reverse=True):
+        key = _norm_broker(r["brokerage"])
+        if key not in by_broker:
+            by_broker[key] = []
+            order.append(key)
+        by_broker[key].append(r)
 
-    search_domains = [
-        "bloomberg.com", "reuters.com", "cnbc.com", "moneycontrol.com",
-        "trendlyne.com", "economictimes.indiatimes.com", "livemint.com",
-        "business-standard.com", "financialexpress.com", "ndtvprofit.com",
-        "bqprime.com", "investing.com", "jefferies.com",
-        "morganstanley.com", "goldmansachs.com", "macquarie.com",
+    score = {"Buy": 1, "Hold": 0, "Sell": -1}
+    latest = []
+    for key in order:
+        hist = by_broker[key]
+        cur = dict(hist[0])
+        # Previous call = the most recent older report with a target (skip same-day duplicates)
+        prev = next((h for h in hist[1:] if h.get("target_price") and h.get("date_iso") != cur.get("date_iso")), None)
+        if prev:
+            cur["prev_target_price"] = prev.get("target_price")
+            cur["prev_rating"] = prev.get("rating_raw") or prev.get("recommendation")
+            cur["prev_date"] = prev.get("date")
+            a, b = score.get(cur.get("recommendation"), 0), score.get(prev.get("recommendation"), 0)
+            cur["rating_change"] = "up" if a > b else "down" if a < b else None
+        latest.append(cur)
+
+    history = [
+        {"brokerage": r["brokerage"], "date_iso": r["date_iso"], "target_price": r.get("target_price"),
+         "rating": r.get("recommendation")}
+        for r in reports if r.get("date_iso") and r.get("target_price")
     ]
+    return latest, history
 
-    try:
-        from dateutil.relativedelta import relativedelta
 
-        six_months_ago = datetime.datetime.now() - relativedelta(months=6)
-        date_filter = (
-            six_months_ago.strftime("%#m/%#d/%Y")
-            if sys.platform == "win32"
-            else six_months_ago.strftime("%-m/%-d/%Y")
+# =====================================================================
+# MARKDOWN RENDERING (for chat context + watchlist modal)
+# =====================================================================
+
+def _fmt_num(x, prefix="", suffix="", nd=0):
+    if x is None:
+        return "—"
+    return f"{prefix}{x:,.{nd}f}{suffix}"
+
+
+def _brokers(lst):
+    return f" _({', '.join(lst)})_" if lst else ""
+
+
+def _g(r, kind):
+    g = (r.get("growth") or {}).get(kind) or {}
+    if g.get("cagr") is None:
+        return "—"
+    note = ", stated" if g.get("basis") == "stated" else ""
+    return f"{g['cagr']:.0f}% ({g.get('span') or ''}{note})"
+
+
+def build_markdown(company_name, ticker, cons, rows, syn) -> str:
+    syn = syn or {}
+    fys = cons.get("fy_labels", [])
+    fy1, fy2 = (fys + ["", ""])[:2]
+    tp = cons.get("target") or {}
+    rc = cons.get("rating_counts", {})
+    md = []
+    if syn.get("verdict_headline"):
+        md.append(f"## Verdict\n\n**{syn['verdict_headline']}**\n")
+    cur = cons.get("current") or {}
+    if cur:
+        q = f" ({cur.get('quarter')})" if cur.get("quarter") else ""
+        md.append("## Where the stock stands today\n")
+        md.append("| Metric | Value |\n|---|---|")
+        md.append(f"| Current price | {_fmt_num(cur.get('cmp') or cons.get('cmp'), '₹', nd=2)} |")
+        md.append(f"| P/E (trailing 12m) | {_fmt_num(cur.get('pe_ttm'), suffix='x', nd=1)} |")
+        md.append(f"| EPS (trailing 12m) | {_fmt_num(cur.get('eps_ttm'), '₹', nd=2)} |")
+        md.append(f"| Revenue YoY{q} | {_fmt_num(cur.get('revenue_yoy'), suffix='%', nd=1)} |")
+        md.append(f"| EBITDA YoY{q} | {_fmt_num(cur.get('ebitda_yoy'), suffix='%', nd=1)} |")
+        md.append(f"| PAT YoY{q} | {_fmt_num(cur.get('pat_yoy'), suffix='%', nd=1)} |")
+        md.append("")
+    md.append("## Consensus snapshot\n")
+    md.append("| Metric | Value |\n|---|---|")
+    md.append(f"| Consensus rating | {cons.get('consensus_rating')} ({rc.get('Buy',0)} Buy / {rc.get('Hold',0)} Hold / {rc.get('Sell',0)} Sell) |")
+    md.append(f"| CMP | {_fmt_num(cons.get('cmp'), '₹', nd=2)} |")
+    md.append(f"| Median target | {_fmt_num(tp.get('median'), '₹')} (upside {_fmt_num(cons.get('upside_median_pct'), suffix='%', nd=1)}) |")
+    md.append(f"| Target range | {_fmt_num(tp.get('low'), '₹')} ({tp.get('low_broker','')}) – {_fmt_num(tp.get('high'), '₹')} ({tp.get('high_broker','')}) |")
+    md.append(f"| Fwd P/E {fy2}E (at median EPS) | {_fmt_num(cons.get('fwd_pe_fy2'), suffix='x', nd=1)} |")
+    md.append(f"| Median EPS CAGR | {_fmt_num(cons.get('eps_cagr_median_pct'), suffix='%', nd=1)} |")
+    md.append(f"| Reports in consensus | {cons.get('n_in_consensus')} ({cons.get('n_full_reports')} full PDFs read) |")
+    yf = cons.get("yf") or {}
+    if yf.get("price_target"):
+        md.append(f"| Yahoo/LSEG mean target | {_fmt_num(yf['price_target'].get('mean'), '₹')} |")
+    if yf.get("eps_revision_90d_pct") is not None:
+        md.append(f"| {yf.get('eps_revision_fy','')} EPS revision, 90d (LSEG) | {yf['eps_revision_90d_pct']}% |")
+    md.append("")
+    if syn.get("bottom_line"):
+        md.append(f"## Bottom line\n\n{syn['bottom_line']}\n")
+
+    md.append("## Broker comparison\n")
+    md.append(f"| Broker | Date | Rating | Target | Upside | Method | EPS {fy1}E | EPS {fy2}E | P/E {fy2}E | Revenue CAGR | EBITDA CAGR | PAT CAGR | Source |")
+    md.append("|---|---|---|---|---|---|---|---|---|---|---|---|---|")
+    for r in rows:
+        v = r.get("valuation") or {}
+        meth = v.get("method") or "—"
+        if v.get("multiple"):
+            meth += f" {v['multiple']}x {v.get('basis_year') or ''}".rstrip()
+        md.append(
+            f"| {r['brokerage']} | {r.get('date') or '—'}{' (stale)' if r.get('stale') else ''} | {r.get('rating_raw') or r['rating']} | "
+            f"{_fmt_num(r.get('target_price'), '₹')} | {_fmt_num(r.get('upside_pct'), suffix='%', nd=1)} | {meth} | "
+            f"{_fmt_num(r['eps'].get(fy1), nd=1)} | {_fmt_num(r['eps'].get(fy2), nd=1)} | {_fmt_num(r['fwd_pe'].get(fy2), suffix='x', nd=1)} | "
+            f"{_g(r, 'revenue')} | {_g(r, 'ebitda')} | {_g(r, 'pat')} | {r.get('source')} |"
         )
+    md.append("")
+    if syn.get("valuation_view"):
+        md.append(f"## How the street values it\n\n{syn['valuation_view']}\n")
 
-        search_results = call_perplexity_search_api_fn(
-            query=search_query,
-            search_domain_filter=search_domains,
-            search_after_date_filter=date_filter,
-            max_results=10,
-            max_tokens_per_page=1024,
-            timeout=120,
-        )
+    sw = syn.get("swot") or {}
+    if any(sw.get(k) for k in ("strengths", "weaknesses", "opportunities", "threats")):
+        md.append("## SWOT (consolidated)\n")
+        for k in ("strengths", "weaknesses", "opportunities", "threats"):
+            if sw.get(k):
+                md.append(f"**{k.title()}**")
+                md.extend(f"- {p['point']}{_brokers(p.get('brokers'))}" for p in sw[k])
+                md.append("")
 
-        if not search_results:
-            print(f"ANALYST_AGENT: No Perplexity results for {ticker}", file=sys.stderr)
-            return []
+    if syn.get("bull_case") or syn.get("bear_case"):
+        md.append(f"## Bull vs bear\n\n**Bull case:** {syn.get('bull_case','')}\n\n**Bear case:** {syn.get('bear_case','')}\n")
+    for d in syn.get("debates") or []:
+        md.append(f"### Debate: {d.get('topic')}\n- **Bull:** {d.get('bull_view')}{_brokers(d.get('bull_brokers'))}\n- **Bear:** {d.get('bear_view')}{_brokers(d.get('bear_brokers'))}\n")
 
-        # Build context block
-        context_block = "SEARCH RESULTS:\n"
-        for idx, res in enumerate(search_results):
-            context_block += f"[{idx+1}] Title: {res.get('title')}\n"
-            context_block += f"URL: {res.get('url')}\n"
-            if res.get("date"):
-                context_block += f"Published Date: {res.get('date')}\n"
-            if res.get("last_updated"):
-                context_block += f"Last Updated: {res.get('last_updated')}\n"
-            context_block += f"Snippet: {res.get('snippet')}\n\n"
+    io = syn.get("industry_outlook") or {}
+    if io.get("summary"):
+        md.append(f"## Industry outlook\n\n{io['summary']}\n")
+        md.extend(f"- {g['point']}{_brokers(g.get('brokers'))}" for g in io.get("growth_figures") or [])
+        if io.get("tailwinds"):
+            md.append("\n**Tailwinds:** " + "; ".join(io["tailwinds"]))
+        if io.get("headwinds"):
+            md.append("\n**Headwinds:** " + "; ".join(io["headwinds"]))
+        md.append("")
+    if syn.get("catalysts"):
+        md.append("## Catalysts\n")
+        md.extend(f"- {c['point']}{_brokers(c.get('brokers'))}" for c in syn["catalysts"])
+        md.append("")
+    if syn.get("risks"):
+        md.append("## Key risks\n\n| Risk | Severity | Flagged by |\n|---|---|---|")
+        md.extend(f"| {r['point']} | {r.get('severity','')} | {', '.join(r.get('brokers') or [])} |" for r in syn["risks"])
+        md.append("")
+    if syn.get("estimate_momentum"):
+        md.append(f"## Estimate momentum\n\n{syn['estimate_momentum']}\n")
+    return "\n".join(md)
 
-        current_date_str = datetime.datetime.now().strftime("%B %Y")
 
-        extraction_prompt = f"""You are an elite financial data extraction assistant working with strict JSON structures.
-I will provide you with a list of real-time search results about equity research reports for the Indian stock {company_name} ({ticker}).
-Review these search results carefully and extract EVERY mentioned analyst report from reputable global or global-affiliated research houses.
-
-CRITICAL INSTRUCTION 1: You MUST ONLY include reports from the following GLOBAL research houses: Morgan Stanley, Goldman Sachs, Jefferies, CLSA, Nomura, Macquarie, UBS, Nuvama, Bernstein, BofA Securities, Citi, HSBC, JPMorgan.
-DO NOT include any domestic Indian brokerages.
-
-CRITICAL INSTRUCTION 2: Only include reports published within the LAST 6 MONTHS. The current month is {current_date_str}.
-
-CRITICAL INSTRUCTION 3: Extract the EXACT PUBLICATION DATE from the "Published Date" metadata.
-
-{context_block}
-
-Return the extracted reports ONLY as a valid JSON array of objects. Do not include markdown formatting.
-If no relevant reports found, return [].
-
-[
-  {{
-    "brokerage": "Morgan Stanley",
-    "recommendation": "Overweight / Buy",
-    "target_price": "2400",
-    "upside": "15%",
-    "date": "15 Feb 2026",
-    "summary": "Set a target of Rs. 1435 ...",
-    "detailed_summary": "In an extensive report...",
-    "source_url": "https://example.com/actual-source-link"
-  }}
-]
-
-Make sure target_price is a clean number string (no symbols).
-For "summary", provide 2-3 sentence overview.
-For "detailed_summary", provide 2-3 paragraphs.
-For "source_url", use the EXACT URL from the search results."""
-
-        messages = [{"role": "user", "content": extraction_prompt}]
-        response_text = call_gemini_api_fn(
-            messages, model="gemini-3.5-flash-lite",
-            temperature=0.1, thinking_level="MEDIUM",
-        )
-
-        cleaned = response_text.strip()
-        start_idx = cleaned.find("[")
-        end_idx = cleaned.rfind("]")
-        if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
-            cleaned = cleaned[start_idx : end_idx + 1]
-
-        reports = json.loads(cleaned)
-        if not isinstance(reports, list):
-            return []
-
-        # Sort newest first
-        from dateutil import parser as date_parser
-        def _sort_key(r):
-            try:
-                return date_parser.parse(r.get("date", ""), fuzzy=True)
-            except Exception:
-                return datetime.datetime(1970, 1, 1)
-
-        reports.sort(key=_sort_key, reverse=True)
-        print(f"ANALYST_AGENT: Got {len(reports)} global reports for {ticker}", file=sys.stderr)
-        return reports
-
-    except Exception as e:
-        print(f"ANALYST_AGENT: Global reports fetch failed: {e}", file=sys.stderr)
-        traceback.print_exc(file=sys.stderr)
-        return []
+def _rows_for_llm(rows: list[dict], include_summary: bool = False) -> list[dict]:
+    keep = ["brokerage", "origin", "source", "date", "age_days", "rating_raw", "rating",
+            "target_price", "upside_pct", "prev_target_price", "tp_change_pct", "rating_change",
+            "bull_case_target", "bear_case_target", "valuation", "implied_multiple", "eps",
+            "revenue_cr", "pat_cr", "ebitda_margin_pct", "roe_pct", "fwd_pe", "fwd_pb",
+            "eps_cagr_pct", "eps_cagr_span", "growth", "ebitda_cr", "eps_derived", "growth_guidance", "estimate_revisions", "thesis",
+            "key_drivers", "catalysts", "risks", "management_guidance", "swot",
+            "industry_outlook", "key_quote"]
+    if include_summary:
+        keep.append("detailed_summary")
+    out = []
+    for r in rows:
+        d = {k: r.get(k) for k in keep if r.get(k) not in (None, "", [], {})}
+        if not r.get("has_full_report") and r.get("listing_summary"):
+            d["listing_summary"] = r["listing_summary"]
+        out.append(d)
+    return out
 
 
 # =====================================================================
 # BACKGROUND PIPELINE
 # =====================================================================
 
-def _run_analyst_analysis(
-    job_id: str,
-    ticker: str,
-    company_name: str,
-    call_gemini_api_fn,
-    call_perplexity_search_api_fn,
-    fetch_analyst_reports_async_fn,
-):
-    """
-    Background thread: full analyst report analysis pipeline.
-    Steps:
-        1. Fetch domestic reports from Trendlyne (Scrapling → cache fallback)
-        2. Download and summarise top domestic PDFs via Gemini
-        3. Fetch global reports via Perplexity + Gemini
-        4. Synthesise everything into a comprehensive view
-    """
-    start_time = time.time()
+def _run_analyst_analysis(job_id, ticker, company_name, call_gemini_api_fn,
+                          call_perplexity_search_api_fn, fetch_analyst_reports_async_fn):
+    from agents.analyst_extract import (
+        extract_pdf_report, load_cached_extraction, fetch_news_calls, gemini_json, step_config,
+    )
+    from google.genai import types
+
+    start = time.time()
+    today = datetime.date.today()
+    warnings: list[str] = []
+    source_notes: dict = {}
 
     try:
-        # ── Step 1: Domestic reports from Trendlyne ─────────────────
-        update_agent_job(job_id, {"progress": f"Fetching domestic analyst reports for {ticker}..."})
-        print(f"ANALYST_AGENT: Step 1 — Fetching domestic reports for {ticker}", file=sys.stderr)
+        # ── Step 1: Trendlyne feed + market data in parallel ───────────
+        update_agent_job(job_id, {"progress": f"Fetching the live brokerage report feed and market data for {ticker}..."})
+        pool = concurrent.futures.ThreadPoolExecutor(max_workers=3)
+        market_f = pool.submit(am.fetch_market_data, ticker)
 
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-
+        reports: list[dict] = []
         try:
-            # Try existing fetcher first (hits cache)
-            domestic_reports = []
-
-            from analyst_reports.trendlyne_fetcher import get_post_url
-            post_url = get_post_url(ticker)
-
+            from analyst_reports.trendlyne_live import fetch_trendlyne_reports_live
+            reports = fetch_trendlyne_reports_live(ticker, max_pages=3, lookback_days=LOOKBACK_DAYS)
+            source_notes["trendlyne"] = "live"
+        except Exception as e:
+            _log(f"ANALYST_AGENT: live Trendlyne failed for {ticker}: {e}")
+            source_notes["trendlyne"] = "failed"
             try:
-                domestic_reports = loop.run_until_complete(
-                    fetch_analyst_reports_async_fn(ticker)
-                )
-                if domestic_reports:
-                    print(f"ANALYST_AGENT: Got {len(domestic_reports)} domestic reports from cache/fallback", file=sys.stderr)
-            except Exception as cache_err:
-                print(f"ANALYST_AGENT: Cache fetch failed: {cache_err}", file=sys.stderr)
+                loop = asyncio.new_event_loop()
+                cached = loop.run_until_complete(fetch_analyst_reports_async_fn(ticker))
+                loop.close()
+                reports = _cache_reports_to_live_shape(cached)
+                if reports:
+                    source_notes["trendlyne"] = "cache"
+                    warnings.append("Live Trendlyne fetch failed, so domestic reports come from an older "
+                                    "cached snapshot and may be months out of date.")
+            except Exception as ce:
+                _log(f"ANALYST_AGENT: cache fallback failed: {ce}")
+        if source_notes["trendlyne"] == "failed":
+            warnings.append("Could not reach Trendlyne, so no domestic brokerage reports were loaded.")
 
-            # If empty (not in cache), try Scrapling live fetch
-            if not domestic_reports:
-                if post_url:
-                    try:
-                        from analyst_reports.scrapling_fetcher import fetch_reports_with_scrapling
-                        domestic_reports = loop.run_until_complete(
-                            fetch_reports_with_scrapling(ticker, post_url)
-                        )
-                        if domestic_reports:
-                            print(f"ANALYST_AGENT: Scrapling got {len(domestic_reports)} domestic reports", file=sys.stderr)
-                    except Exception as scrape_err:
-                        print(f"ANALYST_AGENT: Scrapling failed: {scrape_err}, falling back", file=sys.stderr)
+        latest, tp_history = _latest_per_broker(reports)
+        _log(f"ANALYST_AGENT: {len(reports)} Trendlyne reports, {len(latest)} brokers")
 
-            print(f"ANALYST_AGENT: Step 1 done — {len(domestic_reports)} domestic reports", file=sys.stderr)
-        except Exception as e:
-            print(f"ANALYST_AGENT: Step 1 error: {e}", file=sys.stderr)
-            domestic_reports = []
+        # ── Step 2 + 3: PDF extraction  ||  news-sourced calls ─────────
+        domestic_names = [r["brokerage"] for r in latest]
+        news_f = pool.submit(fetch_news_calls, ticker, company_name, call_perplexity_search_api_fn,
+                             domestic_names, NEWS_MONTHS)
+        from agents.analyst_extract import discover_coverage_roster
+        roster_f = pool.submit(discover_coverage_roster, ticker, company_name, NEWS_MONTHS)
 
-        # ── Step 2: Download + summarise top domestic PDFs ──────────
-        pdf_summaries = {}
-        reports_with_pdf = [r for r in domestic_reports if r.get("pdf_url")]
-        pdfs_to_process = reports_with_pdf[:MAX_PDF_DOWNLOADS]
-
-        if pdfs_to_process:
-            update_agent_job(job_id, {
-                "progress": f"Downloading & analyzing {len(pdfs_to_process)} domestic report PDFs..."
-            })
-            print(f"ANALYST_AGENT: Step 2 — Processing {len(pdfs_to_process)} PDFs", file=sys.stderr)
-
-            async def process_single_pdf(i, report, total):
-                brokerage = report.get("brokerage", f"Broker_{i}")
-                pdf_url = report["pdf_url"]
-                
-                # We can't safely call `update_agent_job` from multiple async tasks concurrently without race conditions 
-                # causing flickering in the UI. We'll just emit prints.
-                print(f"ANALYST_AGENT: Analyzing PDF {i}/{total}: {brokerage}...", file=sys.stderr)
-
-                try:
-                    pdf_bytes = None
-                    try:
-                        from analyst_reports.scrapling_fetcher import download_pdf_with_scrapling
-                        pdf_bytes = await download_pdf_with_scrapling(pdf_url)
-                    except Exception as scrape_pdf_err:
-                        print(f"ANALYST_AGENT: Scrapling PDF failed for {brokerage}: {scrape_pdf_err}", file=sys.stderr)
-
-                    if not pdf_bytes:
-                        try:
-                            from analyst_reports.pdf_summarizer_cookies import download_analyst_pdf_with_cookies
-                            # download_analyst_pdf_with_cookies is synchronous, so run in thread if we make it async
-                            # Wait, the current version in master says it's an async fn if it was awaited via run_until_complete?
-                            # Let's wrap it in to_thread just in case to be perfectly safe, since we are in an async context.
-                            from analyst_reports.pdf_summarizer_cookies import download_analyst_pdf_with_cookies
-                            if asyncio.iscoroutinefunction(download_analyst_pdf_with_cookies):
-                                pdf_bytes = await download_analyst_pdf_with_cookies(pdf_url)
-                            else:
-                                pdf_bytes = await asyncio.to_thread(download_analyst_pdf_with_cookies, pdf_url)
-                        except Exception as cookie_err:
-                            print(f"ANALYST_AGENT: Cookie PDF download failed for {brokerage}: {cookie_err}", file=sys.stderr)
-
-                    if pdf_bytes and len(pdf_bytes) > 1000:
-                        import os
-                        local_filename = f"report_{ticker}_{slugify(brokerage)}.pdf"
-                        local_dir = os.path.join(os.getcwd(), "temp_reports")
-                        if not os.path.exists(local_dir):
-                            os.makedirs(local_dir, exist_ok=True)
-                        
-                        local_path = os.path.join(local_dir, local_filename)
-                        with open(local_path, "wb") as f:
-                            f.write(pdf_bytes)
-                        
-                        report["pdf_url"] = f"/temp_reports/{local_filename}"
-
-                        summary = await asyncio.to_thread(
-                            _summarise_pdf_bytes, pdf_bytes, brokerage, ticker
-                        )
-                        if summary and not summary.startswith("Error"):
-                            print(f"ANALYST_AGENT: PDF summary done for {brokerage} ({len(summary)} chars)", file=sys.stderr)
-                            return brokerage, summary
-                        else:
-                            print(f"ANALYST_AGENT: PDF summary failed for {brokerage}: {summary[:100] if summary else 'empty'}", file=sys.stderr)
-                    else:
-                        print(f"ANALYST_AGENT: No PDF bytes for {brokerage}", file=sys.stderr)
-
-                except Exception as pdf_err:
-                    print(f"ANALYST_AGENT: PDF processing error for {brokerage}: {pdf_err}", file=sys.stderr)
-                
-                return brokerage, None
-
-            update_agent_job(job_id, {"progress": f"Downloading & concurrently analyzing {len(pdfs_to_process)} domestic report PDFs..."})
-            
-            # Run all PDF downloads and summaries CONCURRENTLY
-            tasks = [process_single_pdf(i, r, len(pdfs_to_process)) for i, r in enumerate(pdfs_to_process, 1)]
-            results = loop.run_until_complete(asyncio.gather(*tasks))
-            
-            for brokr, summ in results:
-                if summ:
-                    pdf_summaries[brokr] = summ
-
-        # ── Step 3: Global reports via Perplexity ───────────────────
-        update_agent_job(job_id, {"progress": f"Fetching global research reports for {ticker}..."})
-        print(f"ANALYST_AGENT: Step 3 — Fetching global reports", file=sys.stderr)
-
-        global_reports = []
-        try:
-            global_reports = _fetch_global_reports(
-                ticker, company_name,
-                call_gemini_api_fn, call_perplexity_search_api_fn,
-            )
-        except Exception as global_err:
-            print(f"ANALYST_AGENT: Global reports failed: {global_err}", file=sys.stderr)
-
-        # ── Step 4: Synthesise everything ───────────────────────────
-        update_agent_job(job_id, {"progress": "Fetching live CMP and synthesizing reports..."})
-        print(f"ANALYST_AGENT: Step 4 — Synthesising", file=sys.stderr)
-
-        # Fetch current market price (CMP) using yfinance
-        cmp_text = "Not available"
-        try:
-            import yfinance as yf
-            yf_ticker = ticker if (ticker.endswith(".NS") or ticker.endswith(".BO")) else f"{ticker}.NS"
-            ticker_obj = yf.Ticker(yf_ticker)
-            hist = ticker_obj.history(period="1d")
-            if not hist.empty:
-                cmp_val = float(hist['Close'].iloc[-1])
-                cmp_text = f"₹{cmp_val:,.2f}"
+        to_read = [r for r in latest if r.get("pdf_url")][:MAX_PDF_REPORTS]
+        extractions: dict[str, dict] = {}
+        pending = []
+        for r in to_read:
+            c = load_cached_extraction(r["pdf_url"])
+            if c:
+                extractions[r["pdf_url"]] = c
             else:
-                # Fallback to info
-                info = ticker_obj.info
-                if info and "currentPrice" in info:
-                    cmp_text = f"₹{float(info['currentPrice']):,.2f}"
+                pending.append(r)
+
+        done_count = [len(extractions)]
+        lock = threading.Lock()
+        total = len(to_read)
+
+        def _progress():
+            update_agent_job(job_id, {"progress": f"Reading full brokerage reports: {done_count[0]}/{total} done "
+                                                  f"(also searching news for global brokerage calls)..."})
+
+        download_errors: list[str] = []
+
+        def _read_one(r):
+            # trendlyne_auth: cookies -> re-login on expiry (if credentials are set),
+            # direct -> residential proxy on block, and records session health.
+            from analyst_reports.trendlyne_auth import download_pdf_sync
+            try:
+                try:
+                    pdf = download_pdf_sync(r["pdf_url"])
+                except Exception as de:
+                    with lock:
+                        download_errors.append(str(de))
+                    _log(f"ANALYST_AGENT: PDF download failed for {r['brokerage']}: {str(de)[:200]}")
+                    return r["pdf_url"], None
+                if not pdf or len(pdf) < 1000:
+                    _log(f"ANALYST_AGENT: no PDF bytes for {r['brokerage']}")
+                    return r["pdf_url"], None
+                ext = extract_pdf_report(pdf, r["pdf_url"], r["brokerage"], ticker, company_name, r.get("date", ""))
+                return r["pdf_url"], ext
+            except Exception as e:
+                _log(f"ANALYST_AGENT: extraction failed for {r['brokerage']}: {str(e)[:200]}")
+                return r["pdf_url"], None
+            finally:
+                with lock:
+                    done_count[0] += 1
+                    _progress()
+
+        if total:
+            _progress()
+        if pending:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=PDF_WORKERS) as ex:
+                for url, ext in ex.map(_read_one, pending):
+                    if ext:
+                        extractions[url] = ext
+        n_failed = sum(1 for r in to_read if r["pdf_url"] not in extractions)
+        if n_failed:
+            pool_down = any("No Trendlyne account" in e for e in download_errors)
+            if pool_down:
+                warnings.append(f"No Trendlyne account could download reports right now (monthly limits reached "
+                                f"or sessions expired), so {n_failed} of {total} brokers show Trendlyne's short "
+                                "summary only. Details are on the Admin page (Trendlyne accounts).")
+            else:
+                warnings.append(f"{n_failed} of {total} report PDFs could not be read; those brokers show "
+                                "Trendlyne's short summary only.")
+
+        update_agent_job(job_id, {"progress": "Collecting news-sourced brokerage calls (global houses)..."})
+        try:
+            news_calls, n_news_sources, news_results = news_f.result(timeout=240)
         except Exception as e:
-            print(f"ANALYST_AGENT: Error fetching CMP for {ticker}: {e}", file=sys.stderr)
+            _log(f"ANALYST_AGENT: news calls failed: {e}")
+            news_calls, n_news_sources, news_results = [], 0, []
+        source_notes["news_sources"] = n_news_sources
 
-        # Build context for synthesis
-        domestic_context = ""
-        for r in domestic_reports:
-            brokerage = r.get("brokerage", "Unknown")
-            domestic_context += f"\n### {brokerage}\n"
-            domestic_context += f"- Recommendation: {r.get('recommendation', 'N/A')}\n"
-            domestic_context += f"- Target Price: ₹{r.get('target_price', 'N/A')}\n"
-            domestic_context += f"- Upside: {r.get('upside', 'N/A')}\n"
-            domestic_context += f"- Date: {r.get('date', 'N/A')}\n"
-            domestic_context += f"- Report URL: {r.get('pdf_url') or r.get('report_url', 'Not Available')}\n"
-            domestic_context += f"- Summary: {r.get('summary', '')}\n"
-            if brokerage in pdf_summaries:
-                domestic_context += f"\n**Full PDF Analysis:**\n{pdf_summaries[brokerage]}\n"
+        try:
+            roster = roster_f.result(timeout=120)
+        except Exception as e:
+            _log(f"ANALYST_AGENT: coverage roster failed: {e}")
+            roster = []
+        market = market_f.result(timeout=120)
+        pool.shutdown(wait=False)
+        cmp = market.get("cmp")
+        if not cmp:
+            warnings.append("Live price unavailable, so upside and forward multiples are not computed.")
 
-        global_context = ""
-        for r in global_reports:
-            brokerage = r.get("brokerage", "Unknown")
-            global_context += f"\n### {brokerage}\n"
-            global_context += f"- Recommendation: {r.get('recommendation', 'N/A')}\n"
-            global_context += f"- Target Price: ₹{r.get('target_price', 'N/A')}\n"
-            global_context += f"- Upside: {r.get('upside', 'N/A')}\n"
-            global_context += f"- Date: {r.get('date', 'N/A')}\n"
-            global_context += f"- Report URL: {r.get('source_url', 'Not Available')}\n"
-            global_context += f"- Summary: {r.get('summary', '')}\n"
-            if r.get("detailed_summary"):
-                global_context += f"- Detailed: {r['detailed_summary']}\n"
+        # ── Step 4: rows + deterministic metrics ──────────────────────
+        rows = []
+        for r in latest:
+            base = {**r, "source_kind": "Full report" if r.get("pdf_url") in extractions else "Trendlyne summary",
+                    "origin": "Domestic", "link": _pdf_link(r.get("pdf_url"))}
+            rows.append(am.build_row(base, extractions.get(r.get("pdf_url")), cmp, today))
 
-        if not domestic_context and not global_context:
+        kept_calls = []
+        for c in news_calls:
+            if any(_same_broker(c.get("brokerage", ""), n) for n in domestic_names):
+                continue
+            if any(_same_broker(c.get("brokerage", ""), k["brokerage"]) for k, _ in kept_calls):
+                continue
+            d = _parse_any_date(c.get("date", ""))
+            if not d or (today - d).days > NEWS_MONTHS * 31:
+                continue
+            kept_calls.append((c, d))
+
+        # Brokers that the roster names, or that appear by name next to the company in any
+        # search result, but that the news extraction missed, become LEADS. A lead is kept only
+        # if enrichment then finds real articles naming the broker and the company.
+        from agents.analyst_extract import scan_broker_mentions
+        mentions = scan_broker_mentions(news_results, company_name, ticker)
+        leads = [{**m, "lead_source": "mention"} for m in mentions] + \
+                [{**r, "lead_source": r.get("roster_source", "roster")} for r in roster]
+        known = domestic_names + [c.get("brokerage", "") for c, _ in kept_calls]
+        n_leads = 0
+        for lead in leads:
+            name = (lead.get("brokerage") or "").strip()
+            if not name or any(_same_broker(name, k) for k in known):
+                continue
+            d = _parse_any_date(lead.get("date") or "")
+            if d and (today - d).days > NEWS_MONTHS * 31:
+                continue
+            known.append(name)
+            n_leads += 1
+            kept_calls.append(({"brokerage": name, "date": lead.get("date"), "lead": True,
+                                "source_url": lead.get("url"), "origin": "Domestic"}, d))
+        source_notes["coverage_leads"] = n_leads
+
+        # Read the full articles behind each news call (plus alternate outlets covering the
+        # same note) so news-sourced brokers get thesis / valuation / growth / risks too.
+        enrichments: dict[int, tuple] = {}
+        if kept_calls:
+            update_agent_job(job_id, {"progress": f"Reading full articles for {len(kept_calls)} news-sourced brokerage calls..."})
+            from agents.analyst_extract import enrich_news_call
+            with concurrent.futures.ThreadPoolExecutor(max_workers=6) as ex:
+                futs = {ex.submit(enrich_news_call, c, company_name, ticker, call_perplexity_search_api_fn): i
+                        for i, (c, _) in enumerate(kept_calls[:MAX_ENRICHED_CALLS])}
+                for f in concurrent.futures.as_completed(futs):
+                    try:
+                        enrichments[futs[f]] = f.result()
+                    except Exception as e:
+                        _log(f"ANALYST_AGENT: enrichment failed: {str(e)[:160]}")
+
+        global_rows = []
+        for i, (c, d) in enumerate(kept_calls):
+            ext, sources = enrichments.get(i, (None, []))
+            no_view = bool(ext) and ext.get("broker_view_found") is False
+            if c.get("lead"):
+                # Lead: kept only when the articles read show this broker's own view, and at
+                # least one of them is established financial press (not a blog / aggregator).
+                if not ext or no_view or not any(s.get("trusted") for s in sources):
+                    continue
+                ext_rating = ext.get("rating") if ext.get("rating") not in (None, "Not rated") else None
+                if not (ext_rating or ext.get("target_price") or (ext.get("thesis") or "").strip()):
+                    continue        # articles mention the broker but carry no view of its own
+            elif no_view:
+                ext, sources = None, []     # keep the call itself; the articles found weren't about it
+                c = {**c, "rating": ext_rating or "Not rated", "rating_raw": ext.get("rating_raw"),
+                     "target_price": ext.get("target_price")}
+            base = {
+                "brokerage": c.get("brokerage"), "origin": c.get("origin") or "Global",
+                "source_kind": "News",
+                "date": d.strftime("%d %b %Y") if d else "", "date_iso": d.isoformat() if d else "",
+                "undated": d is None,
+                "recommendation": c.get("rating") if c.get("rating") not in (None, "Not rated") else None,
+                "rating_raw": c.get("rating_raw") or (None if c.get("rating") in (None, "Not rated") else c.get("rating")),
+                "target_price": c.get("target_price"),
+                "prev_target_price": c.get("previous_target_price"),
+                "valuation_method": c.get("valuation_method"),
+                "valuation_multiple": c.get("valuation_multiple"),
+                "valuation_basis_year": c.get("valuation_basis_year"),
+                "eps_estimates": c.get("eps_estimates") or [],
+                "thesis": c.get("thesis"), "risks": c.get("risks") or [],
+                "link": c.get("source_url") or (sources[0]["url"] if sources else None),
+                "sources": sources,
+            }
+            global_rows.append(am.build_row(base, ext, cmp, today))
+
+        all_rows = rows + global_rows
+        all_rows.sort(key=lambda r: (not r["in_consensus"], -(datetime.date.fromisoformat(r["date_iso"]).toordinal() if r.get("date_iso") else 0)))
+
+        if not all_rows:
             update_agent_job(job_id, {
                 "status": "error",
-                "error": f"No analyst reports found for {ticker}. This stock may not have recent brokerage coverage.",
+                "error": f"No analyst reports found for {ticker}. This stock may not have recent brokerage coverage."
+                         + (" " + " ".join(warnings) if warnings else ""),
             })
-            loop.close()
             return
 
-        synthesis_input = f"""{ANALYST_SYNTHESIS_PROMPT}
+        consensus = am.compute_consensus(all_rows, market, tp_history)
 
-## Company: {company_name} ({ticker})
-## Current Market Price (CMP): {cmp_text}
-
-## DOMESTIC RESEARCH REPORTS:
-{domestic_context if domestic_context else "No domestic reports found."}
-
-## GLOBAL RESEARCH REPORTS:
-{global_context if global_context else "No global reports found."}
-"""
-
-        messages = [{"role": "user", "content": synthesis_input}]
-        analysis_result = call_gemini_api_fn(
-            messages, model="gemini-3.5-flash-lite",
-            temperature=1, thinking_level="MEDIUM",
+        # ── Step 5: structured synthesis ──────────────────────────────
+        update_agent_job(job_id, {"progress": f"Synthesising {len(all_rows)} brokerage views..."})
+        cons_for_llm = {k: v for k, v in consensus.items() if k not in ("price_history", "tp_history", "peg_fy2")}
+        payload = json.dumps({"computed_metrics": cons_for_llm, "reports": _rows_for_llm(all_rows)},
+                             ensure_ascii=False, default=str)
+        prompt = ANALYST_SYNTHESIS_STRUCTURED_PROMPT.format(
+            company_name=company_name, ticker=ticker, today=today.strftime("%d %b %Y"),
+            cmp=f"Rs {cmp:,.2f}" if cmp else "not available", payload=payload[:300000],
         )
+        synthesis = {}
+        try:
+            synthesis = gemini_json([types.Part.from_text(text=prompt)], ANALYST_SYNTHESIS_SCHEMA,
+                                    usage_tag="analyst.synthesis", temperature=0.4,
+                                    **step_config("synthesis"))
+        except Exception as e:
+            _log(f"ANALYST_AGENT: synthesis failed: {e}")
+            warnings.append("The cross-broker synthesis step failed; tables and per-broker details are still shown.")
 
-        elapsed_total = int(time.time() - start_time)
-        print(f"ANALYST_AGENT: Step 4 done — {len(analysis_result)} chars in {elapsed_total}s", file=sys.stderr)
+        analysis_md = build_markdown(company_name, ticker, consensus, all_rows, synthesis)
+        elapsed = int(time.time() - start)
 
-        # ── Store result ────────────────────────────────────────────
-        result_data = {
-            "analysis": analysis_result,
+        result = {
+            "version": RESULT_VERSION,
             "ticker": ticker,
             "company_name": company_name,
-            "domestic_reports": domestic_reports,
-            "global_reports": global_reports,
-            "pdf_summaries": pdf_summaries,
-            "domestic_count": len(domestic_reports),
-            "global_count": len(global_reports),
-            "pdfs_analyzed": len(pdf_summaries),
+            "cmp": cmp,
+            "consensus": consensus,
+            "rows": all_rows,
+            "synthesis": synthesis,
+            "analysis": analysis_md,
+            "warnings": warnings,
+            "source_notes": source_notes,
+            # Back-compat fields (watchlist modal, chat payloads)
+            "domestic_reports": [
+                {"brokerage": r["brokerage"], "recommendation": r["rating"], "target_price": r["target_price"],
+                 "date": r["date"], "summary": r["thesis"] or r["listing_summary"], "pdf_url": r["link"]}
+                for r in rows
+            ],
+            "global_reports": [
+                {"brokerage": r["brokerage"], "recommendation": r["rating"], "target_price": r["target_price"],
+                 "date": r["date"], "summary": r["thesis"], "source_url": r["link"]}
+                for r in global_rows
+            ],
+            "domestic_count": len(rows),
+            "global_count": len(global_rows),
+            "pdfs_analyzed": len(extractions),
             "analyzed_at": time.time(),
-            "analysis_time_seconds": elapsed_total,
+            "analysis_time_seconds": elapsed,
         }
-
-        store_latest_result("analyst", ticker, result_data)
-
+        store_latest_result("analyst", ticker, result)
         update_agent_job(job_id, {
-            "status": "complete",
-            "progress": "Analysis complete!",
-            "result": result_data,
-            "completed_at": time.time(),
-            "total_time": elapsed_total,
+            "status": "complete", "progress": "Analysis complete!", "result": result,
+            "completed_at": time.time(), "total_time": elapsed,
         })
-
-        loop.close()
-        print(f"ANALYST_AGENT: ✓ Complete for {ticker} in {elapsed_total}s", file=sys.stderr)
+        _log(f"ANALYST_AGENT: done for {ticker} in {elapsed}s ({len(rows)} domestic, "
+             f"{len(global_rows)} news, {len(extractions)} PDFs)")
 
     except Exception as e:
-        print(f"ANALYST_AGENT ERROR: {e}", file=sys.stderr)
+        _log(f"ANALYST_AGENT ERROR: {e}")
         traceback.print_exc(file=sys.stderr)
-        update_agent_job(job_id, {
-            "status": "error",
-            "error": f"Analysis failed: {str(e)}",
-        })
-
-
-def await_in_thread(fn, *args):
-    """Run a synchronous function, useful for calling blocking code from the background thread."""
-    return fn(*args)
+        update_agent_job(job_id, {"status": "error", "error": f"Analysis failed: {str(e)}"})
 
 
 # =====================================================================
 # FLASK ROUTE REGISTRATION
 # =====================================================================
 
-def register_analyst_routes(
-    app,
-    call_gemini_api_fn,
-    call_perplexity_search_api_fn,
-    fetch_analyst_reports_async_fn,
-):
-    """
-    Register all Analyst Report Agent API routes.
+def register_analyst_routes(app, call_gemini_api_fn, call_perplexity_search_api_fn,
+                            fetch_analyst_reports_async_fn):
+    """Register all Analyst Report Agent API routes."""
 
-    Args:
-        app: Flask app instance
-        call_gemini_api_fn: Reference to call_gemini_api from handler.py
-        call_perplexity_search_api_fn: Reference to call_perplexity_search_api
-        fetch_analyst_reports_async_fn: Reference to fetch_analyst_reports_async
-    """
-
-    # --- Helper: resolve company name from ticker ---
     def _get_company_name(ticker: str) -> str:
-        """Look up company name from the trendlyne master CSV mapping."""
         try:
             from analyst_reports.trendlyne_fetcher import TRENDLYNE_DATA
             data = TRENDLYNE_DATA.get(ticker.upper())
@@ -522,88 +627,56 @@ def register_analyst_routes(
             pass
         return ticker
 
-    # =================================================================
-    # POST /agent/analyst/analyze
-    # =================================================================
     @app.route("/agent/analyst/analyze", methods=["POST"])
     def agent_analyst_analyze():
-        """Start an Analyst Report Agent analysis job."""
         try:
             data = request.get_json(force=True)
             ticker = data.get("ticker", "").strip().upper()
-
             if not ticker:
                 return jsonify({"error": "Ticker is required"}), 400
 
             company_name = _get_company_name(ticker)
-            print(f"ANALYST_AGENT: Starting analysis for {ticker} ({company_name})", file=sys.stderr)
+            _log(f"ANALYST_AGENT: Starting analysis for {ticker} ({company_name})")
 
-            # Check cached result
             existing = get_latest_result("analyst", ticker)
-            if existing and data.get("force_refresh") is not True:
+            if (existing and data.get("force_refresh") is not True
+                    and (existing.get("result") or {}).get("version") == RESULT_VERSION):
                 age_minutes = (time.time() - existing["stored_at"]) / 60
                 if age_minutes < 60:
-                    print(f"ANALYST_AGENT: Returning cached result ({age_minutes:.0f}m old)", file=sys.stderr)
-                    return jsonify({
-                        "status": "complete",
-                        "result": existing["result"],
-                        "cached": True,
-                        "age_minutes": round(age_minutes),
-                    })
+                    return jsonify({"status": "complete", "result": existing["result"],
+                                    "cached": True, "age_minutes": round(age_minutes)})
 
             job_id = create_agent_job("analyst", ticker)
-
             thread = threading.Thread(
                 target=_run_analyst_analysis,
-                args=(
-                    job_id, ticker, company_name,
-                    call_gemini_api_fn, call_perplexity_search_api_fn,
-                    fetch_analyst_reports_async_fn,
-                ),
+                args=(job_id, ticker, company_name, call_gemini_api_fn,
+                      call_perplexity_search_api_fn, fetch_analyst_reports_async_fn),
+                daemon=True,
             )
-            thread.daemon = True
             thread.start()
-
-            return jsonify({
-                "job_id": job_id,
-                "status": "processing",
-                "message": f"Analyst report analysis started for {ticker}.",
-            })
-
+            return jsonify({"job_id": job_id, "status": "processing",
+                            "message": f"Analyst report analysis started for {ticker}."})
         except Exception as e:
-            print(f"ANALYST_AGENT ERROR: {e}", file=sys.stderr)
+            _log(f"ANALYST_AGENT ERROR: {e}")
             traceback.print_exc(file=sys.stderr)
             return jsonify({"error": str(e)}), 500
 
-    # =================================================================
-    # GET /agent/analyst/<job_id>/status
-    # =================================================================
     @app.route("/agent/analyst/<job_id>/status", methods=["GET"])
     def agent_analyst_status(job_id):
-        """Poll endpoint for Analyst Agent job status."""
         job = get_agent_job(job_id)
         if not job:
             return jsonify({"error": "Job not found or expired"}), 404
-
         if job["status"] == "processing":
-            return jsonify({
-                "status": "processing",
-                "progress": job["progress"],
-                "elapsed_seconds": int(time.time() - job["started_at"]),
-            })
-        elif job["status"] == "complete":
+            return jsonify({"status": "processing", "progress": job["progress"],
+                            "elapsed_seconds": int(time.time() - job["started_at"])})
+        if job["status"] == "complete":
             return jsonify({"status": "complete", "result": job["result"]})
-        elif job["status"] == "error":
+        if job["status"] == "error":
             return jsonify({"status": "error", "error": job["error"]})
-
         return jsonify({"error": "Unknown job status"}), 500
 
-    # =================================================================
-    # POST /agent/analyst/chat
-    # =================================================================
     @app.route("/agent/analyst/chat", methods=["POST"])
     def agent_analyst_chat():
-        """Chat about the completed analyst report analysis."""
         try:
             data = request.get_json(force=True)
             question = data.get("question", "").strip()
@@ -616,51 +689,112 @@ def register_analyst_routes(
             if not analysis_context:
                 return jsonify({"error": "Analysis context is required. Run the analysis first."}), 400
 
-            # Build domestic/global report text for chat context
+            # Prefer the full structured result held server-side; fall back to the client's text.
             domestic_text = data.get("domestic_reports_text", "Not available")
             global_text = data.get("global_reports_text", "Not available")
+            stored = get_latest_result("analyst", ticker) if ticker else None
+            res = (stored or {}).get("result") or {}
+            if res.get("version") == RESULT_VERSION and res.get("rows"):
+                dom = [r for r in res["rows"] if r.get("source") != "News"]
+                glob = [r for r in res["rows"] if r.get("source") == "News"]
+                domestic_text = json.dumps(_rows_for_llm(dom, include_summary=True), ensure_ascii=False, default=str)
+                global_text = json.dumps(_rows_for_llm(glob), ensure_ascii=False, default=str)
+                analysis_context = res.get("analysis") or analysis_context
 
             chat_prompt = ANALYST_CHAT_PROMPT.format(
-                company_name=company_name,
-                ticker=ticker,
+                company_name=company_name, ticker=ticker,
                 analysis=analysis_context[:40000],
-                domestic_reports=domestic_text[:20000],
-                global_reports=global_text[:20000],
+                domestic_reports=domestic_text[:120000],
+                global_reports=global_text[:30000],
             )
-
-            messages = [
-                {"role": "system", "content": chat_prompt},
-                {"role": "user", "content": question},
-            ]
-
-            answer = call_gemini_api_fn(
-                messages, model="gemini-3.5-flash-lite",
-                temperature=1, thinking_level="MEDIUM",
-            )
-
+            messages = [{"role": "system", "content": chat_prompt},
+                        {"role": "user", "content": question}]
+            answer = call_gemini_api_fn(messages, model="gemini-3.5-flash-lite",
+                                        temperature=1, thinking_level="MEDIUM",
+                                        usage_tag="analyst.chat")
             return jsonify({"answer": answer, "status": "success"})
-
         except Exception as e:
-            print(f"ANALYST_AGENT_CHAT ERROR: {e}", file=sys.stderr)
+            _log(f"ANALYST_AGENT_CHAT ERROR: {e}")
             traceback.print_exc(file=sys.stderr)
             return jsonify({"error": str(e)}), 500
 
     # =================================================================
-    # GET /agent/analyst/latest
+    # Admin: Trendlyne session health (Admin page card)
     # =================================================================
+    def _require_admin():
+        from flask import session as flask_session
+        if "user_id" not in flask_session:
+            return jsonify({"error": "Authentication required"}), 401
+        from auth.database import User
+        user = User.get_by_id(flask_session["user_id"])
+        if not user or not user.is_admin:
+            return jsonify({"error": "Admin access required"}), 403
+        return None
+
+    @app.route("/api/admin/trendlyne/status", methods=["GET"])
+    def admin_trendlyne_status():
+        denied = _require_admin()
+        if denied:
+            return denied
+        from analyst_reports import trendlyne_auth as ta
+        return jsonify({"status": ta.get_status()})
+
+    @app.route("/api/admin/trendlyne/check", methods=["POST"])
+    def admin_trendlyne_check():
+        denied = _require_admin()
+        if denied:
+            return denied
+        from analyst_reports import trendlyne_auth as ta
+        aid = str((request.get_json(silent=True) or {}).get("account_id") or "") or None
+        return jsonify(ta.check_session(aid))
+
+    @app.route("/api/admin/trendlyne/cookies", methods=["POST"])
+    def admin_trendlyne_cookies():
+        denied = _require_admin()
+        if denied:
+            return denied
+        from analyst_reports import trendlyne_auth as ta
+        body = request.get_json(force=True) or {}
+        aid = str(body.get("account_id") or "1")
+        try:
+            cookies = ta.parse_cookie_input(body.get("cookie", ""))
+            ta.set_cookies_manually(cookies, aid)
+        except (ValueError, json.JSONDecodeError) as e:
+            return jsonify({"error": str(e)}), 400
+        check = ta.check_session(aid)
+        return jsonify({"saved": True, "cookie_names": sorted(cookies.keys()), **check})
+
+    @app.route("/api/admin/trendlyne/relogin", methods=["POST"])
+    def admin_trendlyne_relogin():
+        denied = _require_admin()
+        if denied:
+            return denied
+        from analyst_reports import trendlyne_auth as ta
+        aid = str((request.get_json(silent=True) or {}).get("account_id") or "1")
+        try:
+            ta.force_login(aid)
+        except Exception as e:
+            return jsonify({"error": str(e), "status": ta.get_status()}), 400
+        return jsonify(ta.check_session(aid))
+
+    @app.route("/api/admin/trendlyne/reset", methods=["POST"])
+    def admin_trendlyne_reset():
+        """Clear an account's cool-downs (limit / error / expired) so it is tried again now."""
+        denied = _require_admin()
+        if denied:
+            return denied
+        from analyst_reports import trendlyne_auth as ta
+        aid = str((request.get_json(silent=True) or {}).get("account_id") or "1")
+        ta.reset_cooldowns(aid)
+        return jsonify({"status": ta.get_status()})
+
     @app.route("/agent/analyst/latest", methods=["GET"])
     def agent_analyst_latest():
-        """Get the latest cached result for persistence across tab switches."""
         ticker = request.args.get("ticker", "").strip().upper()
         if not ticker:
             return jsonify({"error": "Ticker is required"}), 400
-
         result = get_latest_result("analyst", ticker)
         if result:
-            return jsonify({
-                "status": "complete",
-                "result": result["result"],
-                "age_minutes": round((time.time() - result["stored_at"]) / 60),
-            })
-
+            return jsonify({"status": "complete", "result": result["result"],
+                            "age_minutes": round((time.time() - result["stored_at"]) / 60)})
         return jsonify({"status": "none", "message": "No cached result found"})

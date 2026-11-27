@@ -280,6 +280,13 @@
     <!-- Main Content -->
     <main class="container mx-auto px-4 sm:px-6 py-6 sm:py-8">
 
+        <!-- Trendlyne session alert (shown on any tab when the session is expired) -->
+        <div id="tl-alert" class="hidden mb-6 p-4 rounded-xl border border-red-500/50 bg-red-500/10 text-sm flex flex-wrap items-center justify-between gap-3">
+            <span><strong>Trendlyne report downloads are down.</strong> <span id="tl-alert-text">No Trendlyne account can download report PDFs right now.</span></span>
+            <button onclick="switchTab('cache'); document.getElementById('tl-card').scrollIntoView({behavior:'smooth'})"
+                class="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white font-medium">Fix it</button>
+        </div>
+
         <!-- Tab 1: User Management -->
         <div id="tab-content-users">
             <!-- Invite User Section -->
@@ -380,6 +387,58 @@
 
         <!-- Tab 2: Light Cache Management -->
         <div id="tab-content-cache" class="hidden">
+            <!-- Trendlyne account pool -->
+            <div id="tl-card" class="bg-slate-800/50 backdrop-blur-sm rounded-2xl p-6 border border-slate-700 mb-8">
+                <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+                    <div class="flex items-center gap-3">
+                        <h2 class="text-xl font-bold">🔑 Trendlyne accounts</h2>
+                        <span id="tl-state" class="px-2 py-1 rounded-full text-xs font-medium bg-slate-600/40 text-slate-300">…</span>
+                    </div>
+                    <button onclick="tlLoadStatus()" class="text-slate-400 hover:text-white transition-colors text-sm">↻ Refresh</button>
+                </div>
+                <p class="text-slate-400 text-sm mb-4">
+                    Report PDFs are downloaded through a pool of Trendlyne accounts (<code>TRENDLYNE_USERNAME</code>,
+                    <code>_2</code>, <code>_3</code> …). When an account reaches its monthly download limit or its session
+                    expires, the next one takes over automatically, and expired sessions are renewed by password login.
+                    Downloaded PDFs are cached, so opening a report again never uses quota.
+                </p>
+                <div id="tl-summary" class="text-sm text-slate-300 mb-3"></div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="text-left text-slate-400 border-b border-slate-700">
+                                <th class="py-2 pr-3 font-medium">#</th>
+                                <th class="py-2 pr-3 font-medium">Account</th>
+                                <th class="py-2 pr-3 font-medium">State</th>
+                                <th class="py-2 pr-3 font-medium">Used this month</th>
+                                <th class="py-2 pr-3 font-medium">Last worked</th>
+                                <th class="py-2 pr-3 font-medium">Notes</th>
+                                <th class="py-2 font-medium"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="tl-rows"></tbody>
+                    </table>
+                </div>
+                <div id="tl-net" class="text-xs text-slate-500 mt-3"></div>
+
+                <details class="mt-5">
+                    <summary class="cursor-pointer text-sm text-slate-300">Paste a session cookie for an account (only needed if password login is not working)</summary>
+                    <div class="mt-3 flex flex-wrap items-center gap-3">
+                        <label class="text-sm text-slate-400">Account</label>
+                        <select id="tl-cookie-acct" class="px-3 py-2 bg-slate-900/50 border border-slate-600 rounded-lg text-white text-sm"></select>
+                    </div>
+                    <textarea id="tl-cookie" rows="2"
+                        placeholder="Value of the .trendlyne cookie, or the whole Cookie header, or {&quot;.trendlyne&quot;: &quot;...&quot;, &quot;csrftoken&quot;: &quot;...&quot;}"
+                        class="mt-3 w-full px-4 py-3 bg-slate-900/50 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y font-mono text-xs"></textarea>
+                    <p class="text-xs text-slate-500 mt-1">In Chrome: log into trendlyne.com with that account, then DevTools → Application → Cookies → trendlyne.com → copy the value of <code>.trendlyne</code>.</p>
+                    <div class="flex items-center gap-3 mt-3">
+                        <button onclick="tlSaveCookie()" id="tl-save-btn"
+                            class="kg-brand-btn bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 px-5 py-2 rounded-lg font-semibold text-sm">Save and test</button>
+                    </div>
+                </details>
+                <div id="tl-msg" class="text-sm mt-3"></div>
+            </div>
+
             <!-- Overnight Pre-Caching Section -->
             <div class="bg-slate-800/50 backdrop-blur-sm rounded-2xl p-6 border border-slate-700">
                 <div class="flex items-center justify-between mb-4">
@@ -653,6 +712,7 @@
             if (tab === 'cache') {
                 loadLightCache();
                 refreshPrecacheJobs();
+                tlLoadStatus();
             } else if (tab === 'insights') {
                 loadInsights();
             } else if (tab === 'blog') {
@@ -667,7 +727,144 @@
         document.addEventListener('DOMContentLoaded', () => {
             loadUsers();
             loadContactRequests();
+            tlLoadStatus();
         });
+
+        // =====================================================================
+        // Trendlyne account pool
+        // =====================================================================
+        function tlAgo(ts) {
+            if (!ts) return '—';
+            const s = Math.round(Date.now() / 1000 - ts);
+            const a = Math.abs(s);
+            const t = a < 90 ? `${a}s` : a < 5400 ? `${Math.round(a / 60)} min` : a < 172800 ? `${Math.round(a / 3600)} h` : `${Math.round(a / 86400)} days`;
+            return s >= 0 ? `${t} ago` : `in ${t}`;
+        }
+        function tlEsc(s) { const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
+
+        const TL_PILLS = {
+            valid: ['working', 'bg-green-500/20 text-green-400'],
+            unknown: ['not used yet', 'bg-slate-600/40 text-slate-300'],
+            quota: ['limit reached', 'bg-amber-500/20 text-amber-400'],
+            expired: ['session expired', 'bg-red-500/20 text-red-400'],
+            error: ['cooling down', 'bg-amber-500/20 text-amber-400'],
+        };
+
+        function tlRender(st) {
+            st = st || {};
+            const accts = st.accounts || [];
+            const overall = { valid: ['all accounts working', 'bg-green-500/20 text-green-400'],
+                              degraded: [`serving from account #${st.active_account || '?'}`, 'bg-amber-500/20 text-amber-400'],
+                              down: ['downloads down', 'bg-red-500/20 text-red-400'] }[st.state] || ['unknown', 'bg-slate-600/40 text-slate-300'];
+            const pill = document.getElementById('tl-state');
+            pill.textContent = accts.length ? overall[0] : 'no accounts configured';
+            pill.className = 'px-2 py-1 rounded-full text-xs font-medium ' + (accts.length ? overall[1] : 'bg-red-500/20 text-red-400');
+
+            const alertEl = document.getElementById('tl-alert');
+            const down = !accts.length || st.state === 'down';
+            alertEl.classList.toggle('hidden', !down);
+            if (down) {
+                const why = accts.map(a => `#${a.id} ${(TL_PILLS[a.state] || [a.state])[0]}`).join(', ');
+                document.getElementById('tl-alert-text').textContent =
+                    accts.length ? `No account can download report PDFs right now (${why}).` : 'No Trendlyne account is configured.';
+            }
+
+            document.getElementById('tl-summary').innerHTML = accts.length
+                ? `${tlEsc(st.month)}: <b>${st.total_used_this_month}</b> of ${st.total_monthly_limit} downloads used across ${accts.length} account${accts.length > 1 ? 's' : ''}. Next download goes to account <b>#${tlEsc(st.active_account || '—')}</b>.`
+                : '';
+
+            document.getElementById('tl-rows').innerHTML = accts.map(a => {
+                const [label, cls] = TL_PILLS[a.state] || [a.state, 'bg-slate-600/40 text-slate-300'];
+                const pct = Math.min(100, Math.round(a.used_this_month / a.monthly_limit * 100));
+                const barCol = pct >= 100 ? 'bg-red-500' : pct >= 85 ? 'bg-amber-500' : 'bg-green-500';
+                const notes = [];
+                if (a.quota_until) notes.push(`Limit: retried ${tlAgo(a.quota_until)}${a.quota_reason ? ' · ' + tlEsc(String(a.quota_reason).slice(0, 120)) : ''}`);
+                if (a.state === 'expired' || a.state === 'error') notes.push(tlEsc(a.last_error || ''));
+                if (a.last_login_error) notes.push(`Login: ${tlEsc(a.last_login_error)}${a.login_blocked_until ? ' (next try ' + tlAgo(a.login_blocked_until) + ')' : ''}`);
+                else if (a.last_login_at) notes.push(`Logged in ${tlAgo(a.last_login_at)}`);
+                if (!a.has_password) notes.push('No password configured; uses a pasted / seeded cookie');
+                const cooling = a.quota_until || a.state === 'error' || a.login_blocked_until || a.state === 'expired';
+                return `<tr class="border-b border-slate-700/60 align-top">
+                    <td class="py-2 pr-3 font-semibold">${tlEsc(a.id)}${st.active_account === a.id ? ' <span class="text-xs text-blue-400">active</span>' : ''}</td>
+                    <td class="py-2 pr-3">${tlEsc(a.username)}</td>
+                    <td class="py-2 pr-3"><span class="px-2 py-0.5 rounded-full text-xs font-medium ${cls}">${label}</span></td>
+                    <td class="py-2 pr-3 min-w-[130px]"><div>${a.used_this_month} / ${a.monthly_limit}</div>
+                        <div class="h-1.5 bg-slate-700 rounded mt-1"><div class="h-1.5 rounded ${barCol}" style="width:${pct}%"></div></div></td>
+                    <td class="py-2 pr-3 whitespace-nowrap">${tlAgo(a.last_ok_at)}</td>
+                    <td class="py-2 pr-3 text-xs text-slate-400 max-w-[340px]">${notes.filter(Boolean).join('<br>') || '—'}</td>
+                    <td class="py-2 whitespace-nowrap text-xs">
+                        <button onclick="tlCheck('${a.id}')" class="px-2 py-1 rounded border border-slate-600 hover:border-slate-400">Check</button>
+                        ${a.has_password ? `<button onclick="tlRelogin('${a.id}')" class="px-2 py-1 rounded border border-slate-600 hover:border-slate-400 ml-1">Re-login</button>` : ''}
+                        ${cooling ? `<button onclick="tlReset('${a.id}')" class="px-2 py-1 rounded border border-slate-600 hover:border-slate-400 ml-1" title="Clear the cool-down so this account is tried again now">Retry now</button>` : ''}
+                    </td></tr>`;
+            }).join('') || '<tr><td colspan="7" class="py-3 text-slate-400">No accounts configured. Add TRENDLYNE_USERNAME / TRENDLYNE_PASSWORD (and _2, _3) to the app settings.</td></tr>';
+
+            const sel = document.getElementById('tl-cookie-acct');
+            const ids = accts.length ? accts.map(a => a.id) : ['1'];
+            const prev = sel.value;
+            sel.innerHTML = ['1', '2', '3'].concat(ids).filter((v, i, arr) => arr.indexOf(v) === i)
+                .map(id => `<option value="${id}">#${id}${(accts.find(a => a.id === id) || {}).username ? ' · ' + tlEsc(accts.find(a => a.id === id).username) : ''}</option>`).join('');
+            if (prev) sel.value = prev;
+
+            document.getElementById('tl-net').innerHTML =
+                `Network: last success ${tlEsc(st.last_route || '—')} · proxy ${st.proxy_configured ? 'configured (' + tlEsc(st.proxy_mode) + ')' : 'not configured'}`
+                + (st.last_blocked_at ? ` · last IP block ${tlAgo(st.last_blocked_at)} (${tlEsc(st.last_blocked_error || '')})` : '');
+        }
+
+        async function tlLoadStatus() {
+            try {
+                const r = await fetch('/api/admin/trendlyne/status');
+                if (!r.ok) return;
+                const d = await r.json();
+                tlRender(d.status);
+            } catch (e) { /* admin page still works without this card */ }
+        }
+
+        async function tlPost(url, body, busyMsg) {
+            const msg = document.getElementById('tl-msg');
+            msg.className = 'text-sm mt-3 text-slate-400';
+            msg.textContent = busyMsg || '';
+            try {
+                const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
+                const d = await r.json();
+                if (d.status) tlRender(d.status);
+                if (!r.ok) {
+                    msg.className = 'text-sm mt-3 text-red-400';
+                    msg.textContent = d.error || 'Request failed';
+                    return null;
+                }
+                msg.textContent = '';
+                return d;
+            } catch (e) {
+                msg.className = 'text-sm mt-3 text-red-400';
+                msg.textContent = 'Network error: ' + e.message;
+                return null;
+            }
+        }
+
+        function tlResultMsg(d, prefix) {
+            const msg = document.getElementById('tl-msg');
+            if (!d) return;
+            const ok = d.page_logged_in === true;
+            msg.className = 'text-sm mt-3 ' + (ok ? 'text-green-400' : 'text-amber-400');
+            msg.textContent = `${prefix}Account #${d.account_id}: ` + (ok ? 'logged in and working.' : (d.error ? 'check failed: ' + d.error : 'not logged in.'));
+        }
+
+        async function tlCheck(id) { tlResultMsg(await tlPost('/api/admin/trendlyne/check', { account_id: id }, `Checking account #${id}…`), ''); }
+        async function tlRelogin(id) { tlResultMsg(await tlPost('/api/admin/trendlyne/relogin', { account_id: id }, `Logging in account #${id}…`), ''); }
+        async function tlReset(id) { await tlPost('/api/admin/trendlyne/reset', { account_id: id }, ''); }
+
+        async function tlSaveCookie() {
+            const val = document.getElementById('tl-cookie').value.trim();
+            const id = document.getElementById('tl-cookie-acct').value || '1';
+            const msg = document.getElementById('tl-msg');
+            if (!val) { msg.className = 'text-sm mt-3 text-red-400'; msg.textContent = 'Paste a cookie first.'; return; }
+            const d = await tlPost('/api/admin/trendlyne/cookies', { cookie: val, account_id: id }, 'Saving…');
+            if (d) {
+                document.getElementById('tl-cookie').value = '';
+                tlResultMsg(d, 'Saved. ');
+            }
+        }
 
         // =====================================================================
         // Cache Management Functions

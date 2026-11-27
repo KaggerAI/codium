@@ -4230,6 +4230,95 @@
             .live-toast { max-width: none; }
         }
     </style>
+    <style>
+        /* ===== Analyst Report Agent v2 (structured view) ===== */
+        .analysis-body.ar2-mode { max-height: none; overflow: visible; padding: 1.25rem 1.5rem 1.5rem; }
+        .ar2 { --ar2-buy: #10b981; --ar2-hold: #f59e0b; --ar2-sell: #ef4444; --ar2-soft: rgba(127, 127, 160, 0.08); color: var(--text-primary); font-size: 0.875rem; }
+        html[data-theme="light"] .ar2 { --ar2-buy: #059669; --ar2-hold: #d97706; --ar2-sell: #dc2626; --ar2-soft: rgba(15, 23, 42, 0.04); }
+        .ar2-warn { border: 1px solid rgba(245, 158, 11, 0.45); background: rgba(245, 158, 11, 0.08); color: var(--text-primary); border-radius: 0.6rem; padding: 0.55rem 0.8rem; margin-bottom: 0.75rem; font-size: 0.8rem; }
+        .ar2-headline { font-size: 1.1rem; font-weight: 600; line-height: 1.45; margin: 0.1rem 0 1rem; }
+        .ar2-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 0.65rem; }
+        .ar2-tile { background: var(--ar2-soft); border: 1px solid var(--border-color); border-radius: 0.75rem; padding: 0.75rem 0.9rem; min-width: 0; }
+        .ar2-tile-label { font-size: 0.72rem; color: var(--text-muted); text-transform: none; }
+        .ar2-tile-value { font-size: 1.35rem; font-weight: 700; margin-top: 0.15rem; line-height: 1.2; }
+        .ar2-tile-sub { font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.25rem; line-height: 1.4; }
+        .ar2-standing { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.5rem; }
+        .ar2-stand { border: 1px solid var(--border-color); border-radius: 0.65rem; padding: 0.55rem 0.75rem; min-width: 0; }
+        .ar2-stand-value { font-size: 1.1rem; font-weight: 700; margin-top: 0.1rem; }
+        .ar2-ratingbar { display: flex; height: 6px; border-radius: 3px; overflow: hidden; margin-top: 0.45rem; background: var(--border-color); }
+        .ar2-pos { color: var(--ar2-buy); } .ar2-neg { color: var(--ar2-sell); }
+        .ar2-section { margin-top: 1.5rem; min-width: 0; }
+        .ar2-label { font-size: 0.95rem; font-weight: 650; margin-bottom: 0.2rem; }
+        .ar2-hint { font-size: 0.74rem; color: var(--text-muted); margin-bottom: 0.55rem; }
+        .ar2-prose { line-height: 1.65; color: var(--text-primary); margin: 0.25rem 0 0; }
+        .ar2-grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 0 1.5rem; }
+        .ar2-card { border: 1px solid var(--border-color); border-radius: 0.75rem; padding: 0.8rem 0.95rem; background: var(--bg-card); min-width: 0; }
+        .ar2-dot-wrap svg { width: 100%; height: auto; display: block; overflow: visible; }
+        .ar2-dot-wrap text { fill: var(--text-secondary); font-size: 11px; }
+        .ar2-legend { display: flex; flex-wrap: wrap; gap: 0.9rem; font-size: 0.72rem; color: var(--text-muted); margin-top: 0.3rem; }
+        .ar2-legend i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 0.3rem; vertical-align: -1px; }
+        .ar2-table-wrap { overflow-x: auto; border: 1px solid var(--border-color); border-radius: 0.75rem; }
+        .ar2-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; min-width: 900px; }
+        .ar2-table th { text-align: left; font-weight: 600; color: var(--text-secondary); padding: 0.55rem 0.6rem; border-bottom: 1px solid var(--border-color); cursor: pointer; white-space: nowrap; user-select: none; background: var(--ar2-soft); }
+        .ar2-table th.num, .ar2-table td.num { text-align: right; }
+        .ar2-table td { padding: 0.55rem 0.6rem; border-bottom: 1px solid var(--border-color); vertical-align: top; }
+        .ar2-table tr.ar2-row { cursor: pointer; }
+        .ar2-table tr.ar2-row:hover td { background: var(--ar2-soft); }
+        .ar2-pill { display: inline-block; padding: 0.08rem 0.5rem; border-radius: 999px; font-size: 0.72rem; font-weight: 600; white-space: nowrap; }
+        .ar2-pill.buy { background: rgba(16, 185, 129, 0.14); color: var(--ar2-buy); }
+        .ar2-pill.hold { background: rgba(245, 158, 11, 0.15); color: var(--ar2-hold); }
+        .ar2-pill.sell { background: rgba(239, 68, 68, 0.14); color: var(--ar2-sell); }
+        .ar2-tag { display: inline-block; font-size: 0.66rem; padding: 0.02rem 0.4rem; border-radius: 0.3rem; border: 1px solid var(--border-color); color: var(--text-muted); margin-left: 0.3rem; white-space: nowrap; vertical-align: 1px; }
+        .ar2-tag.stale { border-color: rgba(245, 158, 11, 0.5); color: var(--ar2-hold); }
+        .ar2-sub { font-size: 0.7rem; color: var(--text-muted); }
+        .ar2-table td.num .ar2-sub { white-space: nowrap; }
+        .ar2-detail td { background: var(--ar2-soft); padding: 0.9rem 1rem 1.1rem; cursor: default; }
+        .ar2-detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem 1.5rem; }
+        .ar2-detail h5 { font-size: 0.76rem; font-weight: 650; color: var(--text-secondary); margin: 0.6rem 0 0.25rem; }
+        .ar2-detail h5:first-child { margin-top: 0; }
+        .ar2-detail ul { margin: 0; padding-left: 1.1rem; list-style: disc; }
+        .ar2-detail li { margin: 0.12rem 0; line-height: 1.45; }
+        .ar2-quote { border-left: 3px solid var(--border-glow); padding: 0.2rem 0 0.2rem 0.7rem; font-style: italic; color: var(--text-secondary); margin: 0.5rem 0; }
+        .ar2-mini { width: 100%; border-collapse: collapse; font-size: 0.76rem; }
+        .ar2-mini th, .ar2-mini td { padding: 0.25rem 0.4rem; border-bottom: 1px solid var(--border-color); text-align: right; white-space: nowrap; }
+        .ar2-eps-table { font-size: 0.8rem; }
+        .ar2-eps-table th { background: var(--ar2-soft); color: var(--text-secondary); font-weight: 600; padding: 0.45rem 0.6rem; }
+        .ar2-eps-table td { padding: 0.45rem 0.6rem; }
+        .ar2-eps-table tr:last-child td { border-bottom: 0; }
+        .ar2-mini th:first-child, .ar2-mini td:first-child { text-align: left; }
+        .ar2-detail details { margin-top: 0.8rem; }
+        .ar2-detail summary { cursor: pointer; font-size: 0.78rem; color: var(--accent-violet); }
+        .ar2-detail .ar2-md { margin-top: 0.5rem; font-size: 0.8rem; line-height: 1.6; }
+        .ar2-detail .ar2-md h1, .ar2-detail .ar2-md h2, .ar2-detail .ar2-md h3 { font-size: 0.85rem; font-weight: 650; margin: 0.7rem 0 0.25rem; }
+        .ar2-link { color: var(--accent-violet); text-decoration: none; font-size: 0.78rem; }
+        .ar2-link:hover { text-decoration: underline; }
+        .ar2-chart-box { position: relative; height: 280px; }
+        .ar2-eps-row { display: grid; grid-template-columns: 52px 1fr; gap: 0.6rem; align-items: center; margin: 0.55rem 0; }
+        .ar2-eps-track { position: relative; height: 18px; }
+        .ar2-eps-track .rng { position: absolute; top: 6px; height: 6px; border-radius: 3px; background: rgba(124, 58, 237, 0.35); }
+        html[data-theme="light"] .ar2-eps-track .rng { background: rgba(22, 163, 74, 0.3); }
+        .ar2-eps-track .med { position: absolute; top: 1px; width: 2px; height: 16px; background: var(--text-primary); }
+        .ar2-eps-track .lseg { position: absolute; top: 4px; width: 9px; height: 9px; transform: translateX(-4.5px) rotate(45deg); border: 2px solid var(--ar2-hold); background: var(--bg-card); }
+        .ar2-chip { display: block; border: 1px solid var(--border-color); border-radius: 0.6rem; padding: 0.5rem 0.7rem; margin-bottom: 0.45rem; }
+        .ar2-swot { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 0.65rem; }
+        .ar2-swot h4 { font-size: 0.82rem; font-weight: 650; margin: 0 0 0.35rem; }
+        .ar2-point { display: flex; justify-content: space-between; gap: 0.6rem; padding: 0.3rem 0; border-top: 1px solid var(--border-color); line-height: 1.4; }
+        .ar2-point:first-of-type { border-top: 0; }
+        .ar2-count { flex-shrink: 0; font-size: 0.7rem; color: var(--text-muted); white-space: nowrap; cursor: help; padding-top: 0.1rem; }
+        .ar2-debate { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 0.65rem; }
+        .ar2-debate-row { border-top: 1px solid var(--border-color); padding: 0.6rem 0; }
+        .ar2-debate-row .two { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 0.3rem 1.2rem; margin-top: 0.25rem; }
+        .ar2-sev { font-size: 0.68rem; font-weight: 700; }
+        .ar2-foot { margin-top: 1.5rem; padding-top: 0.75rem; border-top: 1px solid var(--border-color); font-size: 0.72rem; color: var(--text-muted); line-height: 1.6; }
+        @media (max-width: 640px) {
+            .analysis-body.ar2-mode { padding: 1rem; }
+            .ar2-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem; }
+            .ar2-tile { padding: 0.6rem 0.7rem; }
+            .ar2-tile-value { font-size: 1.15rem; }
+            .ar2-grid2 { grid-template-columns: minmax(0, 1fr); }
+            .ar2-chart-box { height: 230px; }
+        }
+    </style>
     <script src="/scale_ui.js"></script>
 </head>
 
@@ -7814,13 +7903,18 @@
 
             const meta = [];
             if (result.domestic_count !== undefined) meta.push(`${result.domestic_count} domestic`);
-            if (result.global_count !== undefined) meta.push(`${result.global_count} global`);
-            if (result.pdfs_analyzed) meta.push(`${result.pdfs_analyzed} PDFs analyzed`);
+            if (result.global_count !== undefined) meta.push(`${result.global_count} news-sourced`);
+            if (result.pdfs_analyzed) meta.push(`${result.pdfs_analyzed} full reports read`);
             if (result.analysis_time_seconds) meta.push(`${result.analysis_time_seconds}s`);
             document.getElementById('analystAnalysisMeta').textContent = meta.join(' · ');
 
-            const analysisHtml = marked.parse(result.analysis || 'No analysis available.');
-            document.getElementById('analystAnalysisBody').innerHTML = analysisHtml;
+            if (result.version >= 2 && result.rows) {
+                renderAnalystV2(result);
+            } else {
+                const bodyEl = document.getElementById('analystAnalysisBody');
+                bodyEl.classList.remove('ar2-mode');
+                bodyEl.innerHTML = marked.parse(result.analysis || 'No analysis available.');
+            }
 
             // Reset chat
             const chatMessages = document.getElementById('analystChatMessages');
@@ -7844,6 +7938,633 @@
             const btn = document.getElementById('analystAnalyzeBtn');
             btn.disabled = false;
             document.getElementById('analystBtnText').textContent = 'Analyze Reports';
+        }
+
+        // =====================================================
+        // ANALYST AGENT v2: STRUCTURED RESULT RENDERING
+        // Order follows how an investor reads a street view: verdict -> where the
+        // targets sit -> broker-by-broker comparison -> how targets moved ->
+        // valuation & estimates -> SWOT -> debate -> industry -> catalysts/risks.
+        // =====================================================
+        const ar2State = { result: null, sortKey: null, sortDir: -1, open: new Set() };
+        let ar2HistoryChart = null;
+
+        function ar2Esc(s) { return s == null ? '' : escapeHtml(String(s)); }
+        function ar2Num(x, nd = 0) {
+            if (x == null || x === '' || isNaN(x)) return '—';
+            return Number(x).toLocaleString('en-IN', { minimumFractionDigits: nd, maximumFractionDigits: nd });
+        }
+        function ar2Rs(x) { return x == null ? '—' : '₹' + ar2Num(x, 0); }
+        function ar2Pct(x, nd = 1) { return x == null ? '—' : (x > 0 ? '+' : '') + Number(x).toFixed(nd) + '%'; }
+        function ar2X(x, nd = 1) { return x == null ? '—' : Number(x).toFixed(nd) + 'x'; }
+        function ar2Cls(r) { return r === 'Buy' ? 'buy' : r === 'Sell' ? 'sell' : 'hold'; }
+        function ar2Signed(x) { return x == null ? '' : (x > 0 ? 'ar2-pos' : x < 0 ? 'ar2-neg' : ''); }
+        function ar2Md(md) {
+            const html = marked.parse(md || '');
+            return window.DOMPurify ? DOMPurify.sanitize(html) : html;
+        }
+        function ar2Css(name, fallback) {
+            const el = document.querySelector('.ar2') || document.documentElement;
+            const v = getComputedStyle(el).getPropertyValue(name).trim();
+            return v || fallback;
+        }
+        function ar2Count(brokers, total) {
+            const list = brokers || [];
+            const t = total ? ` of ${total}` : '';
+            return `<span class="ar2-count" title="${ar2Esc(list.join(', '))}">${list.length}${t}</span>`;
+        }
+        function ar2Section(title, inner, hint) {
+            if (!inner) return '';
+            return `<div class="ar2-section"><div class="ar2-label">${title}</div>${hint ? `<div class="ar2-hint">${hint}</div>` : ''}${inner}</div>`;
+        }
+        function ar2Method(v) {
+            if (!v || !v.method || v.method === 'Not stated') return '—';
+            let s = ar2Esc(v.method);
+            if (v.multiple) s += ` ${Number(v.multiple).toFixed(v.multiple % 1 ? 1 : 0)}x`;
+            if (v.basis_year) s += ` ${ar2Esc(v.basis_year)}`;
+            return s;
+        }
+
+        function renderAnalystV2(result) {
+            ar2State.result = result;
+            ar2State.open = new Set();
+            ar2State.sortKey = null;
+            const c = result.consensus || {};
+            const s = result.synthesis || {};
+            const body = document.getElementById('analystAnalysisBody');
+            body.classList.add('ar2-mode');
+
+            let h = '<div class="ar2">';
+            (result.warnings || []).forEach(w => { h += `<div class="ar2-warn">⚠ ${ar2Esc(w)}</div>`; });
+            if (s.verdict_headline) h += `<div class="ar2-headline">${ar2Esc(s.verdict_headline)}</div>`;
+            h += ar2Standing(c);
+            h += ar2Tiles(c);
+            if (s.bottom_line) h += ar2Section('Bottom line', `<p class="ar2-prose">${ar2Esc(s.bottom_line)}</p>`);
+            h += ar2Section('Where every target sits', `<div class="ar2-dot-wrap">${ar2DotPlot(c, result.rows || [])}</div>`,
+                'Each dot is one broker\'s latest target, coloured by rating; hover for details. Hollow dots are older than 6 months and left out of the consensus.');
+            h += ar2Section('Broker comparison', '<div class="ar2-table-wrap"><table class="ar2-table" id="ar2Table"></table></div>',
+                'Click a column to sort and a row to open that broker\'s full view. Upside and forward P/E use today\'s price and each broker\'s own estimates.');
+            if ((c.price_history || []).length && ((c.tp_history || []).length || (result.rows || []).some(r => r.target_price && r.date_iso))) {
+                h += ar2Section('How targets have moved', '<div class="ar2-chart-box"><canvas id="ar2HistoryCanvas"></canvas></div>',
+                    'Share price (line) against every target published in the last 12 months: broker reports and press-reported calls, coloured by rating. Triangles are technical calls. Hover a point for the broker.');
+            }
+            h += '<div class="ar2-grid2">'
+                + ar2Section('How the street values it', ar2Valuation(c, s))
+                + ar2Section('EPS estimates by year', ar2EpsSpread(c), 'Earnings per share the brokers in the table project for each year, next to the wider LSEG analyst consensus.')
+                + '</div>';
+            h += ar2Section('SWOT', ar2Swot(s.swot, c.n_in_consensus), 'Points merged across brokers; the count shows how many raise each one (hover for names).');
+            h += ar2Section('Bull vs bear', ar2Debate(s, c));
+            h += ar2Section('Industry outlook', ar2Industry(s.industry_outlook));
+            h += '<div class="ar2-grid2">'
+                + ar2Section('Catalysts', ar2Catalysts(s.catalysts))
+                + ar2Section('Key risks', ar2Risks(s.risks))
+                + '</div>';
+            if (s.estimate_momentum) h += ar2Section('Estimate momentum', `<p class="ar2-prose">${ar2Esc(s.estimate_momentum)}</p>`);
+            h += ar2Footnote(result);
+            h += '</div>';
+            body.innerHTML = h;
+            ar2RenderTable();
+            ar2DrawHistory();
+        }
+
+        // Growth cell: the CAGR, with its period and whether the broker stated it or it was
+        // computed from the broker's estimate table (hover shows the absolute figures used).
+        function ar2GrowthCell(r, kind) {
+            const g = (r.growth || {})[kind];
+            if (!g || g.cagr == null) return '—';
+            const series = { revenue: r.revenue_cr, ebitda: r.ebitda_cr, pat: r.pat_cr }[kind] || {};
+            const fig = Object.keys(series).length ? Object.entries(series).map(([y, v]) => `${y}: ₹${ar2Num(v)} cr`).join(', ') : '';
+            const basis = g.basis === 'stated' ? 'stated by the broker' : g.basis === 'EPS' ? 'EPS growth (no PAT figure)' : 'computed from the broker\'s estimates';
+            const tip = `${basis}${fig ? ' · ' + fig : ''}`;
+            const sub = [g.span, g.basis === 'EPS' ? 'EPS' : g.basis === 'estimates' ? 'est.' : ''].filter(Boolean).join(' · ');
+            return `<span title="${ar2Esc(tip)}">${ar2Pct(g.cagr, 0)}</span>${sub ? `<div class="ar2-sub">${ar2Esc(sub)}</div>` : ''}`;
+        }
+
+        // "Where it stands today": the yardstick for every broker call below it.
+        function ar2Standing(c) {
+            const cur = c.current || {};
+            if (cur.cmp == null && c.cmp == null) return '';
+            const q = cur.quarter ? ` (${ar2Esc(cur.quarter)})` : '';
+            const yoy = (v, na) => v == null ? `<span style="color:var(--text-muted)">${na || '—'}</span>` : `<span class="${ar2Signed(v)}">${ar2Pct(v)}</span>`;
+            const fin = cur.is_financial;
+            const cells = [
+                ['Current price', ar2Rs(cur.cmp != null ? cur.cmp : c.cmp), c.as_of ? `live · ${ar2Esc(c.as_of)}` : 'live'],
+                ['P/E (trailing 12m)', ar2X(cur.pe_ttm), 'Screener'],
+                ['EPS (trailing 12m)', cur.eps_ttm != null ? '₹' + ar2Num(cur.eps_ttm, 2) : '—', 'last four quarters'],
+                [`Revenue YoY${q}`, yoy(cur.revenue_yoy, fin ? 'n/a for financials' : null), 'latest quarter vs a year ago'],
+                [`EBITDA YoY${q}`, yoy(cur.ebitda_yoy, fin ? 'n/a for financials' : null), 'latest quarter vs a year ago'],
+                [`PAT YoY${q}`, yoy(cur.pat_yoy), 'latest quarter vs a year ago'],
+            ];
+            return `<div class="ar2-label" style="margin-bottom:0.45rem">Where the stock stands today</div>
+                <div class="ar2-standing">${cells.map(([l, v, sub]) => `<div class="ar2-stand"><div class="ar2-tile-label">${l}</div><div class="ar2-stand-value">${v}</div>${sub ? `<div class="ar2-tile-sub" style="color:var(--text-muted)">${sub}</div>` : ''}</div>`).join('')}</div>
+                <div class="ar2-hint" style="margin-top:0.35rem">Price: live (Yahoo Finance). P/E, EPS and growth: ${ar2Esc(cur.source || 'Screener')}, reported quarterly results.</div>
+                <div class="ar2-label" style="margin:1.1rem 0 0.45rem">What the street says</div>`;
+        }
+
+        function ar2Tiles(c) {
+            const rc = c.rating_counts || { Buy: 0, Hold: 0, Sell: 0 };
+            const tot = (rc.Buy + rc.Hold + rc.Sell) || 1;
+            const tp = c.target || {};
+            const fy2 = (c.fy_labels || [])[1] || '';
+            const yf = c.yf || {};
+            const mom = c.momentum || {};
+            const fr = c.freshness || {};
+            const tiles = [];
+
+            let yfRec = '';
+            if (yf.recommendations) {
+                const r = yf.recommendations;
+                yfRec = `<div class="ar2-tile-sub">Wider street (LSEG): ${r.strongBuy + r.buy} buy · ${r.hold} hold · ${r.sell + r.strongSell} sell</div>`;
+            }
+            tiles.push(`<div class="ar2-tile"><div class="ar2-tile-label">Street view</div>
+                <div class="ar2-tile-value">${ar2Esc(c.consensus_rating || '—')}</div>
+                <div class="ar2-ratingbar"><div style="flex:${rc.Buy};background:var(--ar2-buy)"></div><div style="flex:${rc.Hold};background:var(--ar2-hold)"></div><div style="flex:${rc.Sell};background:var(--ar2-sell)"></div></div>
+                <div class="ar2-tile-sub">${rc.Buy} buy · ${rc.Hold} hold · ${rc.Sell} sell</div>${yfRec}</div>`);
+
+            tiles.push(`<div class="ar2-tile"><div class="ar2-tile-label">Median target</div>
+                <div class="ar2-tile-value">${ar2Rs(tp.median)}</div>
+                <div class="ar2-tile-sub"><span class="${ar2Signed(c.upside_median_pct)}">${ar2Pct(c.upside_median_pct)}</span> vs CMP ${ar2Rs(c.cmp)}</div>
+                <div class="ar2-tile-sub">Range ${ar2Rs(tp.low)} – ${ar2Rs(tp.high)}</div></div>`);
+
+            if (c.headline_metric === 'pb' && c.fwd_pb_fy2) {
+                tiles.push(`<div class="ar2-tile"><div class="ar2-tile-label">Fwd P/B (${fy2}E)</div>
+                    <div class="ar2-tile-value">${ar2X(c.fwd_pb_fy2, 2)}</div>
+                    <div class="ar2-tile-sub">Fwd P/E ${ar2X(c.fwd_pe_fy2)} · EPS CAGR ${ar2Pct(c.eps_cagr_median_pct)}</div></div>`);
+            } else {
+                const srcNote = [];
+                if (c.fwd_pe_source && c.fwd_pe_source !== 'brokers') srcNote.push(`P/E from ${ar2Esc(c.fwd_pe_source)}`);
+                if (c.eps_cagr_source && c.eps_cagr_source !== 'brokers') srcNote.push(`growth from ${ar2Esc(c.eps_cagr_source)}`);
+                tiles.push(`<div class="ar2-tile"><div class="ar2-tile-label">Fwd P/E (${fy2}E)</div>
+                    <div class="ar2-tile-value">${ar2X(c.fwd_pe_fy2)}</div>
+                    <div class="ar2-tile-sub">EPS CAGR ${ar2Pct(c.eps_cagr_median_pct)}</div>
+                    ${srcNote.length ? `<div class="ar2-tile-sub" style="color:var(--text-muted)">${srcNote.join('; ')}</div>` : ''}</div>`);
+            }
+
+            const raised = (mom.tp_raised || []).length, cut = (mom.tp_cut || []).length;
+            const compared = raised + cut + ((mom.median_tp_change_pct != null && !raised && !cut) ? 1 : 0);
+            let rev = '';
+            if (yf.eps_revision_90d_pct != null) {
+                rev = `<div class="ar2-tile-sub">${ar2Esc(yf.eps_revision_fy || '')} EPS, 90 days (LSEG): <span class="${ar2Signed(yf.eps_revision_90d_pct)}">${ar2Pct(yf.eps_revision_90d_pct)}</span></div>`;
+            }
+            tiles.push(`<div class="ar2-tile"><div class="ar2-tile-label">Target momentum</div>
+                <div class="ar2-tile-value"><span class="ar2-pos">${raised}↑</span> <span class="ar2-neg">${cut}↓</span></div>
+                <div class="ar2-tile-sub" title="Each broker's latest target vs its previous one">${compared ? `Median change ${ar2Pct(mom.median_tp_change_pct)}${(mom.upgrades || []).length || (mom.downgrades || []).length ? ` · ${(mom.upgrades || []).length} upgrades, ${(mom.downgrades || []).length} downgrades` : ''}` : 'No earlier targets from these brokers to compare'}</div>${rev}</div>`);
+
+            const readBits = [`${c.n_full_reports || 0} full reports read`];
+            const pressRead = (c.n_detailed || 0) - (c.n_full_reports || 0);
+            if (pressRead > 0) readBits.push(`${pressRead} from full press coverage`);
+            const olderRead = (c.n_full_reports_all || 0) - (c.n_full_reports || 0);
+            tiles.push(`<div class="ar2-tile"><div class="ar2-tile-label">Coverage</div>
+                <div class="ar2-tile-value">${c.n_in_consensus || 0} <span style="font-size:0.8rem;font-weight:500;color:var(--text-secondary)">brokers</span></div>
+                <div class="ar2-tile-sub">${readBits.join(' · ')} · median age ${fr.median_age_days != null ? fr.median_age_days + 'd' : '—'}</div>
+                ${olderRead > 0 ? `<div class="ar2-tile-sub">+${olderRead} older report${olderRead > 1 ? 's' : ''} read but outside the 6-month window</div>` : ''}
+                ${fr.n_stale ? `<div class="ar2-tile-sub" style="color:var(--ar2-hold)">${fr.n_stale} older than 90 days</div>` : ''}</div>`);
+            return `<div class="ar2-tiles">${tiles.join('')}</div>`;
+        }
+
+        function ar2DotPlot(c, rows) {
+            const pts = rows.filter(r => r.target_price);
+            if (!pts.length) return '<div class="ar2-hint">No target prices available.</div>';
+            const tp = c.target || {};
+            const yfMean = c.yf && c.yf.price_target ? c.yf.price_target.mean : null;
+            const vals = pts.map(r => r.target_price).concat([c.cmp, yfMean].filter(v => v));
+            let lo = Math.min(...vals), hi = Math.max(...vals);
+            const pad = (hi - lo) * 0.08 || hi * 0.1;
+            lo -= pad; hi += pad;
+            // Draw at the container's real width so 11px labels stay legible on phones
+            const bodyEl = document.getElementById('analystAnalysisBody');
+            const W = Math.max(320, Math.min(900, (bodyEl && bodyEl.clientWidth ? bodyEl.clientWidth - 48 : 700)));
+            const X0 = 24, X1 = W - 24;
+            const nTicks = W < 500 ? 2 : 4;
+            const x = v => X0 + (v - lo) / (hi - lo) * (X1 - X0);
+
+            // Stack dots that would overlap
+            const sorted = pts.slice().sort((a, b) => a.target_price - b.target_price);
+            const levels = [];
+            const placed = sorted.map(r => {
+                const px = x(r.target_price);
+                let l = 0;
+                while (levels[l] != null && px - levels[l] < 13) l++;
+                levels[l] = px;
+                return { r, px, l };
+            });
+            const maxL = Math.max(0, ...placed.map(p => p.l));
+            const base = 46 + maxL * 13;
+            const H = base + 52;
+            const col = { Buy: 'var(--ar2-buy)', Hold: 'var(--ar2-hold)', Sell: 'var(--ar2-sell)' };
+
+            let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Broker target prices against the current share price">`;
+            if (tp.q1 != null && tp.q3 != null) {
+                svg += `<rect x="${x(tp.q1)}" y="${base - 8 - maxL * 13}" width="${Math.max(2, x(tp.q3) - x(tp.q1))}" height="${16 + maxL * 13}" rx="4" fill="currentColor" opacity="0.07" style="color:var(--text-primary)"></rect>`;
+            }
+            svg += `<line x1="${X0}" y1="${base}" x2="${X1}" y2="${base}" stroke="var(--border-color)" stroke-width="1.5"></line>`;
+            for (let i = 0; i <= nTicks; i++) {
+                const v = lo + (hi - lo) * i / nTicks;
+                svg += `<text x="${x(v)}" y="${base + 18}" text-anchor="middle" style="opacity:0.7">₹${ar2Num(v)}</text>`;
+            }
+            if (c.cmp) {
+                svg += `<line x1="${x(c.cmp)}" y1="14" x2="${x(c.cmp)}" y2="${base + 6}" stroke="var(--ar2-sell)" stroke-dasharray="4 3" stroke-width="1.5"></line>`;
+                svg += `<text x="${x(c.cmp)}" y="10" text-anchor="middle" style="fill:var(--ar2-sell);font-weight:600">CMP ₹${ar2Num(c.cmp)}</text>`;
+            }
+            if (tp.median != null) {
+                svg += `<line x1="${x(tp.median)}" y1="${base - 12 - maxL * 13}" x2="${x(tp.median)}" y2="${base + 6}" stroke="var(--text-primary)" stroke-width="2"></line>`;
+                svg += `<text x="${x(tp.median)}" y="${base + 36}" text-anchor="middle" style="fill:var(--text-primary);font-weight:600">Median ₹${ar2Num(tp.median)}</text>`;
+            }
+            if (yfMean) {
+                const yx = x(yfMean);
+                svg += `<rect x="${yx - 5}" y="${base - 5}" width="10" height="10" transform="rotate(45 ${yx} ${base})" fill="none" stroke="var(--text-muted)" stroke-width="1.5"><title>Yahoo/LSEG mean target ₹${ar2Num(yfMean)}</title></rect>`;
+            }
+            placed.forEach(({ r, px, l }) => {
+                const cy = base - l * 13;
+                const fill = r.in_consensus ? col[r.rating] || col.Hold : 'none';
+                const stroke = col[r.rating] || col.Hold;
+                const tip = `${r.brokerage} · ${r.rating_raw || r.rating} · ₹${ar2Num(r.target_price)} (${ar2Pct(r.upside_pct)}) · ${r.date || ''}${r.valuation && r.valuation.method ? ' · ' + r.valuation.method : ''}${r.in_consensus ? '' : ' · older than 6 months'}`;
+                svg += `<circle cx="${px}" cy="${cy}" r="5.5" fill="${fill}" stroke="${stroke}" stroke-width="1.8"><title>${ar2Esc(tip)}</title></circle>`;
+            });
+            svg += '</svg>';
+            const legend = `<div class="ar2-legend"><span><i style="background:var(--ar2-buy)"></i>Buy</span><span><i style="background:var(--ar2-hold)"></i>Hold</span><span><i style="background:var(--ar2-sell)"></i>Sell</span><span>Shaded band = middle half of targets</span>${yfMean ? '<span>◇ Yahoo/LSEG mean</span>' : ''}</div>`;
+            return svg + legend;
+        }
+
+        function ar2Columns() {
+            const c = ar2State.result.consensus || {};
+            const fy = c.fy_labels || [];
+            const pb = c.headline_metric === 'pb';
+            const score = { Buy: 2, Hold: 1, Sell: 0 };
+            return [
+                { k: 'brokerage', label: 'Broker', v: r => r.brokerage.toLowerCase() },
+                { k: 'date', label: 'Date', v: r => r.date_iso || '' },
+                { k: 'rating', label: 'Rating', v: r => score[r.rating] ?? 1 },
+                { k: 'tp', label: 'Target', num: true, v: r => r.target_price },
+                { k: 'up', label: 'Upside', num: true, v: r => r.upside_pct },
+                { k: 'val', label: 'Valuation', v: r => (r.valuation && r.valuation.method) || '' },
+                { k: 'eps1', label: `EPS ${fy[0] || ''}E`, num: true, v: r => (r.eps || {})[fy[0]] },
+                { k: 'eps2', label: `EPS ${fy[1] || ''}E`, num: true, v: r => (r.eps || {})[fy[1]] },
+                pb ? { k: 'mult', label: `P/B ${fy[1] || ''}E`, num: true, v: r => (r.fwd_pb || {})[fy[1]] }
+                   : { k: 'mult', label: `P/E ${fy[1] || ''}E`, num: true, v: r => (r.fwd_pe || {})[fy[1]] },
+                { k: 'geps', label: 'EPS CAGR', num: true, v: r => r.eps_cagr_pct },
+                { k: 'grev', label: 'Revenue CAGR', num: true, v: r => ((r.growth || {}).revenue || {}).cagr },
+                { k: 'gebitda', label: 'EBITDA CAGR', num: true, v: r => ((r.growth || {}).ebitda || {}).cagr },
+                { k: 'gpat', label: 'PAT CAGR', num: true, v: r => ((r.growth || {}).pat || {}).cagr },
+            ];
+        }
+
+        function ar2Sort(k) {
+            if (ar2State.sortKey === k) ar2State.sortDir *= -1;
+            else { ar2State.sortKey = k; ar2State.sortDir = (k === 'brokerage' || k === 'val') ? 1 : -1; }
+            ar2RenderTable();
+        }
+
+        function ar2Toggle(i) {
+            if (ar2State.open.has(i)) ar2State.open.delete(i); else ar2State.open.add(i);
+            ar2RenderTable();
+        }
+
+        function ar2RenderTable() {
+            const table = document.getElementById('ar2Table');
+            if (!table || !ar2State.result) return;
+            const rows = ar2State.result.rows || [];
+            const cols = ar2Columns();
+            let idx = rows.map((_, i) => i);
+            if (ar2State.sortKey) {
+                const col = cols.find(c => c.k === ar2State.sortKey);
+                idx.sort((a, b) => {
+                    const va = col.v(rows[a]), vb = col.v(rows[b]);
+                    if (va == null && vb == null) return 0;
+                    if (va == null) return 1;
+                    if (vb == null) return -1;
+                    return (va > vb ? 1 : va < vb ? -1 : 0) * ar2State.sortDir;
+                });
+            }
+            const fy = (ar2State.result.consensus || {}).fy_labels || [];
+            let h = '<thead><tr>' + cols.map(c => {
+                const arrow = ar2State.sortKey === c.k ? (ar2State.sortDir > 0 ? ' ▲' : ' ▼') : '';
+                return `<th class="${c.num ? 'num' : ''}" onclick="ar2Sort('${c.k}')">${c.label}${arrow}</th>`;
+            }).join('') + '</tr></thead><tbody>';
+
+            idx.forEach(i => {
+                const r = rows[i];
+                const newsLabel = (r.origin === 'Global' ? 'Global · ' : '') + (r.has_detail ? 'press coverage' : 'news');
+                const srcTag = r.source === 'News' ? `<span class="ar2-tag" title="${r.has_detail ? 'Read in full from press articles about this note' : 'From a news excerpt only'}">${ar2Esc(newsLabel)}</span>`
+                    : r.source === 'Full report' ? '<span class="ar2-tag">Full report</span>' : '<span class="ar2-tag">Summary only</span>';
+                const EXCL = {
+                    'no target price': ['no target price', 'This call has no target price, so it cannot count towards the target consensus'],
+                    'date unknown': ['date unknown', 'The publication date could not be confirmed, so it is shown but left out of the consensus'],
+                    'technical call': ['technical call', 'A chart-based trading pick with a short-term target, so it is shown but left out of the fundamental target consensus'],
+                    'older than 6 months': ['over 6 months old', 'Published more than 6 months ago, so it is shown but left out of the consensus'],
+                };
+                const [exclLabel, exclTip] = EXCL[r.excluded_reason] || EXCL['older than 6 months'];
+                const staleTag = !r.in_consensus
+                    ? `<span class="ar2-tag stale" title="${exclTip}">${exclLabel}</span>`
+                    : r.stale ? `<span class="ar2-tag stale">${r.age_days}d old</span>` : '';
+                const epsCell = fyk => {
+                    const val = (r.eps || {})[fyk];
+                    if (val == null) return '—';
+                    const derived = (r.eps_derived || []).includes(fyk);
+                    return derived ? `<span title="Derived: target price ÷ the broker's stated P/E multiple">${ar2Num(val, 1)}*</span>` : ar2Num(val, 1);
+                };
+                let tpCell = ar2Rs(r.target_price);
+                if (r.tp_change_pct != null && Math.abs(r.tp_change_pct) >= 0.5) {
+                    tpCell += `<div class="ar2-sub ${ar2Signed(r.tp_change_pct)}" title="Previous target ${ar2Rs(r.prev_target_price)}${r.prev_date ? ' on ' + ar2Esc(r.prev_date) : ''}">${r.tp_change_pct > 0 ? '▲' : '▼'} ${Math.abs(r.tp_change_pct).toFixed(1)}%</div>`;
+                }
+                let rawRating = r.rating_raw || r.rating || '';
+                if (rawRating === rawRating.toLowerCase()) rawRating = rawRating.replace(/\b\w/g, ch => ch.toUpperCase());
+                let ratingCell = `<span class="ar2-pill ${ar2Cls(r.rating)}">${ar2Esc(rawRating)}</span>`;
+                if (r.rating_change) ratingCell += `<div class="ar2-sub ${r.rating_change === 'up' ? 'ar2-pos' : 'ar2-neg'}">${r.rating_change === 'up' ? 'upgraded' : 'downgraded'}${r.prev_rating ? ' from ' + ar2Esc(r.prev_rating) : ''}</div>`;
+                const v = r.valuation || {};
+                const valCell = ar2Method(v) + (r.implied_multiple && !v.multiple ? `<div class="ar2-sub">implies ${ar2X(r.implied_multiple)}</div>` : '');
+                const multCol = cols[8].v(r);
+                h += `<tr class="ar2-row" onclick="ar2Toggle(${i})">
+                    <td><span style="font-weight:600">${ar2State.open.has(i) ? '▾' : '▸'} ${ar2Esc(r.brokerage)}</span>${srcTag}${staleTag}</td>
+                    <td style="white-space:nowrap">${ar2Esc(r.date || '—')}</td>
+                    <td>${ratingCell}</td>
+                    <td class="num">${tpCell}</td>
+                    <td class="num ${ar2Signed(r.upside_pct)}">${ar2Pct(r.upside_pct)}</td>
+                    <td>${valCell}</td>
+                    <td class="num">${epsCell(fy[0])}</td>
+                    <td class="num">${epsCell(fy[1])}</td>
+                    <td class="num">${ar2X(multCol, cols[8].label.startsWith('P/B') ? 2 : 1)}</td>
+                    <td class="num">${r.eps_cagr_pct != null ? `<span title="${ar2Esc((r.eps_cagr_span || '').includes('stated') ? 'Stated by the broker (profit growth)' : 'Computed from the EPS estimates in this report')}">${ar2Pct(r.eps_cagr_pct, 0)}</span>` : '—'}${r.eps_cagr_span ? `<div class="ar2-sub">${ar2Esc(r.eps_cagr_span)}</div>` : ''}</td>
+                    <td class="num">${ar2GrowthCell(r, 'revenue')}</td>
+                    <td class="num">${ar2GrowthCell(r, 'ebitda')}</td>
+                    <td class="num">${ar2GrowthCell(r, 'pat')}</td>
+                </tr>`;
+                if (ar2State.open.has(i)) h += `<tr class="ar2-detail"><td colspan="${cols.length}">${ar2Detail(r, fy)}</td></tr>`;
+            });
+            table.innerHTML = h + '</tbody>';
+        }
+
+        function ar2List(items) {
+            items = (items || []).filter(Boolean);
+            return items.length ? '<ul>' + items.map(x => `<li>${ar2Esc(x)}</li>`).join('') + '</ul>' : '';
+        }
+
+        function ar2Detail(r, fy) {
+            const v = r.valuation || {};
+            let left = '';
+            if (r.title) left += `<div style="font-weight:600;margin-bottom:0.35rem">${ar2Esc(r.title)}</div>`;
+            if (r.thesis) left += `<h5>Thesis</h5><div style="line-height:1.55">${ar2Esc(r.thesis)}</div>`;
+            if (r.key_quote) left += `<div class="ar2-quote">“${ar2Esc(r.key_quote)}”</div>`;
+            if (v.method && v.method !== 'Not stated') {
+                left += `<h5>Valuation</h5><div>${ar2Method(v)}${r.implied_multiple ? ` <span class="ar2-sub">(target implies ${ar2X(r.implied_multiple)})</span>` : ''}</div>`;
+                if (v.details) left += `<div class="ar2-sub" style="margin-top:0.2rem">${ar2Esc(v.details)}</div>`;
+                if (v.rationale) left += `<div style="margin-top:0.25rem;line-height:1.5">${ar2Esc(v.rationale)}</div>`;
+            }
+            if (r.bull_case_target || r.bear_case_target) left += `<div class="ar2-sub" style="margin-top:0.3rem">Bull case ${ar2Rs(r.bull_case_target)} · Bear case ${ar2Rs(r.bear_case_target)}</div>`;
+            const growth = (r.growth_guidance || []).filter(g => g && g.cagr_pct != null);
+            if (growth.length) left += '<h5>Growth the broker expects</h5>' + ar2List(growth.map(g =>
+                `${g.metric} CAGR ${Number(g.cagr_pct).toFixed(0)}%${g.period ? ' over ' + g.period : ''}`));
+            if ((r.key_drivers || []).length) left += '<h5>Growth drivers</h5>' + ar2List(r.key_drivers);
+            if ((r.catalysts || []).length) left += '<h5>Catalysts</h5>' + ar2List(r.catalysts);
+            if ((r.management_guidance || []).length) left += '<h5>Management guidance</h5>' + ar2List(r.management_guidance);
+            if (!r.has_full_report && r.listing_summary && r.listing_summary !== r.thesis) left += `<h5>Summary</h5><div style="line-height:1.55">${ar2Esc(r.listing_summary)}</div>`;
+
+            let right = '';
+            const years = Array.from(new Set([].concat(Object.keys(r.eps || {}), Object.keys(r.revenue_cr || {}), Object.keys(r.ebitda_cr || {}), Object.keys(r.pat_cr || {})))).sort();
+            if (years.length) {
+                const cmp = (ar2State.result.consensus || {}).cmp;
+                const line = (label, obj, nd, fmt) => {
+                    if (!obj || !Object.keys(obj).length) return '';
+                    return `<tr><td>${label}</td>${years.map(y => `<td>${obj[y] == null ? '—' : (fmt ? fmt(obj[y]) : ar2Num(obj[y], nd))}</td>`).join('')}</tr>`;
+                };
+                const pe = {};
+                years.forEach(y => { if (cmp && r.eps && r.eps[y] > 0) pe[y] = cmp / r.eps[y]; });
+                right += `<h5>Estimates (₹ crore, EPS in ₹)</h5><div style="overflow-x:auto"><table class="ar2-mini"><thead><tr><th></th>${years.map(y => `<th>${ar2Esc(y)}</th>`).join('')}</tr></thead><tbody>`
+                    + line('Revenue', r.revenue_cr, 0)
+                    + line('EBITDA', r.ebitda_cr, 0)
+                    + line('EBITDA margin', r.ebitda_margin_pct, 1, x => Number(x).toFixed(1) + '%')
+                    + line('PAT', r.pat_cr, 0)
+                    + line('EPS', r.eps, 1)
+                    + line('BVPS', r.bvps, 1)
+                    + line('ROE', r.roe_pct, 1, x => Number(x).toFixed(1) + '%')
+                    + line('P/E at CMP', pe, 1, x => Number(x).toFixed(1) + 'x')
+                    + '</tbody></table></div>';
+                if ((r.eps_derived || []).length) right += `<div class="ar2-sub" style="margin-top:0.25rem">* ${r.eps_derived.map(ar2Esc).join(', ')} EPS derived from the target price ÷ the stated P/E multiple.</div>`;
+            }
+            if ((r.estimate_revisions || []).length) {
+                right += '<h5>Estimate changes in this report</h5><ul>' + r.estimate_revisions.map(e =>
+                    `<li>${ar2Esc(e.metric)} ${ar2Esc(e.fiscal_year)}: <span class="${ar2Signed(e.change_pct)}">${ar2Pct(e.change_pct)}</span></li>`).join('') + '</ul>';
+            }
+            const sw = r.swot;
+            if (sw && ['strengths', 'weaknesses', 'opportunities', 'threats'].some(k => (sw[k] || []).length)) {
+                right += '<h5>SWOT (this broker)</h5>';
+                [['strengths', 'S'], ['weaknesses', 'W'], ['opportunities', 'O'], ['threats', 'T']].forEach(([k, l]) => {
+                    if ((sw[k] || []).length) right += `<div style="margin:0.15rem 0"><b>${l}:</b> ${sw[k].map(ar2Esc).join(' · ')}</div>`;
+                });
+            }
+            if ((r.risks || []).length) right += '<h5>Risks</h5>' + ar2List(r.risks);
+            if (r.industry_outlook && r.industry_outlook.summary) {
+                right += `<h5>Industry view</h5><div style="line-height:1.5">${ar2Esc(r.industry_outlook.summary)}</div>`;
+                if ((r.industry_outlook.growth_figures || []).length) right += ar2List(r.industry_outlook.growth_figures);
+            }
+
+            let foot = '';
+            if ((r.sources || []).length) {
+                foot += '<div class="ar2-sub" style="margin-bottom:0.2rem">Read from:</div>' + r.sources.map(s =>
+                    `<a class="ar2-link" style="margin-right:0.9rem" href="${ar2Esc(s.url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${ar2Esc(s.site)}${s.full_text ? '' : ' (excerpt)'} ↗</a>`).join('');
+            } else if (r.link) {
+                const label = r.source === 'News' ? 'Open source article ↗' : 'Open report PDF ↗';
+                foot += `<a class="ar2-link" href="${ar2Esc(r.link)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${label}</a>`;
+            }
+            if (r.detailed_summary) foot += `<details onclick="event.stopPropagation()"><summary>Full write-up of this report</summary><div class="ar2-md">${ar2Md(r.detailed_summary)}</div></details>`;
+            return `<div class="ar2-detail-grid"><div>${left || '<div class="ar2-sub">No further detail extracted.</div>'}</div><div>${right}</div></div>${foot ? `<div style="margin-top:0.8rem">${foot}</div>` : ''}`;
+        }
+
+        // scale_ui.js sets `zoom: 0.9` on <body> for wide screens. Chart.js then reads mouse
+        // positions at the zoomed scale (~10% short of the real point), so hovers miss the
+        // dots. Undo the page zoom on chart events before Chart.js hit-tests them.
+        function ar2ZoomFactor(canvas) {
+            const rect = canvas.getBoundingClientRect();
+            const z = canvas.offsetWidth ? rect.width / canvas.offsetWidth : 1;
+            return (z > 0.5 && z < 1.5) ? z : 1;
+        }
+        const ar2ZoomFix = {
+            id: 'ar2ZoomFix',
+            beforeEvent(chart, args) {
+                const z = ar2ZoomFactor(chart.canvas);
+                const e = args.event;
+                if (Math.abs(z - 1) > 0.01 && e && e.x != null && e.y != null) {
+                    e.x = e.x / z;
+                    e.y = e.y / z;
+                }
+            },
+        };
+
+        function ar2DrawHistory() {
+            const canvas = document.getElementById('ar2HistoryCanvas');
+            if (ar2HistoryChart) { ar2HistoryChart.destroy(); ar2HistoryChart = null; }
+            if (!canvas || typeof Chart === 'undefined') return;
+            const c = ar2State.result.consensus || {};
+            const price = (c.price_history || []).map(p => ({ x: new Date(p.date).getTime(), y: p.close }));
+            const textCol = ar2Css('--text-muted', '#888');
+            const gridCol = ar2Css('--border-color', 'rgba(128,128,128,0.2)');
+            const lineCol = ar2Css('--text-secondary', '#999');
+            const colors = { Buy: ar2Css('--ar2-buy', '#10b981'), Hold: ar2Css('--ar2-hold', '#f59e0b'), Sell: ar2Css('--ar2-sell', '#ef4444') };
+            const minX = price.length ? price[0].x : 0;
+            const maxX = price.length ? Math.max(price[price.length - 1].x, Date.now()) : undefined;
+            const datasets = [{
+                type: 'line', label: 'Share price', data: price, borderColor: lineCol, borderWidth: 1.8,
+                pointRadius: 0, pointHitRadius: 6, tension: 0.2, order: 2,
+            }];
+            // Every published target: Trendlyne's report history (incl. each broker's earlier
+            // calls) plus every call in the broker table (press-reported, roster-found). Same
+            // broker + same day counts once.
+            const calls = [];
+            const seen = new Set();
+            const add = (t) => {
+                if (!t.target_price || !t.date_iso) return;
+                const key = `${(t.brokerage || '').toLowerCase().split(' ')[0]}|${t.date_iso}`;
+                if (seen.has(key)) return;
+                seen.add(key);
+                calls.push(t);
+            };
+            (ar2State.result.rows || []).forEach(r => add({
+                brokerage: r.brokerage, date_iso: r.date_iso, target_price: r.target_price, rating: r.rating,
+                kind: r.excluded_reason === 'technical call' ? 'technical' : (r.source === 'News' ? 'press' : 'report'),
+            }));
+            (c.tp_history || []).forEach(t => add({ ...t, kind: 'report' }));
+            ['Buy', 'Hold', 'Sell'].forEach(rt => {
+                const pts = calls.filter(t => (['Buy', 'Hold', 'Sell'].includes(t.rating) ? t.rating : 'Hold') === rt)
+                    .map(t => ({ x: new Date(t.date_iso).getTime(), y: t.target_price, b: t.brokerage, k: t.kind }))
+                    .filter(p => p.x >= minX);
+                if (pts.length) datasets.push({
+                    type: 'scatter', label: `${rt} target`, data: pts, backgroundColor: colors[rt], borderColor: colors[rt],
+                    pointStyle: pts.map(p => p.k === 'technical' ? 'triangle' : 'circle'),
+                    pointRadius: pts.map(p => p.k === 'technical' ? 6 : 5), pointHoverRadius: 7, pointHitRadius: 12, order: 1,
+                });
+            });
+            ar2HistoryChart = new Chart(canvas.getContext('2d'), {
+                plugins: [ar2ZoomFix],
+                data: { datasets },
+                options: {
+                    responsive: true, maintainAspectRatio: false, animation: false,
+                    interaction: { mode: 'nearest', intersect: true },
+                    plugins: {
+                        legend: { labels: { color: textCol, boxWidth: 10, font: { size: 11 } } },
+                        tooltip: {
+                            callbacks: {
+                                title: items => new Date(items[0].parsed.x).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }),
+                                label: item => item.raw.b
+                                    ? `${item.raw.b}: ₹${ar2Num(item.parsed.y)}${item.raw.k === 'technical' ? ' (technical call)' : item.raw.k === 'press' ? ' (press-reported)' : ''}`
+                                    : 'Price: ₹' + ar2Num(item.parsed.y),
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            type: 'linear', min: minX || undefined, max: maxX, grid: { color: gridCol },
+                            ticks: { color: textCol, maxTicksLimit: 7, callback: v => new Date(v).toLocaleDateString('en-IN', { month: 'short', year: '2-digit' }) }
+                        },
+                        y: { grid: { color: gridCol }, ticks: { color: textCol, callback: v => '₹' + ar2Num(v) } }
+                    }
+                }
+            });
+        }
+
+        function ar2Valuation(c, s) {
+            let h = '';
+            (c.valuation_methods || []).forEach(m => {
+                let mult = '';
+                if (m.multiple_low != null) {
+                    mult = m.multiple_low === m.multiple_high ? ` · ${m.multiple_low}x` : ` · ${m.multiple_low}–${m.multiple_high}x (median ${m.multiple_median}x)`;
+                }
+                const basis = (m.basis_years || []).length ? ` on ${m.basis_years.map(ar2Esc).join(' / ')}` : '';
+                h += `<div class="ar2-chip"><b>${ar2Esc(m.method)}</b> <span class="ar2-sub">${m.count} broker${m.count > 1 ? 's' : ''}${mult}${basis}</span>
+                    <div class="ar2-sub" style="margin-top:0.15rem">${(m.brokers || []).map(ar2Esc).join(', ')}</div></div>`;
+            });
+            if (s.valuation_view) h += `<p class="ar2-prose">${ar2Esc(s.valuation_view)}</p>`;
+            return h;
+        }
+
+        function ar2EpsSpread(c) {
+            // One row per fiscal year: what the brokers in the table project for EPS (low /
+            // median / high), the wider LSEG consensus, and the P/E that implies at today's price.
+            const rows = (c.eps_dispersion || []).filter(e => e.median != null || e.yf_mean != null);
+            if (!rows.length) return '';
+            const cmp = c.cmp;
+            const rs = v => v == null ? '<span style="color:var(--text-muted)">—</span>' : '₹' + ar2Num(v, 1);
+            let h = `<div class="ar2-table-wrap"><table class="ar2-mini ar2-eps-table">
+                <thead><tr><th>Year</th><th>Brokers</th><th>Low</th><th>Median</th><th>High</th><th>LSEG consensus</th><th>P/E at today's price</th></tr></thead><tbody>`;
+            rows.forEach(e => {
+                const basis = e.median != null ? e.median : e.yf_mean;
+                const pe = cmp && basis > 0 ? cmp / basis : null;
+                const peSrc = e.median != null ? 'on broker median' : 'on LSEG';
+                h += `<tr><td style="font-weight:600">${ar2Esc(e.fy)}E</td>
+                    <td>${e.n || 0}</td>
+                    <td>${rs(e.min)}</td><td style="font-weight:600">${rs(e.median)}</td><td>${rs(e.max)}</td>
+                    <td>${e.yf_mean != null ? `₹${ar2Num(e.yf_mean, 1)} <span class="ar2-sub">(${e.yf_n || '?'} analysts)</span>` : rs(null)}</td>
+                    <td>${pe ? `${ar2X(pe)} <span class="ar2-sub">${peSrc}</span>` : rs(null)}</td></tr>`;
+            });
+            h += '</tbody></table></div>';
+            const spread = rows.find(e => e.n >= 2 && e.spread_pct != null);
+            if (spread) h += `<div class="ar2-sub" style="margin-top:0.35rem">Broker estimates for ${ar2Esc(spread.fy)}E differ by ${spread.spread_pct}% from lowest to highest.</div>`;
+            return h;
+        }
+
+        function ar2Swot(sw, total) {
+            if (!sw) return '';
+            const q = [['strengths', 'Strengths', 'var(--ar2-buy)'], ['weaknesses', 'Weaknesses', 'var(--ar2-sell)'],
+                       ['opportunities', 'Opportunities', 'var(--accent-indigo)'], ['threats', 'Threats', 'var(--ar2-hold)']];
+            if (!q.some(([k]) => (sw[k] || []).length)) return '';
+            return '<div class="ar2-swot">' + q.map(([k, label, color]) => {
+                const pts = (sw[k] || []).slice().sort((a, b) => (b.brokers || []).length - (a.brokers || []).length);
+                return `<div class="ar2-card"><h4 style="color:${color}">${label}</h4>${pts.map(p =>
+                    `<div class="ar2-point"><span>${ar2Esc(p.point)}</span>${ar2Count(p.brokers, total)}</div>`).join('') || '<div class="ar2-sub">None noted</div>'}</div>`;
+            }).join('') + '</div>';
+        }
+
+        function ar2Debate(s, c) {
+            const tp = c.target || {};
+            let h = '';
+            if (s.bull_case || s.bear_case) {
+                h += `<div class="ar2-debate">
+                    <div class="ar2-card" style="border-color:rgba(16,185,129,0.4)"><h4 style="font-size:0.82rem;font-weight:650;color:var(--ar2-buy);margin:0 0 0.3rem">Bull case${tp.high ? ` · ${ar2Rs(tp.high)} (${ar2Esc(tp.high_broker)})` : ''}</h4><div style="line-height:1.55">${ar2Esc(s.bull_case || '')}</div></div>
+                    <div class="ar2-card" style="border-color:rgba(239,68,68,0.4)"><h4 style="font-size:0.82rem;font-weight:650;color:var(--ar2-sell);margin:0 0 0.3rem">Bear case${tp.low ? ` · ${ar2Rs(tp.low)} (${ar2Esc(tp.low_broker)})` : ''}</h4><div style="line-height:1.55">${ar2Esc(s.bear_case || '')}</div></div>
+                </div>`;
+            }
+            const debates = s.debates || [];
+            if (debates.length) {
+                h += '<div style="margin-top:0.75rem">' + debates.map(d => `<div class="ar2-debate-row"><div style="font-weight:600">${ar2Esc(d.topic)}</div><div class="two">
+                    <div><span class="ar2-pos" style="font-weight:600">Bull:</span> ${ar2Esc(d.bull_view)}${(d.bull_brokers || []).length ? ` <span class="ar2-sub">(${d.bull_brokers.map(ar2Esc).join(', ')})</span>` : ''}</div>
+                    <div><span class="ar2-neg" style="font-weight:600">Bear:</span> ${ar2Esc(d.bear_view)}${(d.bear_brokers || []).length ? ` <span class="ar2-sub">(${d.bear_brokers.map(ar2Esc).join(', ')})</span>` : ''}</div>
+                </div></div>`).join('') + '</div>';
+            }
+            return h;
+        }
+
+        function ar2Industry(io) {
+            if (!io || !io.summary) return '';
+            let h = `<p class="ar2-prose">${ar2Esc(io.summary)}</p>`;
+            if ((io.growth_figures || []).length) {
+                h += '<div style="margin-top:0.5rem">' + io.growth_figures.map(g =>
+                    `<div class="ar2-point"><span>${ar2Esc(g.point)}</span><span class="ar2-count">${(g.brokers || []).map(ar2Esc).join(', ')}</span></div>`).join('') + '</div>';
+            }
+            const chips = (arr, color) => (arr || []).map(t => `<span class="ar2-tag" style="color:${color};margin:0.2rem 0.3rem 0 0;font-size:0.72rem">${ar2Esc(t)}</span>`).join('');
+            if ((io.tailwinds || []).length) h += `<div style="margin-top:0.6rem"><span class="ar2-sub">Tailwinds</span><br>${chips(io.tailwinds, 'var(--ar2-buy)')}</div>`;
+            if ((io.headwinds || []).length) h += `<div style="margin-top:0.4rem"><span class="ar2-sub">Headwinds</span><br>${chips(io.headwinds, 'var(--ar2-sell)')}</div>`;
+            return h;
+        }
+
+        function ar2Catalysts(list) {
+            if (!(list || []).length) return '';
+            return list.map(p => `<div class="ar2-point"><span>${ar2Esc(p.point)}</span>${ar2Count(p.brokers)}</div>`).join('');
+        }
+
+        function ar2Risks(list) {
+            if (!(list || []).length) return '';
+            const col = { High: 'var(--ar2-sell)', Medium: 'var(--ar2-hold)', Low: 'var(--text-muted)' };
+            const order = { High: 0, Medium: 1, Low: 2 };
+            return list.slice().sort((a, b) => (order[a.severity] ?? 3) - (order[b.severity] ?? 3)).map(p =>
+                `<div class="ar2-point"><span><span class="ar2-sev" style="color:${col[p.severity] || 'inherit'}">${ar2Esc(p.severity || '')}</span> ${ar2Esc(p.point)}</span>${ar2Count(p.brokers)}</div>`).join('');
+        }
+
+        function ar2Footnote(result) {
+            const n = result.source_notes || {};
+            const c = result.consensus || {};
+            const tl = n.trendlyne === 'live' ? 'Trendlyne live feed' : n.trendlyne === 'cache' ? 'Trendlyne (older cached snapshot)' : 'Trendlyne unavailable';
+            const when = result.analyzed_at ? new Date(result.analyzed_at * 1000).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
+            return `<div class="ar2-foot">Sources: domestic reports from ${tl} (${result.pdfs_analyzed || 0} full PDFs read); other coverage from ${n.news_sources || 0} news articles via Perplexity search; wider consensus from Yahoo Finance (LSEG). `
+                + `Upside and forward P/E are computed from the price on ${ar2Esc(c.as_of || '')} and each broker's own estimates. Reports older than 6 months are shown but left out of the consensus. Analysed ${ar2Esc(when)}.</div>`;
         }
 
         // =====================================================
@@ -8018,6 +8739,13 @@
                 const analystTitle = document.getElementById('analystAnalysisTitle');
                 const analystMeta = document.getElementById('analystAnalysisMeta');
 
+                // v2 results are interactive (sortable table, chart): keep the data, re-render on restore
+                if (currentAnalystData && currentAnalystData.version >= 2) {
+                    try { sessionStorage.setItem('kagger_agents_analyst_data', JSON.stringify(currentAnalystData)); }
+                    catch (e) { sessionStorage.removeItem('kagger_agents_analyst_data'); }
+                } else {
+                    sessionStorage.removeItem('kagger_agents_analyst_data');
+                }
                 if (analystBody && analystBody.innerHTML.trim()) {
                     sessionStorage.setItem('kagger_agents_analyst_body', analystBody.innerHTML);
                     sessionStorage.setItem('kagger_agents_analyst_visible', analystCard && analystCard.classList.contains('show') ? '1' : '0');
@@ -8079,9 +8807,16 @@
 
                 // Restore analyst analysis
                 const aBody = sessionStorage.getItem('kagger_agents_analyst_body');
-                if (aBody) {
+                let aData = null;
+                try { aData = JSON.parse(sessionStorage.getItem('kagger_agents_analyst_data') || 'null'); } catch (e) { aData = null; }
+                if (aBody || aData) {
                     const el = document.getElementById('analystAnalysisBody');
-                    if (el) el.innerHTML = aBody;
+                    if (aData && aData.version >= 2 && aData.rows) {
+                        currentAnalystData = aData;
+                        try { renderAnalystV2(aData); } catch (e) { console.error('[AGENTS STATE] analyst v2 restore failed', e); if (el) el.innerHTML = aBody || ''; }
+                    } else if (el) {
+                        el.innerHTML = aBody;
+                    }
                     if (sessionStorage.getItem('kagger_agents_analyst_visible') === '1') showEl('analystAnalysis');
                     const aTitle = sessionStorage.getItem('kagger_agents_analyst_title');
                     const aMeta = sessionStorage.getItem('kagger_agents_analyst_meta');

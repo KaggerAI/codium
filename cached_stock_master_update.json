@@ -1,25 +1,45 @@
 {
   "success": true,
-  "ran_at": "2026-11-21 16:24:16 IST",
+  "ran_at": "2026-11-27 13:16:26 IST",
   "dry_run": false,
   "sitemap_entries": 5968,
-  "rows_before": 6148,
-  "rows_after": 6151,
+  "rows_before": 6151,
+  "rows_after": 6154,
   "added": 3,
   "added_tickers": [
-    "RBGUPTA",
-    "11290687",
-    "13160115"
+    "MONOMARK",
+    "14610181",
+    "AJPACK"
   ],
-  "updated": 2,
+  "updated": 7,
   "updates": [
     {
       "trendlyne_id": "3059",
-      "Ticker": "SHUKRAPHAR -> SHUKRAMED"
+      "Stock Name": "Shukra Meditech Ltd -> Shukra Medtech Ltd"
     },
     {
-      "trendlyne_id": "3344",
-      "Ticker": "VIRAT -> BRAHMVIRAT"
+      "trendlyne_id": "2462",
+      "Stock Name": "Gsb Finance Ltd -> Coffers Finvest Ltd"
+    },
+    {
+      "trendlyne_id": "456782",
+      "Stock Name": "Jetmall Spices And Masala Ltd -> Artemis Adr Marketplace Ltd"
+    },
+    {
+      "trendlyne_id": "634647",
+      "Stock Name": "Sbl Infratech Ltd -> Natural Agro Zone Ltd"
+    },
+    {
+      "trendlyne_id": "884",
+      "Ticker": "UMIYA-MRO -> MROTEK"
+    },
+    {
+      "trendlyne_id": "3729102",
+      "Ticker": "11290734 -> SHREESIDHI"
+    },
+    {
+      "trendlyne_id": "3729717",
+      "Ticker": "11290687 -> FOODLINK"
     }
   ],
   "ambiguous": [
@@ -201,5 +221,5 @@
   ],
   "conflicts": [],
   "error": null,
-  "duration_seconds": 0.5
+  "duration_seconds": 0.9
 }
