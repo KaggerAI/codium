@@ -50,6 +50,18 @@ def _log(*parts):
         print(*(str(p).encode("ascii", "replace").decode() for p in parts), file=sys.stderr)
 
 
+def _json_safe(obj):
+    """Replace NaN/Infinity with None. Python's json emits them as bare NaN, which the
+    browser's JSON.parse rejects ("Unexpected token 'N'"), failing the whole poll."""
+    if isinstance(obj, float):
+        return obj if obj == obj and obj not in (float("inf"), float("-inf")) else None
+    if isinstance(obj, dict):
+        return {k: _json_safe(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_json_safe(v) for v in obj]
+    return obj
+
+
 RESULT_VERSION = 4          # 4: growth CAGR columns, current-standing tiles
 MAX_PDF_REPORTS = 15        # latest report per broker, newest first
 PDF_WORKERS = 5           # extraction parallelism; Trendlyne downloads are throttled separately in trendlyne_auth
@@ -611,6 +623,7 @@ def _run_analyst_analysis(job_id, ticker, company_name, call_gemini_api_fn,
             "analyzed_at": time.time(),
             "analysis_time_seconds": elapsed,
         }
+        result = _json_safe(result)
         store_latest_result("analyst", ticker, result)
         update_agent_job(job_id, {
             "status": "complete", "progress": "Analysis complete!", "result": result,
@@ -659,7 +672,7 @@ def register_analyst_routes(app, call_gemini_api_fn, call_perplexity_search_api_
                     and (existing.get("result") or {}).get("version") == RESULT_VERSION):
                 age_minutes = (time.time() - existing["stored_at"]) / 60
                 if age_minutes < 60:
-                    return jsonify({"status": "complete", "result": existing["result"],
+                    return jsonify({"status": "complete", "result": _json_safe(existing["result"]),
                                     "cached": True, "age_minutes": round(age_minutes)})
 
             job_id = create_agent_job("analyst", ticker)
@@ -686,7 +699,7 @@ def register_analyst_routes(app, call_gemini_api_fn, call_perplexity_search_api_
             return jsonify({"status": "processing", "progress": job["progress"],
                             "elapsed_seconds": int(time.time() - job["started_at"])})
         if job["status"] == "complete":
-            return jsonify({"status": "complete", "result": job["result"]})
+            return jsonify({"status": "complete", "result": _json_safe(job["result"])})
         if job["status"] == "error":
             return jsonify({"status": "error", "error": job["error"]})
         return jsonify({"error": "Unknown job status"}), 500
@@ -811,6 +824,6 @@ def register_analyst_routes(app, call_gemini_api_fn, call_perplexity_search_api_
             return jsonify({"error": "Ticker is required"}), 400
         result = get_latest_result("analyst", ticker)
         if result:
-            return jsonify({"status": "complete", "result": result["result"],
+            return jsonify({"status": "complete", "result": _json_safe(result["result"]),
                             "age_minutes": round((time.time() - result["stored_at"]) / 60)})
         return jsonify({"status": "none", "message": "No cached result found"})

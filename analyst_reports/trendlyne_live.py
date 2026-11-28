@@ -180,6 +180,9 @@ def fetch_trendlyne_reports_live(ticker: str, max_pages: int = 3, lookback_days:
         r = _get(page_url, cookies)
         if r.status_code != 200:
             if page == 1:
+                if ta._is_bot_check(r.status_code, r.text[:5000] if r.text else ""):
+                    raise RuntimeError(f"Trendlyne's bot check (HTTP {r.status_code} Human Verification) "
+                                       "blocked this server's IP; routing via RESIDENTIAL_PROXY_URL avoids it")
                 raise RuntimeError(f"Trendlyne returned HTTP {r.status_code}")
             break
         if page == 1:

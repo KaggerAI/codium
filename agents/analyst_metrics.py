@@ -146,8 +146,12 @@ def fetch_market_data(ticker: str) -> dict:
             if hist is None or hist.empty:
                 continue
             out["yf_symbol"] = sym
+            # Yahoo's newest bar is often a partial one with a NaN close (seen on Azure), so take
+            # the latest *finite* close; NaN would also serialise as invalid JSON for the browser.
             last = t.history(period="5d")
-            out["cmp"] = float((last if not last.empty else hist)["Close"].iloc[-1])
+            closes = [_f(c) for c in (last if not last.empty else hist)["Close"].tolist()]
+            closes = [c for c in closes if c] or [_f(c) for c in hist["Close"].tolist() if _f(c)]
+            out["cmp"] = closes[-1] if closes else None
             out["price_history"] = [
                 {"date": idx.strftime("%Y-%m-%d"), "close": round(float(c), 2)}
                 for idx, c in hist["Close"].items() if c == c
