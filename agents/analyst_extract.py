@@ -86,7 +86,7 @@ EXTRACT_MODEL = step_config("pdf")["model"]   # kept for back-compat with older 
 FALLBACK_MODEL = "gemini-3.5-flash-lite"
 
 # Bump when the extraction schema/prompt changes so stale cached extractions are ignored.
-EXTRACTION_VERSION = "v1"
+EXTRACTION_VERSION = "v2"         # v2: headwinds, target date, in-depth write-up
 _CACHE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                           "temp_reports", "analyst_extractions")
 

@@ -125,6 +125,10 @@ NUMBERS
 - `estimates`: one row per fiscal year in the report's key-financials / forecast table - include the latest ACTUAL year plus every forecast year. For banks/NBFCs/insurers put Net Interest Income (or total income / net premium) in revenue_cr, PPOP (pre-provision operating profit) in ebitda_cr, and fill bvps / roe_pct / roa_pct.
 - `estimate_revisions`: only if the report has a "change in estimates" table or states that it raised/cut estimates; one row per metric-year with the % change.
 
+TARGET HORIZON
+- `target_horizon_months`: the period the target price is for, only if the report states it ("12-month target" -> 12, "18-month TP" -> 18).
+- `target_date`: only if the report dates the target itself ("Sep-27 TP", "target price for Mar-28", "Dec 2027 target") -> "Sep-27" style. Do NOT infer it from the valuation basis year ("25x Sep-28E EPS" is the valuation basis, not the target date). Else null.
+
 VALUATION
 - `valuation.method`: the PRIMARY method used to set the target price.
 - `valuation.multiple` + `valuation.basis_year` describe e.g. "25x FY28E EPS" -> multiple 25, basis_year "FY28E", metric "EPS".
@@ -135,9 +139,11 @@ QUALITATIVE (write in your own concise words, but ONLY from what this report say
 - `thesis`: the analyst's core investment argument in 2-3 sentences.
 - `swot`: 2-4 short points per quadrant (each <= 15 words). If the report has no explicit SWOT, derive it strictly from the report's positives, concerns, opportunities and risks.
 - `industry_outlook`: what the report says about the sector/industry - growth rates with numbers wherever given.
+- `key_drivers`: ONLY positive forces the analyst expects to push revenue / earnings UP (new orders, capacity, pricing, product launches, market-share gains). Never put slowdowns, competition or degrowth here. If the report names none, return [].
+- `headwinds`: pressures the analyst says are holding growth back NOW (competition taking share, demand slowdown, loan-book degrowth, margin pressure). Distinct from `risks`, which are things that MAY go wrong in future.
 - `catalysts`, `risks`, `management_guidance`: short bullet phrases.
 - `key_quote`: one verbatim sentence from the report that best captures the view (max 40 words).
-- `detailed_summary`: a well-structured markdown summary of the report (250-400 words) with short headings and bullets: results/what changed, thesis, estimates & valuation, risks.
+- `detailed_summary`: an in-depth research write-up in markdown (600-1000 words) that lets an investor skip reading the PDF. It must go BEYOND the thesis / SWOT / bullet fields above, not restate them. Cover, with the report's own numbers: (1) what the report reacts to - results vs the analyst's and street estimates, YoY/QoQ figures; (2) segment / business-line detail and operating metrics (volumes, order book, utilisation, loan growth, asset quality, margins by segment); (3) management commentary and guidance the report relays; (4) estimate changes and the reasons for them; (5) valuation workings - multiple, basis year, peer or historical comparison, bull/bear cases; (6) risks and what would change the analyst's view. Use short headings, bullets and a small markdown table for multi-year figures where useful. Never invent - omit a section the report does not cover.
 
 If a field truly does not apply, use null (scalars) or [] (lists)."""
 
@@ -158,6 +164,8 @@ ANALYST_PDF_EXTRACTION_SCHEMA = {
         "rating": {"type": "string", "enum": ["Buy", "Hold", "Sell", "Not rated"]},
         "target_price": _N_NUM,
         "target_horizon_months": _N_NUM,
+        "target_date": {"type": ["string", "null"],
+                        "description": "Month the target is set for if the source states it, e.g. 'Sep-27'"},
         "price_in_report": _N_NUM,
         "previous_rating": _N_STR,
         "previous_target_price": _N_NUM,
@@ -209,7 +217,10 @@ ANALYST_PDF_EXTRACTION_SCHEMA = {
             },
         },
         "thesis": {"type": "string"},
-        "key_drivers": _STR_LIST,
+        "key_drivers": {"type": "array", "items": {"type": "string"},
+                        "description": "Positive growth drivers only; pressures go in headwinds"},
+        "headwinds": {"type": "array", "items": {"type": "string"},
+                      "description": "Current pressures holding growth back (not future risks)"},
         "catalysts": _STR_LIST,
         "risks": _STR_LIST,
         "management_guidance": _STR_LIST,
@@ -260,9 +271,12 @@ Extract what these articles say ABOUT {brokerage}'S VIEW ON {company_name} into 
 - fiscal_year labels like "FY28E" (Indian April-March years). If the articles give a P/E "at the current price" for a year, put it in estimates[].pe_reported for that year.
 - Valuation: e.g. "40 times September 2028 EPS" -> method "P/E", multiple 40, metric "EPS", basis_year "Sep-28E".
 - Stated growth rates ("25% revenue CAGR over FY26-29E") go in growth_guidance.
-- thesis, swot, catalysts, risks, key_drivers, industry_outlook, management_guidance: from what the articles report of {brokerage}'s view. Product names, segment targets (e.g. "formulations and biologics ~60% of revenue by FY29") and approvals belong in key_drivers / catalysts.
+- thesis, swot, catalysts, risks, key_drivers, headwinds, industry_outlook, management_guidance: from what the articles report of {brokerage}'s view. Product names, segment targets (e.g. "formulations and biologics ~60% of revenue by FY29") and approvals belong in key_drivers / catalysts.
+- key_drivers: ONLY positive forces {brokerage} expects to push growth UP. Slowdowns, competition, degrowth and other pressures the broker cites go in headwinds, never in key_drivers. If the broker names no positive driver, key_drivers is [].
+- headwinds: pressures {brokerage} says are holding growth back now. risks: things that may go wrong in future.
+- target_horizon_months / target_date: only if the articles state the target's horizon ("12-month target" -> 12) or date ("Sep-27 target" -> "Sep-27"). Never infer the date from the valuation basis year.
 - key_quote: a sentence the articles attribute to {brokerage}, verbatim (max 40 words), else null.
-- detailed_summary: 150-300 words of markdown summarising {brokerage}'s view as reported, with short headings.
+- detailed_summary: a complete account in markdown of EVERYTHING the articles attribute to {brokerage} on {company_name} - every number, estimate, segment comment, argument and caveat - organised under short headings, so a reader needs nothing else. Go beyond the thesis / bullet fields: include the supporting figures and reasoning behind them. Length follows the material (typically 250-600 words); never pad, never repeat a point, never add anything the articles don't say, and never calculate a figure the articles don't print (e.g. back out a share price from a target and an upside).
 - report_type: "Initiation" if the articles say the broker initiated coverage. "Technical / trading call" if the recommendation is chart / momentum based (technical analyst picks, festive or weekly "stock picks", stop-loss levels) rather than fundamental research.
 - broker_view_found: false if the articles contain NO rating, target or opinion that {brokerage} itself expressed on {company_name} (e.g. the broker is only named in passing, or covers a different company in the same article). In that case leave every other field empty.
 

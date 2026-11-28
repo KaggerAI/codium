@@ -4290,6 +4290,9 @@
         .ar2-detail summary { cursor: pointer; font-size: 0.78rem; color: var(--accent-violet); }
         .ar2-detail .ar2-md { margin-top: 0.5rem; font-size: 0.8rem; line-height: 1.6; }
         .ar2-detail .ar2-md h1, .ar2-detail .ar2-md h2, .ar2-detail .ar2-md h3 { font-size: 0.85rem; font-weight: 650; margin: 0.7rem 0 0.25rem; }
+        .ar2-detail .ar2-md table { border-collapse: collapse; margin: 0.4rem 0 0.6rem; font-size: 0.76rem; display: block; overflow-x: auto; max-width: 100%; }
+        .ar2-detail .ar2-md th, .ar2-detail .ar2-md td { border: 1px solid var(--border-color, rgba(128,128,128,0.25)); padding: 0.2rem 0.5rem; text-align: right; white-space: nowrap; }
+        .ar2-detail .ar2-md th:first-child, .ar2-detail .ar2-md td:first-child { text-align: left; }
         .ar2-link { color: var(--accent-violet); text-decoration: none; font-size: 0.78rem; }
         .ar2-link:hover { text-decoration: underline; }
         .ar2-chart-box { position: relative; height: 280px; }
@@ -8197,6 +8200,7 @@
                 { k: 'rating', label: 'Rating', v: r => score[r.rating] ?? 1 },
                 { k: 'tp', label: 'Target', num: true, v: r => r.target_price },
                 { k: 'up', label: 'Upside', num: true, v: r => r.upside_pct },
+                { k: 'tby', label: 'Target by', v: r => (r.target_by || {}).iso },
                 { k: 'val', label: 'Valuation', v: r => (r.valuation && r.valuation.method) || '' },
                 { k: 'eps1', label: `EPS ${fy[0] || ''}E`, num: true, v: r => (r.eps || {})[fy[0]] },
                 { k: 'eps2', label: `EPS ${fy[1] || ''}E`, num: true, v: r => (r.eps || {})[fy[1]] },
@@ -8273,17 +8277,23 @@
                 if (r.rating_change) ratingCell += `<div class="ar2-sub ${r.rating_change === 'up' ? 'ar2-pos' : 'ar2-neg'}">${r.rating_change === 'up' ? 'upgraded' : 'downgraded'}${r.prev_rating ? ' from ' + ar2Esc(r.prev_rating) : ''}</div>`;
                 const v = r.valuation || {};
                 const valCell = ar2Method(v) + (r.implied_multiple && !v.multiple ? `<div class="ar2-sub">implies ${ar2X(r.implied_multiple)}</div>` : '');
-                const multCol = cols[8].v(r);
+                const multDef = cols.find(c => c.k === 'mult');
+                const multCol = multDef.v(r);
+                const tb = r.target_by;
+                const tbyCell = !tb ? '—'
+                    : `<span title="${ar2Esc(tb.note || '')}" style="${tb.basis === 'assumed' ? 'opacity:0.6' : ''}">${ar2Esc(tb.label)}${tb.basis === 'assumed' ? '*' : ''}</span>`
+                      + `<div class="ar2-sub">${tb.basis === 'stated' ? 'stated' : tb.basis === 'horizon' ? 'stated horizon' : '12m assumed'}</div>`;
                 h += `<tr class="ar2-row" onclick="ar2Toggle(${i})">
                     <td><span style="font-weight:600">${ar2State.open.has(i) ? '▾' : '▸'} ${ar2Esc(r.brokerage)}</span>${srcTag}${staleTag}</td>
                     <td style="white-space:nowrap">${ar2Esc(r.date || '—')}</td>
                     <td>${ratingCell}</td>
                     <td class="num">${tpCell}</td>
                     <td class="num ${ar2Signed(r.upside_pct)}">${ar2Pct(r.upside_pct)}</td>
+                    <td style="white-space:nowrap">${tbyCell}</td>
                     <td>${valCell}</td>
                     <td class="num">${epsCell(fy[0])}</td>
                     <td class="num">${epsCell(fy[1])}</td>
-                    <td class="num">${ar2X(multCol, cols[8].label.startsWith('P/B') ? 2 : 1)}</td>
+                    <td class="num">${ar2X(multCol, multDef.label.startsWith('P/B') ? 2 : 1)}</td>
                     <td class="num">${r.eps_cagr_pct != null ? `<span title="${ar2Esc((r.eps_cagr_span || '').includes('stated') ? 'Stated by the broker (profit growth)' : 'Computed from the EPS estimates in this report')}">${ar2Pct(r.eps_cagr_pct, 0)}</span>` : '—'}${r.eps_cagr_span ? `<div class="ar2-sub">${ar2Esc(r.eps_cagr_span)}</div>` : ''}</td>
                     <td class="num">${ar2GrowthCell(r, 'revenue')}</td>
                     <td class="num">${ar2GrowthCell(r, 'ebitda')}</td>
@@ -8315,6 +8325,8 @@
             if (growth.length) left += '<h5>Growth the broker expects</h5>' + ar2List(growth.map(g =>
                 `${g.metric} CAGR ${Number(g.cagr_pct).toFixed(0)}%${g.period ? ' over ' + g.period : ''}`));
             if ((r.key_drivers || []).length) left += '<h5>Growth drivers</h5>' + ar2List(r.key_drivers);
+            if ((r.headwinds || []).length) left += '<h5>Headwinds the broker flags</h5>' + ar2List(r.headwinds);
+            if (r.target_by && r.target_by.note) left += `<div class="ar2-sub" style="margin-top:0.3rem">Target horizon: ${ar2Esc(r.target_by.note)}</div>`;
             if ((r.catalysts || []).length) left += '<h5>Catalysts</h5>' + ar2List(r.catalysts);
             if ((r.management_guidance || []).length) left += '<h5>Management guidance</h5>' + ar2List(r.management_guidance);
             if (!r.has_full_report && r.listing_summary && r.listing_summary !== r.thesis) left += `<h5>Summary</h5><div style="line-height:1.55">${ar2Esc(r.listing_summary)}</div>`;
@@ -8366,7 +8378,12 @@
                 const label = r.source === 'News' ? 'Open source article ↗' : 'Open report PDF ↗';
                 foot += `<a class="ar2-link" href="${ar2Esc(r.link)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${label}</a>`;
             }
-            if (r.detailed_summary) foot += `<details onclick="event.stopPropagation()"><summary>Full write-up of this report</summary><div class="ar2-md">${ar2Md(r.detailed_summary)}</div></details>`;
+            if (r.detailed_summary) {
+                // PDF reads get an in-depth write-up of the report; press-sourced calls can only be as
+                // detailed as the coverage, so say what it is.
+                const wuLabel = r.has_full_report ? 'In-depth write-up of the full report' : 'Everything the press reported on this note';
+                foot += `<details onclick="event.stopPropagation()"><summary>${wuLabel}</summary><div class="ar2-md">${ar2Md(r.detailed_summary)}</div></details>`;
+            }
             return `<div class="ar2-detail-grid"><div>${left || '<div class="ar2-sub">No further detail extracted.</div>'}</div><div>${right}</div></div>${foot ? `<div style="margin-top:0.8rem">${foot}</div>` : ''}`;
         }
 

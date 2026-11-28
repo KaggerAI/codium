@@ -421,6 +421,48 @@ def _series_cagr(series: dict, by_fy: dict, cfy: int) -> dict | None:
     return {"cagr": _r(val, 1), "span": f"{fy_label(base_y)}-{fy_label(end_y)}E", "basis": "estimates"}
 
 
+_MONTHS = {m: i for i, m in enumerate(
+    ("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"), 1)}
+_MONTH_NAMES = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+
+
+def _parse_month_year(text: str) -> tuple[int, int] | None:
+    """'Sep-27', "Dec'27", 'September 2027', 'Mar 28E' -> (year, month)."""
+    m = re.search(r"\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s*['\-/ ]?\s*(\d{4}|\d{2})\b",
+                  (text or "").lower())
+    if not m:
+        return None
+    yr = int(m.group(2))
+    return (yr + 2000 if yr < 100 else yr), _MONTHS[m.group(1)]
+
+
+def _target_by(ext: dict, date_iso: str, technical: bool) -> dict | None:
+    """When the target price is meant to be reached. A dated target the broker states wins;
+    else report date + the stated horizon; else Indian brokers' 12-month convention (flagged
+    as assumed). Chart-based trading calls run weeks, so nothing is assumed for them."""
+    stated = _parse_month_year(ext.get("target_date") or "")
+    if stated:
+        yr, mo = stated
+        return {"label": f"{_MONTH_NAMES[mo - 1]} {yr}", "iso": f"{yr}-{mo:02d}",
+                "basis": "stated", "note": f"Target set for {ext.get('target_date')}"}
+    try:
+        d = datetime.date.fromisoformat(date_iso)
+    except (TypeError, ValueError):
+        return None
+    months = _f(ext.get("target_horizon_months"))
+    assumed = not (months and 0 < months <= 60)
+    if assumed:
+        if technical:
+            return None
+        months = 12
+    total = d.month - 1 + int(round(months))
+    yr, mo = d.year + total // 12, total % 12 + 1
+    return {"label": f"{_MONTH_NAMES[mo - 1]} {yr}", "iso": f"{yr}-{mo:02d}",
+            "basis": "assumed" if assumed else "horizon",
+            "note": (f"Not stated: assumes the usual 12-month target from the {date_iso} report"
+                     if assumed else f"{int(round(months))}-month target from the {date_iso} report")}
+
+
 def build_row(base: dict, ext: dict | None, cmp: float | None, today: datetime.date) -> dict:
     """Merge a report's listing data (Trendlyne / news) with its PDF extraction and compute metrics."""
     ext = ext or {}
@@ -552,6 +594,7 @@ def build_row(base: dict, ext: dict | None, cmp: float | None, today: datetime.d
         "rating": rating or "Not rated",
         "rating_raw": base.get("rating_raw") or ext.get("rating_raw") or rating or "Not rated",
         "target_price": _r(tp, 0),
+        "target_by": _target_by(ext, date_iso, ext.get("report_type") == "Technical / trading call") if tp else None,
         "upside_pct": _r((tp / cmp - 1) * 100, 1) if tp and cmp else None,
         "bull_case_target": _r(_f(ext.get("bull_case_target")), 0),
         "bear_case_target": _r(_f(ext.get("bear_case_target")), 0),
@@ -587,6 +630,7 @@ def build_row(base: dict, ext: dict | None, cmp: float | None, today: datetime.d
         "estimate_revisions": ext.get("estimate_revisions") or [],
         "thesis": ext.get("thesis") or base.get("thesis") or base.get("summary") or "",
         "key_drivers": ext.get("key_drivers") or [],
+        "headwinds": ext.get("headwinds") or [],
         "catalysts": ext.get("catalysts") or [],
         "risks": ext.get("risks") or base.get("risks") or [],
         "management_guidance": ext.get("management_guidance") or [],

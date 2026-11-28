@@ -62,7 +62,7 @@ def _json_safe(obj):
     return obj
 
 
-RESULT_VERSION = 4          # 4: growth CAGR columns, current-standing tiles
+RESULT_VERSION = 5          # 5: headwinds, target-by date, in-depth write-up
 MAX_PDF_REPORTS = 15        # latest report per broker, newest first
 PDF_WORKERS = 5           # extraction parallelism; Trendlyne downloads are throttled separately in trendlyne_auth
 LOOKBACK_DAYS = 365         # Trendlyne history window (for target momentum + history chart)
@@ -247,16 +247,18 @@ def build_markdown(company_name, ticker, cons, rows, syn) -> str:
         md.append(f"## Bottom line\n\n{syn['bottom_line']}\n")
 
     md.append("## Broker comparison\n")
-    md.append(f"| Broker | Date | Rating | Target | Upside | Method | EPS {fy1}E | EPS {fy2}E | P/E {fy2}E | Revenue CAGR | EBITDA CAGR | PAT CAGR | Source |")
-    md.append("|---|---|---|---|---|---|---|---|---|---|---|---|---|")
+    md.append(f"| Broker | Date | Rating | Target | Upside | Target by | Method | EPS {fy1}E | EPS {fy2}E | P/E {fy2}E | Revenue CAGR | EBITDA CAGR | PAT CAGR | Source |")
+    md.append("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|")
     for r in rows:
         v = r.get("valuation") or {}
         meth = v.get("method") or "—"
         if v.get("multiple"):
             meth += f" {v['multiple']}x {v.get('basis_year') or ''}".rstrip()
+        tb = r.get("target_by") or {}
+        tby = (tb.get("label", "") + (" (12m assumed)" if tb.get("basis") == "assumed" else "")) or "—"
         md.append(
             f"| {r['brokerage']} | {r.get('date') or '—'}{' (stale)' if r.get('stale') else ''} | {r.get('rating_raw') or r['rating']} | "
-            f"{_fmt_num(r.get('target_price'), '₹')} | {_fmt_num(r.get('upside_pct'), suffix='%', nd=1)} | {meth} | "
+            f"{_fmt_num(r.get('target_price'), '₹')} | {_fmt_num(r.get('upside_pct'), suffix='%', nd=1)} | {tby} | {meth} | "
             f"{_fmt_num(r['eps'].get(fy1), nd=1)} | {_fmt_num(r['eps'].get(fy2), nd=1)} | {_fmt_num(r['fwd_pe'].get(fy2), suffix='x', nd=1)} | "
             f"{_g(r, 'revenue')} | {_g(r, 'ebitda')} | {_g(r, 'pat')} | {r.get('source')} |"
         )
@@ -306,7 +308,7 @@ def _rows_for_llm(rows: list[dict], include_summary: bool = False) -> list[dict]
             "bull_case_target", "bear_case_target", "valuation", "implied_multiple", "eps",
             "revenue_cr", "pat_cr", "ebitda_margin_pct", "roe_pct", "fwd_pe", "fwd_pb",
             "eps_cagr_pct", "eps_cagr_span", "growth", "ebitda_cr", "eps_derived", "growth_guidance", "estimate_revisions", "thesis",
-            "key_drivers", "catalysts", "risks", "management_guidance", "swot",
+            "target_by", "key_drivers", "headwinds", "catalysts", "risks", "management_guidance", "swot",
             "industry_outlook", "key_quote"]
     if include_summary:
         keep.append("detailed_summary")
